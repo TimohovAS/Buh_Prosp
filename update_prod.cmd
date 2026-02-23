@@ -64,10 +64,10 @@ if errorlevel 1 (
 )
 
 echo [ProspEl] Restarting services...
-sc stop ProspEl-Web >nul 2>nul
-sc stop ProspEl-Backend >nul 2>nul
+sc.exe stop ProspEl-Web >nul 2>nul
+sc.exe stop ProspEl-Backend >nul 2>nul
 
-sc start ProspEl-Backend
+sc.exe start ProspEl-Backend
 if errorlevel 1 (
   echo [ERROR] Failed to start ProspEl-Backend service.
   exit /b 1
@@ -75,7 +75,7 @@ if errorlevel 1 (
 
 timeout /t 2 /nobreak >nul
 
-sc start ProspEl-Web
+sc.exe start ProspEl-Web
 if errorlevel 1 (
   echo [ERROR] Failed to start ProspEl-Web service.
   exit /b 1
@@ -88,7 +88,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -Command "$r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1/' -TimeoutSec 10; Write-Host ('Web: ' + $r.StatusCode)"
+powershell -NoProfile -Command "$ok=$false; try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1/' -TimeoutSec 6; Write-Host ('Web (80): ' + $r.StatusCode); $ok=$true } catch {}; if (-not $ok) { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173/' -TimeoutSec 10; Write-Host ('Web (5173): ' + $r.StatusCode) }"
 if errorlevel 1 (
   echo [ERROR] Web health check failed.
   exit /b 1

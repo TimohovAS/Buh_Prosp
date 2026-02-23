@@ -93,8 +93,16 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost/prospel
 Для серверного запуска на Windows 11 и доступа с других ПК используйте:
 
 - `DEPLOY_WINDOWS_LAN.md` — пошаговая инструкция
+- `install_services.cmd` — установка/перезапись служб Windows через NSSM
+- `update_prod.cmd` — обновление из GitHub + перезапуск служб
+- `remove_services.cmd` — удаление служб
 - `start_backend_server.bat` — запуск backend (uvicorn, без reload)
 - `start_frontend_server.bat` — запуск frontend на `0.0.0.0:5173`
 - `start_all_server.bat` — запуск backend + frontend
 - `setup_firewall_server.bat` — правила firewall
 - `backup_db.ps1` — резервные копии SQLite БД
+
+Службы, которые используются скриптами:
+
+- `ProspEl-Backend`
+- `ProspEl-Web`

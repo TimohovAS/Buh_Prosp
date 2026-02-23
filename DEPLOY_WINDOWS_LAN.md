@@ -3,6 +3,8 @@
 Сервер: `192.168.10.20`  
 URL для клиентов: `http://192.168.10.20:5173`
 
+Рекомендуемый режим: запуск как службы Windows (`ProspEl-Backend` и `ProspEl-Web`).
+
 ## 1) Установить зависимости на сервере
 
 - Python 3.10+
@@ -54,20 +56,39 @@ SECRET_KEY=ваш_случайный_длинный_секрет
 .\setup_firewall_server.bat
 ```
 
-## 5) Запустить приложение для работы по сети
+## 5) Установить службы (один раз, от администратора)
 
 ```powershell
-.\start_all_server.bat
+.\install_services.cmd
 ```
 
-Или вручную в двух окнах:
+Проверка:
 
 ```powershell
-.\start_backend_server.bat
-.\start_frontend_server.bat
+Get-Service ProspEl-Backend,ProspEl-Web
 ```
 
-## 6) Проверки
+Обе службы должны быть в состоянии `Running`.
+
+> В PowerShell используйте `sc.exe`, а не `sc` (в PowerShell `sc` — это алиас `Set-Content`).
+
+## 6) Запуск/остановка служб
+
+Запуск:
+
+```powershell
+Start-Service ProspEl-Backend
+Start-Service ProspEl-Web
+```
+
+Остановка:
+
+```powershell
+Stop-Service ProspEl-Web
+Stop-Service ProspEl-Backend
+```
+
+## 7) Проверки
 
 На сервере:
 
@@ -77,13 +98,13 @@ SECRET_KEY=ваш_случайный_длинный_секрет
 
 - `http://192.168.10.20:5173`
 
-## 7) Вход и безопасность
+## 8) Вход и безопасность
 
 - Первый вход: `admin / admin`
 - Сразу смените пароль администратора
 - Не храните реальный `SECRET_KEY` в git
 
-## 8) Бэкап БД
+## 9) Бэкап БД
 
 Ручной запуск:
 
@@ -93,11 +114,33 @@ powershell -ExecutionPolicy Bypass -File .\backup_db.ps1
 
 Папка бэкапов по умолчанию: `D:\Program\ProspEl\backups`.
 
-## 9) Обновления и доработки
+## 10) Обновления и доработки
 
-Рекомендуемый процесс:
+После `git push` с рабочего ПК:
 
-1. Сделать бэкап: `backup_db.ps1`
-2. Обновить код
-3. Перезапустить оба процесса (`backend` и `frontend`)
-4. Проверить вход и ключевые разделы (доходы/расходы/отчеты)
+```powershell
+.\update_prod.cmd
+```
+
+Скрипт делает:
+
+1. Бэкап БД (если есть `backup_db.ps1`)
+2. `git pull --ff-only origin main`
+3. Установку backend/frontend зависимостей
+4. Сборку frontend
+5. Перезапуск служб и health-check
+
+## 11) Если службы пока не используете
+
+Ручной запуск (2 окна):
+
+```powershell
+.\start_backend_server.bat
+.\start_frontend_server.bat
+```
+
+Удаление служб:
+
+```powershell
+.\remove_services.cmd
+```
