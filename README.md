@@ -96,9 +96,6 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost/prospel
 - `install_services.cmd` — установка/перезапись служб Windows через NSSM
 - `update_prod.cmd` — обновление из GitHub + перезапуск служб
 - `remove_services.cmd` — удаление служб
-- `start_backend_server.bat` — запуск backend (uvicorn, без reload)
-- `start_frontend_server.bat` — запуск frontend на `0.0.0.0:5173`
-- `start_all_server.bat` — запуск backend + frontend
 - `setup_firewall_server.bat` — правила firewall
 - `backup_db.ps1` — резервные копии SQLite БД
 

@@ -130,16 +130,7 @@ powershell -ExecutionPolicy Bypass -File .\backup_db.ps1
 4. Сборку frontend
 5. Перезапуск служб и health-check
 
-## 11) Если службы пока не используете
-
-Ручной запуск (2 окна):
-
-```powershell
-.\start_backend_server.bat
-.\start_frontend_server.bat
-```
-
-Удаление служб:
+## 11) Удаление служб
 
 ```powershell
 .\remove_services.cmd

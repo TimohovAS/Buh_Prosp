@@ -11,23 +11,40 @@ export default function BankImport() {
   const [result, setResult] = useState(null)
   const [clients, setClients] = useState([])
   const [selections, setSelections] = useState({}) // idx -> { selected, type }
+  const [parseMeta, setParseMeta] = useState(null)
+  const [recentFiles, setRecentFiles] = useState([])
 
   useEffect(() => { api.clients.listBrief().then(setClients) }, [])
+  useEffect(() => {
+    api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => setRecentFiles([]))
+  }, [])
 
   const handleFileChange = async (e) => {
     const f = e.target.files?.[0] || null
     setFile(f)
     setTransactions([])
     setSelections({})
+    setParseMeta(null)
     setResult(null)
     if (!f) return
     setLoading(true)
     try {
-      const { transactions: tx } = await api.bankImport.parse(f)
+      const parsed = await api.bankImport.parse(f)
+      const tx = parsed.transactions || []
       setTransactions(tx)
       const sel = {}
       tx.forEach((t, i) => { sel[i] = { selected: true, type: t.type } })
       setSelections(sel)
+      setParseMeta({
+        file_name: parsed.file_name || f.name,
+        file_hash: parsed.file_hash,
+        already_imported: !!parsed.already_imported,
+        imported_file: parsed.imported_file || null,
+      })
+      if (Array.isArray(parsed.recent_files)) setRecentFiles(parsed.recent_files)
+      if (parsed.already_imported) {
+        alert(tr('bankImportAlreadyImported'))
+      }
     } catch (e) {
       alert(e.message)
     } finally {
@@ -40,6 +57,7 @@ export default function BankImport() {
       .map((tx, i) => ({ tx, i, sel: selections[i] }))
       .filter(({ sel }) => sel?.selected)
     if (items.length === 0) return alert(tr('selectAtLeastOne'))
+    if (parseMeta?.already_imported) return alert(tr('bankImportAlreadyImported'))
     setApplying(true)
     setResult(null)
     try {
@@ -50,12 +68,19 @@ export default function BankImport() {
           client_id: selections[i].client_id || null,
           invoice_number: selections[i].invoice_number || null,
         })),
+        file_hash: parseMeta?.file_hash || null,
+        file_name: parseMeta?.file_name || file?.name || null,
+        file_size: file?.size || null,
+        transaction_count: transactions.length,
       }
       const res = await api.bankImport.apply(body)
       setResult(res)
       setTransactions([])
       setFile(null)
       setSelections({})
+      setParseMeta(null)
+      if (Array.isArray(res.recent_files)) setRecentFiles(res.recent_files)
+      else api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => {})
     } catch (e) {
       alert(e.message)
     } finally {
@@ -95,6 +120,43 @@ export default function BankImport() {
           />
           {loading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{tr('loading')}...</span>}
         </div>
+        {parseMeta?.already_imported && parseMeta.imported_file && (
+          <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
+            {tr('bankImportAlreadyImportedAt')
+              .replace('{file}', parseMeta.imported_file.file_name || parseMeta.file_name || '-')
+              .replace('{date}', parseMeta.imported_file.imported_at ? new Date(parseMeta.imported_file.imported_at).toLocaleString() : '-')}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <h3 style={{ marginTop: 0 }}>{tr('bankImportRecentFiles')}</h3>
+        {recentFiles.length === 0 ? (
+          <div style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tr('bankImportRecentFileName')}</th>
+                  <th>{tr('bankImportRecentAt')}</th>
+                  <th>{tr('bankImportRecentRows')}</th>
+                  <th>{tr('bankImportRecentCreated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentFiles.map((f) => (
+                  <tr key={f.id || f.file_hash}>
+                    <td>{f.file_name || '-'}</td>
+                    <td>{f.imported_at ? new Date(f.imported_at).toLocaleString() : '-'}</td>
+                    <td>{f.transaction_count ?? 0}</td>
+                    <td>{`${f.created_income ?? 0} / ${f.created_expense ?? 0}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {result && (

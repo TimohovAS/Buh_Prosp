@@ -240,6 +240,7 @@ export const api = {
       return res.json();
     },
     apply: (data) => request('/bank-import/apply', { method: 'POST', body: JSON.stringify(data) }),
+    recentFiles: (limit = 10) => request(`/bank-import/files?limit=${limit}`),
   },
   enterprise: {
     get: () => request('/enterprise'),

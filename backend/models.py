@@ -207,6 +207,22 @@ class CashTransaction(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class BankImportFile(Base):
+    """Журнал импортированных банковских файлов (защита от повторного импорта)."""
+    __tablename__ = "bank_import_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_name = Column(String(255), nullable=False)
+    file_hash = Column(String(64), unique=True, index=True, nullable=False)
+    file_size = Column(Integer)
+    transaction_count = Column(Integer, default=0)
+    created_income = Column(Integer, default=0)
+    created_expense = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+    imported_by = Column(Integer, ForeignKey("users.id"))
+    imported_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class Income(Base):
     """Книга доходов (КПО) - записи о доходах. Управленческая экономика: issued/paid/cancelled."""
     __tablename__ = "income"
