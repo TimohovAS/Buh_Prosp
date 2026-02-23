@@ -1,5 +1,6 @@
 """Бизнес-логика ProspEl."""
 from datetime import date, datetime
+import re
 from typing import Optional
 from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,33 +49,49 @@ async def get_income_total_12_months(db: AsyncSession, as_of: date) -> float:
     return await get_income_total(db, start_date=start, end_date=as_of)
 
 
+def _parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    """
+    Вернуть (year, serial) для форматов:
+    - YYYY-NNNN
+    - NNNN-YYYY
+    """
+    s = (value or "").strip()
+    if not s:
+        return None, None
+    m_year_first = re.fullmatch(r"(20\d{2})-(\d{1,10})", s)
+    if m_year_first:
+        return int(m_year_first.group(1)), int(m_year_first.group(2))
+    m_num_first = re.fullmatch(r"(\d{1,10})-(20\d{2})", s)
+    if m_num_first:
+        return int(m_num_first.group(2)), int(m_num_first.group(1))
+    return None, None
+
+
 def _invoice_year_from_record(i: Income) -> Optional[int]:
-    """Год периода счёта: из поля invoice_year или из префикса YYYY в invoice_number."""
+    """Год периода счёта: из поля invoice_year или из номера счёта."""
     if getattr(i, "invoice_year", None) is not None:
         return int(i.invoice_year)
-    s = (i.invoice_number or "").strip()
-    if len(s) >= 4 and s[:4].isdigit() and (len(s) == 4 or s[4:5] in ("-", "")):
-        return int(s[:4])
+    y, _ = _parse_invoice_number_parts(getattr(i, "invoice_number", None))
+    if y is not None:
+        return y
     return None
 
 
 def get_next_invoice_number(db_incomes: list[Income], year: int) -> str:
-    """Следующий номер счёта за год (формат YYYY-NNNN). NNNN сбрасывается на 0001 в новом году."""
+    """Следующий номер счёта за год (формат NNNN-YYYY)."""
     nums = []
     for i in db_incomes:
         if not i.invoice_number:
             continue
         if _invoice_year_from_record(i) != year:
             continue
-        s = str(i.invoice_number).strip()
-        if "-" in s:
-            parts = s.split("-", 1)
-            if len(parts) == 2 and parts[1].isdigit():
-                nums.append(int(parts[1]))
-        elif s.isdigit():
-            nums.append(int(s))
+        _, serial = _parse_invoice_number_parts(str(i.invoice_number).strip())
+        if serial is not None:
+            nums.append(serial)
+        elif str(i.invoice_number).strip().isdigit():
+            nums.append(int(str(i.invoice_number).strip()))
     next_num = max(nums, default=0) + 1
-    return f"{year}-{next_num:04d}"
+    return f"{next_num:04d}-{year}"
 
 
 async def allocate_next_invoice_number(db: AsyncSession, year: int) -> int:

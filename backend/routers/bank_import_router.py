@@ -36,7 +36,27 @@ class ApplyRequest(BaseModel):
 def _normalize_invoice_number(value: Optional[str]) -> str:
     if not value:
         return ""
-    return re.sub(r"\s+", "", str(value).strip().upper())
+    s = re.sub(r"\s+", "", str(value).strip().upper())
+    m_year_first = re.fullmatch(r"(20\d{2})-(\d{1,10})", s)
+    if m_year_first:
+        return f"{m_year_first.group(1)}:{int(m_year_first.group(2))}"
+    m_num_first = re.fullmatch(r"(\d{1,10})-(20\d{2})", s)
+    if m_num_first:
+        return f"{m_num_first.group(2)}:{int(m_num_first.group(1))}"
+    return s
+
+
+def _to_number_year_format(value: Optional[str], fallback_year: Optional[int]) -> str:
+    s = re.sub(r"\s+", "", str(value or "").strip().upper())
+    m_year_first = re.fullmatch(r"(20\d{2})-(\d{1,10})", s)
+    if m_year_first:
+        return f"{int(m_year_first.group(2)):04d}-{m_year_first.group(1)}"
+    m_num_first = re.fullmatch(r"(\d{1,10})-(20\d{2})", s)
+    if m_num_first:
+        return f"{int(m_num_first.group(1)):04d}-{m_num_first.group(2)}"
+    if fallback_year is not None and s.isdigit():
+        return f"{int(s):04d}-{fallback_year}"
+    return s
 
 
 def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
@@ -71,7 +91,10 @@ async def _find_unpaid_income_match(
 ) -> tuple[Optional[Income], Optional[str]]:
     """
     Пытаемся сопоставить банковский платёж с уже существующей неоплаченной фактурой.
-    Возвращаем (income, reason) или (None, None).
+    reason:
+      - "invoice" — надёжно по номеру фактуры
+      - "invoice-ambiguous" — найдено несколько кандидатов по номеру (нужно уточнение)
+      - "client+amount" — слабое совпадение (клиент+сумма), нужно уточнение
     """
     base_filters = [
         Income.status != "cancelled",
@@ -94,15 +117,18 @@ async def _find_unpaid_income_match(
             deduped.append(inv)
 
     if deduped:
+        normalized = [_normalize_invoice_number(x) for x in deduped]
+        normalized_set = set(normalized)
         r = await db.execute(
-            select(Income).where(*base_filters, Income.invoice_number.in_(deduped))
+            select(Income).where(*base_filters)
         )
-        rows = r.scalars().all()
+        rows = [
+            inc for inc in r.scalars().all()
+            if _normalize_invoice_number(inc.invoice_number) in normalized_set
+        ]
         if rows:
-            # Если совпадений несколько (например, похожие номера за разные периоды) —
-            # берём наиболее вероятный: ближайший по сумме и дате.
-            normalized = [_normalize_invoice_number(x) for x in deduped]
-
+            # Если совпадений несколько — сортируем кандидатов, но не считаем это
+            # автоматически безопасным действием (в apply вернём запрос на уточнение).
             def rank(inc: Income):
                 inv_norm = _normalize_invoice_number(inc.invoice_number)
                 idx = normalized.index(inv_norm) if inv_norm in normalized else 999
@@ -111,7 +137,9 @@ async def _find_unpaid_income_match(
                 return (idx, amount_diff, date_diff, -inc.id)
 
             rows = sorted(rows, key=rank)
-            return rows[0], "invoice"
+            if len(rows) == 1:
+                return rows[0], "invoice"
+            return rows[0], "invoice-ambiguous"
 
     # Осторожный fallback: по клиенту+сумме, только если найден ровно один кандидат.
     if item.client_id:
@@ -282,6 +310,7 @@ async def apply_import(
 
         if tx_type == "income":
             matched_income = None
+            match_reason: Optional[str] = None
 
             # 1) Если есть референция и по ней уже есть неоплаченный income — закрываем его.
             if ref:
@@ -292,11 +321,19 @@ async def apply_import(
                         Income.paid_date.is_(None),
                     )
                 )
-                matched_income = r_ref.scalar_one_or_none()
+                ref_candidates = r_ref.scalars().all()
+                if len(ref_candidates) > 1:
+                    errors.append(
+                        f"Строка {i + 1}: по референции {ref} найдено несколько неоплаченных фактур. Уточните вручную перед импортом."
+                    )
+                    continue
+                if len(ref_candidates) == 1:
+                    matched_income = ref_candidates[0]
+                    match_reason = "reference"
 
             # 2) Иначе пробуем сопоставить по номеру фактуры/клиенту+сумме.
             if matched_income is None:
-                matched_income, _ = await _find_unpaid_income_match(
+                matched_income, match_reason = await _find_unpaid_income_match(
                     db=db,
                     item=item,
                     tx_date=d,
@@ -307,6 +344,16 @@ async def apply_import(
                 )
 
             if matched_income is not None:
+                if match_reason == "invoice-ambiguous":
+                    errors.append(
+                        f"Строка {i + 1}: найдено несколько кандидатов фактуры ({matched_income.invoice_number}) по номеру. Уточните вручную перед импортом."
+                    )
+                    continue
+                if match_reason == "client+amount":
+                    errors.append(
+                        f"Строка {i + 1}: найдено вероятное совпадение по клиенту и сумме ({matched_income.invoice_number}). Для безопасности уточните вручную перед импортом."
+                    )
+                    continue
                 matched_income.status = "paid"
                 matched_income.paid_date = d
                 matched_income.is_paid = True
@@ -339,11 +386,11 @@ async def apply_import(
                     )
                 matched_income_paid += 1
             else:
-                invoice_number = item.invoice_number
+                invoice_number = _to_number_year_format(item.invoice_number, d.year) if item.invoice_number else None
                 invoice_year_val = d.year
                 if not invoice_number:
                     next_n = await allocate_next_invoice_number(db, d.year)
-                    invoice_number = f"{d.year}-{next_n:04d}"
+                    invoice_number = f"{next_n:04d}-{d.year}"
                 income = Income(
                     issued_date=d,
                     invoice_number=invoice_number,

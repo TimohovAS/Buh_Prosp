@@ -153,7 +153,7 @@ class MonthlyObligation(Base):
 
 
 class InvoiceSequence(Base):
-    """Счётчик номеров счетов по годам (блокировка конкуренции при присвоении YYYY-NNNN)."""
+    """Счётчик номеров счетов по годам (блокировка конкуренции при присвоении NNNN-YYYY)."""
     __tablename__ = "invoice_sequence"
 
     year = Column(Integer, primary_key=True)
@@ -231,7 +231,7 @@ class Income(Base):
     id = Column(Integer, primary_key=True, index=True)
     issued_date = Column("date", Date, nullable=False)  # дата счёта (колонка в БД: date)
     invoice_number = Column(String(50), nullable=False)
-    invoice_year = Column(Integer, nullable=True)  # Период счёта (год): нумерация YYYY-NNNN сбрасывается по годам
+    invoice_year = Column(Integer, nullable=True)  # Период счёта (год): нумерация NNNN-YYYY сбрасывается по годам
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     client_name = Column(String(200))  # На случай если клиент не в справочнике
     description = Column(String(500))   # Основание платежа / описание услуги

@@ -2,6 +2,7 @@
 from datetime import date
 from typing import Optional
 from decimal import Decimal, InvalidOperation
+import re
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -47,6 +48,79 @@ def _normalize_pib(value: Optional[str]) -> Optional[str]:
 def _normalize_name(value: Optional[str]) -> Optional[str]:
     text = _normalize_whitespace(value)
     return text.lower() if text else None
+
+
+def _parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    """
+    Разобрать номер фактуры в форматах YYYY-NNNN и NNNN-YYYY.
+    Возвращает (year, serial) или (None, None), если шаблон не распознан.
+    """
+    s = (_normalize_whitespace(value) or "").upper()
+    if not s:
+        return None, None
+    m_year_first = re.fullmatch(r"(20\d{2})-(\d{1,10})", s)
+    if m_year_first:
+        return int(m_year_first.group(1)), int(m_year_first.group(2))
+    m_num_first = re.fullmatch(r"(\d{1,10})-(20\d{2})", s)
+    if m_num_first:
+        return int(m_num_first.group(2)), int(m_num_first.group(1))
+    return None, None
+
+
+def _invoice_identity(invoice_number: Optional[str], invoice_year: Optional[int]) -> tuple[Optional[int], str]:
+    """
+    Нормализованный ключ фактуры для сравнения дублей.
+    Для числовых форматов сравниваем по (year, serial без ведущих нулей).
+    """
+    raw = (_normalize_whitespace(invoice_number) or "").upper()
+    parsed_year, serial = _parse_invoice_number_parts(raw)
+    year_key = parsed_year if parsed_year is not None else invoice_year
+    if serial is not None:
+        return year_key, str(serial)
+    return year_key, raw
+
+
+def _to_number_year_format(invoice_number: Optional[str], fallback_year: Optional[int] = None) -> str:
+    """Привести распознанный номер к формату NNNN-YYYY."""
+    raw = (_normalize_whitespace(invoice_number) or "")
+    parsed_year, serial = _parse_invoice_number_parts(raw)
+    year_val = parsed_year if parsed_year is not None else fallback_year
+    if serial is not None and year_val is not None:
+        return f"{serial:04d}-{year_val}"
+    return raw
+
+
+async def _has_invoice_duplicate(
+    db: AsyncSession,
+    invoice_number: str,
+    invoice_year: int,
+    exclude_income_id: Optional[int] = None,
+) -> bool:
+    """
+    Проверка дубля с учётом форматов YYYY-NNNN и NNNN-YYYY.
+    Нужна для старых данных, где могут встречаться оба формата.
+    """
+    target_year, target_key = _invoice_identity(invoice_number, invoice_year)
+    r = await db.execute(
+        select(Income.id, Income.invoice_number, Income.invoice_year, Income.issued_date).where(
+            or_(
+                Income.invoice_year == invoice_year,
+                and_(
+                    Income.invoice_year.is_(None),
+                    Income.issued_date >= date(invoice_year, 1, 1),
+                    Income.issued_date <= date(invoice_year, 12, 31),
+                ),
+            )
+        )
+    )
+    for income_id, existing_number, existing_year, issued_date in r.fetchall():
+        if exclude_income_id is not None and int(income_id) == int(exclude_income_id):
+            continue
+        year_val = int(existing_year) if existing_year is not None else (issued_date.year if issued_date else None)
+        ex_year, ex_key = _invoice_identity(existing_number, year_val)
+        if ex_year == target_year and ex_key == target_key:
+            return True
+    return False
 
 
 def _parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
@@ -123,7 +197,7 @@ def _parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
     currency = _normalize_whitespace(invoice.findtext("cbc:DocumentCurrencyCode", default="RSD", namespaces=EF_NS)) or "RSD"
 
     return {
-        "invoice_number": invoice_number,
+        "invoice_number": _to_number_year_format(invoice_number, issue_date.year),
         "issued_date": issue_date,
         "due_date": due_date,
         "amount_rsd": amount_rsd,
@@ -167,11 +241,9 @@ async def list_income(
 
 
 def _invoice_year_from_number(invoice_number: str) -> Optional[int]:
-    """Год из номера YYYY-NNNN или None."""
-    s = (invoice_number or "").strip()
-    if len(s) >= 4 and s[:4].isdigit():
-        return int(s[:4])
-    return None
+    """Год из номера YYYY-NNNN или NNNN-YYYY."""
+    y, _ = _parse_invoice_number_parts(invoice_number)
+    return y
 
 
 @router.post("", response_model=IncomeResponse)
@@ -193,10 +265,22 @@ async def create_income(
     invoice_year_val = year
 
     if not invoice_number:
-        next_n = await allocate_next_invoice_number(db, year)
-        invoice_number = f"{year}-{next_n:04d}"
+        # Может быть старый формат в БД (YYYY-NNNN), поэтому при коллизии берём следующий номер.
+        allocated = False
+        for _ in range(50):
+            next_n = await allocate_next_invoice_number(db, year)
+            candidate = f"{next_n:04d}-{year}"
+            if not await _has_invoice_duplicate(db, candidate, year):
+                invoice_number = candidate
+                allocated = True
+                break
+        if not allocated:
+            raise HTTPException(409, "Не удалось подобрать уникальный номер счёта за год")
     else:
+        invoice_number = _to_number_year_format(invoice_number, year)
         invoice_year_val = data.invoice_year or _invoice_year_from_number(invoice_number) or (data.issued_date.year if data.issued_date else date.today().year)
+        if await _has_invoice_duplicate(db, invoice_number, invoice_year_val):
+            raise HTTPException(409, "Номер счёта уже существует в этом году (уникальность по году)")
 
     status_val = data.status or ("paid" if data.paid_date else "issued")
     income = Income(
@@ -252,16 +336,8 @@ async def check_invoice_exists(
 ):
     """Проверить, существует ли счёт с таким номером в указанном году (период счёта)."""
     y = year or date.today().year
-    r = await db.execute(
-        select(Income).where(
-            Income.invoice_number == invoice_number.strip(),
-            or_(
-                Income.invoice_year == y,
-                and_(Income.invoice_year.is_(None), Income.issued_date >= date(y, 1, 1), Income.issued_date <= date(y, 12, 31)),
-            ),
-        )
-    )
-    return {"exists": r.scalars().first() is not None}
+    normalized = _to_number_year_format(invoice_number, y)
+    return {"exists": await _has_invoice_duplicate(db, normalized, y)}
 
 
 @router.get("/next-invoice-number")
@@ -356,17 +432,12 @@ async def import_efaktura(
         invoice_year = parsed["issued_date"].year
         try:
             async with db.begin_nested():
-                existing_result = await db.execute(
-                    select(Income.id).where(
-                        Income.invoice_year == invoice_year,
-                        Income.invoice_number == parsed["invoice_number"],
-                    )
-                )
-                if existing_result.scalar_one_or_none() is not None:
+                normalized_invoice_number = _to_number_year_format(parsed["invoice_number"], invoice_year)
+                if await _has_invoice_duplicate(db, normalized_invoice_number, invoice_year):
                     skipped.append(
                         {
                             "file_name": file_name,
-                            "invoice_number": parsed["invoice_number"],
+                            "invoice_number": normalized_invoice_number,
                             "reason": "Фактура уже существует в доходах за этот год",
                         }
                     )
@@ -374,7 +445,7 @@ async def import_efaktura(
 
                 income = Income(
                     issued_date=parsed["issued_date"],
-                    invoice_number=parsed["invoice_number"],
+                    invoice_number=normalized_invoice_number,
                     invoice_year=invoice_year,
                     client_id=matched_client.id if matched_client else None,
                     client_name=matched_client.name if matched_client else parsed["client_name"],
@@ -527,14 +598,8 @@ async def update_income(
         if year_val is None and income.issued_date:
             year_val = income.issued_date.year
         if year_val is not None:
-            r_dup = await db.execute(
-                select(Income.id).where(
-                    Income.invoice_year == year_val,
-                    Income.invoice_number == (income.invoice_number or "").strip(),
-                    Income.id != income_id,
-                )
-            )
-            if r_dup.scalar_one_or_none() is not None:
+            income.invoice_number = _to_number_year_format(income.invoice_number, year_val)
+            if await _has_invoice_duplicate(db, income.invoice_number, year_val, exclude_income_id=income_id):
                 raise HTTPException(
                     409,
                     "Запись с таким номером счёта за этот год уже существует (invoice_year, invoice_number).",
