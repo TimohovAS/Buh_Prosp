@@ -45,6 +45,20 @@ async def init_db():
     import backend.models  # noqa: F401 — регистрируем модели в Base.metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_income_due_date_column)
+
+
+def _ensure_income_due_date_column(sync_conn):
+    """
+    Лёгкая миграция для существующих SQLite БД:
+    добавляет income.due_date (Valuta), если колонка отсутствует.
+    """
+    if sync_conn.dialect.name != "sqlite":
+        return
+    rows = sync_conn.exec_driver_sql("PRAGMA table_info('income')").fetchall()
+    columns = {str(r[1]).lower() for r in rows}
+    if "due_date" not in columns:
+        sync_conn.exec_driver_sql("ALTER TABLE income ADD COLUMN due_date DATE")
 
 
 def get_db_path() -> Path | None:

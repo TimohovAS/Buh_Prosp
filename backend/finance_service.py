@@ -299,16 +299,20 @@ async def get_accounts_receivable(db: AsyncSession) -> dict:
     for i in incomes:
         amt = float(i.amount_rsd)
         days_out = (today - i.issued_date).days
+        due_dt = i.due_date or (i.issued_date + timedelta(days=30))
+        days_overdue = (today - due_dt).days
         items.append({
             "income_id": i.id,
             "invoice_number": i.invoice_number,
             "client_name": i.client_name or (i.client.name if i.client else None),
             "issued_date": i.issued_date.isoformat(),
+            "due_date": due_dt.isoformat(),
             "amount": amt,
             "days_outstanding": days_out,
+            "days_overdue": days_overdue,
         })
         ar_total += amt
-        if days_out > 30:
+        if days_overdue > 0:
             ar_overdue += amt
     return {
         "items": items,

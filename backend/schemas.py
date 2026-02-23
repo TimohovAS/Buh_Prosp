@@ -136,6 +136,7 @@ class ProjectBrief(BaseModel):
 # --- Income ---
 class IncomeBase(BaseModel):
     issued_date: DateType = Field(serialization_alias="date")  # дата счёта (в БД: date)
+    due_date: Optional[DateType] = None  # Valuta / срок оплаты
     invoice_number: str
     invoice_year: Optional[int] = None
     client_id: Optional[int] = None
@@ -180,6 +181,7 @@ class IncomeCreate(IncomeBase):
 
 class IncomeUpdate(BaseModel):
     issued_date: Optional[DateType] = None
+    due_date: Optional[DateType] = None
     invoice_year: Optional[int] = None
     invoice_number: Optional[str] = None
     client_id: Optional[int] = None

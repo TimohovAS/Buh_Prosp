@@ -110,6 +110,28 @@ export const api = {
     bulkAssignProject: (data) => request('/income/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
     nextInvoice: (year) => request(`/income/next-invoice-number?year=${year || new Date().getFullYear()}`),
     checkInvoice: (invoiceNumber, year) => request(`/income/check-invoice?invoice_number=${encodeURIComponent(invoiceNumber)}&year=${year || new Date().getFullYear()}`),
+    importEfaktura: async (files) => {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+      const t = getToken();
+      const headers = t ? { Authorization: `Bearer ${t}` } : {};
+      const res = await fetch(API_BASE + '/income/import-efaktura', {
+        method: 'POST',
+        body: formData,
+        headers,
+      });
+      if (res.status === 401) {
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
   },
 
   finance: {

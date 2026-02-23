@@ -163,6 +163,11 @@ export default function BankImport() {
         <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-success)' }}>
           <p style={{ margin: 0 }}>
             {tr('bankImportCreated').replace('{income}', result.created_income).replace('{expense}', result.created_expense)}
+            {!!result.matched_income_paid && (
+              <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>
+                {tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}
+              </span>
+            )}
             {result.errors?.length > 0 && (
               <span style={{ color: 'var(--color-warning)', marginLeft: '0.5rem' }}>
                 {tr('bankImportWarnings')}: {result.errors.join('; ')}

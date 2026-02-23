@@ -1,7 +1,10 @@
 """Роутер доходов (КПО)."""
 from datetime import date
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from decimal import Decimal, InvalidOperation
+from xml.etree import ElementTree as ET
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy import select, or_, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +17,121 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
 
 router = APIRouter(prefix="/income", tags=["income"])
+
+
+EF_NS = {
+    "env": "urn:eFaktura:MinFinrs:envelop:schema",
+    "inv": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
+    "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+    "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+}
+
+
+def _normalize_whitespace(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    compact = " ".join(value.split()).strip()
+    return compact or None
+
+
+def _normalize_pib(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if not digits:
+        return None
+    # В eFaktura может приходить CompanyID вида RS123456789.
+    return digits[-9:] if len(digits) > 9 else digits
+
+
+def _normalize_name(value: Optional[str]) -> Optional[str]:
+    text = _normalize_whitespace(value)
+    return text.lower() if text else None
+
+
+def _parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as exc:
+        raise ValueError(f"{file_name}: не удалось прочитать XML ({exc})") from exc
+
+    invoice = root.find("env:DocumentBody/inv:Invoice", EF_NS)
+    if invoice is None and root.tag.endswith("Invoice"):
+        invoice = root
+    if invoice is None:
+        raise ValueError(f"{file_name}: не найден блок Invoice")
+
+    invoice_number = _normalize_whitespace(invoice.findtext("cbc:ID", default="", namespaces=EF_NS))
+    if not invoice_number:
+        raise ValueError(f"{file_name}: отсутствует номер фактуры (cbc:ID)")
+
+    issue_raw = _normalize_whitespace(invoice.findtext("cbc:IssueDate", default="", namespaces=EF_NS))
+    if not issue_raw:
+        raise ValueError(f"{file_name}: отсутствует дата фактуры (cbc:IssueDate)")
+    try:
+        issue_date = date.fromisoformat(issue_raw)
+    except ValueError as exc:
+        raise ValueError(f"{file_name}: некорректная дата фактуры ({issue_raw})") from exc
+
+    due_raw = _normalize_whitespace(invoice.findtext("cbc:DueDate", default="", namespaces=EF_NS))
+    due_date = None
+    if due_raw:
+        try:
+            due_date = date.fromisoformat(due_raw)
+        except ValueError as exc:
+            raise ValueError(f"{file_name}: некорректная дата оплаты (cbc:DueDate={due_raw})") from exc
+
+    amount_raw = _normalize_whitespace(
+        invoice.findtext("cac:LegalMonetaryTotal/cbc:PayableAmount", default="", namespaces=EF_NS)
+    )
+    if not amount_raw:
+        raise ValueError(f"{file_name}: отсутствует сумма к оплате (cbc:PayableAmount)")
+    normalized_amount = amount_raw.replace("\u00A0", "").replace(" ", "").replace(",", ".")
+    try:
+        amount_rsd = float(Decimal(normalized_amount))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{file_name}: некорректная сумма ({amount_raw})") from exc
+
+    customer_name = _normalize_whitespace(
+        invoice.findtext("cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name", default="", namespaces=EF_NS)
+    ) or _normalize_whitespace(
+        invoice.findtext(
+            "cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName",
+            default="",
+            namespaces=EF_NS,
+        )
+    )
+    customer_tax_id = _normalize_whitespace(
+        invoice.findtext(
+            "cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+            default="",
+            namespaces=EF_NS,
+        )
+    ) or _normalize_whitespace(
+        invoice.findtext("cac:AccountingCustomerParty/cac:Party/cbc:EndpointID", default="", namespaces=EF_NS)
+    )
+
+    line_titles: list[str] = []
+    for node in invoice.findall("cac:InvoiceLine/cac:Item/cbc:Name", EF_NS):
+        line_name = _normalize_whitespace(node.text)
+        if line_name:
+            line_titles.append(line_name)
+    description = "; ".join(line_titles) if line_titles else f"eFaktura {invoice_number}"
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+
+    currency = _normalize_whitespace(invoice.findtext("cbc:DocumentCurrencyCode", default="RSD", namespaces=EF_NS)) or "RSD"
+
+    return {
+        "invoice_number": invoice_number,
+        "issued_date": issue_date,
+        "due_date": due_date,
+        "amount_rsd": amount_rsd,
+        "currency": currency,
+        "client_name": customer_name,
+        "customer_pib": _normalize_pib(customer_tax_id),
+        "description": description,
+    }
 
 
 @router.get("", response_model=list[IncomeResponse])
@@ -94,6 +212,7 @@ async def create_income(
         currency=data.currency,
         exchange_rate=data.exchange_rate,
         paid_date=data.paid_date,
+        due_date=data.due_date,
         status=status_val,
         project_id=data.project_id,
         income_type=data.income_type or {"advance":"advance","intermediate":"intermediate","closing":"final"}.get(data.contract_payment_type or "", None),
@@ -187,6 +306,115 @@ async def bulk_assign_project_income(
         item.project_id = data.project_id
     await db.flush()
     return {"updated": len(items)}
+
+
+@router.post("/import-efaktura")
+async def import_efaktura(
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Импорт фактур eFaktura XML в доходы."""
+    if not files:
+        raise HTTPException(400, "Нужно выбрать хотя бы один XML-файл")
+
+    clients_result = await db.execute(select(Client))
+    clients = clients_result.scalars().all()
+    clients_by_pib: dict[str, Client] = {}
+    clients_by_name: dict[str, Client] = {}
+    for client in clients:
+        pib_key = _normalize_pib(client.pib)
+        if pib_key and pib_key not in clients_by_pib:
+            clients_by_pib[pib_key] = client
+        name_key = _normalize_name(client.name)
+        if name_key and name_key not in clients_by_name:
+            clients_by_name[name_key] = client
+
+    created = []
+    skipped = []
+    errors = []
+
+    for upload in files:
+        file_name = upload.filename or "unknown.xml"
+        content = await upload.read()
+        if not content:
+            errors.append({"file_name": file_name, "error": "Пустой файл"})
+            continue
+
+        try:
+            parsed = _parse_efaktura_invoice(content, file_name)
+        except ValueError as exc:
+            errors.append({"file_name": file_name, "error": str(exc)})
+            continue
+
+        matched_client = None
+        if parsed["customer_pib"]:
+            matched_client = clients_by_pib.get(parsed["customer_pib"])
+        if matched_client is None and parsed["client_name"]:
+            matched_client = clients_by_name.get(_normalize_name(parsed["client_name"]))
+
+        invoice_year = parsed["issued_date"].year
+        try:
+            async with db.begin_nested():
+                existing_result = await db.execute(
+                    select(Income.id).where(
+                        Income.invoice_year == invoice_year,
+                        Income.invoice_number == parsed["invoice_number"],
+                    )
+                )
+                if existing_result.scalar_one_or_none() is not None:
+                    skipped.append(
+                        {
+                            "file_name": file_name,
+                            "invoice_number": parsed["invoice_number"],
+                            "reason": "Фактура уже существует в доходах за этот год",
+                        }
+                    )
+                    continue
+
+                income = Income(
+                    issued_date=parsed["issued_date"],
+                    invoice_number=parsed["invoice_number"],
+                    invoice_year=invoice_year,
+                    client_id=matched_client.id if matched_client else None,
+                    client_name=matched_client.name if matched_client else parsed["client_name"],
+                    description=parsed["description"],
+                    amount_rsd=parsed["amount_rsd"],
+                    currency=parsed["currency"],
+                    exchange_rate=1.0,
+                    due_date=parsed["due_date"],
+                    status="issued",
+                    is_paid=False,
+                    note=f"Импорт eFaktura: {file_name}",
+                    created_by=current_user.id,
+                )
+                db.add(income)
+                await db.flush()
+                created.append(
+                    {
+                        "file_name": file_name,
+                        "income_id": income.id,
+                        "invoice_number": income.invoice_number,
+                        "client_name": income.client_name,
+                    }
+                )
+        except IntegrityError:
+            skipped.append(
+                {
+                    "file_name": file_name,
+                    "invoice_number": parsed["invoice_number"],
+                    "reason": "Дубликат фактуры",
+                }
+            )
+
+    return {
+        "created_count": len(created),
+        "skipped_count": len(skipped),
+        "error_count": len(errors),
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
 
 
 @router.get("/{income_id}", response_model=IncomeResponse)

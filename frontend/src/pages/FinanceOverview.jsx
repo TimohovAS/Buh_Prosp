@@ -75,7 +75,10 @@ export default function FinanceOverview() {
   const arItems = ar?.items || []
   const arTotals = ar?.totals || {}
 
-  const overdueItems = arItems.filter((i) => i.days_outstanding > 30).sort((a, b) => b.days_outstanding - a.days_outstanding).slice(0, 5)
+  const overdueItems = arItems
+    .filter((i) => (i.days_overdue ?? 0) > 0)
+    .sort((a, b) => (b.days_overdue ?? 0) - (a.days_overdue ?? 0))
+    .slice(0, 5)
 
   const revenueKey = mode === 'cash' ? 'revenue_cash' : mode === 'accrual' ? 'revenue_accrual' : 'revenue_cash'
   const expenseKey = mode === 'cash' ? 'expense_cash' : mode === 'accrual' ? 'expense_accrual' : 'expense_cash'
@@ -277,6 +280,7 @@ export default function FinanceOverview() {
                     <th>{tr('invoiceNumber')}</th>
                     <th>{tr('client')}</th>
                     <th>{tr('date')}</th>
+                    <th>{tr('valuta')}</th>
                     <th>{tr('amount')}</th>
                     <th>{tr('financeDaysOverdue')}</th>
                   </tr>
@@ -287,8 +291,9 @@ export default function FinanceOverview() {
                       <td>{i.invoice_number}</td>
                       <td>{i.client_name || '—'}</td>
                       <td>{i.issued_date}</td>
+                      <td>{i.due_date || '—'}</td>
                       <td>{fmt(i.amount)} RSD</td>
-                      <td style={{ color: 'var(--color-danger)' }}>{i.days_outstanding} дн.</td>
+                      <td style={{ color: 'var(--color-danger)' }}>{Math.max(0, i.days_overdue ?? 0)} дн.</td>
                     </tr>
                   ))}
                 </tbody>

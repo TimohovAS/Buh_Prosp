@@ -2,6 +2,7 @@
 from datetime import date, timedelta
 from typing import Optional, Any
 import hashlib
+import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -30,6 +31,104 @@ class ApplyRequest(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     transaction_count: Optional[int] = None
+
+
+def _normalize_invoice_number(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\s+", "", str(value).strip().upper())
+
+
+def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
+    """
+    Достаём возможные номера фактур из текста назначения/референции.
+    Поддерживаем оба частых формата: YYYY-NNNN и NNN-YYYY.
+    """
+    text = " ".join([str(p or "") for p in parts]).upper()
+    patterns = [
+        r"\b20\d{2}-\d{1,6}\b",   # 2026-0008
+        r"\b\d{1,6}-20\d{2}\b",   # 008-2026
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for pat in patterns:
+        for m in re.findall(pat, text):
+            v = m.strip()
+            if v and v not in seen:
+                seen.add(v)
+                out.append(v)
+    return out
+
+
+async def _find_unpaid_income_match(
+    db: AsyncSession,
+    item: ApplyItem,
+    tx_date: date,
+    amount: float,
+    payer: str,
+    description: str,
+    ref: str,
+) -> tuple[Optional[Income], Optional[str]]:
+    """
+    Пытаемся сопоставить банковский платёж с уже существующей неоплаченной фактурой.
+    Возвращаем (income, reason) или (None, None).
+    """
+    base_filters = [
+        Income.status != "cancelled",
+        Income.paid_date.is_(None),
+    ]
+    if item.client_id:
+        base_filters.append(Income.client_id == item.client_id)
+
+    invoice_candidates: list[str] = []
+    if item.invoice_number:
+        invoice_candidates.append(item.invoice_number.strip())
+    invoice_candidates.extend(_extract_invoice_candidates(description, ref))
+    # Убираем дубликаты при сохранении порядка.
+    deduped: list[str] = []
+    seen_norm: set[str] = set()
+    for inv in invoice_candidates:
+        n = _normalize_invoice_number(inv)
+        if n and n not in seen_norm:
+            seen_norm.add(n)
+            deduped.append(inv)
+
+    if deduped:
+        r = await db.execute(
+            select(Income).where(*base_filters, Income.invoice_number.in_(deduped))
+        )
+        rows = r.scalars().all()
+        if rows:
+            # Если совпадений несколько (например, похожие номера за разные периоды) —
+            # берём наиболее вероятный: ближайший по сумме и дате.
+            normalized = [_normalize_invoice_number(x) for x in deduped]
+
+            def rank(inc: Income):
+                inv_norm = _normalize_invoice_number(inc.invoice_number)
+                idx = normalized.index(inv_norm) if inv_norm in normalized else 999
+                amount_diff = abs(float(inc.amount_rsd) - float(amount))
+                date_diff = abs((tx_date - inc.issued_date).days)
+                return (idx, amount_diff, date_diff, -inc.id)
+
+            rows = sorted(rows, key=rank)
+            return rows[0], "invoice"
+
+    # Осторожный fallback: по клиенту+сумме, только если найден ровно один кандидат.
+    if item.client_id:
+        r = await db.execute(
+            select(Income).where(*base_filters, Income.client_id == item.client_id)
+        )
+        rows = [
+            inc
+            for inc in r.scalars().all()
+            if abs(float(inc.amount_rsd) - float(amount)) <= 0.5
+            and inc.issued_date <= tx_date
+            and (tx_date - inc.issued_date).days <= 365
+        ]
+        if len(rows) == 1:
+            return rows[0], "client+amount"
+
+    return None, None
 
 
 async def _recent_files(db: AsyncSession, limit: int = 10) -> list[dict[str, Any]]:
@@ -134,6 +233,7 @@ async def apply_import(
             )
 
     created_income = 0
+    matched_income_paid = 0
     created_expense = 0
     errors = []
     transactions = body.transactions
@@ -165,7 +265,8 @@ async def apply_import(
         if ref:
             if tx_type == "income":
                 r = await db.execute(select(Income).where(Income.bank_reference == ref))
-                if r.scalar_one_or_none():
+                income_by_ref = r.scalar_one_or_none()
+                if income_by_ref and (income_by_ref.paid_date is not None or income_by_ref.status == "paid"):
                     errors.append(f"Строка {i + 1}: доход с референцией {ref} уже импортирован")
                     continue
             else:
@@ -180,37 +281,95 @@ async def apply_import(
                     continue
 
         if tx_type == "income":
-            invoice_number = item.invoice_number
-            invoice_year_val = d.year
-            if not invoice_number:
-                next_n = await allocate_next_invoice_number(db, d.year)
-                invoice_number = f"{d.year}-{next_n:04d}"
-            income = Income(
-                issued_date=d,
-                invoice_number=invoice_number,
-                invoice_year=invoice_year_val,
-                client_id=item.client_id,
-                client_name=payer or None,
-                description=description or f"Банк: {payer}",
-                amount_rsd=amount,
-                bank_reference=ref or None,
-                status="paid" if amount else "issued",
-                paid_date=d if amount else None,
-                is_paid=bool(amount),
-                created_by=current_user.id,
-            )
-            db.add(income)
-            await db.flush()  # чтобы получить income.id
-            if amount:
-                ct = CashTransaction(
-                    type="income",
-                    source="invoice",
-                    reference_id=income.id,
-                    amount=float(amount),
-                    date=d,
+            matched_income = None
+
+            # 1) Если есть референция и по ней уже есть неоплаченный income — закрываем его.
+            if ref:
+                r_ref = await db.execute(
+                    select(Income).where(
+                        Income.bank_reference == ref,
+                        Income.status != "cancelled",
+                        Income.paid_date.is_(None),
+                    )
                 )
-                db.add(ct)
-            created_income += 1
+                matched_income = r_ref.scalar_one_or_none()
+
+            # 2) Иначе пробуем сопоставить по номеру фактуры/клиенту+сумме.
+            if matched_income is None:
+                matched_income, _ = await _find_unpaid_income_match(
+                    db=db,
+                    item=item,
+                    tx_date=d,
+                    amount=float(amount),
+                    payer=payer,
+                    description=description,
+                    ref=ref,
+                )
+
+            if matched_income is not None:
+                matched_income.status = "paid"
+                matched_income.paid_date = d
+                matched_income.is_paid = True
+                if ref and not matched_income.bank_reference:
+                    matched_income.bank_reference = ref
+                if item.client_id and not matched_income.client_id:
+                    matched_income.client_id = item.client_id
+                if payer and not matched_income.client_name:
+                    matched_income.client_name = payer
+
+                r_ct = await db.execute(
+                    select(CashTransaction).where(
+                        CashTransaction.source == "invoice",
+                        CashTransaction.reference_id == matched_income.id,
+                    )
+                )
+                existing_ct = r_ct.scalar_one_or_none()
+                if existing_ct:
+                    existing_ct.amount = float(amount)
+                    existing_ct.date = d
+                else:
+                    db.add(
+                        CashTransaction(
+                            type="income",
+                            source="invoice",
+                            reference_id=matched_income.id,
+                            amount=float(amount),
+                            date=d,
+                        )
+                    )
+                matched_income_paid += 1
+            else:
+                invoice_number = item.invoice_number
+                invoice_year_val = d.year
+                if not invoice_number:
+                    next_n = await allocate_next_invoice_number(db, d.year)
+                    invoice_number = f"{d.year}-{next_n:04d}"
+                income = Income(
+                    issued_date=d,
+                    invoice_number=invoice_number,
+                    invoice_year=invoice_year_val,
+                    client_id=item.client_id,
+                    client_name=payer or None,
+                    description=description or f"Банк: {payer}",
+                    amount_rsd=amount,
+                    bank_reference=ref or None,
+                    status="paid" if amount else "issued",
+                    paid_date=d if amount else None,
+                    is_paid=bool(amount),
+                    created_by=current_user.id,
+                )
+                db.add(income)
+                await db.flush()  # чтобы получить income.id
+                if amount:
+                    ct = CashTransaction(
+                        type="income",
+                        source="invoice",
+                        reference_id=income.id,
+                        amount=float(amount),
+                        date=d,
+                    )
+                    db.add(ct)
+                created_income += 1
         else:
             expense = Expense(
                 date=d,
@@ -273,6 +432,7 @@ async def apply_import(
 
     return {
         "created_income": created_income,
+        "matched_income_paid": matched_income_paid,
         "created_expense": created_expense,
         "errors": errors,
         "recent_files": await _recent_files(db, 10),

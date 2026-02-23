@@ -41,7 +41,7 @@ export default function AccountsReceivable() {
 
   useEffect(load, [])
 
-  const filtered = onlyOverdue ? items.filter((i) => i.days_outstanding > 30) : items
+  const filtered = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
 
   const openMarkPaid = (item) => {
     setModal({ income_id: item.income_id, invoice_number: item.invoice_number })
@@ -116,6 +116,7 @@ export default function AccountsReceivable() {
                 <th>{tr('invoiceNumber')}</th>
                 <th>{tr('client')}</th>
                 <th>{tr('date')}</th>
+                <th>{tr('valuta')}</th>
                 <th>{tr('amount')}</th>
                 <th>{tr('financeDaysOverdue')}</th>
                 <th style={{ width: 140 }}></th>
@@ -124,7 +125,7 @@ export default function AccountsReceivable() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                     {onlyOverdue ? tr('financeNoOverdue') : tr('noData')}
                   </td>
                 </tr>
@@ -134,9 +135,10 @@ export default function AccountsReceivable() {
                     <td>{i.invoice_number}</td>
                     <td>{i.client_name || '—'}</td>
                     <td>{formatDate(i.issued_date)}</td>
+                    <td>{formatDate(i.due_date)}</td>
                     <td>{fmt(i.amount)} RSD</td>
-                    <td style={{ color: i.days_outstanding > 30 ? 'var(--color-danger)' : undefined }}>
-                      {i.days_outstanding} {tr('days')}
+                    <td style={{ color: (i.days_overdue ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
+                      {Math.max(0, i.days_overdue ?? 0)} {tr('days')}
                     </td>
                     <td>
                       <button

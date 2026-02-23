@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -7,6 +7,7 @@ const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' };
 
 export default function Income() {
+  const efakturaInputRef = useRef(null)
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [contracts, setContracts] = useState([])
@@ -19,8 +20,11 @@ export default function Income() {
   const [modalAssign, setModalAssign] = useState(false)
   const [projects, setProjects] = useState([])
   const [assignProjectId, setAssignProjectId] = useState('')
+  const [efakturaImporting, setEfakturaImporting] = useState(false)
+  const [efakturaLastResult, setEfakturaLastResult] = useState(null)
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
+    due_date: '',
     invoice_number: '',
     client_id: '',
     client_name: '',
@@ -56,6 +60,7 @@ export default function Income() {
     const y = new Date().getFullYear()
     const defaultForm = {
       date: new Date().toISOString().slice(0, 10),
+      due_date: '',
       invoice_number: '', // сервер присвоит автоматически (блокировка конкуренции)
       client_id: '',
       client_name: '',
@@ -74,6 +79,7 @@ export default function Income() {
   const openEdit = (item) => {
     setForm({
       date: item.date,
+      due_date: item.due_date || '',
       invoice_number: item.invoice_number,
       client_id: item.client_id || '',
       client_name: item.client_name || '',
@@ -98,6 +104,7 @@ export default function Income() {
       const invoiceVal = form.invoice_number?.trim() || null
       const payload = {
         date: form.date,
+        due_date: form.due_date || null,
         invoice_number: modal === 'add' ? invoiceVal : (invoiceVal || undefined),
         invoice_year: new Date(form.date).getFullYear(),
         client_id: num(form.client_id),
@@ -164,6 +171,31 @@ export default function Income() {
     }
   }
 
+  const openEfakturaPicker = () => {
+    if (efakturaImporting) return
+    efakturaInputRef.current?.click()
+  }
+
+  const handleEfakturaFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (files.length === 0) return
+    setEfakturaImporting(true)
+    try {
+      const result = await api.income.importEfaktura(files)
+      setEfakturaLastResult(result)
+      load()
+      if ((result.error_count || 0) > 0) {
+        const first = result.errors?.[0]?.error || tr('loadError')
+        alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${first}`)
+      }
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setEfakturaImporting(false)
+    }
+  }
+
   const invoiceDuplicate = modal === 'add' && form.invoice_number?.trim() &&
     items.some((i) => i.invoice_number === form.invoice_number.trim())
 
@@ -183,6 +215,14 @@ export default function Income() {
       <div className="page-header">
         <h1 className="page-title">{tr('income')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <input
+            ref={efakturaInputRef}
+            type="file"
+            accept=".xml,text/xml,application/xml"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleEfakturaFiles}
+          />
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -225,9 +265,17 @@ export default function Income() {
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
+          <button className="btn btn-secondary" onClick={openEfakturaPicker} disabled={efakturaImporting}>
+            {efakturaImporting ? tr('efakturaImporting') : tr('efakturaImport')}
+          </button>
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>
+          {efakturaLastResult && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', alignSelf: 'center' }}>
+              {`${tr('efakturaCreated')}: ${efakturaLastResult.created_count || 0}, ${tr('efakturaSkipped')}: ${efakturaLastResult.skipped_count || 0}, ${tr('efakturaErrors')}: ${efakturaLastResult.error_count || 0}`}
+            </div>
+          )}
         </div>
       </div>
 
@@ -245,6 +293,7 @@ export default function Income() {
                   />
                 </th>
                 <th>{tr('date')}</th>
+                <th>{tr('valuta')}</th>
                 <th>{tr('invoiceNumber')}</th>
                 <th>{tr('client')}</th>
                 <th>{tr('contracts')}</th>
@@ -256,9 +305,9 @@ export default function Income() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9}>{tr('loading')}</td></tr>
+                <tr><td colSpan={10}>{tr('loading')}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
               ) : (
                 filtered.map((i) => (
                   <tr key={i.id}>
@@ -270,6 +319,7 @@ export default function Income() {
                       />
                     </td>
                     <td>{i.date}</td>
+                    <td>{i.due_date || '—'}</td>
                     <td>{i.invoice_number}</td>
                     <td>{i.client_name || '-'}</td>
                     <td>{i.contract_number || '-'}</td>
@@ -336,6 +386,13 @@ export default function Income() {
                     {tr('invoiceExistsWarning')}
                   </div>
                 )}
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('valuta')}</label>
+                <DatePicker
+                  value={form.due_date}
+                  onChange={(v) => setForm({ ...form, due_date: v })}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('client')}</label>
