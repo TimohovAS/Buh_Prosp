@@ -104,8 +104,12 @@ async def create_income(
     db.add(income)
     try:
         await db.flush()
-    except IntegrityError:
-        raise HTTPException(409, "Номер счёта уже существует в этом году (уникальность по году)")
+    except IntegrityError as e:
+        msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+        low = msg.lower()
+        if "unique" in low and ("invoice" in low or "uq_income_invoice_per_year" in low):
+            raise HTTPException(409, "Номер счёта уже существует в этом году (уникальность по году)") from e
+        raise
     if status_val == "paid" and data.paid_date:
         ct = CashTransaction(
             type="income",
@@ -289,7 +293,31 @@ async def update_income(
         setattr(income, k, v)
     if "paid_date" in dump or "status" in dump:
         income.is_paid = income.status == "paid"
-    await db.flush()
+    # Проверка уникальности (invoice_year, invoice_number) до flush
+    if "invoice_number" in dump:
+        year_val = income.invoice_year
+        if year_val is None and income.issued_date:
+            year_val = income.issued_date.year
+        if year_val is not None:
+            r_dup = await db.execute(
+                select(Income.id).where(
+                    Income.invoice_year == year_val,
+                    Income.invoice_number == (income.invoice_number or "").strip(),
+                    Income.id != income_id,
+                )
+            )
+            if r_dup.scalar_one_or_none() is not None:
+                raise HTTPException(
+                    409,
+                    "Запись с таким номером счёта за этот год уже существует (invoice_year, invoice_number).",
+                )
+    try:
+        await db.flush()
+    except IntegrityError as e:
+        msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+        if "UNIQUE" in msg and ("invoice" in msg or "income" in msg.lower()):
+            raise HTTPException(409, "Запись с таким номером счёта за этот год уже существует.") from e
+        raise
     # Синхронизация cash_transaction
     r2 = await db.execute(
         select(CashTransaction).where(

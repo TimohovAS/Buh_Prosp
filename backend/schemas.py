@@ -180,6 +180,7 @@ class IncomeCreate(IncomeBase):
 
 class IncomeUpdate(BaseModel):
     issued_date: Optional[DateType] = None
+    invoice_year: Optional[int] = None
     invoice_number: Optional[str] = None
     client_id: Optional[int] = None
     client_name: Optional[str] = None
@@ -198,9 +199,13 @@ class IncomeUpdate(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
+        if result.get("issued_date") is None and result.get("date") is not None:
+            result["issued_date"] = result.pop("date", None)
         for key in ("client_id", "contract_id", "project_id"):
             if key in result and (result[key] == "" or result[key] is None):
                 result[key] = None
+        if "invoice_year" in result and (result["invoice_year"] == "" or result["invoice_year"] is None):
+            result["invoice_year"] = None
         if "contract_payment_type" in result and (result["contract_payment_type"] == "" or result["contract_payment_type"] is None):
             result["contract_payment_type"] = None
         if result.get("contract_id") is None:

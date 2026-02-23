@@ -1,4 +1,5 @@
 """Конфигурация приложения ProspEl."""
+import secrets
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -8,7 +9,9 @@ class Settings(BaseSettings):
     app_name: str = "ProspEl"
     debug: bool = False
     database_url: str = "sqlite+aiosqlite:///./prospel.db"
-    secret_key: str = "change-this-in-production-use-secure-random-string"
+    # Если SECRET_KEY не задан в .env, используем случайный ключ на текущий запуск.
+    # Это безопаснее фиксированного дефолта, но для продакшена нужен постоянный ключ в .env.
+    secret_key: str = secrets.token_urlsafe(64)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 часа
     

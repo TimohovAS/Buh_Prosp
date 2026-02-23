@@ -42,10 +42,16 @@ async def get_or_create_obligations(
 ) -> list[MonthlyObligation]:
     """Получить или создать месячные обязательства за год. Обновить overdue."""
     today = date.today()
-    # Решения на год: своё или привремене с прошлого
+    # Решения на год: приоритет текущего года, fallback — provisional с прошлого года.
     q = (
         select(YearDecision)
-        .where(YearDecision.year == year, YearDecision.is_active == True)
+        .where(
+            YearDecision.is_active == True,
+            (
+                (YearDecision.year == year)
+                | ((YearDecision.year == (year - 1)) & (YearDecision.is_provisional == True))
+            ),
+        )
         .join(PaymentType)
     )
     if payment_type_code:

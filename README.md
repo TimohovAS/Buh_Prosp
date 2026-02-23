@@ -23,7 +23,7 @@
 ### 1. Backend
 
 ```bash
-cd c:\Programming\Buh_Prosp
+cd D:\Program\ProspEl
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
@@ -87,3 +87,14 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost/prospel
 - `GET /api/payments` — платежи
 - `GET /api/reports/kpo/csv` — экспорт КПО CSV
 - `GET /api/reports/kpo/pdf` — экспорт КПО PDF
+
+## Развёртывание на Windows в локальной сети
+
+Для серверного запуска на Windows 11 и доступа с других ПК используйте:
+
+- `DEPLOY_WINDOWS_LAN.md` — пошаговая инструкция
+- `start_backend_server.bat` — запуск backend (uvicorn, без reload)
+- `start_frontend_server.bat` — запуск frontend на `0.0.0.0:5173`
+- `start_all_server.bat` — запуск backend + frontend
+- `setup_firewall_server.bat` — правила firewall
+- `backup_db.ps1` — резервные копии SQLite БД

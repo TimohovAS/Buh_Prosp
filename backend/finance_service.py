@@ -86,9 +86,11 @@ async def get_finance_summary(
     if project_id is not None:
         income_base = and_(income_base, Income.project_id == project_id)
 
-    # Базовые условия для expenses (accrual: date in period, status != reversed)
+    # Базовые условия для expenses:
+    # accrual: учитываем фактические проводки, включая сторно (status=reversed, amount<0),
+    # но исключаем planned.
     expense_accrual_base = and_(
-        expense_status != "reversed",
+        expense_status != "planned",
         expense_date_col >= date_from,
         expense_date_col <= date_to,
     )
@@ -100,7 +102,7 @@ async def get_finance_summary(
             expense_is_tax == (1 if is_tax_related else 0),
         )
 
-    # Cash: paid_date in period, status == paid (и не reversed — paid уже подразумевает не reversed)
+    # Cash: paid_date in period, учитываем paid и reversed (сторно влияет на cash-flow).
     income_cash_base = and_(
         income_status == "paid",
         income_paid_col.isnot(None),
@@ -115,7 +117,7 @@ async def get_finance_summary(
         income_cash_base = and_(income_cash_base, Income.project_id == project_id)
 
     expense_cash_base = and_(
-        expense_status == "paid",
+        expense_status.in_(["paid", "reversed"]),
         expense_paid_col.isnot(None),
         expense_paid_col >= date_from,
         expense_paid_col <= date_to,
@@ -129,7 +131,7 @@ async def get_finance_summary(
         )
 
     expense_tax_base = and_(
-        expense_status == "paid",
+        expense_status.in_(["paid", "reversed"]),
         expense_is_tax == True,
         expense_paid_col.isnot(None),
         expense_paid_col >= date_from,
@@ -388,9 +390,9 @@ async def get_finance_by_project(
             income_date_col >= date_from,
             income_date_col <= date_to,
         )
-        # Расходы: date в периоде, status != reversed
+        # Расходы: date в периоде, включая сторно (reversed), но без planned
         expense_base = and_(
-            expense_status != "reversed",
+            expense_status != "planned",
             expense_date_col >= date_from,
             expense_date_col <= date_to,
         )
@@ -402,9 +404,9 @@ async def get_finance_by_project(
             income_paid_col >= date_from,
             income_paid_col <= date_to,
         )
-        # cash: расходы — только paid, по paid_date (если нет paid_date — не считаем)
+        # cash: расходы — paid и reversed, по paid_date (если нет paid_date — не считаем)
         expense_base = and_(
-            expense_status == "paid",
+            expense_status.in_(["paid", "reversed"]),
             expense_paid_col.isnot(None),
             expense_paid_col >= date_from,
             expense_paid_col <= date_to,

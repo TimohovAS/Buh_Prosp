@@ -89,6 +89,39 @@ async def bulk_assign_project_expenses(
     return {"updated": len(items)}
 
 
+@router.get("/totals/summary")
+async def get_expense_totals(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Суммы расходов за год и месяц."""
+    today = date.today()
+    y = year or today.year
+    m = month or today.month
+
+    r_year = await db.execute(
+        select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.date >= date(y, 1, 1),
+            Expense.date <= date(y, 12, 31),
+        )
+    )
+    year_total = float(r_year.scalar() or 0)
+
+    import calendar
+    last_day = calendar.monthrange(y, m)[1]
+    r_month = await db.execute(
+        select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.date >= date(y, m, 1),
+            Expense.date <= date(y, m, last_day),
+        )
+    )
+    month_total = float(r_month.scalar() or 0)
+
+    return {"year_expenses": year_total, "month_expenses": month_total}
+
+
 @router.get("/{expense_id}", response_model=ExpenseResponse)
 async def get_expense(
     expense_id: int,
@@ -169,36 +202,3 @@ async def delete_expense(
         created_by=current_user.id,
     )
     return {"ok": True, "reversal_id": reversal.id}
-
-
-@router.get("/totals/summary")
-async def get_expense_totals(
-    year: Optional[int] = Query(None),
-    month: Optional[int] = Query(None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user_required),
-):
-    """Суммы расходов за год и месяц."""
-    today = date.today()
-    y = year or today.year
-    m = month or today.month
-
-    r_year = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0)).where(
-            Expense.date >= date(y, 1, 1),
-            Expense.date <= date(y, 12, 31),
-        )
-    )
-    year_total = float(r_year.scalar() or 0)
-
-    import calendar
-    last_day = calendar.monthrange(y, m)[1]
-    r_month = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0)).where(
-            Expense.date >= date(y, m, 1),
-            Expense.date <= date(y, m, last_day),
-        )
-    )
-    month_total = float(r_month.scalar() or 0)
-
-    return {"year_expenses": year_total, "month_expenses": month_total}
