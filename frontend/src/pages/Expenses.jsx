@@ -92,11 +92,12 @@ export default function Expenses() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      const categoryValue = form.category?.trim() || null
       const payload = {
         date: form.date,
         description: form.description.trim(),
         amount: parseFloat(form.amount) || 0,
-        category: form.category || null,
+        category: categoryValue,
         project_id: form.project_id ? parseInt(form.project_id, 10) : null,
         note: form.note || null,
       }
@@ -130,6 +131,12 @@ export default function Expenses() {
   })
 
   const total = filtered.reduce((sum, i) => sum + i.amount, 0)
+  const defaultCategoryValues = getCategories(tr).filter((c) => c.value).map((c) => c.value)
+  const savedCategoryValues = items
+    .map((i) => (i.category || '').trim())
+    .filter(Boolean)
+  const categoryOptions = Array.from(new Set([...defaultCategoryValues, ...savedCategoryValues]))
+    .sort((a, b) => a.localeCompare(b))
 
   return (
     <>
@@ -282,15 +289,19 @@ export default function Expenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('category')}</label>
-                <select
+                <input
+                  list="expense-category-list"
+                  type="text"
                   className="form-input"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
-                >
-                  {getCategories(tr).map((c) => (
-                    <option key={c.value || 'empty'} value={c.value}>{c.label}</option>
+                  placeholder={tr('expenseCategoryOther')}
+                />
+                <datalist id="expense-category-list">
+                  {categoryOptions.map((value) => (
+                    <option key={value} value={value} />
                   ))}
-                </select>
+                </datalist>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
