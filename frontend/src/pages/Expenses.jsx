@@ -136,6 +136,16 @@ export default function Expenses() {
       <div className="page-header">
         <h1 className="page-title">{tr('expenses')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              alignSelf: 'center',
+              fontWeight: 600,
+              color: 'var(--color-danger)',
+              marginRight: '0.5rem',
+            }}
+          >
+            {tr('total')}: {total.toLocaleString('sr-RS')} RSD
+          </div>
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -240,11 +250,6 @@ export default function Expenses() {
             </tbody>
           </table>
         </div>
-        {filtered.length > 0 && (
-          <div style={{ marginTop: '1rem', fontWeight: 600, color: 'var(--color-danger)' }}>
-            {tr('total')}: {total.toLocaleString('sr-RS')} RSD
-          </div>
-        )}
       </div>
       </div>
 
