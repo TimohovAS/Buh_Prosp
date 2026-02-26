@@ -202,11 +202,13 @@ async def update_contract(
         for ci in list(contract.items):
             await db.delete(ci)
         await db.flush()
-        amount = 0
+        amount = 0.0
+        has_items = False
         for i, item in enumerate(items_data):
             item_obj = ContractItemCreate(**item)
             amt = item_obj.quantity * item_obj.price
             amount += amt
+            has_items = True
             ci = ContractItem(
                 contract_id=contract.id,
                 description=item_obj.description,
@@ -217,7 +219,8 @@ async def update_contract(
                 sort_order=i,
             )
             db.add(ci)
-        contract.amount = amount
+        if has_items:
+            contract.amount = amount
     await db.flush()
     await db.refresh(contract)
     await db.refresh(contract, ["client", "items"])
