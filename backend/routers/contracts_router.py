@@ -126,7 +126,9 @@ async def create_contract(
 def _contract_to_response(c: Contract) -> ContractResponse:
     items = [ContractItemResponse.model_validate(i) for i in c.items] if c.items else []
     advance_sum = intermediate_sum = closing_sum = 0.0
-    incomes = getattr(c, "incomes", []) or []
+    # Для create/update связь incomes может быть не предзагружена.
+    # Не триггерим lazy-load в async-контексте, чтобы избежать MissingGreenlet (HTTP 500).
+    incomes = c.__dict__.get("incomes") or []
     for inc in incomes:
         amt = inc.amount_rsd * (inc.exchange_rate or 1)
         if inc.contract_payment_type == "advance":
