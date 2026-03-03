@@ -83,7 +83,7 @@ export default function Obligations() {
       await api.obligations.generate(year)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     } finally {
       setGenerating(false)
     }
@@ -108,7 +108,7 @@ export default function Obligations() {
       setPaidModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -118,7 +118,7 @@ export default function Obligations() {
       await api.obligations.markUnpaid(ob.id)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -193,7 +193,7 @@ export default function Obligations() {
       setDecisionFormModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -203,7 +203,7 @@ export default function Obligations() {
       await api.obligations.applyPreset2026()
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

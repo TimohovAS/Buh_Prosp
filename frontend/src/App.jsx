@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { getToken, setUser, getUser, api } from './api'
 import { getLang, setLang, tr } from './i18n'
+import ToastProvider from './components/ToastProvider'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -62,33 +63,36 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout lang={lang} toggleLang={toggleLang} />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Dashboard />} />
-        <Route path="income" element={<Income />} />
-        <Route path="clients" element={<Clients />} />
-        <Route path="finance" element={<FinanceOverview />} />
-        <Route path="finance/ar" element={<AccountsReceivable />} />
-        <Route path="finance/cashflow" element={<CashFlow />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="payments" element={<Obligations />} />
-        <Route path="contracts" element={<Contracts />} />
-        <Route path="expenses" element={<Expenses />} />
-        <Route path="planned-expenses" element={<PlannedExpenses />} />
-        <Route path="bank-import" element={<BankImport />} />
-        <Route path="bank" element={<BankTransactions />} />
-        <Route path="settings" element={<Settings />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout lang={lang} toggleLang={toggleLang} />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="income" element={<Income />} />
+          <Route path="clients" element={<Clients />} />
+          <Route path="finance" element={<FinanceOverview />} />
+          <Route path="finance/ar" element={<AccountsReceivable />} />
+          <Route path="finance/cashflow" element={<CashFlow />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="payments" element={<Obligations />} />
+          <Route path="contracts" element={<Contracts />} />
+          <Route path="expenses" element={<Expenses />} />
+          <Route path="planned-expenses" element={<PlannedExpenses />} />
+          <Route path="bank-import" element={<BankImport />} />
+          <Route path="bank" element={<BankTransactions />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <ToastProvider />
+    </>
   )
 }
 

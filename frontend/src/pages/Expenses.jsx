@@ -61,7 +61,7 @@ export default function Expenses() {
       setSelectedIds([])
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -109,7 +109,7 @@ export default function Expenses() {
       setModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -119,7 +119,7 @@ export default function Expenses() {
       await api.expenses.delete(id)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

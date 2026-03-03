@@ -156,7 +156,7 @@ export default function Contracts() {
       setModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -174,7 +174,7 @@ export default function Contracts() {
       await api.contracts.delete(id)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

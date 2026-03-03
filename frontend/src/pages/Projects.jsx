@@ -117,7 +117,7 @@ export default function Projects() {
       setModal(null)
       loadAll()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -127,7 +127,7 @@ export default function Projects() {
       await api.projects.delete(id)
       loadAll()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

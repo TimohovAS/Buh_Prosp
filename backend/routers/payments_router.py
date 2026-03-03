@@ -24,7 +24,7 @@ async def list_payments(
     # Создаём записи для всех месяцев если их нет
     for m in range(1, 13):
         await get_or_create_payment(db, year, m)
-    await db.flush()
+    await db.commit()
     r = await db.execute(
         select(Payment).where(Payment.year == year).order_by(Payment.month)
     )
@@ -58,7 +58,7 @@ async def create_rates(
         raise HTTPException(400, "Ставки за этот год уже существуют")
     rates = ContributionRates(**data.model_dump())
     db.add(rates)
-    await db.flush()
+    await db.commit()
     await db.refresh(rates)
     return ContributionRatesResponse.model_validate(rates)
 
@@ -77,6 +77,6 @@ async def update_payment(
         raise HTTPException(404, "Платёж не найден")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(payment, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(payment)
     return PaymentResponse.model_validate(payment)

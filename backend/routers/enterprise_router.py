@@ -39,6 +39,6 @@ async def update_enterprise(
     else:
         for k, v in data.model_dump(exclude_unset=True).items():
             setattr(ent, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(ent)
     return EnterpriseResponse.model_validate(ent)

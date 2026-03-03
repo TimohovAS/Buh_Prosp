@@ -129,7 +129,7 @@ async def mark_planned_expense_paid(
         note=data.note,
     )
     db.add(pep)
-    await db.flush()
+    await db.commit()
     return {"ok": True, "expense_id": expense.id}
 
 
@@ -162,7 +162,7 @@ async def mark_planned_expense_unpaid(
                 created_by=current_user.id,
             )
     await db.delete(pep)
-    await db.flush()
+    await db.commit()
     return {"ok": True}
 
 
@@ -189,7 +189,7 @@ async def create_planned_expense(
         note=data.note,
     )
     db.add(pe)
-    await db.flush()
+    await db.commit()
     await db.refresh(pe)
     return PlannedExpenseResponse.model_validate(pe)
 
@@ -222,7 +222,7 @@ async def update_planned_expense(
         raise HTTPException(404, "Планируемый расход не найден")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(pe, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(pe)
     return PlannedExpenseResponse.model_validate(pe)
 

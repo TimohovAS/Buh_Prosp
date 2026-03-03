@@ -19,14 +19,19 @@ router = APIRouter(prefix="/bank-import", tags=["bank-import"])
 class ApplyItem(BaseModel):
     type: str  # income | expense
     tx: dict[str, Any]
+    file_hash: Optional[str] = None
+
+
+class ImportFileMeta(BaseModel):
+    file_hash: str
+    file_name: str
+    file_size: int
+    transaction_count: int
 
 
 class ApplyRequest(BaseModel):
     transactions: list[ApplyItem]
-    file_hash: Optional[str] = None
-    file_name: Optional[str] = None
-    file_size: Optional[int] = None
-    transaction_count: Optional[int] = None
+    files: list[ImportFileMeta] = []
 
 
 async def _recent_files(db: AsyncSession, limit: int = 10) -> list[dict[str, Any]]:
@@ -69,44 +74,47 @@ async def list_recent_import_files(
 
 @router.post("/parse")
 async def parse_izvod(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     """Разобрать файл извода (.xls). Возвращает список транзакций."""
-    if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
-        raise HTTPException(400, "Нужен файл .xls или .xlsx")
-    content = await file.read()
-    file_hash = hashlib.sha256(content).hexdigest()
-    try:
-        transactions = parse_izvod_xls(content)
-    except Exception as e:
-        raise HTTPException(400, f"Ошибка чтения файла: {e}")
-    r = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == file_hash))
-    existing = r.scalar_one_or_none()
-    existing_data = None
-    if existing:
-        username = None
-        if existing.imported_by:
-            r_user = await db.execute(select(User.username).where(User.id == existing.imported_by))
-            username = r_user.scalar_one_or_none()
-        existing_data = {
-            "id": existing.id,
-            "file_name": existing.file_name,
-            "file_hash": existing.file_hash,
-            "transaction_count": existing.transaction_count,
-            "created_income": existing.created_income,
-            "created_expense": existing.created_expense,
-            "errors_count": existing.errors_count,
-            "imported_by": username,
-            "imported_at": existing.imported_at.isoformat() if existing.imported_at else None,
-        }
+    all_transactions = []
+    skipped_files = []
+    parsed_files = []
+    
+    for file in files:
+        if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
+            skipped_files.append({"file_name": file.filename or "unknown", "reason": "Нужен файл .xls или .xlsx"})
+            continue
+            
+        content = await file.read()
+        file_hash = hashlib.sha256(content).hexdigest()
+        
+        r = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == file_hash))
+        existing = r.scalar_one_or_none()
+        if existing:
+            skipped_files.append({"file_name": file.filename, "reason": "Уже импортирован", "hash": file_hash})
+            continue
+            
+        try:
+            transactions = parse_izvod_xls(content)
+            for t in transactions:
+                t["file_hash"] = file_hash
+            all_transactions.extend(transactions)
+            parsed_files.append({
+                "file_hash": file_hash,
+                "file_name": file.filename,
+                "file_size": len(content),
+                "transaction_count": len(transactions)
+            })
+        except Exception as e:
+            skipped_files.append({"file_name": file.filename, "reason": f"Ошибка чтения: {e}"})
+            
     return {
-        "transactions": transactions,
-        "file_name": file.filename,
-        "file_hash": file_hash,
-        "already_imported": existing is not None,
-        "imported_file": existing_data,
+        "transactions": all_transactions,
+        "parsed_files": parsed_files,
+        "skipped_files": skipped_files,
         "recent_files": await _recent_files(db, 10),
     }
 
@@ -120,15 +128,15 @@ async def apply_import(
     """
     Создать BankTransaction из выбранных строк.
     """
-    if body.file_hash:
-        r_file = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == body.file_hash))
-        existing = r_file.scalar_one_or_none()
-        if existing:
-            raise HTTPException(
-                409,
-                f"Файл уже был импортирован: {existing.file_name} ({existing.imported_at.date() if existing.imported_at else 'unknown'})",
-            )
+    if body.files:
+        hashes = [f.file_hash for f in body.files]
+        r_files = await db.execute(select(BankImportFile).where(BankImportFile.file_hash.in_(hashes)))
+        existing_files = r_files.scalars().all()
+        if existing_files:
+            names = ", ".join(f.file_name for f in existing_files)
+            raise HTTPException(409, f"Файлы уже были импортированы: {names}")
 
+    file_stats = {f.file_hash: {"created_income": 0, "created_expense": 0, "errors_count": 0} for f in body.files}
     created_transactions = 0
     skipped_duplicates = 0
     errors = []
@@ -147,12 +155,16 @@ async def apply_import(
 
         if not date_str or float(amount) <= 0:
             errors.append(f"Строка {i + 1}: неверные дата или сумма")
+            if item.file_hash and item.file_hash in file_stats:
+                file_stats[item.file_hash]["errors_count"] += 1
             continue
 
         try:
             d = date.fromisoformat(date_str)
         except ValueError:
             errors.append(f"Строка {i + 1}: неверный формат даты")
+            if item.file_hash and item.file_hash in file_stats:
+                file_stats[item.file_hash]["errors_count"] += 1
             continue
 
         is_duplicate = False
@@ -187,22 +199,29 @@ async def apply_import(
         )
         db.add(transaction)
         created_transactions += 1
+        if item.file_hash and item.file_hash in file_stats:
+            if direction == "in":
+                file_stats[item.file_hash]["created_income"] += 1
+            else:
+                file_stats[item.file_hash]["created_expense"] += 1
 
     await db.flush()
 
-    if body.file_hash:
+    for f in body.files:
+        stats = file_stats[f.file_hash]
         file_entry = BankImportFile(
-            file_name=(body.file_name or "unknown").strip() or "unknown",
-            file_hash=body.file_hash,
-            file_size=body.file_size,
-            transaction_count=body.transaction_count if body.transaction_count is not None else len(transactions),
-            created_income=created_transactions,
-            created_expense=0,
-            errors_count=len(errors),
+            file_name=f.file_name,
+            file_hash=f.file_hash,
+            file_size=f.file_size,
+            transaction_count=f.transaction_count,
+            created_income=stats["created_income"],
+            created_expense=stats["created_expense"],
+            errors_count=stats["errors_count"],
             imported_by=current_user.id,
         )
         db.add(file_entry)
-        await db.flush()
+
+    await db.commit()
 
     return {
         "created_transactions": created_transactions,

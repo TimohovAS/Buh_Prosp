@@ -27,7 +27,7 @@ export default function BankTransactions() {
             const res = await api.bankTransactions.list(params)
             setData(res)
         } catch (err) {
-            alert(err.message)
+            console.error(err)
         } finally {
             setLoading(false)
         }
@@ -42,7 +42,7 @@ export default function BankTransactions() {
             await api.bankTransactions.update(id, { status: newStatus })
             loadData()
         } catch (e) {
-            alert(e.message)
+            console.error(e)
         }
     }
 
@@ -52,7 +52,7 @@ export default function BankTransactions() {
             await api.bankTransactions.unmatch(id)
             loadData()
         } catch (e) {
-            alert(e.message)
+            console.error(e)
         }
     }
 

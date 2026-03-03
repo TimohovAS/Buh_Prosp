@@ -49,7 +49,7 @@ export default function Clients() {
       setModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -59,7 +59,7 @@ export default function Clients() {
       await api.clients.delete(id)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

@@ -136,7 +136,7 @@ export default function Income() {
         alert(tr('invoiceExistsConfirm'))
         return
       }
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -157,7 +157,7 @@ export default function Income() {
       setSelectedIds([])
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -167,7 +167,7 @@ export default function Income() {
       await api.income.delete(id)
       load()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -190,7 +190,7 @@ export default function Income() {
         alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${first}`)
       }
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     } finally {
       setEfakturaImporting(false)
     }
@@ -199,8 +199,8 @@ export default function Income() {
   const invoiceDuplicate = modal === 'add' && form.invoice_number?.trim() &&
     items.some((i) => i.invoice_number === form.invoice_number.trim())
 
-  const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((e) => alert(e.message))
-  const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((e) => alert(e.message))
+  const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((e) => console.error(e))
+  const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((e) => console.error(e))
 
   const filtered = items.filter((i) => {
     if (!search) return true

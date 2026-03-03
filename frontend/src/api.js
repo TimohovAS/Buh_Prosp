@@ -51,6 +51,7 @@ async function request(endpoint, options = {}) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const msg = typeof err.detail === 'string' ? err.detail : (Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(', ') : err.message || `HTTP ${res.status}`);
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
     const e = new Error(msg);
     e.status = res.status;
     throw e;
@@ -76,7 +77,9 @@ export const api = {
       }).then(async (r) => {
         if (!r.ok) {
           const e = await r.json().catch(() => ({}));
-          throw new Error(e.detail || 'Неверный логин или пароль');
+          const msg = e.detail || 'Неверный логин или пароль';
+          window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+          throw new Error(msg);
         }
         const data = await r.json();
         setToken(data.access_token);
@@ -126,7 +129,9 @@ export const api = {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
+        const msg = err.detail || `HTTP ${res.status}`;
+        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+        throw new Error(msg);
       }
       return res.json();
     },
@@ -237,9 +242,11 @@ export const api = {
 
   dashboard: () => request('/dashboard'),
   bankImport: {
-    parse: async (file) => {
+    parse: async (files) => {
       const formData = new FormData();
-      formData.append('file', file);
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
       const t = getToken();
       const headers = t ? { Authorization: `Bearer ${t}` } : {};
       const res = await fetch(API_BASE + '/bank-import/parse', {
@@ -255,7 +262,9 @@ export const api = {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
+        const msg = err.detail || `HTTP ${res.status}`;
+        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+        throw new Error(msg);
       }
       return res.json();
     },
@@ -293,7 +302,10 @@ export const api = {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
-      if (!res.ok) throw new Error('Ошибка загрузки');
+      if (!res.ok) {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
+        throw new Error('Ошибка загрузки');
+      }
       const blob = await res.blob();
       const u = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -307,7 +319,10 @@ export const api = {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
-      if (!res.ok) throw new Error('Ошибка загрузки');
+      if (!res.ok) {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
+        throw new Error('Ошибка загрузки');
+      }
       const blob = await res.blob();
       const u = URL.createObjectURL(blob);
       const a = document.createElement('a');

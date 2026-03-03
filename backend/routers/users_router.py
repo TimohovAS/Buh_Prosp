@@ -61,7 +61,7 @@ async def create_user(
         default_language=data.default_language or "sr",
     )
     db.add(user)
-    await db.flush()
+    await db.commit()
     await db.refresh(user)
     return UserResponse.model_validate(user)
 
@@ -90,7 +90,7 @@ async def update_user(
             raise HTTPException(400, "Недопустимая роль")
     for k, v in d.items():
         setattr(user, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(user)
     return UserResponse.model_validate(user)
 
@@ -109,5 +109,5 @@ async def deactivate_user(
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     user.is_active = False
-    await db.flush()
+    await db.commit()
     return {"ok": True}

@@ -42,6 +42,7 @@ async def generate_obligations(
     """
     await ensure_payment_types(db)
     obligations = await get_or_create_obligations(db, year, None)
+    await db.commit()
     return {"ok": True, "count": len(obligations)}
 
 
@@ -165,7 +166,7 @@ async def create_decision(
         raise HTTPException(400, "Решение на этот год и тип уже существует")
     dec = YearDecision(**data.model_dump())
     db.add(dec)
-    await db.flush()
+    await db.commit()
     await db.refresh(dec)
     pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
     return YearDecisionResponse(
@@ -191,7 +192,7 @@ async def update_decision(
         raise HTTPException(404, "Решение не найдено")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(dec, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(dec)
     pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
     return YearDecisionResponse(
@@ -240,7 +241,7 @@ async def apply_preset_2026(
         )
         db.add(dec)
         created += 1
-    await db.flush()
+    await db.commit()
     return {"ok": True, "created": created}
 
 

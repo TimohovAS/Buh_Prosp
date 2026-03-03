@@ -46,7 +46,7 @@ async def create_bank_transaction(
     """Добавить банковскую транзакцию вручную."""
     transaction = BankTransaction(**data.model_dump())
     db.add(transaction)
-    await db.flush()
+    await db.commit()
     await db.refresh(transaction)
     return BankTransactionResponse.model_validate(transaction)
 
@@ -79,7 +79,7 @@ async def update_bank_transaction(
         raise HTTPException(404, "Транзакция не найдена")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(tx, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(tx)
     return BankTransactionResponse.model_validate(tx)
 
@@ -110,6 +110,7 @@ async def apply_match(
     """Сопоставить банковскую транзакцию с документом."""
     try:
         tx = await match_transaction(db, tx_id, body.type, body.id)
+        await db.commit()
         # SQLAlchemy may not return a fresh model immediately after status updates, 
         # so we refresh it before responding.
         await db.refresh(tx)
@@ -127,6 +128,7 @@ async def revert_match(
     """Отменить сопоставление банковской транзакции."""
     try:
         tx = await unmatch_transaction(db, tx_id)
+        await db.commit()
         await db.refresh(tx)
         return BankTransactionResponse.model_validate(tx)
     except ValueError as e:

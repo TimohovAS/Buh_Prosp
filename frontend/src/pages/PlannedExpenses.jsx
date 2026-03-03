@@ -156,7 +156,7 @@ export default function PlannedExpenses() {
       load()
       loadUpcoming()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -177,7 +177,7 @@ export default function PlannedExpenses() {
       })
       loadUpcoming()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -194,7 +194,7 @@ export default function PlannedExpenses() {
       setPaidModal(null)
       loadUpcoming()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -205,7 +205,7 @@ export default function PlannedExpenses() {
       load()
       loadUpcoming()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

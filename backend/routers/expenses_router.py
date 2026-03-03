@@ -60,7 +60,7 @@ async def create_expense(
         created_by=current_user.id,
     )
     db.add(expense)
-    await db.flush()
+    await db.commit()
     await db.refresh(expense)
     return ExpenseResponse.model_validate(expense)
 
@@ -85,7 +85,7 @@ async def bulk_assign_project_expenses(
     items = r.scalars().all()
     for item in items:
         item.project_id = data.project_id
-    await db.flush()
+    await db.commit()
     return {"updated": len(items)}
 
 
@@ -160,6 +160,7 @@ async def reverse_expense(
         source="manual",
         created_by=current_user.id,
     )
+    await db.commit()
     return ExpenseResponse.model_validate(reversal)
 
 
@@ -201,4 +202,5 @@ async def delete_expense(
         source=source,
         created_by=current_user.id,
     )
+    await db.commit()
     return {"ok": True, "reversal_id": reversal.id}

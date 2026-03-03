@@ -53,7 +53,7 @@ async def create_client(
     """Добавить клиента."""
     client = Client(**data.model_dump())
     db.add(client)
-    await db.flush()
+    await db.commit()
     await db.refresh(client)
     return ClientResponse.model_validate(client)
 
@@ -86,7 +86,7 @@ async def update_client(
         raise HTTPException(404, "Клиент не найден")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(client, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(client)
     return ClientResponse.model_validate(client)
 
@@ -103,5 +103,5 @@ async def delete_client(
     if not client:
         raise HTTPException(404, "Клиент не найден")
     client.is_archived = True
-    await db.flush()
+    await db.commit()
     return {"ok": True}

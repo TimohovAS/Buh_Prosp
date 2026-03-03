@@ -53,7 +53,7 @@ export default function Settings() {
     setUsersLoading(true)
     api.users.list(showInactive)
       .then(setUsers)
-      .catch((err) => alert(err.message))
+      .catch((err) => console.error(err))
       .finally(() => setUsersLoading(false))
   }
 
@@ -88,7 +88,7 @@ export default function Settings() {
       setUserModal(null)
       loadUsers()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -99,7 +99,7 @@ export default function Settings() {
       await api.users.deactivate(id)
       loadUsers()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -108,7 +108,7 @@ export default function Settings() {
       await api.users.update(id, { is_active: true })
       loadUsers()
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 
@@ -142,7 +142,7 @@ export default function Settings() {
       setData({ ...data, ...form })
       setModal(false)
     } catch (err) {
-      alert(err.message)
+      console.error(err)
     }
   }
 

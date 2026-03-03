@@ -54,7 +54,7 @@ async def update_me(
         if data.default_language not in ("sr", "ru"):
             raise HTTPException(400, "Язык должен быть sr или ru")
         current_user.default_language = data.default_language
-    await db.flush()
+    await db.commit()
     await db.refresh(current_user)
     return UserResponse(
         id=current_user.id,

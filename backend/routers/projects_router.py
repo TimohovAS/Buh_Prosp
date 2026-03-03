@@ -54,7 +54,7 @@ async def create_project(
         payload["code"] = await allocate_next_project_code(db)
     project = Project(**payload)
     db.add(project)
-    await db.flush()
+    await db.commit()
     await db.refresh(project)
     return ProjectResponse.model_validate(project)
 
@@ -88,7 +88,7 @@ async def update_project(
         raise HTTPException(404, "Проект не найден")
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(project, k, v)
-    await db.flush()
+    await db.commit()
     await db.refresh(project)
     return ProjectResponse.model_validate(project)
 
@@ -105,5 +105,5 @@ async def delete_project(
     if not project:
         raise HTTPException(404, "Проект не найден")
     project.status = "archived"
-    await db.flush()
+    await db.commit()
     return {"ok": True}

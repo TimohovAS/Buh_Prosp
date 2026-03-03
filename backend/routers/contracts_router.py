@@ -117,7 +117,7 @@ async def create_contract(
         )
         db.add(ci)
 
-    await db.flush()
+    await db.commit()
     await db.refresh(contract)
     await db.refresh(contract, ["client", "items"])
     return _contract_to_response(contract)
@@ -221,7 +221,7 @@ async def update_contract(
             db.add(ci)
         if has_items:
             contract.amount = amount
-    await db.flush()
+    await db.commit()
     await db.refresh(contract)
     await db.refresh(contract, ["client", "items"])
     return _contract_to_response(contract)
@@ -239,4 +239,5 @@ async def delete_contract(
     if not contract:
         raise HTTPException(404, "Договор не найден")
     await db.delete(contract)
+    await db.commit()
     return {"ok": True}

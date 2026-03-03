@@ -4,14 +4,15 @@ import { api } from '../api'
 import { tr } from '../i18n'
 
 export default function BankImport() {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
   const [clients, setClients] = useState([])
   const [selections, setSelections] = useState({}) // idx -> { selected, type }
-  const [parseMeta, setParseMeta] = useState(null)
+  const [parseMeta, setParseMeta] = useState([])
+  const [skippedFiles, setSkippedFiles] = useState([])
   const [recentFiles, setRecentFiles] = useState([])
 
   useEffect(() => { api.clients.listBrief().then(setClients) }, [])
@@ -20,33 +21,27 @@ export default function BankImport() {
   }, [])
 
   const handleFileChange = async (e) => {
-    const f = e.target.files?.[0] || null
-    setFile(f)
+    const selectedFiles = e.target.files || []
+    if (selectedFiles.length === 0) return
+    setFiles(Array.from(selectedFiles))
     setTransactions([])
     setSelections({})
-    setParseMeta(null)
+    setParseMeta([])
+    setSkippedFiles([])
     setResult(null)
-    if (!f) return
     setLoading(true)
     try {
-      const parsed = await api.bankImport.parse(f)
+      const parsed = await api.bankImport.parse(selectedFiles)
       const tx = parsed.transactions || []
       setTransactions(tx)
       const sel = {}
       tx.forEach((t, i) => { sel[i] = { selected: true, type: t.type } })
       setSelections(sel)
-      setParseMeta({
-        file_name: parsed.file_name || f.name,
-        file_hash: parsed.file_hash,
-        already_imported: !!parsed.already_imported,
-        imported_file: parsed.imported_file || null,
-      })
+      setParseMeta(parsed.parsed_files || [])
+      setSkippedFiles(parsed.skipped_files || [])
       if (Array.isArray(parsed.recent_files)) setRecentFiles(parsed.recent_files)
-      if (parsed.already_imported) {
-        alert(tr('bankImportAlreadyImported'))
-      }
     } catch (e) {
-      alert(e.message)
+      console.error(e)
     } finally {
       setLoading(false)
     }
@@ -56,8 +51,7 @@ export default function BankImport() {
     const items = transactions
       .map((tx, i) => ({ tx, i, sel: selections[i] }))
       .filter(({ sel }) => sel?.selected)
-    if (items.length === 0) return alert(tr('selectAtLeastOne'))
-    if (parseMeta?.already_imported) return alert(tr('bankImportAlreadyImported'))
+    if (items.length === 0) { console.error(tr('selectAtLeastOne')); return; }
     setApplying(true)
     setResult(null)
     try {
@@ -65,24 +59,23 @@ export default function BankImport() {
         transactions: items.map(({ tx, i }) => ({
           type: selections[i].type,
           tx,
+          file_hash: tx.file_hash || null,
           client_id: selections[i].client_id || null,
           invoice_number: selections[i].invoice_number || null,
         })),
-        file_hash: parseMeta?.file_hash || null,
-        file_name: parseMeta?.file_name || file?.name || null,
-        file_size: file?.size || null,
-        transaction_count: transactions.length,
+        files: parseMeta || [],
       }
       const res = await api.bankImport.apply(body)
       setResult(res)
       setTransactions([])
-      setFile(null)
+      setFiles([])
       setSelections({})
-      setParseMeta(null)
+      setParseMeta([])
+      setSkippedFiles([])
       if (Array.isArray(res.recent_files)) setRecentFiles(res.recent_files)
       else api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => { })
     } catch (e) {
-      alert(e.message)
+      console.error(e)
     } finally {
       setApplying(false)
     }
@@ -114,17 +107,21 @@ export default function BankImport() {
             <label className="form-label">{tr('bankImportFile')}</label>
             <input
               type="file"
+              multiple
               accept=".xls,.xlsx"
               onChange={handleFileChange}
               disabled={loading}
             />
             {loading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{tr('loading')}...</span>}
           </div>
-          {parseMeta?.already_imported && parseMeta.imported_file && (
+          {skippedFiles && skippedFiles.length > 0 && (
             <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
-              {tr('bankImportAlreadyImportedAt')
-                .replace('{file}', parseMeta.imported_file.file_name || parseMeta.file_name || '-')
-                .replace('{date}', parseMeta.imported_file.imported_at ? new Date(parseMeta.imported_file.imported_at).toLocaleString() : '-')}
+              <strong>Пропущенные файлы ({skippedFiles.length}):</strong>
+              <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
+                {skippedFiles.map((sf, idx) => (
+                  <li key={idx}>{sf.file_name} - {sf.reason}</li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
