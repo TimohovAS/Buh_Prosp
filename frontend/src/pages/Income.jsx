@@ -344,11 +344,6 @@ export default function Income() {
                         )}
                       </td>
                       <td>
-                        {!i.is_paid && (
-                          <a href="/bank" className="btn btn-sm btn-primary" style={{ marginRight: '0.5rem', textDecoration: 'none' }}>
-                            🔗 {tr('bankTransactions')}
-                          </a>
-                        )}
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
                         <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
                           {tr('delete')}

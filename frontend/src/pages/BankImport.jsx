@@ -80,7 +80,7 @@ export default function BankImport() {
       setSelections({})
       setParseMeta(null)
       if (Array.isArray(res.recent_files)) setRecentFiles(res.recent_files)
-      else api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => {})
+      else api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => { })
     } catch (e) {
       alert(e.message)
     } finally {
@@ -109,128 +109,128 @@ export default function BankImport() {
       </div>
 
       <div className="page-body">
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="form-group">
-          <label className="form-label">{tr('bankImportFile')}</label>
-          <input
-            type="file"
-            accept=".xls,.xlsx"
-            onChange={handleFileChange}
-            disabled={loading}
-          />
-          {loading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{tr('loading')}...</span>}
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <div className="form-group">
+            <label className="form-label">{tr('bankImportFile')}</label>
+            <input
+              type="file"
+              accept=".xls,.xlsx"
+              onChange={handleFileChange}
+              disabled={loading}
+            />
+            {loading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{tr('loading')}...</span>}
+          </div>
+          {parseMeta?.already_imported && parseMeta.imported_file && (
+            <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
+              {tr('bankImportAlreadyImportedAt')
+                .replace('{file}', parseMeta.imported_file.file_name || parseMeta.file_name || '-')
+                .replace('{date}', parseMeta.imported_file.imported_at ? new Date(parseMeta.imported_file.imported_at).toLocaleString() : '-')}
+            </div>
+          )}
         </div>
-        {parseMeta?.already_imported && parseMeta.imported_file && (
-          <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
-            {tr('bankImportAlreadyImportedAt')
-              .replace('{file}', parseMeta.imported_file.file_name || parseMeta.file_name || '-')
-              .replace('{date}', parseMeta.imported_file.imported_at ? new Date(parseMeta.imported_file.imported_at).toLocaleString() : '-')}
+
+        {transactions.length > 0 && (
+          <div className="card" style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>{tr('bankImportTransactions')} ({transactions.length})</h3>
+              <button className="btn btn-primary" onClick={handleApply} disabled={applying}>
+                {applying ? tr('importing') : tr('importSelected')}
+              </button>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}></th>
+                    <th>{tr('date')}</th>
+                    <th>{tr('type')}</th>
+                    <th>{tr('description')}</th>
+                    <th>{tr('client')}</th>
+                    <th>{tr('amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((tx, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selections[i]?.selected ?? true}
+                          onChange={() => toggleSelect(i)}
+                        />
+                      </td>
+                      <td>{tx.date}</td>
+                      <td>
+                        <select
+                          value={selections[i]?.type ?? tx.type}
+                          onChange={(e) => setSelection(i, 'type', e.target.value)}
+                          className="form-input"
+                          style={{ width: 'auto', minWidth: 100 }}
+                        >
+                          <option value="income">{tr('incomeLabel')}</option>
+                          <option value="expense">{tr('expenseLabel')}</option>
+                        </select>
+                      </td>
+                      <td style={{ maxWidth: 200 }}>{(tx.description || '').slice(0, 50)}</td>
+                      <td style={{ maxWidth: 150 }}>{(tx.payer_beneficiary || '').slice(0, 40)}</td>
+                      <td>{tx.amount?.toLocaleString?.('sr-RS')} RSD</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-      </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <h3 style={{ marginTop: 0 }}>{tr('bankImportRecentFiles')}</h3>
-        {recentFiles.length === 0 ? (
-          <div style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tr('bankImportRecentFileName')}</th>
-                  <th>{tr('bankImportRecentAt')}</th>
-                  <th>{tr('bankImportRecentRows')}</th>
-                  <th>{tr('bankImportRecentCreated')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentFiles.map((f) => (
-                  <tr key={f.id || f.file_hash}>
-                    <td>{f.file_name || '-'}</td>
-                    <td>{f.imported_at ? new Date(f.imported_at).toLocaleString() : '-'}</td>
-                    <td>{f.transaction_count ?? 0}</td>
-                    <td>{`${f.created_income ?? 0} / ${f.created_expense ?? 0}`}</td>
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <h3 style={{ marginTop: 0 }}>{tr('bankImportRecentFiles')}</h3>
+          {recentFiles.length === 0 ? (
+            <div style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{tr('bankImportRecentFileName')}</th>
+                    <th>{tr('bankImportRecentAt')}</th>
+                    <th>{tr('bankImportRecentRows')}</th>
+                    <th>{tr('bankImportRecentCreated')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recentFiles.map((f) => (
+                    <tr key={f.id || f.file_hash}>
+                      <td>{f.file_name || '-'}</td>
+                      <td>{f.imported_at ? new Date(f.imported_at).toLocaleString() : '-'}</td>
+                      <td>{f.transaction_count ?? 0}</td>
+                      <td>{`${f.created_income ?? 0} / ${f.created_expense ?? 0}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {result && (
+          <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-success)' }}>
+            <p style={{ margin: 0 }}>
+              {tr('bankImportCreated').replace('{income}', result.created_income).replace('{expense}', result.created_expense)}
+              {!!result.matched_income_paid && (
+                <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>
+                  {tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}
+                </span>
+              )}
+              {result.errors?.length > 0 && (
+                <span style={{ color: 'var(--color-warning)', marginLeft: '0.5rem' }}>
+                  {tr('bankImportWarnings')}: {result.errors.join('; ')}
+                </span>
+              )}
+            </p>
+            <Link to="/income" style={{ marginTop: '0.5rem', display: 'inline-block' }}>{tr('bankImportToIncome')}</Link>
+            <Link to="/expenses" style={{ marginTop: '0.5rem', marginLeft: '1rem', display: 'inline-block' }}>{tr('bankImportToExpenses')}</Link>
           </div>
         )}
-      </div>
-
-      {result && (
-        <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-success)' }}>
-          <p style={{ margin: 0 }}>
-            {tr('bankImportCreated').replace('{income}', result.created_income).replace('{expense}', result.created_expense)}
-            {!!result.matched_income_paid && (
-              <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>
-                {tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}
-              </span>
-            )}
-            {result.errors?.length > 0 && (
-              <span style={{ color: 'var(--color-warning)', marginLeft: '0.5rem' }}>
-                {tr('bankImportWarnings')}: {result.errors.join('; ')}
-              </span>
-            )}
-          </p>
-          <Link to="/income" style={{ marginTop: '0.5rem', display: 'inline-block' }}>{tr('bankImportToIncome')}</Link>
-          <Link to="/expenses" style={{ marginTop: '0.5rem', marginLeft: '1rem', display: 'inline-block' }}>{tr('bankImportToExpenses')}</Link>
-        </div>
-      )}
-
-      {transactions.length > 0 && (
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0 }}>{tr('bankImportTransactions')} ({transactions.length})</h3>
-            <button className="btn btn-primary" onClick={handleApply} disabled={applying}>
-              {applying ? tr('importing') : tr('importSelected')}
-            </button>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: 40 }}></th>
-                  <th>{tr('date')}</th>
-                  <th>{tr('type')}</th>
-                  <th>{tr('description')}</th>
-                  <th>{tr('client')}</th>
-                  <th>{tr('amount')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx, i) => (
-                  <tr key={i}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selections[i]?.selected ?? true}
-                        onChange={() => toggleSelect(i)}
-                      />
-                    </td>
-                    <td>{tx.date}</td>
-                    <td>
-                      <select
-                        value={selections[i]?.type ?? tx.type}
-                        onChange={(e) => setSelection(i, 'type', e.target.value)}
-                        className="form-input"
-                        style={{ width: 'auto', minWidth: 100 }}
-                      >
-                        <option value="income">{tr('incomeLabel')}</option>
-                        <option value="expense">{tr('expenseLabel')}</option>
-                      </select>
-                    </td>
-                    <td style={{ maxWidth: 200 }}>{(tx.description || '').slice(0, 50)}</td>
-                    <td style={{ maxWidth: 150 }}>{(tx.payer_beneficiary || '').slice(0, 40)}</td>
-                    <td>{tx.amount?.toLocaleString?.('sr-RS')} RSD</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
       </div>
     </>
   )
