@@ -2,6 +2,23 @@ import { Outlet } from 'react-router-dom'
 import { NavLink } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import {
+  LayoutDashboard,
+  LineChart,
+  Wallet,
+  AlertCircle,
+  FileText,
+  CreditCard,
+  CalendarDays,
+  Landmark,
+  Building2,
+  ArrowRightLeft,
+  Users,
+  Briefcase,
+  FolderKanban,
+  Settings,
+  LogOut
+} from 'lucide-react'
 
 export default function Layout({ lang, toggleLang }) {
   return (
@@ -17,30 +34,58 @@ export default function Layout({ lang, toggleLang }) {
             {lang === 'sr' ? 'RU' : 'SR'}
           </button>
         </div>
-        <nav>
-          <ul className="sidebar-nav">
-            <li><NavLink to="/" end>{tr('dashboard')}</NavLink></li>
-            <li><NavLink to="/income">{tr('income')}</NavLink></li>
-            <li><NavLink to="/clients">{tr('clients')}</NavLink></li>
-            <li><NavLink to="/contracts">{tr('contracts')}</NavLink></li>
-            <li><NavLink to="/projects">{tr('projects')}</NavLink></li>
-            <li><NavLink to="/expenses">{tr('expenses')}</NavLink></li>
-            <li><NavLink to="/planned-expenses">{tr('plannedExpenses')}</NavLink></li>
-            <li><NavLink to="/bank-import">{tr('bankImport')}</NavLink></li>
-            <li><NavLink to="/bank">{tr('bankTransactions')}</NavLink></li>
-            <li><NavLink to="/finance">{tr('finance')}</NavLink></li>
-            <li><NavLink to="/finance/ar">{tr('financeAR')}</NavLink></li>
-            <li><NavLink to="/finance/cashflow">{tr('cashflowTitle')}</NavLink></li>
-            <li><NavLink to="/payments">{tr('payments')}</NavLink></li>
-            <li><NavLink to="/settings">{tr('settings')}</NavLink></li>
-          </ul>
+        <nav style={{ flex: 1, overflowY: 'auto', paddingBottom: '1rem' }}>
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Обзор</div>
+            <ul className="sidebar-nav">
+              <li><NavLink to="/" end><LayoutDashboard size={18} /> {tr('dashboard')}</NavLink></li>
+              <li><NavLink to="/finance"><LineChart size={18} /> {tr('finance')}</NavLink></li>
+              <li><NavLink to="/finance/cashflow"><Wallet size={18} /> {tr('cashflowTitle')}</NavLink></li>
+              <li><NavLink to="/finance/ar"><AlertCircle size={18} /> {tr('financeAR')}</NavLink></li>
+            </ul>
+          </div>
+
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Операции</div>
+            <ul className="sidebar-nav">
+              <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
+              <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
+              <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
+              <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>
+            </ul>
+          </div>
+
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Банка</div>
+            <ul className="sidebar-nav">
+              <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}</NavLink></li>
+              <li><NavLink to="/bank-import"><ArrowRightLeft size={18} /> {tr('bankImport')}</NavLink></li>
+            </ul>
+          </div>
+
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Справочники</div>
+            <ul className="sidebar-nav">
+              <li><NavLink to="/clients"><Users size={18} /> {tr('clients')}</NavLink></li>
+              <li><NavLink to="/contracts"><Briefcase size={18} /> {tr('contracts')}</NavLink></li>
+              <li><NavLink to="/projects"><FolderKanban size={18} /> {tr('projects')}</NavLink></li>
+            </ul>
+          </div>
+
+          <div className="sidebar-group">
+            <div className="sidebar-group-title">Система</div>
+            <ul className="sidebar-nav">
+              <li><NavLink to="/settings"><Settings size={18} /> {tr('settings')}</NavLink></li>
+            </ul>
+          </div>
         </nav>
-        <div style={{ padding: '1rem 1.25rem', marginTop: 'auto' }}>
+        <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <button
             className="btn btn-sm btn-secondary"
+            style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem', alignItems: 'center' }}
             onClick={() => { api.auth.logout(); window.location.href = '/login'; }}
           >
-            {tr('logout')}
+            <LogOut size={16} /> {tr('logout')}
           </button>
         </div>
       </aside>
