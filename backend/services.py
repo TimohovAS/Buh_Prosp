@@ -67,6 +67,40 @@ def _parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Op
     return None, None
 
 
+def _normalize_invoice_number(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    s = re.sub(r"\s+", "", str(value).strip().upper())
+    m_year_first = re.fullmatch(r"(20\d{2})-(\d{1,10})", s)
+    if m_year_first:
+        return f"{m_year_first.group(1)}:{int(m_year_first.group(2))}"
+    m_num_first = re.fullmatch(r"(\d{1,10})-(20\d{2})", s)
+    if m_num_first:
+        return f"{m_num_first.group(2)}:{int(m_num_first.group(1))}"
+    return s
+
+
+def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
+    """
+    Достаём возможные номера фактур из текста назначения/референции.
+    Поддерживаем оба частых формата: YYYY-NNNN и NNN-YYYY.
+    """
+    text = " ".join([str(p or "") for p in parts]).upper()
+    patterns = [
+        r"\b20\d{2}-\d{1,6}\b",   # 2026-0008
+        r"\b\d{1,6}-20\d{2}\b",   # 008-2026
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for pat in patterns:
+        for m in re.findall(pat, text):
+            v = m.strip()
+            if v and v not in seen:
+                seen.add(v)
+                out.append(v)
+    return out
+
+
 def _invoice_year_from_record(i: Income) -> Optional[int]:
     """Год периода счёта: из поля invoice_year или из номера счёта."""
     if getattr(i, "invoice_year", None) is not None:

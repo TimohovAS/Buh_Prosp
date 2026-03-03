@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_db
-from backend.models import Income, Client, User, CashTransaction, Project
+from backend.models import Income, Client, User, Project
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
@@ -314,15 +314,7 @@ async def create_income(
             raise HTTPException(409, "Номер счёта уже существует в этом году (уникальность по году)") from e
         raise
     if status_val == "paid" and data.paid_date:
-        ct = CashTransaction(
-            type="income",
-            source="invoice",
-            reference_id=income.id,
-            amount=float(income.amount_rsd),
-            date=data.paid_date,
-        )
-        db.add(ct)
-        await db.flush()
+        pass # BankTransaction now handles cash flow
     await db.refresh(income)
     return IncomeResponse.model_validate(income)
 
@@ -521,23 +513,7 @@ async def mark_income_paid(
     income.status = "paid"
     income.is_paid = True
     await db.flush()
-    # Создать cash_transaction для cash-flow
-    existing = await db.execute(
-        select(CashTransaction).where(
-            CashTransaction.source == "invoice",
-            CashTransaction.reference_id == income_id,
-        )
-    )
-    if existing.scalar_one_or_none() is None:
-        ct = CashTransaction(
-            type="income",
-            source="invoice",
-            reference_id=income_id,
-            amount=float(income.amount_rsd),
-            date=data.paid_date,
-        )
-        db.add(ct)
-        await db.flush()
+    # Bank transactions handle cash flow, no need to spawn CashTransaction here
     await db.refresh(income)
     data_out = IncomeResponse.model_validate(income).model_dump()
     if income.client:
@@ -560,17 +536,7 @@ async def mark_income_unpaid(
     income.status = "issued"
     income.is_paid = False
     await db.flush()
-    # Удалить cash_transaction
-    r2 = await db.execute(
-        select(CashTransaction).where(
-            CashTransaction.source == "invoice",
-            CashTransaction.reference_id == income_id,
-        )
-    )
-    ct = r2.scalar_one_or_none()
-    if ct:
-        await db.delete(ct)
-        await db.flush()
+    # BankTransaction handles matching
     return {"ok": True}
 
 
@@ -611,28 +577,7 @@ async def update_income(
         if "UNIQUE" in msg and ("invoice" in msg or "income" in msg.lower()):
             raise HTTPException(409, "Запись с таким номером счёта за этот год уже существует.") from e
         raise
-    # Синхронизация cash_transaction
-    r2 = await db.execute(
-        select(CashTransaction).where(
-            CashTransaction.source == "invoice",
-            CashTransaction.reference_id == income_id,
-        )
-    )
-    ct = r2.scalar_one_or_none()
-    if income.status == "paid" and income.paid_date:
-        if ct:
-            ct.amount = float(income.amount_rsd)
-            ct.date = income.paid_date
-            await db.flush()
-        else:
-            db.add(CashTransaction(
-                type="income", source="invoice", reference_id=income_id,
-                amount=float(income.amount_rsd), date=income.paid_date,
-            ))
-            await db.flush()
-    elif ct:
-        await db.delete(ct)
-        await db.flush()
+    # Синхронизация завершена, BankTransaction сам управляется
     r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client)).where(Income.id == income_id))
     income = r.scalar_one()
     data = IncomeResponse.model_validate(income).model_dump()
@@ -652,15 +597,5 @@ async def delete_income(
     income = r.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Запись не найдена")
-    r2 = await db.execute(
-        select(CashTransaction).where(
-            CashTransaction.source == "invoice",
-            CashTransaction.reference_id == income_id,
-        )
-    )
-    ct = r2.scalar_one_or_none()
-    if ct:
-        await db.delete(ct)
-        await db.flush()
     await db.delete(income)
     return {"ok": True}

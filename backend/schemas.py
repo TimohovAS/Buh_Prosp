@@ -654,3 +654,52 @@ class PlannedExpenseMarkPaid(BaseModel):
 class PlannedExpenseUnmarkPaid(BaseModel):
     planned_expense_id: int
     due_date: DateType
+
+
+# --- BankTransaction ---
+class BankTransactionBase(BaseModel):
+    date: DateType
+    amount: float
+    direction: str  # in | out
+    currency: str = "RSD"
+    counterparty_name: Optional[str] = None
+    purpose: Optional[str] = None
+    bank_reference: Optional[str] = None
+    status: str = "unmatched"  # unmatched | matched | ignored
+    matched_type: Optional[str] = None   # income | expense | obligation
+    matched_id: Optional[int] = None
+    project_id: Optional[int] = None
+    raw_json: Optional[str] = None
+
+
+class BankTransactionCreate(BankTransactionBase):
+    pass
+
+
+class BankTransactionUpdate(BaseModel):
+    status: Optional[str] = None
+    matched_type: Optional[str] = None
+    matched_id: Optional[int] = None
+    project_id: Optional[int] = None
+
+
+class BankTransactionResponse(BankTransactionBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MatchCandidate(BaseModel):
+    id: int
+    type: str
+    description: str
+    amount: float
+    date: DateType
+    score: Optional[int] = None
+
+
+class MatchRequest(BaseModel):
+    type: str  # income | expense | obligation
+    id: int

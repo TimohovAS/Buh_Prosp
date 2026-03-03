@@ -20,6 +20,7 @@ from backend.routers.users_router import router as users_router
 from backend.routers.expenses_router import router as expenses_router
 from backend.routers.planned_expenses_router import router as planned_expenses_router
 from backend.routers.bank_import_router import router as bank_import_router
+from backend.routers.bank_transactions_router import router as bank_transactions_router
 from backend.routers.projects_router import router as projects_router
 
 
@@ -74,6 +75,7 @@ app.include_router(users_router, prefix="/api")
 app.include_router(expenses_router, prefix="/api")
 app.include_router(planned_expenses_router, prefix="/api")
 app.include_router(bank_import_router, prefix="/api")
+app.include_router(bank_transactions_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(obligations_router, prefix="/api")

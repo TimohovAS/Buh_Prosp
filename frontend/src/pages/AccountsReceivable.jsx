@@ -19,9 +19,6 @@ export default function AccountsReceivable() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [onlyOverdue, setOnlyOverdue] = useState(false)
-  const [modal, setModal] = useState(null) // { income_id, invoice_number }
-  const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10))
-  const [submitting, setSubmitting] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -42,31 +39,6 @@ export default function AccountsReceivable() {
   useEffect(load, [])
 
   const filtered = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
-
-  const openMarkPaid = (item) => {
-    setModal({ income_id: item.income_id, invoice_number: item.invoice_number })
-    setPaidDate(new Date().toISOString().slice(0, 10))
-  }
-
-  const closeModal = () => {
-    setModal(null)
-    setSubmitting(false)
-  }
-
-  const handleMarkPaid = async (e) => {
-    e.preventDefault()
-    if (!modal?.income_id) return
-    setSubmitting(true)
-    try {
-      await api.income.markPaid(modal.income_id, { paid_date: paidDate })
-      closeModal()
-      load()
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   if (loading && items.length === 0) {
     return (
@@ -141,13 +113,13 @@ export default function AccountsReceivable() {
                       {Math.max(0, i.days_overdue ?? 0)} {tr('days')}
                     </td>
                     <td>
-                      <button
-                        type="button"
+                      <a
+                        href="/bank"
                         className="btn btn-sm btn-primary"
-                        onClick={() => openMarkPaid(i)}
+                        style={{ textDecoration: 'none' }}
                       >
-                        {tr('arMarkPaid')}
-                      </button>
+                        🔗 {tr('bankTransactions')}
+                      </a>
                     </td>
                   </tr>
                 ))
@@ -156,40 +128,6 @@ export default function AccountsReceivable() {
           </table>
         </div>
       </div>
-
-      {/* Модалка: отметка оплаты */}
-      {modal && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{tr('arMarkPaid')} — {modal.invoice_number}</h3>
-              <button type="button" className="modal-close" onClick={closeModal} aria-label={tr('close')}>×</button>
-            </div>
-            <form onSubmit={handleMarkPaid}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>{tr('arPaidDate')}</label>
-                  <DatePicker
-                    value={paidDate}
-                    onChange={setPaidDate}
-                    required
-                    className="form-input"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>
-                  {tr('cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? tr('loading') : tr('arMarkPaid')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

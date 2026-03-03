@@ -31,6 +31,8 @@ def _parse_date(s: Any) -> str | None:
     return None
 
 
+import json
+
 def parse_izvod_xls(content: bytes) -> list[dict]:
     """
     Парсинг извода банка (.xls).
@@ -66,6 +68,16 @@ def parse_izvod_xls(content: bytes) -> list[dict]:
         if not date_val:
             continue
 
+        # Сохраняем всю значимую сырую строку
+        raw_row = {
+            "c1_date": str(c1),
+            "c2_ref": str(c2),
+            "c5_desc": str(c5),
+            "c9_payer": str(c9),
+            "c22_debit": str(c22),
+            "c26_credit": str(c26),
+        }
+
         result.append({
             "date": date_val,
             "reference": str(c2).strip() if c2 else "",
@@ -75,6 +87,7 @@ def parse_izvod_xls(content: bytes) -> list[dict]:
             "amount": round(amount, 2),
             "debit": round(debit, 2),
             "credit": round(credit, 2),
+            "raw_json": json.dumps(raw_row, ensure_ascii=False)
         })
 
     return result

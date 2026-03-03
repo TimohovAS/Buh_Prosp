@@ -3,7 +3,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
-const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' };
 
 export default function Income() {
@@ -206,8 +206,8 @@ export default function Income() {
     if (!search) return true
     const s = search.toLowerCase()
     return (i.client_name || '').toLowerCase().includes(s) ||
-           (i.invoice_number || '').toLowerCase().includes(s) ||
-           (i.description || '').toLowerCase().includes(s)
+      (i.invoice_number || '').toLowerCase().includes(s) ||
+      (i.description || '').toLowerCase().includes(s)
   })
 
   return (
@@ -229,7 +229,7 @@ export default function Income() {
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
           >
-            {[year-2, year-1, year, year+1].map((y) => (
+            {[year - 2, year - 1, year, year + 1].map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -280,74 +280,87 @@ export default function Income() {
       </div>
 
       <div className="page-body">
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.length >= filtered.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th>{tr('date')}</th>
-                <th>{tr('valuta')}</th>
-                <th>{tr('invoiceNumber')}</th>
-                <th>{tr('client')}</th>
-                <th>{tr('contracts')}</th>
-                <th>{tr('project')}</th>
-                <th>{tr('description')}</th>
-                <th>{tr('amount')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={10}>{tr('loading')}</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
-              ) : (
-                filtered.map((i) => (
-                  <tr key={i.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(i.id)}
-                        onChange={() => toggleSelect(i.id)}
-                      />
-                    </td>
-                    <td>{i.date}</td>
-                    <td>{i.due_date || '—'}</td>
-                    <td>{i.invoice_number}</td>
-                    <td>{i.client_name || '-'}</td>
-                    <td>{i.contract_number || '-'}</td>
-                    <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
-                      {i.project_id ? (projects.find((p) => p.id === i.project_id)?.code || '—') : '—'}
-                    </td>
-                    <td>
-                      {(i.description || '').slice(0, 40)}
-                      {i.contract_payment_type && (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                          ({tr(PAYMENT_TYPE_KEYS[i.contract_payment_type] || i.contract_payment_type)})
-                        </span>
-                      )}
-                    </td>
-                    <td>{i.amount_rsd.toLocaleString('sr-RS')}</td>
-                    <td>
-                      <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
-                      <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
-                        {tr('delete')}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selectedIds.length >= filtered.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th>{tr('date')}</th>
+                  <th>{tr('valuta')}</th>
+                  <th>{tr('invoiceNumber')}</th>
+                  <th>{tr('client')}</th>
+                  <th>{tr('contracts')}</th>
+                  <th>{tr('project')}</th>
+                  <th>{tr('description')}</th>
+                  <th>{tr('amount')}</th>
+                  <th>{tr('status')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={10}>{tr('loading')}</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                ) : (
+                  filtered.map((i) => (
+                    <tr key={i.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(i.id)}
+                          onChange={() => toggleSelect(i.id)}
+                        />
+                      </td>
+                      <td>{i.date}</td>
+                      <td>{i.due_date || '—'}</td>
+                      <td>{i.invoice_number}</td>
+                      <td>{i.client_name || '-'}</td>
+                      <td>{i.contract_number || '-'}</td>
+                      <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
+                        {i.project_id ? (projects.find((p) => p.id === i.project_id)?.code || '—') : '—'}
+                      </td>
+                      <td>
+                        {(i.description || '').slice(0, 40)}
+                        {i.contract_payment_type && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
+                            ({tr(PAYMENT_TYPE_KEYS[i.contract_payment_type] || i.contract_payment_type)})
+                          </span>
+                        )}
+                      </td>
+                      <td>{i.amount_rsd.toLocaleString('sr-RS')}</td>
+                      <td>
+                        {i.is_paid ? (
+                          <span className="badge badge-success" title={`Paid: ${i.paid_date}`}>{tr('paid')}</span>
+                        ) : (
+                          <span className="badge badge-warning">{tr('unpaid')}</span>
+                        )}
+                      </td>
+                      <td>
+                        {!i.is_paid && (
+                          <a href="/bank" className="btn btn-sm btn-primary" style={{ marginRight: '0.5rem', textDecoration: 'none' }}>
+                            🔗 {tr('bankTransactions')}
+                          </a>
+                        )}
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
+                          {tr('delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
 
       {modal && (

@@ -194,17 +194,29 @@ class Project(Base):
     expenses = relationship("Expense", back_populates="project")
 
 
-class CashTransaction(Base):
-    """Денежные операции для cash-flow. Создаётся при mark-paid invoice."""
-    __tablename__ = "cash_transactions"
+
+
+
+class BankTransaction(Base):
+    """Строка выписки банка (поступление/списание)."""
+    __tablename__ = "bank_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(String(20), nullable=False)  # income | expense
-    source = Column(String(30), nullable=False)  # invoice | expense | ...
-    reference_id = Column(Integer, nullable=False)  # income.id или expense.id
+    date = Column(Date, nullable=False, index=True)
     amount = Column(Float, nullable=False)
-    date = Column(Date, nullable=False)
+    direction = Column(String(10), nullable=False, index=True)  # in | out
+    currency = Column(String(5), default="RSD")
+    counterparty_name = Column(String(200))
+    purpose = Column(Text)
+    bank_reference = Column(String(100), unique=True, nullable=True)
+    status = Column(String(20), default="unmatched", index=True)  # unmatched | matched | ignored
+    matched_type = Column(String(50))  # income | expense | obligation
+    matched_id = Column(Integer)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    raw_json = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", foreign_keys=[project_id])
 
 
 class BankImportFile(Base):

@@ -12,6 +12,7 @@ import Settings from './pages/Settings'
 import Expenses from './pages/Expenses'
 import PlannedExpenses from './pages/PlannedExpenses'
 import BankImport from './pages/BankImport'
+import BankTransactions from './pages/BankTransactions'
 import FinanceOverview from './pages/FinanceOverview'
 import AccountsReceivable from './pages/AccountsReceivable'
 import CashFlow from './pages/CashFlow'
@@ -83,6 +84,7 @@ function App() {
         <Route path="expenses" element={<Expenses />} />
         <Route path="planned-expenses" element={<PlannedExpenses />} />
         <Route path="bank-import" element={<BankImport />} />
+        <Route path="bank" element={<BankTransactions />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

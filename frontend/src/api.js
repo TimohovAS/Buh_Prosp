@@ -104,8 +104,6 @@ export const api = {
     get: (id) => request(`/income/${id}`),
     create: (data) => request('/income', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/income/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    markPaid: (id, data) => request(`/income/${id}/mark-paid`, { method: 'PATCH', body: JSON.stringify(data) }),
-    markUnpaid: (id) => request(`/income/${id}/mark-unpaid`, { method: 'PATCH' }),
     delete: (id) => request(`/income/${id}`, { method: 'DELETE' }),
     bulkAssignProject: (data) => request('/income/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
     nextInvoice: (year) => request(`/income/next-invoice-number?year=${year || new Date().getFullYear()}`),
@@ -263,6 +261,16 @@ export const api = {
     },
     apply: (data) => request('/bank-import/apply', { method: 'POST', body: JSON.stringify(data) }),
     recentFiles: (limit = 10) => request(`/bank-import/files?limit=${limit}`),
+  },
+  bankTransactions: {
+    list: (params) => {
+      const q = new URLSearchParams(params || {}).toString();
+      return request(`/bank-transactions?${q}`);
+    },
+    update: (id, data) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    suggest: (id) => request(`/bank-transactions/${id}/suggest`),
+    match: (id, data) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(data) }),
+    unmatch: (id) => request(`/bank-transactions/${id}/unmatch`, { method: 'POST' }),
   },
   enterprise: {
     get: () => request('/enterprise'),

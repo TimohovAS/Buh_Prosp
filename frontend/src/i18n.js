@@ -314,6 +314,24 @@ const t = {
     loginHint: 'По дефолту: admin / admin',
     loginCannotChange: 'Логин се не може мењати',
     loginError: 'Грешка пријаве',
+
+    // Bank Transactions
+    bankTransactions: 'Банка',
+    bankTxUnmatched: 'Неупарено',
+    bankTxMatched: 'Упарено',
+    bankTxIgnored: 'Игнорисано',
+    bankTxAll: 'Све',
+    bankTxDirectionIn: 'Приливи',
+    bankTxDirectionOut: 'Одливи',
+    bankTxMatchTitle: 'Упаривање трансакције',
+    bankTxIgnore: 'Игнориши',
+    bankTxMatchBtn: 'Упари',
+    bankTxUnmatchBtn: 'Ресетуј',
+    bankTxScore: 'Поклапање',
+    bankTxCounterparty: 'Друга страна',
+    bankTxPurpose: 'Сврха',
+    bankTxReference: 'Позив на број',
+    bankTxSelectTarget: 'Изабери унос',
   },
   ru: {
     appName: 'ProspEl',
@@ -630,6 +648,24 @@ const t = {
     loginHint: 'По умолчанию: admin / admin',
     loginCannotChange: 'Логин нельзя изменить',
     loginError: 'Ошибка входа',
+
+    // Bank Transactions
+    bankTransactions: 'Банк',
+    bankTxUnmatched: 'Без связи',
+    bankTxMatched: 'Связано',
+    bankTxIgnored: 'Игнорировано',
+    bankTxAll: 'Все',
+    bankTxDirectionIn: 'Поступления',
+    bankTxDirectionOut: 'Списания',
+    bankTxMatchTitle: 'Связывание транзакции',
+    bankTxIgnore: 'Игнорировать',
+    bankTxMatchBtn: 'Связать',
+    bankTxUnmatchBtn: 'Отвязать',
+    bankTxScore: 'Совпадение',
+    bankTxCounterparty: 'Контрагент',
+    bankTxPurpose: 'Назначение',
+    bankTxReference: 'Референс',
+    bankTxSelectTarget: 'Выбрать запись',
   },
 };
 
@@ -648,10 +684,10 @@ export function tr(key) {
   return t[lang]?.[key] ?? t.sr[key] ?? key;
 }
 
-const MONTH_NAMES_SR = ['Јан','Феб','Мар','Апр','Мај','Јун','Јул','Авг','Сеп','Окт','Нов','Дец'];
-const MONTH_NAMES_RU = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-const MONTH_NAMES_FULL_SR = ['јануар','фебруар','март','април','мај','јун','јул','август','септембар','октобар','новембар','децембар'];
-const MONTH_NAMES_FULL_RU = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+const MONTH_NAMES_SR = ['Јан', 'Феб', 'Мар', 'Апр', 'Мај', 'Јун', 'Јул', 'Авг', 'Сеп', 'Окт', 'Нов', 'Дец'];
+const MONTH_NAMES_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+const MONTH_NAMES_FULL_SR = ['јануар', 'фебруар', 'март', 'април', 'мај', 'јун', 'јул', 'август', 'септембар', 'октобар', 'новембар', 'децембар'];
+const MONTH_NAMES_FULL_RU = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 
 export function getMonthNamesShort() {
   return lang === 'ru' ? MONTH_NAMES_RU : MONTH_NAMES_SR;

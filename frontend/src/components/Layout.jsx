@@ -27,6 +27,7 @@ export default function Layout({ lang, toggleLang }) {
             <li><NavLink to="/expenses">{tr('expenses')}</NavLink></li>
             <li><NavLink to="/planned-expenses">{tr('plannedExpenses')}</NavLink></li>
             <li><NavLink to="/bank-import">{tr('bankImport')}</NavLink></li>
+            <li><NavLink to="/bank">{tr('bankTransactions')}</NavLink></li>
             <li><NavLink to="/finance">{tr('finance')}</NavLink></li>
             <li><NavLink to="/finance/ar">{tr('financeAR')}</NavLink></li>
             <li><NavLink to="/finance/cashflow">{tr('cashflowTitle')}</NavLink></li>
