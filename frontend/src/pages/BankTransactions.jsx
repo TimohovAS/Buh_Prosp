@@ -352,7 +352,7 @@ export default function BankTransactions() {
                     >
                         <option value="">-- {tr('notSelected')} --</option>
                         <option value="_none">[{tr('removeProject')}]</option>
-                        {projects.filter(p => p.is_active).map(p => (
+                        {projects.filter(p => p.status === 'active').map(p => (
                             <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                         ))}
                     </select>

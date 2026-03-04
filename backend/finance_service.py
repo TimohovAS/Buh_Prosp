@@ -366,12 +366,12 @@ async def get_finance_summary(
 
 async def get_accounts_receivable(db: AsyncSession) -> dict:
     """
-    Дебиторская задолженность: unpaid incomes (status != 'cancelled' and paid_date is null).
+    Дебиторская задолженность: unpaid и partial incomes.
+    Для partial показывает остаток (amount_rsd - paid_amount).
     """
     today = date.today()
     q = select(Income).options(selectinload(Income.client)).where(
-        Income.status != "cancelled",
-        Income.paid_date.is_(None),
+        Income.status.in_(["issued", "partial"]),
     ).order_by(Income.issued_date.asc())
     r = await db.execute(q)
     incomes = r.scalars().all()
@@ -379,7 +379,10 @@ async def get_accounts_receivable(db: AsyncSession) -> dict:
     ar_total = 0.0
     ar_overdue = 0.0
     for i in incomes:
-        amt = float(i.amount_rsd)
+        # Для частичной оплаты показываем остаток
+        remaining = float(i.amount_rsd) - float(i.paid_amount or 0)
+        if remaining <= 0:
+            continue
         days_out = (today - i.issued_date).days
         due_dt = i.due_date or (i.issued_date + timedelta(days=30))
         days_overdue = (today - due_dt).days
@@ -389,13 +392,16 @@ async def get_accounts_receivable(db: AsyncSession) -> dict:
             "client_name": i.client_name or (i.client.name if i.client else None),
             "issued_date": i.issued_date.isoformat(),
             "due_date": due_dt.isoformat(),
-            "amount": amt,
+            "amount": remaining,          # остаток к оплате
+            "amount_full": float(i.amount_rsd),
+            "amount_paid": float(i.paid_amount or 0),
+            "status": i.status,
             "days_outstanding": days_out,
             "days_overdue": days_overdue,
         })
-        ar_total += amt
+        ar_total += remaining
         if days_overdue > 0:
-            ar_overdue += amt
+            ar_overdue += remaining
     return {
         "items": items,
         "totals": {"ar_total": ar_total, "ar_overdue": ar_overdue},

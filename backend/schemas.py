@@ -147,7 +147,7 @@ class IncomeBase(BaseModel):
     amount_rsd: float
     currency: str = "RSD"
     exchange_rate: float = 1.0
-    status: Optional[str] = None  # issued | paid | cancelled
+    status: Optional[str] = None  # issued | partial | paid | cancelled
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
     income_type: Optional[str] = None  # advance | intermediate | final | other
@@ -228,6 +228,7 @@ class BulkAssignProject(BaseModel):
 class IncomeResponse(IncomeBase):
     id: int
     is_paid: bool
+    paid_amount: float = 0.0
     created_at: datetime
     contract_number: Optional[str] = None
 

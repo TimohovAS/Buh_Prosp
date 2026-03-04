@@ -365,12 +365,21 @@ export default function Income() {
                       </td>
                       <td>{i.amount_rsd.toLocaleString('sr-RS')}</td>
                       <td>
-                        {i.is_paid ? (
-                          <span className="badge badge-success" title={`Paid: ${i.paid_date}`}>{tr('paid')}</span>
+                        {i.status === 'paid' ? (
+                          <span className="badge badge-success" title={`Оплачен: ${i.paid_date}`}>{tr('paid')}</span>
+                        ) : i.status === 'partial' ? (
+                          <span className="badge" style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
+                            title={`Получено ${(i.paid_amount || 0).toLocaleString('sr-RS')} из ${i.amount_rsd.toLocaleString('sr-RS')} RSD`}>
+                            Частично
+                            <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.9 }}>
+                              +{(i.paid_amount || 0).toLocaleString('sr-RS')} / {i.amount_rsd.toLocaleString('sr-RS')}
+                            </span>
+                          </span>
                         ) : (
                           <span className="badge badge-warning">{tr('unpaid')}</span>
                         )}
                       </td>
+
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
                         <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>

@@ -253,7 +253,9 @@ class Income(Base):
     is_paid = Column(Boolean, default=False)
     paid_date = Column(Date)
     due_date = Column(Date)  # Valuta / срок оплаты
-    status = Column(String(20), nullable=False, default="issued")  # issued | paid | cancelled
+    paid_amount = Column(Float, default=0.0)  # Сумма уже полученных платежей (для частичной оплаты)
+    status = Column(String(20), nullable=False, default="issued")  # issued | partial | paid | cancelled
+
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     income_type = Column(String(20), nullable=True)  # advance | intermediate | final | other
     note = Column(Text)

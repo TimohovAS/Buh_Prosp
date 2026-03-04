@@ -16,12 +16,11 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
     candidates = []
 
     if tx.direction == "in":
-        # Ищем Income (счета), которые не оплачены
+        # Ищем Income (счета), которые не оплачены или оплачены частично
         q = select(Income).where(
             Income.status != "cancelled",
-            Income.paid_date.is_(None)
+            Income.status != "paid",   # полностью оплаченные пропускаем
         )
-        # Ограничиваем поиск по дате, чтобы ускорить работу (допустим фактуры не старше года)
         r = await db.execute(q)
         incomes = r.scalars().all()
 
@@ -34,32 +33,23 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
         normalized_extracted = {_normalize_invoice_number(x) for x in extracted_invoices if x}
 
         def score_income(inc: Income) -> tuple[int, float, int]:
-            # Правила скоринга (меньше - лучше)
-            # 1. Совпадение номера фактуры из назначения (0 - супер, 1 - нет)
-            # 2. Разница в сумме (идеально 0.0)
-            # 3. Разница в днях (от даты счета до даты платежа)
-            
             score_inv = 1
             if normalized_extracted:
                 inv_norm = _normalize_invoice_number(inc.invoice_number)
                 if inv_norm in normalized_extracted:
                     score_inv = 0
             
-            # Если разница в суммах огромна, то это плохой кандидат (штрафуем)
-            amount_diff = abs(float(inc.amount_rsd) - float(tx.amount))
-            
-            # Ожидается, что платеж после выставления счета. Если счет из будущего, это хуже, 
-            # но защита на разницу.
+            # Остаток для доплаты
+            remaining = float(inc.amount_rsd) - float(inc.paid_amount or 0)
+            amount_diff = abs(remaining - float(tx.amount))
             date_diff = abs((tx.date - inc.issued_date).days)
             
             return (score_inv, amount_diff, date_diff)
 
-        # Отбираем только тех у кого разница в сумме < 0.5 динар, ИЛИ найдено явное совпадение номера
         valid_incomes = []
         for inc in incomes:
             sc = score_income(inc)
             if sc[0] == 0 or sc[1] <= 0.5:
-                # Отсекаем совсем старые/будущие счета, если счет найден не по номеру
                 if sc[0] == 1 and sc[2] > 60:
                     continue
                 valid_incomes.append((sc, inc))
@@ -67,27 +57,35 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
         valid_incomes.sort(key=lambda x: x[0])
         
         for sc, inc in valid_incomes[:5]:
+            paid = float(inc.paid_amount or 0)
+            remaining = float(inc.amount_rsd) - paid
+            is_partial = inc.status == "partial"
+            desc = f"Счёт {inc.invoice_number} ({inc.client_name or 'Без клиента'})"
+            if is_partial:
+                desc += f" — остаток {remaining:,.0f} RSD"
             candidates.append({
                 "type": "income",
                 "id": inc.id,
-                "description": f"Счёт {inc.invoice_number} ({inc.client_name or 'Без клиента'})",
-                "amount": inc.amount_rsd,
+                "description": desc,
+                "amount": remaining,  # показываем остаток
+                "amount_full": inc.amount_rsd,
+                "amount_paid": paid,
                 "date": inc.issued_date,
                 "score": sc
             })
             
     elif tx.direction == "out":
         # TODO: Логика для расходов и налогов (MonthlyObligation). 
-        # Пока по ТЗ требуется как минимум для Income. Можно расширить позже.
         pass
 
-    # Для фронтенда отдадим плоский dict вместе с процентом совпадения
     return [
         {
             "id": c["id"],
             "type": c["type"],
             "description": c["description"],
             "amount": c["amount"],
+            "amount_full": c.get("amount_full"),
+            "amount_paid": c.get("amount_paid"),
             "date": c["date"],
             "score": 100 if c["score"][0] == 0 else max(10, 90 - c["score"][2])
         } for c in candidates
@@ -95,7 +93,7 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
 
 
 async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match_id: int):
-    """Связать BankTransaction с сущностью."""
+    """Связать BankTransaction с сущностью. Поддерживает частичную оплату фактур."""
     r = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
     tx = r.scalar_one_or_none()
     
@@ -110,10 +108,21 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         if not inc:
             raise ValueError("Income не найден")
         
-        inc.status = "paid"
-        inc.is_paid = True
-        inc.paid_date = tx.date
+        # Суммируем уже полученные платежи
+        new_paid = float(inc.paid_amount or 0) + float(tx.amount)
+        inc.paid_amount = new_paid
         
+        if new_paid >= float(inc.amount_rsd):
+            # Полностью оплачен
+            inc.status = "paid"
+            inc.is_paid = True
+            inc.paid_date = tx.date
+        else:
+            # Частичная оплата
+            inc.status = "partial"
+            inc.is_paid = False
+            # paid_date не устанавливаем — не полностью оплачено
+            
         if tx.bank_reference and not inc.bank_reference:
             inc.bank_reference = tx.bank_reference
             
@@ -151,7 +160,7 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
 
 
 async def unmatch_transaction(db: AsyncSession, tx_id: int):
-    """Отменить связь BankTransaction."""
+    """Отменить связь BankTransaction. При частичной оплате вычитает сумму транзакции."""
     r = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
     tx = r.scalar_one_or_none()
     
@@ -164,9 +173,19 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
         r_inc = await db.execute(select(Income).where(Income.id == tx.matched_id))
         inc = r_inc.scalar_one_or_none()
         if inc:
-            inc.status = "issued"
-            inc.is_paid = False
-            inc.paid_date = None
+            # Вычитаем сумму этой транзакции из суммы оплат
+            new_paid = max(0.0, float(inc.paid_amount or 0) - float(tx.amount))
+            inc.paid_amount = new_paid
+            
+            if new_paid <= 0:
+                inc.status = "issued"
+                inc.is_paid = False
+                inc.paid_date = None
+            else:
+                # Ещё есть другие платежи — статус partial
+                inc.status = "partial"
+                inc.is_paid = False
+                inc.paid_date = None
             
     elif tx.matched_type == "expense":
         r_exp = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
@@ -179,7 +198,6 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
         r_ob = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))
         ob = r_ob.scalar_one_or_none()
         if ob:
-            # Считаем, если дата оплаты зашла за deadline, долг overdue, иначе unpaid
             ob.status = "unpaid"
             ob.paid_date = None
             if ob.deadline < date.today():
