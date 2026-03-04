@@ -33,11 +33,22 @@ export default function BankImport() {
     try {
       const parsed = await api.bankImport.parse(selectedFiles)
       const tx = parsed.transactions || []
+      const parsedFiles = parsed.parsed_files || []
+
+      // Набор хэшей файлов, которые были ранее импортированы
+      const previouslyImportedHashes = new Set(
+        parsedFiles.filter(f => f.previously_imported).map(f => f.file_hash)
+      )
+
       setTransactions(tx)
       const sel = {}
-      tx.forEach((t, i) => { sel[i] = { selected: true, type: t.type } })
+      tx.forEach((t, i) => {
+        // Отмечаем только транзакции из новых (ранее не импортированных) файлов
+        const isNew = !previouslyImportedHashes.has(t.file_hash)
+        sel[i] = { selected: isNew, type: t.type }
+      })
       setSelections(sel)
-      setParseMeta(parsed.parsed_files || [])
+      setParseMeta(parsedFiles)
       setSkippedFiles(parsed.skipped_files || [])
       if (Array.isArray(parsed.recent_files)) setRecentFiles(parsed.recent_files)
     } catch (e) {
@@ -72,8 +83,8 @@ export default function BankImport() {
       setSelections({})
       setParseMeta([])
       setSkippedFiles([])
-      if (Array.isArray(res.recent_files)) setRecentFiles(res.recent_files)
-      else api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => { })
+      // Всегда перезагружаем список файлов с сервера после применения
+      api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => { })
     } catch (e) {
       console.error(e)
     } finally {
