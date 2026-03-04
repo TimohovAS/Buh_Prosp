@@ -199,10 +199,17 @@ export default function BankTransactions() {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                         {suggestions.map((s, idx) => (
                                             <div key={idx} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem' }}>
-                                                <div>
+                                                <div style={{ paddingRight: '1rem' }}>
                                                     <strong>{s.type === 'income' ? tr('incomeLabel') : s.type === 'expense' ? tr('expenseLabel') : 'Obligation'} #{s.id}</strong>
-                                                    <div style={{ fontSize: '0.85em', color: 'gray' }}>{s.label}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: s.score >= 80 ? 'green' : 'orange' }}>{tr('bankTxScore')}: {s.score}%</div>
+                                                    <div style={{ fontSize: '0.9em', color: 'var(--color-text-muted)', margin: '0.25rem 0' }}>{s.description}</div>
+                                                    <div style={{ fontSize: '0.85em', fontWeight: 'bold' }}>
+                                                        {s.amount ? Number(s.amount).toLocaleString('ru-RU', { style: 'currency', currency: 'RSD' }) : ''} • {s.date}
+                                                    </div>
+                                                    {s.score !== undefined && (
+                                                        <div style={{ fontSize: '0.8rem', color: s.score >= 80 ? 'var(--color-success)' : 'var(--color-warning)', marginTop: '0.25rem' }}>
+                                                            {tr('bankTxScore')}: {s.score}%
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <button className="btn btn-sm btn-primary" onClick={() => performMatch(s.id, s.type)}>
                                                     {tr('bankTxMatchBtn')}

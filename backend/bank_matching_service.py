@@ -81,14 +81,15 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
         # Пока по ТЗ требуется как минимум для Income. Можно расширить позже.
         pass
 
-    # Для фронтенда отдадим плоский dict (без score)
+    # Для фронтенда отдадим плоский dict вместе с процентом совпадения
     return [
         {
             "id": c["id"],
             "type": c["type"],
             "description": c["description"],
             "amount": c["amount"],
-            "date": c["date"]
+            "date": c["date"],
+            "score": 100 if c["score"][0] == 0 else max(10, 90 - c["score"][2])
         } for c in candidates
     ]
 
