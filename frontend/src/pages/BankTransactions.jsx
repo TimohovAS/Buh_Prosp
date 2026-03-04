@@ -225,7 +225,6 @@ export default function BankTransactions() {
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIcon col="counterparty_name" /></th>
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIcon col="purpose" /></th>
                                     <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
-                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('filterStatus')} <SortIcon col="status" /></th>
                                     <th style={{ textAlign: 'right' }}>{tr('actions')}</th>
                                 </tr>
@@ -243,11 +242,6 @@ export default function BankTransactions() {
                                         <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
                                         <td>{tx.counterparty_name}</td>
                                         <td style={{ maxWidth: '300px' }}>
-                                            {tx.project_id && (
-                                                <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.code || ''}>
-                                                    {projects.find(p => p.id === tx.project_id)?.name || '—'}
-                                                </span>
-                                            )}
                                             <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
                                                 {tx.purpose}
                                             </div>
@@ -258,13 +252,7 @@ export default function BankTransactions() {
                                         <td style={{ textAlign: 'right', fontWeight: 'bold', color: tx.direction === 'in' ? 'green' : 'inherit' }}>
                                             {tx.direction === 'in' ? '+' : '-'}{tx.amount.toLocaleString('ru-RU', { style: 'currency', currency: tx.currency })}
                                         </td>
-                                        <td style={{ fontSize: '0.85em', color: 'var(--color-text-muted)' }}>
-                                            {tx.project_id ? (
-                                                <span title={projects.find(p => p.id === tx.project_id)?.code || ''}>
-                                                    {projects.find(p => p.id === tx.project_id)?.name || '—'}
-                                                </span>
-                                            ) : '—'}
-                                        </td>
+
                                         <td>
                                             {tx.status === 'unmatched' && <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
                                             {tx.status === 'matched' && <span className="badge badge-success">{tr('bankTxMatched')} ({tx.matched_type})</span>}
@@ -296,7 +284,7 @@ export default function BankTransactions() {
                                 ))}
                                 {displayed.length === 0 && (
                                     <tr>
-                                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
+                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
                                     </tr>
                                 )}
                             </tbody>
