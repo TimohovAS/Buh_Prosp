@@ -7,7 +7,7 @@ import { Check } from 'lucide-react'
 export default function BankTransactions() {
     const [data, setData] = useState([])
     const [loading, setLoading] = useState(true)
-    const [statusFilter, setStatusFilter] = useState('unmatched')
+    const [statusFilter, setStatusFilter] = useState('all')
     const [directionFilter, setDirectionFilter] = useState('all')
     const [page, setPage] = useState(0)
 
@@ -130,10 +130,10 @@ export default function BankTransactions() {
                         onChange={e => { setStatusFilter(e.target.value); setPage(0) }}
                         className="input"
                     >
+                        <option value="all">{tr('bankTxAll')}</option>
                         <option value="unmatched">{tr('bankTxUnmatched')}</option>
                         <option value="matched">{tr('bankTxMatched')}</option>
                         <option value="ignored">{tr('bankTxIgnored')}</option>
-                        <option value="all">{tr('bankTxAll')}</option>
                     </select>
 
                     {selectedIds.length > 0 && (
@@ -178,21 +178,21 @@ export default function BankTransactions() {
                                 {data.map(tx => (
                                     <tr key={tx.id}>
                                         <td style={{ textAlign: 'center' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.includes(tx.id)}
-                                            onChange={() => toggleSelect(tx.id)}
-                                        />
-                                    </td>
-                                    <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(tx.id)}
+                                                onChange={() => toggleSelect(tx.id)}
+                                            />
+                                        </td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
                                         <td>{tx.counterparty_name}</td>
                                         <td style={{ maxWidth: '300px' }}>
                                             {tx.project_id && (
-                                            <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.name || ''}>
-                                                {projects.find(p => p.id === tx.project_id)?.code || '—'}
-                                            </span>
-                                        )}
-                                        <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
+                                                <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.name || ''}>
+                                                    {projects.find(p => p.id === tx.project_id)?.code || '—'}
+                                                </span>
+                                            )}
+                                            <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
                                                 {tx.purpose}
                                             </div>
                                             {tx.bank_reference && (
