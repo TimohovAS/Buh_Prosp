@@ -123,7 +123,11 @@ async def parse_izvod(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Разобрать файл извода (.xls). Возвращает список транзакций."""
+    """Разобрать файл(ы) извода (.xls). Возвращает список транзакций.
+    
+    если файл уже был импортирован, он всё равно разбирается, но помечается предупреждением.
+    Дубликаты транзакций будут отсеяны на этапе /apply.
+    """
     all_transactions = []
     skipped_files = []
     parsed_files = []
@@ -136,11 +140,10 @@ async def parse_izvod(
         content = await file.read()
         file_hash = hashlib.sha256(content).hexdigest()
         
+        # Проверяем, был ли файл уже импортирован - но теперь это только предупреждение
         r = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == file_hash))
         existing = r.scalar_one_or_none()
-        if existing:
-            skipped_files.append({"file_name": file.filename, "reason": "Уже импортирован", "hash": file_hash})
-            continue
+        previously_imported = existing is not None
             
         try:
             transactions = parse_izvod_xls(content)
@@ -151,8 +154,16 @@ async def parse_izvod(
                 "file_hash": file_hash,
                 "file_name": file.filename,
                 "file_size": len(content),
-                "transaction_count": len(transactions)
+                "transaction_count": len(transactions),
+                "previously_imported": previously_imported,
             })
+            if previously_imported:
+                skipped_files.append({
+                    "file_name": file.filename,
+                    "reason": "Уже импортирован",
+                    "hash": file_hash,
+                    "re_import": True,
+                })
         except Exception as e:
             skipped_files.append({"file_name": file.filename, "reason": f"Ошибка чтения: {e}"})
             
@@ -172,15 +183,10 @@ async def apply_import(
 ):
     """
     Создать BankTransaction из выбранных строк.
+    Дубликаты определяются по содержимому транзакций, а не по хэшу файла.
+    Это позволяет переимпортировать файлы, если транзакции не были записаны при первом импорте.
     """
-    if body.files:
-        hashes = [f.file_hash for f in body.files]
-        r_files = await db.execute(select(BankImportFile).where(BankImportFile.file_hash.in_(hashes)))
-        existing_files = r_files.scalars().all()
-        if existing_files:
-            names = ", ".join(f.file_name for f in existing_files)
-            raise HTTPException(409, f"Файлы уже были импортированы: {names}")
-
+    # Не блокируем по хэшу файла - дубликаты решаются на уровне транзакций
     file_stats = {f.file_hash: {"created_income": 0, "created_expense": 0, "errors_count": 0} for f in body.files}
     created_transactions = 0
     skipped_duplicates = 0
@@ -254,17 +260,27 @@ async def apply_import(
 
     for f in body.files:
         stats = file_stats[f.file_hash]
-        file_entry = BankImportFile(
-            file_name=f.file_name,
-            file_hash=f.file_hash,
-            file_size=f.file_size,
-            transaction_count=f.transaction_count,
-            created_income=stats["created_income"],
-            created_expense=stats["created_expense"],
-            errors_count=stats["errors_count"],
-            imported_by=current_user.id,
-        )
-        db.add(file_entry)
+        # Upsert: если файл был импортирован раньше (ghost), обновляем статистику
+        r_existing = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == f.file_hash))
+        existing_entry = r_existing.scalar_one_or_none()
+        if existing_entry:
+            # Обновляем счётчики (добавляем к уже записанным)
+            existing_entry.created_income = (existing_entry.created_income or 0) + stats["created_income"]
+            existing_entry.created_expense = (existing_entry.created_expense or 0) + stats["created_expense"]
+            existing_entry.errors_count = (existing_entry.errors_count or 0) + stats["errors_count"]
+        else:
+            file_entry = BankImportFile(
+                file_name=f.file_name,
+                file_hash=f.file_hash,
+                file_size=f.file_size,
+                transaction_count=f.transaction_count,
+                created_income=stats["created_income"],
+                created_expense=stats["created_expense"],
+                errors_count=stats["errors_count"],
+                imported_by=current_user.id,
+            )
+            db.add(file_entry)
+
 
     await db.commit()
 
