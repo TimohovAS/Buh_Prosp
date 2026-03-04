@@ -7,6 +7,18 @@ echo [ProspEl] Production update started...
 echo [ProspEl] Working dir: %CD%
 echo.
 
+:: Check for Administrator privileges
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo =======================================================
+    echo [ERROR] Administrator privileges required!
+    echo Please right-click update_prod.cmd and select "Run as administrator"
+    echo so that Windows Services can be restarted automatically.
+    echo =======================================================
+    pause
+    exit /b 1
+)
+
 where git >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] git not found in PATH.
@@ -64,10 +76,10 @@ if errorlevel 1 (
 )
 
 echo [ProspEl] Restarting services...
-sc.exe stop ProspEl-Web >nul 2>nul
-sc.exe stop ProspEl-Backend >nul 2>nul
+net stop ProspEl-Web >nul 2>&1
+net stop ProspEl-Backend >nul 2>&1
 
-sc.exe start ProspEl-Backend
+net start ProspEl-Backend
 if errorlevel 1 (
   echo [ERROR] Failed to start ProspEl-Backend service.
   exit /b 1
@@ -75,7 +87,7 @@ if errorlevel 1 (
 
 timeout /t 2 /nobreak >nul
 
-sc.exe start ProspEl-Web
+net start ProspEl-Web
 if errorlevel 1 (
   echo [ERROR] Failed to start ProspEl-Web service.
   exit /b 1
