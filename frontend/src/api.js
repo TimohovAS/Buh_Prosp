@@ -272,14 +272,15 @@ export const api = {
     recentFiles: (limit = 10) => request(`/bank-import/files?limit=${limit}`),
   },
   bankTransactions: {
-    list: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/bank-transactions?${q}`);
+    list: async (params) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/bank-transactions?${q}`)
     },
-    update: (id, data) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    suggest: (id) => request(`/bank-transactions/${id}/suggest`),
-    match: (id, data) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, payload) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    match: (id, payload) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
     unmatch: (id) => request(`/bank-transactions/${id}/unmatch`, { method: 'POST' }),
+    suggest: (id) => request(`/bank-transactions/${id}/suggest`),
+    bulkAssignProject: (payload) => request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),
   },
   enterprise: {
     get: () => request('/enterprise'),

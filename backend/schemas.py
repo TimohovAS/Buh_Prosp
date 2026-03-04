@@ -691,6 +691,11 @@ class BankTransactionResponse(BankTransactionBase):
         from_attributes = True
 
 
+class BankTransactionBulkAssignProject(BaseModel):
+    ids: list[int]
+    project_id: Optional[int] = None
+
+
 class MatchCandidate(BaseModel):
     id: int
     type: str

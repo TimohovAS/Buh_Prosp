@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import Modal from '../components/Modal'
+import { Check } from 'lucide-react'
 
 export default function BankTransactions() {
     const [data, setData] = useState([])
@@ -16,6 +17,12 @@ export default function BankTransactions() {
     const [suggestLoading, setSuggestLoading] = useState(false)
     const [matchError, setMatchError] = useState('')
 
+    // Projects State
+    const [projects, setProjects] = useState([])
+    const [selectedIds, setSelectedIds] = useState([])
+    const [modalAssign, setModalAssign] = useState(false)
+    const [assignProjectId, setAssignProjectId] = useState('')
+
     const LIMIT = 50
 
     const loadData = async () => {
@@ -24,8 +31,12 @@ export default function BankTransactions() {
             const params = { skip: page * LIMIT, limit: LIMIT }
             if (statusFilter !== 'all') params.status = statusFilter
             if (directionFilter !== 'all') params.direction = directionFilter
-            const res = await api.bankTransactions.list(params)
+            const [res, proj] = await Promise.all([
+                api.bankTransactions.list(params),
+                api.projects.list()
+            ])
             setData(res)
+            setProjects(proj)
         } catch (err) {
             console.error(err)
         } finally {
@@ -43,6 +54,31 @@ export default function BankTransactions() {
             loadData()
         } catch (e) {
             console.error(e)
+        }
+    }
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        )
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length >= data.length) setSelectedIds([])
+        else setSelectedIds(data.map(i => i.id))
+    }
+
+    const handleBulkAssign = async () => {
+        if (selectedIds.length === 0) return
+        const pid = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
+        try {
+            await api.bankTransactions.bulkAssignProject({ ids: selectedIds, project_id: pid })
+            setModalAssign(false)
+            setAssignProjectId('')
+            setSelectedIds([])
+            loadData()
+        } catch (err) {
+            console.error(err)
         }
     }
 
@@ -100,6 +136,11 @@ export default function BankTransactions() {
                         <option value="all">{tr('bankTxAll')}</option>
                     </select>
 
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-primary btn-sm" onClick={() => setModalAssign(true)}>
+                            {tr('assignProject')} ({selectedIds.length})
+                        </button>
+                    )}
                     <select
                         value={directionFilter}
                         onChange={e => { setDirectionFilter(e.target.value); setPage(0) }}
@@ -118,6 +159,13 @@ export default function BankTransactions() {
                         <table className="table">
                             <thead>
                                 <tr>
+                                    <th style={{ width: '40px', textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={data.length > 0 && selectedIds.length === data.length}
+                                            onChange={toggleSelectAll}
+                                        />
+                                    </th>
                                     <th>{tr('date')}</th>
                                     <th>{tr('bankTxCounterparty')}</th>
                                     <th>{tr('bankTxPurpose')} / {tr('bankTxReference')}</th>
@@ -129,10 +177,22 @@ export default function BankTransactions() {
                             <tbody>
                                 {data.map(tx => (
                                     <tr key={tx.id}>
-                                        <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(tx.id)}
+                                            onChange={() => toggleSelect(tx.id)}
+                                        />
+                                    </td>
+                                    <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
                                         <td>{tx.counterparty_name}</td>
                                         <td style={{ maxWidth: '300px' }}>
-                                            <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
+                                            {tx.project_id && (
+                                            <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.name || ''}>
+                                                {projects.find(p => p.id === tx.project_id)?.code || '—'}
+                                            </span>
+                                        )}
+                                        <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
                                                 {tx.purpose}
                                             </div>
                                             {tx.bank_reference && (
@@ -242,6 +302,27 @@ export default function BankTransactions() {
                         {matchError && <div style={{ color: 'red', marginTop: '1rem' }}>{matchError}</div>}
                     </div>
                 )}
+            </Modal>
+
+            <Modal isOpen={modalAssign} onClose={() => setModalAssign(false)} title={tr('assignProject')}>
+                <div className="form-group">
+                    <label className="form-label">{tr('projectLabel')}</label>
+                    <select
+                        className="form-input"
+                        value={assignProjectId}
+                        onChange={(e) => setAssignProjectId(e.target.value)}
+                    >
+                        <option value="">-- {tr('notSelected')} --</option>
+                        <option value="_none">[{tr('removeProject')}]</option>
+                        {projects.filter(p => p.is_active).map(p => (
+                            <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="modal-actions">
+                    <button className="btn btn-secondary" onClick={() => setModalAssign(false)}>{tr('cancel')}</button>
+                    <button className="btn btn-primary" onClick={handleBulkAssign}>{tr('save')}</button>
+                </div>
             </Modal>
         </>
     )

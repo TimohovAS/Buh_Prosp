@@ -10,6 +10,7 @@ from backend.schemas import (
     BankTransactionCreate, 
     BankTransactionUpdate, 
     BankTransactionResponse,
+    BankTransactionBulkAssignProject,
     MatchCandidate,
     MatchRequest
 )
@@ -133,3 +134,26 @@ async def revert_match(
         return BankTransactionResponse.model_validate(tx)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.post("/bulk-assign-project")
+async def bulk_assign_project(
+    data: BankTransactionBulkAssignProject,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Массовое назначение проекта банковским транзакциям."""
+    from backend.models import Project
+    if data.project_id is not None:
+        r = await db.execute(select(Project).where(Project.id == data.project_id))
+        if not r.scalar_one_or_none():
+            raise HTTPException(404, "Проект не найден")
+            
+    r = await db.execute(select(BankTransaction).where(BankTransaction.id.in_(data.ids)))
+    items = r.scalars().all()
+    
+    for item in items:
+        item.project_id = data.project_id
+        
+    await db.commit()
+    return {"message": f"Проект назначен {len(items)} транзакциям"}
