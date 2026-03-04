@@ -266,23 +266,6 @@ export default function BankTransactions() {
                         </table>
                     </div>
                 )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem' }}>
-                    <button
-                        className="btn btn-secondary"
-                        disabled={page === 0}
-                        onClick={() => setPage(p => p - 1)}
-                    >
-                        &laquo; Prev
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        disabled={data.length < LIMIT}
-                        onClick={() => setPage(p => p + 1)}
-                    >
-                        Next &raquo;
-                    </button>
-                </div>
             </div>
 
             {/* MATCH MODAL */}
