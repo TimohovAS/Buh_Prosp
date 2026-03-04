@@ -85,7 +85,7 @@ export default function BankTransactions() {
     }
 
     return (
-        <div className="page-container">
+        <>
             <div className="page-header">
                 <h1>{tr('bankTransactions')}</h1>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -112,73 +112,92 @@ export default function BankTransactions() {
                 </div>
             </div>
 
-            {loading ? <p>{tr('loading')}</p> : (
-                <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>{tr('date')}</th>
-                                <th>{tr('bankTxCounterparty')}</th>
-                                <th>{tr('bankTxPurpose')} / {tr('bankTxReference')}</th>
-                                <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                                <th>{tr('filterStatus')}</th>
-                                <th style={{ textAlign: 'right' }}>{tr('actions')}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.map(tx => (
-                                <tr key={tx.id}>
-                                    <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
-                                    <td>{tx.counterparty_name}</td>
-                                    <td style={{ maxWidth: '300px' }}>
-                                        <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
-                                            {tx.purpose}
-                                        </div>
-                                        {tx.bank_reference && (
-                                            <div style={{ fontSize: '0.75em', color: 'gray' }}>Ref: {tx.bank_reference}</div>
-                                        )}
-                                    </td>
-                                    <td style={{ textAlign: 'right', fontWeight: 'bold', color: tx.direction === 'in' ? 'green' : 'inherit' }}>
-                                        {tx.direction === 'in' ? '+' : '-'}{tx.amount.toLocaleString('ru-RU', { style: 'currency', currency: tx.currency })}
-                                    </td>
-                                    <td>
-                                        {tx.status === 'unmatched' && <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
-                                        {tx.status === 'matched' && <span className="badge badge-success">{tr('bankTxMatched')} ({tx.matched_type})</span>}
-                                        {tx.status === 'ignored' && <span className="badge badge-secondary">{tr('bankTxIgnored')}</span>}
-                                    </td>
-                                    <td style={{ textAlign: 'right' }}>
-                                        {tx.status === 'unmatched' && (
-                                            <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
-                                                <button className="btn btn-sm btn-primary" onClick={() => openMatchModal(tx)}>
-                                                    {tr('bankTxMatchBtn')}
-                                                </button>
-                                                <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(tx.id, 'ignored')}>
-                                                    {tr('bankTxIgnore')}
-                                                </button>
-                                            </div>
-                                        )}
-                                        {tx.status === 'ignored' && (
-                                            <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(tx.id, 'unmatched')}>
-                                                Восстановить
-                                            </button>
-                                        )}
-                                        {tx.status === 'matched' && (
-                                            <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(tx.id)}>
-                                                {tr('bankTxUnmatchBtn')}
-                                            </button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                            {data.length === 0 && (
+            <div className="page-body">
+                {loading ? <p>{tr('loading')}</p> : (
+                    <div className="card" style={{ padding: 0, overflowX: 'auto', marginBottom: '1rem' }}>
+                        <table className="table">
+                            <thead>
                                 <tr>
-                                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
+                                    <th>{tr('date')}</th>
+                                    <th>{tr('bankTxCounterparty')}</th>
+                                    <th>{tr('bankTxPurpose')} / {tr('bankTxReference')}</th>
+                                    <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                                    <th>{tr('filterStatus')}</th>
+                                    <th style={{ textAlign: 'right' }}>{tr('actions')}</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {data.map(tx => (
+                                    <tr key={tx.id}>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{tx.date}</td>
+                                        <td>{tx.counterparty_name}</td>
+                                        <td style={{ maxWidth: '300px' }}>
+                                            <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
+                                                {tx.purpose}
+                                            </div>
+                                            {tx.bank_reference && (
+                                                <div style={{ fontSize: '0.75em', color: 'gray' }}>Ref: {tx.bank_reference}</div>
+                                            )}
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: tx.direction === 'in' ? 'green' : 'inherit' }}>
+                                            {tx.direction === 'in' ? '+' : '-'}{tx.amount.toLocaleString('ru-RU', { style: 'currency', currency: tx.currency })}
+                                        </td>
+                                        <td>
+                                            {tx.status === 'unmatched' && <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
+                                            {tx.status === 'matched' && <span className="badge badge-success">{tr('bankTxMatched')} ({tx.matched_type})</span>}
+                                            {tx.status === 'ignored' && <span className="badge badge-secondary">{tr('bankTxIgnored')}</span>}
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            {tx.status === 'unmatched' && (
+                                                <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                                                    <button className="btn btn-sm btn-primary" onClick={() => openMatchModal(tx)}>
+                                                        {tr('bankTxMatchBtn')}
+                                                    </button>
+                                                    <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(tx.id, 'ignored')}>
+                                                        {tr('bankTxIgnore')}
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {tx.status === 'ignored' && (
+                                                <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(tx.id, 'unmatched')}>
+                                                    Восстановить
+                                                </button>
+                                            )}
+                                            {tx.status === 'matched' && (
+                                                <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(tx.id)}>
+                                                    {tr('bankTxUnmatchBtn')}
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {data.length === 0 && (
+                                    <tr>
+                                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem' }}>
+                    <button
+                        className="btn btn-secondary"
+                        disabled={page === 0}
+                        onClick={() => setPage(p => p - 1)}
+                    >
+                        &laquo; Prev
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        disabled={data.length < LIMIT}
+                        onClick={() => setPage(p => p + 1)}
+                    >
+                        Next &raquo;
+                    </button>
                 </div>
-            )}
+            </div>
 
             {/* MATCH MODAL */}
             <Modal isOpen={!!matchTx} onClose={() => setMatchTx(null)} title={tr('bankTxMatchTitle')}>
@@ -224,23 +243,6 @@ export default function BankTransactions() {
                     </div>
                 )}
             </Modal>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
-                <button
-                    className="btn btn-secondary"
-                    disabled={page === 0}
-                    onClick={() => setPage(p => p - 1)}
-                >
-                    &laquo; Prev
-                </button>
-                <button
-                    className="btn btn-secondary"
-                    disabled={data.length < LIMIT}
-                    onClick={() => setPage(p => p + 1)}
-                >
-                    Next &raquo;
-                </button>
-            </div>
-        </div>
+        </>
     )
 }
