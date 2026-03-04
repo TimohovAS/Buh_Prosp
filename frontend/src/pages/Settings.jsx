@@ -158,86 +158,89 @@ export default function Settings() {
       </div>
 
       <div className="page-body">
-      <div className="card">
-        <div className="card-title">{tr('enterpriseData')}</div>
-        {data ? (
-          <div>
-            <p><strong>{tr('name')}:</strong> {data.name}</p>
-            <p><strong>{tr('address')}:</strong> {data.address || '-'}</p>
-            <p><strong>{tr('pib')}:</strong> {data.pib || '-'}</p>
-            <p><strong>{tr('maticniBroj')}:</strong> {data.maticni_broj || '-'}</p>
-            <p><strong>{tr('bankName')}:</strong> {data.bank_name || '-'}</p>
-            <p><strong>{tr('bankAccount')}:</strong> {data.bank_account || '-'}</p>
-          </div>
-        ) : (
-          <p style={{ color: 'var(--color-text-muted)' }}>{tr('fillEnterpriseData')}</p>
-        )}
-      </div>
-
-      {isAdmin && (
         <div className="card">
-          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <span>{tr('users')}</span>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-                <span>{tr('showInactive')}</span>
-              </label>
-              <button className="btn btn-primary btn-sm" onClick={openAddUser}>{tr('add')}</button>
+          <div className="card-title">{tr('enterpriseData')}</div>
+          {data ? (
+            <div>
+              <p><strong>{tr('name')}:</strong> {data.name}</p>
+              <p><strong>{tr('address')}:</strong> {data.address || '-'}</p>
+              <p><strong>{tr('pib')}:</strong> {data.pib || '-'}</p>
+              <p><strong>{tr('maticniBroj')}:</strong> {data.maticni_broj || '-'}</p>
+              <p><strong>{tr('bankName')}:</strong> {data.bank_name || '-'}</p>
+              <p><strong>{tr('bankAccount')}:</strong> {data.bank_account || '-'}</p>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-text-muted)' }}>{tr('fillEnterpriseData')}</p>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="card">
+            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span>{tr('users')}</span>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+                  <span>{tr('showInactive')}</span>
+                </label>
+                <button className="btn btn-primary btn-sm" onClick={openAddUser}>{tr('add')}</button>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{tr('username')}</th>
+                    <th>{tr('fullName')}</th>
+                    <th>{tr('role')}</th>
+                    <th>{tr('language')}</th>
+                    <th>{tr('status')}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersLoading ? (
+                    <tr><td colSpan={6}>{tr('loading')}</td></tr>
+                  ) : users.length === 0 ? (
+                    <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noUsers')}</td></tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u.id} style={!u.is_active ? { opacity: 0.6 } : {}}>
+                        <td>{u.username}</td>
+                        <td>{u.full_name || '-'}</td>
+                        <td>{roleLabel(u.role)}</td>
+                        <td>{u.default_language === 'ru' ? 'RU' : 'SR'}</td>
+                        <td>{u.is_active ? tr('active') : tr('inactive')}</td>
+                        <td>
+                          <button className="btn btn-sm btn-secondary" onClick={() => openEditUser(u)}>{tr('edit')}</button>
+                          {u.is_active ? (
+                            u.id !== currentUser?.id && (
+                              <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDeactivate(u.id)}>
+                                {tr('deactivate')}
+                              </button>
+                            )
+                          ) : (
+                            <button className="btn btn-sm btn-secondary" style={{ marginLeft: '0.5rem' }} onClick={() => handleActivate(u.id)}>
+                              {tr('activate')}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tr('username')}</th>
-                  <th>{tr('fullName')}</th>
-                  <th>{tr('role')}</th>
-                  <th>{tr('language')}</th>
-                  <th>{tr('status')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {usersLoading ? (
-                  <tr><td colSpan={6}>{tr('loading')}</td></tr>
-                ) : users.length === 0 ? (
-                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noUsers')}</td></tr>
-                ) : (
-                  users.map((u) => (
-                    <tr key={u.id} style={!u.is_active ? { opacity: 0.6 } : {}}>
-                      <td>{u.username}</td>
-                      <td>{u.full_name || '-'}</td>
-                      <td>{roleLabel(u.role)}</td>
-                      <td>{u.default_language === 'ru' ? 'RU' : 'SR'}</td>
-                      <td>{u.is_active ? tr('active') : tr('inactive')}</td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEditUser(u)}>{tr('edit')}</button>
-                        {u.is_active ? (
-                          u.id !== currentUser?.id && (
-                            <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDeactivate(u.id)}>
-                              {tr('deactivate')}
-                            </button>
-                          )
-                        ) : (
-                          <button className="btn btn-sm btn-secondary" style={{ marginLeft: '0.5rem' }} onClick={() => handleActivate(u.id)}>
-                            {tr('activate')}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        )}
 
-      <div className="card">
-        <div className="card-title">{tr('limits')}</div>
-        <p>{tr('limitsDescription')}</p>
-      </div>
+        <div className="card">
+          <div className="card-title">{tr('limits')}</div>
+          <p>{tr('limitsDescription')}</p>
+          <p style={{ marginTop: '2rem', textAlign: 'right', fontSize: '0.85rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+            Версия программы: v2.1.0 <span>(Сборка: 04.03.2026 18:35)</span>
+          </p>
+        </div>
       </div>
 
       {modal && (
