@@ -24,6 +24,8 @@ router = APIRouter(prefix="/bank-transactions", tags=["bank-transactions"])
 async def list_bank_transactions(
     status: Optional[str] = Query(None, description="Фильтр по статусу (unmatched, matched, ignored)"),
     direction: Optional[str] = Query(None, description="Фильтр по направлению (in, out)"),
+    year: Optional[int] = Query(None, description="Год"),
+    month: Optional[int] = Query(None, description="Месяц"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
@@ -33,6 +35,13 @@ async def list_bank_transactions(
         q = q.where(BankTransaction.status == status)
     if direction:
         q = q.where(BankTransaction.direction == direction)
+    if year:
+        from datetime import date
+        q = q.where(BankTransaction.date >= date(year, 1, 1), BankTransaction.date <= date(year, 12, 31))
+    if month and year:
+        import calendar
+        last = calendar.monthrange(year, month)[1]
+        q = q.where(BankTransaction.date >= date(year, month, 1), BankTransaction.date <= date(year, month, last))
     q = q.order_by(desc(BankTransaction.date), desc(BankTransaction.id))
     result = await db.execute(q)
     return [BankTransactionResponse.model_validate(t) for t in result.scalars().all()]

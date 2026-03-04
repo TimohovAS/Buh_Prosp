@@ -9,7 +9,8 @@ export default function BankTransactions() {
     const [loading, setLoading] = useState(true)
     const [statusFilter, setStatusFilter] = useState('all')
     const [directionFilter, setDirectionFilter] = useState('all')
-    const [page, setPage] = useState(0)
+    const [year, setYear] = useState(new Date().getFullYear())
+    const [month, setMonth] = useState('')
 
     // Matching Modal State
     const [matchTx, setMatchTx] = useState(null)
@@ -17,18 +18,21 @@ export default function BankTransactions() {
     const [suggestLoading, setSuggestLoading] = useState(false)
     const [matchError, setMatchError] = useState('')
 
+    // Sort State
+    const [sortCol, setSortCol] = useState('date')
+    const [sortAsc, setSortAsc] = useState(false)
+
     // Projects State
     const [projects, setProjects] = useState([])
     const [selectedIds, setSelectedIds] = useState([])
     const [modalAssign, setModalAssign] = useState(false)
     const [assignProjectId, setAssignProjectId] = useState('')
 
-    const LIMIT = 50
-
     const loadData = async () => {
         setLoading(true)
         try {
-            const params = { skip: page * LIMIT, limit: LIMIT }
+            const params = { year }
+            if (month) params.month = month
             if (statusFilter !== 'all') params.status = statusFilter
             if (directionFilter !== 'all') params.direction = directionFilter
             const [res, proj] = await Promise.all([
@@ -46,7 +50,7 @@ export default function BankTransactions() {
 
     useEffect(() => {
         loadData()
-    }, [statusFilter, directionFilter, page])
+    }, [statusFilter, directionFilter, year, month])
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
@@ -80,6 +84,16 @@ export default function BankTransactions() {
         } catch (err) {
             console.error(err)
         }
+    }
+
+    const toggleSort = (col) => {
+        if (sortCol === col) setSortAsc(!sortAsc)
+        else { setSortCol(col); setSortAsc(true) }
+    }
+
+    const SortIcon = ({ col }) => {
+        if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+        return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
     }
 
     const handleUnmatch = async (id) => {
@@ -127,7 +141,7 @@ export default function BankTransactions() {
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <select
                         value={statusFilter}
-                        onChange={e => { setStatusFilter(e.target.value); setPage(0) }}
+                        onChange={e => setStatusFilter(e.target.value)}
                         className="input"
                     >
                         <option value="all">{tr('bankTxAll')}</option>
@@ -143,7 +157,7 @@ export default function BankTransactions() {
                     )}
                     <select
                         value={directionFilter}
-                        onChange={e => { setDirectionFilter(e.target.value); setPage(0) }}
+                        onChange={e => setDirectionFilter(e.target.value)}
                         className="input"
                     >
                         <option value="all">{tr('bankTxAll')} (Dir)</option>
@@ -166,16 +180,28 @@ export default function BankTransactions() {
                                             onChange={toggleSelectAll}
                                         />
                                     </th>
-                                    <th>{tr('date')}</th>
-                                    <th>{tr('bankTxCounterparty')}</th>
-                                    <th>{tr('bankTxPurpose')} / {tr('bankTxReference')}</th>
-                                    <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                                    <th>{tr('filterStatus')}</th>
+                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
+                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIcon col="counterparty_name" /></th>
+                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIcon col="purpose" /></th>
+                                    <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
+                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('filterStatus')} <SortIcon col="status" /></th>
                                     <th style={{ textAlign: 'right' }}>{tr('actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.map(tx => (
+                                {data.sort((a, b) => {
+                                    let valA = a[sortCol]
+                                    let valB = b[sortCol]
+
+                                    if (sortCol === 'project_id') {
+                                        valA = projects.find(p => p.id === a.project_id)?.name || ''
+                                        valB = projects.find(p => p.id === b.project_id)?.name || ''
+                                    }
+
+                                    if (valA < valB) return sortAsc ? -1 : 1
+                                    if (valA > valB) return sortAsc ? 1 : -1
+                                    return 0
+                                }).map(tx => (
                                     <tr key={tx.id}>
                                         <td style={{ textAlign: 'center' }}>
                                             <input

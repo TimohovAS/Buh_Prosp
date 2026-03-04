@@ -15,6 +15,8 @@ export default function Income() {
   const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [sortCol, setSortCol] = useState('date')
+  const [sortAsc, setSortAsc] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
