@@ -74,8 +74,8 @@ export default function BankTransactions() {
     const performMatch = async (targetId, targetType) => {
         try {
             await api.bankTransactions.match(matchTx.id, {
-                match_type: targetType,
-                match_id: targetId
+                type: targetType,
+                id: targetId
             })
             setMatchTx(null)
             loadData()
@@ -184,9 +184,9 @@ export default function BankTransactions() {
             <Modal isOpen={!!matchTx} onClose={() => setMatchTx(null)} title={tr('bankTxMatchTitle')}>
                 {matchTx && (
                     <div>
-                        <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--color-surface-hover)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
                             <strong>{matchTx.counterparty_name}</strong><br />
-                            {matchTx.purpose}<br />
+                            <span style={{ color: 'var(--color-text-muted)' }}>{matchTx.purpose}</span><br />
                             <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
                                 {matchTx.direction === 'in' ? '+' : '-'}{matchTx.amount.toLocaleString()} {matchTx.currency}
                             </span>
