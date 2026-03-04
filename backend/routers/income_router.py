@@ -346,6 +346,7 @@ async def update_income(
                 )
     try:
         await db.flush()
+        await db.commit()
     except IntegrityError as e:
         msg = str(e.orig) if getattr(e, "orig", None) else str(e)
         if "UNIQUE" in msg and ("invoice" in msg or "income" in msg.lower()):

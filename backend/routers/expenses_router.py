@@ -179,6 +179,7 @@ async def update_expense(
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(expense, k, v)
     await db.flush()
+    await db.commit()
     await db.refresh(expense)
     return ExpenseResponse.model_validate(expense)
 
