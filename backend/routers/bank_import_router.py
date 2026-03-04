@@ -72,6 +72,51 @@ async def list_recent_import_files(
     return {"items": await _recent_files(db, safe_limit)}
 
 
+@router.get("/files/all")
+async def list_all_import_files(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Все импортированные файлы с флагом ghost (created=0 but tx_count>0)."""
+    from sqlalchemy import select as _select
+    r = await db.execute(_select(BankImportFile).order_by(BankImportFile.id))
+    items = r.scalars().all()
+    result = []
+    for f in items:
+        created = (f.created_income or 0) + (f.created_expense or 0)
+        is_ghost = created == 0 and (f.transaction_count or 0) > 0
+        result.append({
+            "id": f.id,
+            "file_name": f.file_name,
+            "file_hash": f.file_hash,
+            "transaction_count": f.transaction_count,
+            "created_income": f.created_income,
+            "created_expense": f.created_expense,
+            "imported_at": f.imported_at.isoformat() if f.imported_at else None,
+            "is_ghost": is_ghost,
+        })
+    return {"items": result, "total": len(result)}
+
+
+@router.delete("/files/{file_id}")
+async def delete_import_file_record(
+    file_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Удалить запись об импорте файла (чтобы можно было переимпортировать)."""
+    from sqlalchemy import delete as _delete
+    r = await db.execute(_select(BankImportFile).where(BankImportFile.id == file_id))
+    rec = r.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(404, "Запись не найдена")
+    created = (rec.created_income or 0) + (rec.created_expense or 0)
+    await db.execute(_delete(BankImportFile).where(BankImportFile.id == file_id))
+    await db.commit()
+    return {"deleted": True, "file_name": rec.file_name, "was_ghost": created == 0 and (rec.transaction_count or 0) > 0}
+
+
+
 @router.post("/parse")
 async def parse_izvod(
     files: list[UploadFile] = File(...),
