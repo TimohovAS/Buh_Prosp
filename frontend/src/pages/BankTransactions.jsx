@@ -10,7 +10,7 @@ export default function BankTransactions() {
     const [loading, setLoading] = useState(true)
 
     // Filters
-    const [year, setYear] = useState(new Date().getFullYear())
+    const [year, setYear] = useState('')
     const [month, setMonth] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [directionFilter, setDirectionFilter] = useState('all')
@@ -35,8 +35,9 @@ export default function BankTransactions() {
     const loadData = async () => {
         setLoading(true)
         try {
-            const params = { year }
-            if (month) params.month = month
+            const params = {}
+            if (year) params.year = year
+            if (year && month) params.month = month
             if (statusFilter !== 'all') params.status = statusFilter
             if (directionFilter !== 'all') params.direction = directionFilter
             const [res, proj] = await Promise.all([
@@ -164,7 +165,8 @@ export default function BankTransactions() {
                 <h1>{tr('bankTransactions')}</h1>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {/* Year selector */}
-                    <select value={year} onChange={e => { setYear(Number(e.target.value)); setMonth('') }} className="input">
+                    <select value={year} onChange={e => { setYear(e.target.value ? Number(e.target.value) : ''); setMonth('') }} className="input">
+                        <option value="">{tr('allYears') || 'Все годы'}</option>
                         {years.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
 
