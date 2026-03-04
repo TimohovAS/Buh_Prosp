@@ -3,7 +3,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
-const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const getCategories = (tr) => [
   { value: '', label: '—' },
   { value: 'materials', label: tr('expenseCategoryMaterials') },
@@ -127,7 +127,7 @@ export default function Expenses() {
     if (!search) return true
     const s = search.toLowerCase()
     return (i.description || '').toLowerCase().includes(s) ||
-           (i.category || '').toLowerCase().includes(s)
+      (i.category || '').toLowerCase().includes(s)
   })
 
   const total = filtered.reduce((sum, i) => sum + i.amount, 0)
@@ -159,7 +159,7 @@ export default function Expenses() {
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
           >
-            {[year-2, year-1, year, year+1].map((y) => (
+            {[year - 2, year - 1, year, year + 1].map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -196,68 +196,72 @@ export default function Expenses() {
       </div>
 
       <div className="page-body">
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.length >= filtered.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th>{tr('date')}</th>
-                <th>{tr('description')}</th>
-                <th>{tr('project')}</th>
-                <th>{tr('category')}</th>
-                <th>{tr('amount')}</th>
-                <th>{tr('paymentRef')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8}>{tr('loading')}</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
-              ) : (
-                filtered.map((i) => (
-                  <tr
-                    key={i.id}
-                    className={(i.status === 'reversed' || i.reversal_of_id) ? 'row-reversal' : ''}
-                  >
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(i.id)}
-                        onChange={() => toggleSelect(i.id)}
-                      />
-                    </td>
-                    <td>{i.date}</td>
-                    <td>{(i.description || '').slice(0, 50)}</td>
-                    <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
-                      {i.project_id ? (projects.find((p) => p.id === i.project_id)?.code || '—') : '—'}
-                    </td>
-                    <td>{getCategories(tr).find(c => c.value === i.category)?.label || i.category || '-'}</td>
-                    <td>{i.amount.toLocaleString('sr-RS')}</td>
-                    <td title={(i.bank_reference || i.note) || ''} style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {i.bank_reference || i.note || '—'}
-                    </td>
-                    <td>
-                      <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
-                      <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
-                        {tr('delete')}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selectedIds.length >= filtered.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th>{tr('date')}</th>
+                  <th>{tr('description')}</th>
+                  <th>{tr('project')}</th>
+                  <th>{tr('category')}</th>
+                  <th>{tr('amount')}</th>
+                  <th>{tr('paymentRef')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                ) : (
+                  filtered.map((i) => (
+                    <tr
+                      key={i.id}
+                      className={(i.status === 'reversed' || i.reversal_of_id) ? 'row-reversal' : ''}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(i.id)}
+                          onChange={() => toggleSelect(i.id)}
+                        />
+                      </td>
+                      <td>{i.date}</td>
+                      <td>{(i.description || '').slice(0, 50)}</td>
+                      <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
+                        {i.project_id ? (
+                          <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
+                            {projects.find((p) => p.id === i.project_id)?.name || '—'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td>{getCategories(tr).find(c => c.value === i.category)?.label || i.category || '-'}</td>
+                      <td>{i.amount.toLocaleString('sr-RS')}</td>
+                      <td title={(i.bank_reference || i.note) || ''} style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {i.bank_reference || i.note || '—'}
+                      </td>
+                      <td>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
+                          {tr('delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
 
       {modal && (
@@ -312,7 +316,7 @@ export default function Expenses() {
                 >
                   <option value="">— {tr('unassignProject')} —</option>
                   {projects.filter((p) => p.status !== 'archived').map((p) => (
-                    <option key={p.id} value={p.id}>{p.code || p.name} — {p.name}</option>
+                    <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -363,7 +367,7 @@ export default function Expenses() {
               >
                 <option value="_none">— {tr('unassignProject')} —</option>
                 {projects.filter((p) => p.status !== 'archived').map((p) => (
-                  <option key={p.id} value={p.id}>{p.code || p.name} — {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                 ))}
               </select>
             </div>

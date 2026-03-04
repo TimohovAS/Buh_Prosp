@@ -188,8 +188,8 @@ export default function BankTransactions() {
                                         <td>{tx.counterparty_name}</td>
                                         <td style={{ maxWidth: '300px' }}>
                                             {tx.project_id && (
-                                                <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.name || ''}>
-                                                    {projects.find(p => p.id === tx.project_id)?.code || '—'}
+                                                <span style={{ display: 'inline-block', fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: 'var(--color-surface-hover)', borderRadius: '4px', marginBottom: '0.25rem', color: 'var(--color-text-muted)' }} title={projects.find(p => p.id === tx.project_id)?.code || ''}>
+                                                    {projects.find(p => p.id === tx.project_id)?.name || '—'}
                                                 </span>
                                             )}
                                             <div style={{ fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tx.purpose}>
@@ -315,7 +315,7 @@ export default function BankTransactions() {
                         <option value="">-- {tr('notSelected')} --</option>
                         <option value="_none">[{tr('removeProject')}]</option>
                         {projects.filter(p => p.is_active).map(p => (
-                            <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                            <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                         ))}
                     </select>
                 </div>

@@ -325,7 +325,11 @@ export default function Income() {
                       <td>{i.client_name || '-'}</td>
                       <td>{i.contract_number || '-'}</td>
                       <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
-                        {i.project_id ? (projects.find((p) => p.id === i.project_id)?.code || '—') : '—'}
+                        {i.project_id ? (
+                          <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
+                            {projects.find((p) => p.id === i.project_id)?.name || '—'}
+                          </span>
+                        ) : '—'}
                       </td>
                       <td>
                         {(i.description || '').slice(0, 40)}
@@ -443,7 +447,7 @@ export default function Income() {
                 >
                   <option value="">— {tr('unassignProject')} —</option>
                   {projects.filter((p) => p.status !== 'archived').map((p) => (
-                    <option key={p.id} value={p.id}>{p.code || p.name} — {p.name}</option>
+                    <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -532,7 +536,7 @@ export default function Income() {
               >
                 <option value="_none">— {tr('unassignProject')} —</option>
                 {projects.filter((p) => p.status !== 'archived').map((p) => (
-                  <option key={p.id} value={p.id}>{p.code || p.name} — {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
                 ))}
               </select>
             </div>
