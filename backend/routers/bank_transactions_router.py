@@ -1,4 +1,5 @@
 """Роутер банковских транзакций (BankTransaction)."""
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,21 +23,20 @@ router = APIRouter(prefix="/bank-transactions", tags=["bank-transactions"])
 
 @router.get("", response_model=list[BankTransactionResponse])
 async def list_bank_transactions(
-    status: Optional[str] = Query(None, description="Фильтр по статусу (unmatched, matched, ignored)"),
-    direction: Optional[str] = Query(None, description="Фильтр по направлению (in, out)"),
-    year: Optional[int] = Query(None, description="Год"),
-    month: Optional[int] = Query(None, description="Месяц"),
+    status: Optional[str] = Query(None),
+    direction: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список банковских транзакций."""
+    """Список банковских транзакций за год/месяц."""
     q = select(BankTransaction)
     if status:
         q = q.where(BankTransaction.status == status)
     if direction:
         q = q.where(BankTransaction.direction == direction)
     if year:
-        from datetime import date
         q = q.where(BankTransaction.date >= date(year, 1, 1), BankTransaction.date <= date(year, 12, 31))
     if month and year:
         import calendar

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -204,13 +204,35 @@ export default function Income() {
   const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((e) => console.error(e))
   const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((e) => console.error(e))
 
-  const filtered = items.filter((i) => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (i.client_name || '').toLowerCase().includes(s) ||
-      (i.invoice_number || '').toLowerCase().includes(s) ||
-      (i.description || '').toLowerCase().includes(s)
-  })
+  const filtered = useMemo(() => {
+    const s = (search || '').trim().toLowerCase()
+    let rows = items
+    if (s) {
+      rows = items.filter((i) =>
+        (i.client_name || '').toLowerCase().includes(s) ||
+        (i.invoice_number || '').toLowerCase().includes(s) ||
+        (i.description || '').toLowerCase().includes(s) ||
+        String(i.amount_rsd || '').includes(s) ||
+        (projects.find(p => p.id === i.project_id)?.name || '').toLowerCase().includes(s)
+      )
+    }
+    return [...rows].sort((a, b) => {
+      let valA = sortCol === 'project_id' ? (projects.find(p => p.id === a.project_id)?.name || '') : (a[sortCol] ?? '')
+      let valB = sortCol === 'project_id' ? (projects.find(p => p.id === b.project_id)?.name || '') : (b[sortCol] ?? '')
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [items, search, sortCol, sortAsc, projects])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
 
   return (
     <>
@@ -294,15 +316,15 @@ export default function Income() {
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th>{tr('date')}</th>
-                  <th>{tr('valuta')}</th>
-                  <th>{tr('invoiceNumber')}</th>
-                  <th>{tr('client')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIcon col="due_date" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIcon col="invoice_number" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
                   <th>{tr('contracts')}</th>
-                  <th>{tr('project')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
                   <th>{tr('description')}</th>
-                  <th>{tr('amount')}</th>
-                  <th>{tr('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIcon col="amount_rsd" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('is_paid')}>{tr('status')} <SortIcon col="is_paid" /></th>
                   <th></th>
                 </tr>
               </thead>

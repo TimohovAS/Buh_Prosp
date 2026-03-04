@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -125,12 +125,34 @@ export default function Expenses() {
     }
   }
 
-  const filtered = items.filter((i) => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (i.description || '').toLowerCase().includes(s) ||
-      (i.category || '').toLowerCase().includes(s)
-  })
+  const filtered = useMemo(() => {
+    const s = (search || '').trim().toLowerCase()
+    let rows = items
+    if (s) {
+      rows = items.filter((i) =>
+        (i.description || '').toLowerCase().includes(s) ||
+        (i.category || '').toLowerCase().includes(s) ||
+        String(i.amount || '').includes(s) ||
+        (projects.find(p => p.id === i.project_id)?.name || '').toLowerCase().includes(s)
+      )
+    }
+    return [...rows].sort((a, b) => {
+      let valA = sortCol === 'project_id' ? (projects.find(p => p.id === a.project_id)?.name || '') : (a[sortCol] ?? '')
+      let valB = sortCol === 'project_id' ? (projects.find(p => p.id === b.project_id)?.name || '') : (b[sortCol] ?? '')
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [items, search, sortCol, sortAsc, projects])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
 
   const total = filtered.reduce((sum, i) => sum + i.amount, 0)
   const defaultCategoryValues = getCategories(tr).filter((c) => c.value).map((c) => c.value)
@@ -210,11 +232,11 @@ export default function Expenses() {
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th>{tr('date')}</th>
-                  <th>{tr('description')}</th>
-                  <th>{tr('project')}</th>
-                  <th>{tr('category')}</th>
-                  <th>{tr('amount')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIcon col="description" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIcon col="category" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
                   <th>{tr('paymentRef')}</th>
                   <th></th>
                 </tr>

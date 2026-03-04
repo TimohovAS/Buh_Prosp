@@ -81,7 +81,7 @@ if errorlevel 1 (
 "%NSSM%" set ProspEl-Backend AppRotateOnline 1
 
 echo [ProspEl] Installing ProspEl-Web...
-"%NSSM%" install ProspEl-Web "%NPM_CMD%" "run preview -- --host 0.0.0.0 --port 5173"
+"%NSSM%" install ProspEl-Web "%NPM_CMD%" "run dev -- --host 0.0.0.0 --port 5173"
 if errorlevel 1 (
   echo [ERROR] Failed to install ProspEl-Web.
   exit /b 1

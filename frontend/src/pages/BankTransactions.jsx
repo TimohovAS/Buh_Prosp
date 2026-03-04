@@ -1,26 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import Modal from '../components/Modal'
-import { Check } from 'lucide-react'
+
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 export default function BankTransactions() {
     const [data, setData] = useState([])
     const [loading, setLoading] = useState(true)
-    const [statusFilter, setStatusFilter] = useState('all')
-    const [directionFilter, setDirectionFilter] = useState('all')
+
+    // Filters
     const [year, setYear] = useState(new Date().getFullYear())
     const [month, setMonth] = useState('')
+    const [statusFilter, setStatusFilter] = useState('all')
+    const [directionFilter, setDirectionFilter] = useState('all')
+    const [search, setSearch] = useState('')
+
+    // Sort
+    const [sortCol, setSortCol] = useState('date')
+    const [sortAsc, setSortAsc] = useState(false)
 
     // Matching Modal State
     const [matchTx, setMatchTx] = useState(null)
     const [suggestions, setSuggestions] = useState([])
     const [suggestLoading, setSuggestLoading] = useState(false)
     const [matchError, setMatchError] = useState('')
-
-    // Sort State
-    const [sortCol, setSortCol] = useState('date')
-    const [sortAsc, setSortAsc] = useState(false)
 
     // Projects State
     const [projects, setProjects] = useState([])
@@ -48,43 +52,37 @@ export default function BankTransactions() {
         }
     }
 
-    useEffect(() => {
-        loadData()
-    }, [statusFilter, directionFilter, year, month])
+    useEffect(() => { loadData() }, [statusFilter, directionFilter, year, month])
 
-    const handleUpdateStatus = async (id, newStatus) => {
-        try {
-            await api.bankTransactions.update(id, { status: newStatus })
-            loadData()
-        } catch (e) {
-            console.error(e)
+    // Filtered + sorted rows
+    const displayed = useMemo(() => {
+        const s = search.trim().toLowerCase()
+        let rows = data
+        if (s) {
+            rows = data.filter(tx =>
+                (tx.date || '').toLowerCase().includes(s) ||
+                (tx.counterparty_name || '').toLowerCase().includes(s) ||
+                (tx.purpose || '').toLowerCase().includes(s) ||
+                String(tx.amount || '').includes(s) ||
+                (tx.status || '').toLowerCase().includes(s) ||
+                (projects.find(p => p.id === tx.project_id)?.name || '').toLowerCase().includes(s)
+            )
         }
-    }
-
-    const toggleSelect = (id) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-        )
-    }
-
-    const toggleSelectAll = () => {
-        if (selectedIds.length >= data.length) setSelectedIds([])
-        else setSelectedIds(data.map(i => i.id))
-    }
-
-    const handleBulkAssign = async () => {
-        if (selectedIds.length === 0) return
-        const pid = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
-        try {
-            await api.bankTransactions.bulkAssignProject({ ids: selectedIds, project_id: pid })
-            setModalAssign(false)
-            setAssignProjectId('')
-            setSelectedIds([])
-            loadData()
-        } catch (err) {
-            console.error(err)
-        }
-    }
+        rows = [...rows].sort((a, b) => {
+            let valA = a[sortCol]
+            let valB = b[sortCol]
+            if (sortCol === 'project_id') {
+                valA = projects.find(p => p.id === a.project_id)?.name || ''
+                valB = projects.find(p => p.id === b.project_id)?.name || ''
+            }
+            if (valA == null) valA = ''
+            if (valB == null) valB = ''
+            if (valA < valB) return sortAsc ? -1 : 1
+            if (valA > valB) return sortAsc ? 1 : -1
+            return 0
+        })
+        return rows
+    }, [data, search, sortCol, sortAsc, projects])
 
     const toggleSort = (col) => {
         if (sortCol === col) setSortAsc(!sortAsc)
@@ -96,14 +94,42 @@ export default function BankTransactions() {
         return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
     }
 
+    const handleUpdateStatus = async (id, newStatus) => {
+        try {
+            await api.bankTransactions.update(id, { status: newStatus })
+            loadData()
+        } catch (e) { console.error(e) }
+    }
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        )
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length >= displayed.length) setSelectedIds([])
+        else setSelectedIds(displayed.map(i => i.id))
+    }
+
+    const handleBulkAssign = async () => {
+        if (selectedIds.length === 0) return
+        const pid = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
+        try {
+            await api.bankTransactions.bulkAssignProject({ ids: selectedIds, project_id: pid })
+            setModalAssign(false)
+            setAssignProjectId('')
+            setSelectedIds([])
+            loadData()
+        } catch (err) { console.error(err) }
+    }
+
     const handleUnmatch = async (id) => {
         if (!confirm(tr('deleteIncome') + ' (Unmatch)')) return
         try {
             await api.bankTransactions.unmatch(id)
             loadData()
-        } catch (e) {
-            console.error(e)
-        }
+        } catch (e) { console.error(e) }
     }
 
     const openMatchModal = async (tx) => {
@@ -123,47 +149,60 @@ export default function BankTransactions() {
 
     const performMatch = async (targetId, targetType) => {
         try {
-            await api.bankTransactions.match(matchTx.id, {
-                type: targetType,
-                id: targetId
-            })
+            await api.bankTransactions.match(matchTx.id, { type: targetType, id: targetId })
             setMatchTx(null)
             loadData()
-        } catch (e) {
-            setMatchError(e.message)
-        }
+        } catch (e) { setMatchError(e.message) }
     }
+
+    const currentYear = new Date().getFullYear()
+    const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
 
     return (
         <>
             <div className="page-header">
                 <h1>{tr('bankTransactions')}</h1>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <select
-                        value={statusFilter}
-                        onChange={e => setStatusFilter(e.target.value)}
-                        className="input"
-                    >
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {/* Year selector */}
+                    <select value={year} onChange={e => { setYear(Number(e.target.value)); setMonth('') }} className="input">
+                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+
+                    {/* Month selector */}
+                    <select value={month} onChange={e => setMonth(e.target.value)} className="input">
+                        <option value="">{tr('allMonths') || 'Все месяцы'}</option>
+                        {MONTHS.map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
+                    </select>
+
+                    {/* Status filter */}
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input">
                         <option value="all">{tr('bankTxAll')}</option>
                         <option value="unmatched">{tr('bankTxUnmatched')}</option>
                         <option value="matched">{tr('bankTxMatched')}</option>
                         <option value="ignored">{tr('bankTxIgnored')}</option>
                     </select>
 
+                    {/* Direction filter */}
+                    <select value={directionFilter} onChange={e => setDirectionFilter(e.target.value)} className="input">
+                        <option value="all">{tr('bankTxAll')} ↕</option>
+                        <option value="in">{tr('bankTxDirectionIn')} ↑</option>
+                        <option value="out">{tr('bankTxDirectionOut')} ↓</option>
+                    </select>
+
+                    {/* Search */}
+                    <input
+                        className="input"
+                        placeholder={tr('search') || 'Поиск...'}
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{ minWidth: '160px' }}
+                    />
+
                     {selectedIds.length > 0 && (
                         <button className="btn btn-primary btn-sm" onClick={() => setModalAssign(true)}>
                             {tr('assignProject')} ({selectedIds.length})
                         </button>
                     )}
-                    <select
-                        value={directionFilter}
-                        onChange={e => setDirectionFilter(e.target.value)}
-                        className="input"
-                    >
-                        <option value="all">{tr('bankTxAll')} (Dir)</option>
-                        <option value="in">{tr('bankTxDirectionIn')}</option>
-                        <option value="out">{tr('bankTxDirectionOut')}</option>
-                    </select>
                 </div>
             </div>
 
@@ -176,7 +215,7 @@ export default function BankTransactions() {
                                     <th style={{ width: '40px', textAlign: 'center' }}>
                                         <input
                                             type="checkbox"
-                                            checked={data.length > 0 && selectedIds.length === data.length}
+                                            checked={displayed.length > 0 && selectedIds.length === displayed.length}
                                             onChange={toggleSelectAll}
                                         />
                                     </th>
@@ -184,24 +223,13 @@ export default function BankTransactions() {
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIcon col="counterparty_name" /></th>
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIcon col="purpose" /></th>
                                     <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
+                                    <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
                                     <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('filterStatus')} <SortIcon col="status" /></th>
                                     <th style={{ textAlign: 'right' }}>{tr('actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.sort((a, b) => {
-                                    let valA = a[sortCol]
-                                    let valB = b[sortCol]
-
-                                    if (sortCol === 'project_id') {
-                                        valA = projects.find(p => p.id === a.project_id)?.name || ''
-                                        valB = projects.find(p => p.id === b.project_id)?.name || ''
-                                    }
-
-                                    if (valA < valB) return sortAsc ? -1 : 1
-                                    if (valA > valB) return sortAsc ? 1 : -1
-                                    return 0
-                                }).map(tx => (
+                                {displayed.map(tx => (
                                     <tr key={tx.id}>
                                         <td style={{ textAlign: 'center' }}>
                                             <input
@@ -227,6 +255,13 @@ export default function BankTransactions() {
                                         </td>
                                         <td style={{ textAlign: 'right', fontWeight: 'bold', color: tx.direction === 'in' ? 'green' : 'inherit' }}>
                                             {tx.direction === 'in' ? '+' : '-'}{tx.amount.toLocaleString('ru-RU', { style: 'currency', currency: tx.currency })}
+                                        </td>
+                                        <td style={{ fontSize: '0.85em', color: 'var(--color-text-muted)' }}>
+                                            {tx.project_id ? (
+                                                <span title={projects.find(p => p.id === tx.project_id)?.code || ''}>
+                                                    {projects.find(p => p.id === tx.project_id)?.name || '—'}
+                                                </span>
+                                            ) : '—'}
                                         </td>
                                         <td>
                                             {tx.status === 'unmatched' && <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
@@ -257,15 +292,19 @@ export default function BankTransactions() {
                                         </td>
                                     </tr>
                                 ))}
-                                {data.length === 0 && (
+                                {displayed.length === 0 && (
                                     <tr>
-                                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
+                                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>{tr('noData')}</td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
                 )}
+
+                <div style={{ padding: '0.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    {!loading && `${tr('total') || 'Итого'}: ${displayed.length} ${tr('records') || 'записей'}`}
+                </div>
             </div>
 
             {/* MATCH MODAL */}

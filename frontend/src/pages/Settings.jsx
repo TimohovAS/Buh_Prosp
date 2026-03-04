@@ -237,9 +237,6 @@ export default function Settings() {
         <div className="card">
           <div className="card-title">{tr('limits')}</div>
           <p>{tr('limitsDescription')}</p>
-          <p style={{ marginTop: '2rem', textAlign: 'right', fontSize: '0.85rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
-            Версия программы: v2.1.0 <span>(Сборка: 04.03.2026 18:35)</span>
-          </p>
         </div>
       </div>
 
