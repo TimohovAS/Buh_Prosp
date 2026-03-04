@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -19,6 +19,9 @@ export default function AccountsReceivable() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [onlyOverdue, setOnlyOverdue] = useState(false)
+  const [search, setSearch] = useState('')
+  const [sortCol, setSortCol] = useState('days_overdue')
+  const [sortAsc, setSortAsc] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -38,7 +41,30 @@ export default function AccountsReceivable() {
 
   useEffect(load, [])
 
-  const filtered = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
+  const filtered = useMemo(() => {
+    const s = (search || '').trim().toLowerCase()
+    let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
+    if (s) rows = rows.filter(i =>
+      (i.invoice_number || '').toLowerCase().includes(s) ||
+      (i.client_name || '').toLowerCase().includes(s)
+    )
+    return [...rows].sort((a, b) => {
+      const valA = a[sortCol] ?? 0
+      const valB = b[sortCol] ?? 0
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [items, onlyOverdue, search, sortCol, sortAsc])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
 
   if (loading && items.length === 0) {
     return (
@@ -53,14 +79,24 @@ export default function AccountsReceivable() {
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <h1>{tr('financeAR')}</h1>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <input
-            type="checkbox"
-            checked={onlyOverdue}
-            onChange={(e) => setOnlyOverdue(e.target.checked)}
+            type="text"
+            className="form-input"
+            placeholder={tr('search')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: 200 }}
           />
-          <span>{tr('arFilterOverdue')}</span>
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={onlyOverdue}
+              onChange={(e) => setOnlyOverdue(e.target.checked)}
+            />
+            <span>{tr('arFilterOverdue')}</span>
+          </label>
+        </div>
       </div>
 
       {error && (
@@ -85,12 +121,12 @@ export default function AccountsReceivable() {
           <table>
             <thead>
               <tr>
-                <th>{tr('invoiceNumber')}</th>
-                <th>{tr('client')}</th>
-                <th>{tr('date')}</th>
-                <th>{tr('valuta')}</th>
-                <th>{tr('amount')}</th>
-                <th>{tr('financeDaysOverdue')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIcon col="invoice_number" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>{tr('date')} <SortIcon col="issued_date" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIcon col="due_date" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>{tr('financeDaysOverdue')} <SortIcon col="days_overdue" /></th>
                 <th style={{ width: 140 }}></th>
               </tr>
             </thead>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 
@@ -6,6 +6,8 @@ export default function Clients() {
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [sortCol, setSortCol] = useState('name')
+  const [sortAsc, setSortAsc] = useState(true)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -63,6 +65,25 @@ export default function Clients() {
     }
   }
 
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const valA = a[sortCol] ?? ''
+      const valB = b[sortCol] ?? ''
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [items, sortCol, sortAsc])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
+
   return (
     <>
       <div className="page-header">
@@ -83,43 +104,43 @@ export default function Clients() {
       </div>
 
       <div className="page-body">
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{tr('name')}</th>
-                <th>{tr('address')}</th>
-                <th>{tr('pib')}</th>
-                <th>{tr('type')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5}>{tr('loading')}</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
-              ) : (
-                items.map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.name}</td>
-                    <td>{(c.address || '').slice(0, 40)}</td>
-                    <td>{c.pib || '-'}</td>
-                    <td>{c.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')}</td>
-                    <td>
-                      <button className="btn btn-sm btn-secondary" onClick={() => openEdit(c)}>{tr('edit')}</button>
-                      <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(c.id)}>
-                        {tr('delete')}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('name')} <SortIcon col="name" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('address')}>{tr('address')} <SortIcon col="address" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('pib')}>{tr('pib')} <SortIcon col="pib" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_type')}>{tr('type')} <SortIcon col="client_type" /></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={5}>{tr('loading')}</td></tr>
+                ) : items.length === 0 ? (
+                  <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
+                ) : (
+                  sorted.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.name}</td>
+                      <td>{(c.address || '').slice(0, 40)}</td>
+                      <td>{c.pib || '-'}</td>
+                      <td>{c.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')}</td>
+                      <td>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(c)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(c.id)}>
+                          {tr('delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
 
       {modal && (

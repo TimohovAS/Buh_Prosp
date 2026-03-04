@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -13,6 +13,8 @@ export default function Contracts() {
   const [clientFilter, setClientFilter] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [sortCol, setSortCol] = useState('date')
+  const [sortAsc, setSortAsc] = useState(false)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     number: '',
@@ -134,19 +136,19 @@ export default function Contracts() {
         validity_end: form.validity_end || null,
         items: modal === 'add'
           ? (itemsForm.filter((i) => i.description.trim()).length
-              ? itemsForm.filter((i) => i.description.trim()).map((i) => ({
-                  description: i.description,
-                  quantity: parseFloat(i.quantity) || 1,
-                  unit: i.unit || 'шт',
-                  price: parseFloat(i.price) || 0,
-                }))
-              : null)
-          : itemsForm.filter((i) => i.description.trim()).map((i) => ({
+            ? itemsForm.filter((i) => i.description.trim()).map((i) => ({
               description: i.description,
               quantity: parseFloat(i.quantity) || 1,
               unit: i.unit || 'шт',
               price: parseFloat(i.price) || 0,
-            })),
+            }))
+            : null)
+          : itemsForm.filter((i) => i.description.trim()).map((i) => ({
+            description: i.description,
+            quantity: parseFloat(i.quantity) || 1,
+            unit: i.unit || 'шт',
+            price: parseFloat(i.price) || 0,
+          })),
       }
       if (modal === 'add') {
         await api.contracts.create(payload)
@@ -160,13 +162,31 @@ export default function Contracts() {
     }
   }
 
-  const filteredItems = items.filter((c) => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (c.number || '').toLowerCase().includes(s) ||
-           (c.subject || '').toLowerCase().includes(s) ||
-           (c.client_name || '').toLowerCase().includes(s)
-  })
+  const filteredItems = useMemo(() => {
+    const s = (search || '').trim().toLowerCase()
+    let rows = items
+    if (s) rows = items.filter((c) =>
+      (c.number || '').toLowerCase().includes(s) ||
+      (c.subject || '').toLowerCase().includes(s) ||
+      (c.client_name || '').toLowerCase().includes(s)
+    )
+    return [...rows].sort((a, b) => {
+      const valA = a[sortCol] ?? ''
+      const valB = b[sortCol] ?? ''
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [items, search, sortCol, sortAsc])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
 
   const handleDelete = async (id) => {
     if (!confirm(tr('deleteContract'))) return
@@ -220,62 +240,62 @@ export default function Contracts() {
       </div>
 
       <div className="page-body">
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>№</th>
-                <th>{tr('date')}</th>
-                <th>{tr('client')}</th>
-                <th>{tr('type')}</th>
-                <th>{tr('contractSubject')}</th>
-                <th>{tr('amount')}</th>
-                <th>{tr('contractReceived')}</th>
-                <th>{tr('status')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={9}>{tr('loading')}</td></tr>
-              ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
-              ) : (
-                filteredItems.map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.number}</td>
-                    <td>{c.date}</td>
-                    <td>{c.client_name || '-'}</td>
-                    <td>{tr(CONTRACT_TYPE_KEYS[c.contract_type] || 'service')}</td>
-                    <td>{(c.subject || '').slice(0, 30)}</td>
-                    <td>{c.amount.toLocaleString('sr-RS')}</td>
-                    <td title={`${tr('contractPaymentAdvance')}: ${(c.advance_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentIntermediate')}: ${(c.intermediate_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentClosing')}: ${(c.closing_sum || 0).toLocaleString('sr-RS')}`}>
-                      {(c.total_received || 0).toLocaleString('sr-RS')}
-                      {(c.total_received || 0) > 0 && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          А:{((c.advance_sum || 0)).toLocaleString('sr-RS')} П:{((c.intermediate_sum || 0)).toLocaleString('sr-RS')} З:{((c.closing_sum || 0)).toLocaleString('sr-RS')}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge ${c.status === 'active' ? 'badge-success' : c.status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
-                        {tr(STATUS_KEYS[c.status] || 'active')}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn btn-sm btn-secondary" onClick={() => openEdit(c)}>{tr('edit')}</button>
-                      <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(c.id)}>
-                        {tr('delete')}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="card">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>№ <SortIcon col="number" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
+                  <th>{tr('type')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('subject')}>{tr('contractSubject')} <SortIcon col="subject" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_received')}>{tr('contractReceived')} <SortIcon col="total_received" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIcon col="status" /></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={9}>{tr('loading')}</td></tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
+                ) : (
+                  filteredItems.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.number}</td>
+                      <td>{c.date}</td>
+                      <td>{c.client_name || '-'}</td>
+                      <td>{tr(CONTRACT_TYPE_KEYS[c.contract_type] || 'service')}</td>
+                      <td>{(c.subject || '').slice(0, 30)}</td>
+                      <td>{c.amount.toLocaleString('sr-RS')}</td>
+                      <td title={`${tr('contractPaymentAdvance')}: ${(c.advance_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentIntermediate')}: ${(c.intermediate_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentClosing')}: ${(c.closing_sum || 0).toLocaleString('sr-RS')}`}>
+                        {(c.total_received || 0).toLocaleString('sr-RS')}
+                        {(c.total_received || 0) > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                            А:{((c.advance_sum || 0)).toLocaleString('sr-RS')} П:{((c.intermediate_sum || 0)).toLocaleString('sr-RS')} З:{((c.closing_sum || 0)).toLocaleString('sr-RS')}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`badge ${c.status === 'active' ? 'badge-success' : c.status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
+                          {tr(STATUS_KEYS[c.status] || 'active')}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(c)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(c.id)}>
+                          {tr('delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
 
       {modal && (
@@ -327,9 +347,9 @@ export default function Contracts() {
                   value={form.contract_type}
                   onChange={(e) => setForm({ ...form, contract_type: e.target.value })}
                 >
-                {Object.entries(CONTRACT_TYPE_KEYS).map(([k, key]) => (
-                  <option key={k} value={k}>{tr(key)}</option>
-                ))}
+                  {Object.entries(CONTRACT_TYPE_KEYS).map(([k, key]) => (
+                    <option key={k} value={k}>{tr(key)}</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -417,9 +437,9 @@ export default function Contracts() {
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value })}
                   >
-                {Object.entries(STATUS_KEYS).map(([k, key]) => (
-                  <option key={k} value={k}>{tr(key)}</option>
-                ))}
+                    {Object.entries(STATUS_KEYS).map(([k, key]) => (
+                      <option key={k} value={k}>{tr(key)}</option>
+                    ))}
                   </select>
                 </div>
               )}

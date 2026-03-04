@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -18,6 +18,8 @@ export default function Projects() {
   const [form, setForm] = useState({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '' })
   const [showInactive, setShowInactive] = useState(false)
   const [search, setSearch] = useState('')
+  const [sortCol, setSortCol] = useState('name')
+  const [sortAsc, setSortAsc] = useState(true)
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -136,13 +138,37 @@ export default function Projects() {
     return row || { project_name: p.name, revenue: 0, expenses: 0, profit: 0 }
   }
 
-  const filteredProjects = projects.filter((p) => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (p.name || '').toLowerCase().includes(s) ||
-           (p.code || '').toLowerCase().includes(s) ||
-           (p.client_name || '').toLowerCase().includes(s)
-  })
+  const filteredProjects = useMemo(() => {
+    const s = (search || '').trim().toLowerCase()
+    let rows = projects
+    if (s) rows = projects.filter((p) =>
+      (p.name || '').toLowerCase().includes(s) ||
+      (p.code || '').toLowerCase().includes(s) ||
+      (p.client_name || '').toLowerCase().includes(s)
+    )
+    return [...rows].sort((a, b) => {
+      let valA, valB
+      if (sortCol === 'revenue' || sortCol === 'expenses' || sortCol === 'profit') {
+        valA = getRowData(a)[sortCol] ?? 0
+        valB = getRowData(b)[sortCol] ?? 0
+      } else {
+        valA = a[sortCol] ?? ''
+        valB = b[sortCol] ?? ''
+      }
+      if (valA < valB) return sortAsc ? -1 : 1
+      if (valA > valB) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [projects, search, sortCol, sortAsc, byProject])
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+  }
 
   return (
     <div className="page">
@@ -217,12 +243,12 @@ export default function Projects() {
           <table>
             <thead>
               <tr>
-                <th>{tr('project')}</th>
-                <th>{tr('projectCode')}</th>
-                <th>{tr('client')}</th>
-                <th>{tr('income')}</th>
-                <th>{tr('expenses')}</th>
-                <th>{tr('projectProfit')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('project')} <SortIcon col="name" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('code')}>{tr('projectCode')} <SortIcon col="code" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('revenue')}>{tr('income')} <SortIcon col="revenue" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('expenses')}>{tr('expenses')} <SortIcon col="expenses" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('projectProfit')} <SortIcon col="profit" /></th>
                 <th style={{ width: 140 }}></th>
               </tr>
             </thead>
