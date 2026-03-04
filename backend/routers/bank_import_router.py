@@ -284,8 +284,13 @@ async def apply_import(
 
     await db.commit()
 
+    total_income = sum(s["created_income"] for s in file_stats.values())
+    total_expense = sum(s["created_expense"] for s in file_stats.values())
+
     return {
         "created_transactions": created_transactions,
+        "created_income": total_income,
+        "created_expense": total_expense,
         "skipped_duplicates": skipped_duplicates,
         "errors": errors,
         "recent_files": await _recent_files(db, 10),
