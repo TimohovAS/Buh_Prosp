@@ -2,6 +2,7 @@
 from datetime import date
 from typing import Optional
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import BankTransaction, Income, Expense, MonthlyObligation
@@ -21,8 +22,8 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
     result = []
 
     if tx.direction == "in":
-        # Все незакрытые фактуры
-        q = select(Income).where(
+        # Все незакрытые фактуры — загружаем клиента сразу, чтобы использовать client.name
+        q = select(Income).options(selectinload(Income.client)).where(
             Income.status.in_(["issued", "partial"]),
         )
         r = await db.execute(q)
@@ -53,20 +54,19 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             return (score_inv, amount_diff, date_diff)
 
         def matches_counterparty(inc: Income) -> bool:
-            """Проверяет совпадение контрагента по имени клиента."""
+            """Проверяет совпадение контрагента по имени клиента.
+            Использует client_name (свободный текст) или client.name (из справочника)."""
             if not counterparty_norm:
                 return False
-            client_norm = (inc.client_name or "").lower().strip()
+            # Берём имя из поля или из связанного клиента
+            raw_name = inc.client_name or (inc.client.name if inc.client else "")
+            client_norm = raw_name.lower().strip()
             if not client_norm:
                 return False
-            # Совпадение если одна строка содержит другую (хотя бы 6 символов)
-            min_len = min(len(counterparty_norm), len(client_norm))
-            if min_len < 4:
-                return False
-            # Первые слова совпадают
-            cp_words = counterparty_norm.split()[:3]
-            cl_words = client_norm.split()[:3]
-            common = sum(1 for w in cp_words if any(w in cw or cw in w for cw in cl_words))
+            # Первые слова банковского контрагента vs. клиента
+            cp_words = counterparty_norm.split()[:4]
+            cl_words = client_norm.split()[:4]
+            common = sum(1 for w in cp_words if any(w == cw or w in cw or cw in w for cw in cl_words))
             return common >= 2 or client_norm in counterparty_norm or counterparty_norm in client_norm
 
         # 1. Находим топ-5 scored кандидатов (по сумме + номеру)
