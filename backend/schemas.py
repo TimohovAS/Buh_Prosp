@@ -700,10 +700,16 @@ class BankTransactionBulkAssignProject(BaseModel):
 class MatchCandidate(BaseModel):
     id: int
     type: str
-    description: str
+    invoice_number: Optional[str] = None
+    client_name: Optional[str] = None
+    description: Optional[str] = None
     amount: float
-    date: DateType
+    amount_full: Optional[float] = None
+    amount_paid: Optional[float] = None
+    date: Optional[DateType] = None
+    status: Optional[str] = None
     score: Optional[int] = None
+    section: Optional[str] = None
 
 
 class MatchRequest(BaseModel):
