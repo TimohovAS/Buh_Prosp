@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
-import { tr } from '../i18n'
+import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const PERIODS = [
@@ -29,7 +29,7 @@ const CATEGORIES = [
   { value: 'insurance', label: 'plannedCatInsurance' },
   { value: 'software', label: 'plannedCatSoftware' },
   { value: 'other', label: 'plannedCatOther' },
-]
+] // legacy, kept for table display fallback
 
 function formatDate(s) {
   if (!s) return '—'
@@ -65,6 +65,8 @@ export default function PlannedExpenses() {
     amount: '',
     currency: 'RSD',
     category: '',
+    category_id: '',
+    project_id: '',
     period: 'monthly',
     payment_day: 5,
     payment_day_of_week: 0,
@@ -74,6 +76,8 @@ export default function PlannedExpenses() {
     is_active: true,
     note: '',
   })
+  const [projects, setProjects] = useState([])
+  const [apiCategories, setApiCategories] = useState([])
 
   const load = () => {
     setLoading(true)
@@ -90,14 +94,21 @@ export default function PlannedExpenses() {
 
   useEffect(load, [filterActive, filterCategory])
   useEffect(loadUpcoming, [upcomingDays, items.length])
+  useEffect(() => {
+    api.projects.list({ show_archived: true }).then(setProjects)
+    api.categories.list({ category_type: 'expense' }).then(setApiCategories)
+  }, [])
 
   const openAdd = () => {
+    const unassigned = projects.find(p => p.code === 'INT-UNASSIGNED')
     setForm({
       name: '',
       description: '',
       amount: '',
       currency: 'RSD',
       category: '',
+      category_id: '',
+      project_id: unassigned ? String(unassigned.id) : '',
       period: 'monthly',
       payment_day: 5,
       payment_day_of_week: 0,
@@ -117,6 +128,8 @@ export default function PlannedExpenses() {
       amount: item.amount,
       currency: item.currency || 'RSD',
       category: item.category || '',
+      category_id: item.category_id ?? '',
+      project_id: item.project_id ?? '',
       period: item.period || 'monthly',
       payment_day: item.payment_day ?? 5,
       payment_day_of_week: item.payment_day_of_week ?? 0,
@@ -138,6 +151,8 @@ export default function PlannedExpenses() {
         amount: parseFloat(form.amount) || 0,
         currency: form.currency || 'RSD',
         category: form.category || null,
+        category_id: form.category_id ? parseInt(form.category_id, 10) : null,
+        project_id: form.project_id ? parseInt(form.project_id, 10) : null,
         period: form.period || 'monthly',
         payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
@@ -213,7 +228,7 @@ export default function PlannedExpenses() {
     if (!search) return true
     const s = search.toLowerCase()
     return (i.name || '').toLowerCase().includes(s) ||
-           (i.description || '').toLowerCase().includes(s)
+      (i.description || '').toLowerCase().includes(s)
   })
 
   const totalMonthly = items
@@ -225,6 +240,10 @@ export default function PlannedExpenses() {
       if (i.period === 'yearly') return sum + i.amount / 12
       return sum
     }, 0)
+
+  const lang = getLang()
+  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
+  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
 
   return (
     <>
@@ -545,14 +564,41 @@ export default function PlannedExpenses() {
                 <label className="form-label">{tr('category')}</label>
                 <select
                   className="form-input"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  value={form.category_id}
+                  onChange={(e) => {
+                    const cid = e.target.value
+                    const cat = apiCategories.find(c => String(c.id) === cid)
+                    setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
+                  }}
                 >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value || 'empty'} value={c.value}>
-                      {tr(c.label)}
-                    </option>
+                  <option value="">—</option>
+                  {apiCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <select
+                  className="form-input"
+                  value={form.project_id}
+                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                >
+                  <option value="">—</option>
+                  {commercialProjects.length > 0 && (
+                    <optgroup label={tr('commercialProject')}>
+                      {commercialProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {internalProjects.length > 0 && (
+                    <optgroup label={tr('internalProject')}>
+                      {internalProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
               <div className="form-group">

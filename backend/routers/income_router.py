@@ -19,6 +19,12 @@ from backend.services import get_income_total, get_next_invoice_number, allocate
 
 router = APIRouter(prefix="/income", tags=["income"])
 
+async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
+    """Получить id проекта INT-UNASSIGNED."""
+    r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
+    p = r.scalar_one_or_none()
+    return p.id if p else None
+
 
 from backend.income_service import (
     to_number_year_format,
@@ -99,6 +105,10 @@ async def create_income(
             raise HTTPException(409, "Номер счёта уже существует в этом году (уникальность по году)")
 
     status_val = data.status or ("paid" if data.paid_date else "issued")
+    # Auto-assign project
+    project_id = data.project_id
+    if not project_id:
+        project_id = await _get_unassigned_project_id(db)
     income = Income(
         issued_date=data.issued_date,
         invoice_number=invoice_number,
@@ -114,7 +124,7 @@ async def create_income(
         paid_date=data.paid_date,
         due_date=data.due_date,
         status=status_val,
-        project_id=data.project_id,
+        project_id=project_id,
         income_type=data.income_type or {"advance":"advance","intermediate":"intermediate","closing":"final"}.get(data.contract_payment_type or "", None),
         note=data.note,
         is_paid=(status_val == "paid"),
@@ -174,11 +184,14 @@ async def bulk_assign_project_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Массовое назначение проекта доходам. project_id=null — снять проект."""
+    """Массовое назначение проекта доходам. project_id=null → INT-UNASSIGNED."""
     if not data.ids:
         return {"updated": 0}
-    if data.project_id is not None:
-        r = await db.execute(select(Project).where(Project.id == data.project_id))
+    pid = data.project_id
+    if pid is None:
+        pid = await _get_unassigned_project_id(db)
+    if pid is not None:
+        r = await db.execute(select(Project).where(Project.id == pid))
         proj = r.scalar_one_or_none()
         if not proj:
             raise HTTPException(404, "Проект не найден")
@@ -187,7 +200,7 @@ async def bulk_assign_project_income(
     r = await db.execute(select(Income).where(Income.id.in_(data.ids)))
     items = r.scalars().all()
     for item in items:
-        item.project_id = data.project_id
+        item.project_id = pid
     await db.commit()
     return {"updated": len(items)}
 

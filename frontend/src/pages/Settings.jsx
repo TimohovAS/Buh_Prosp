@@ -48,6 +48,13 @@ export default function Settings() {
     default_language: 'sr',
   })
 
+  // Categories
+  const [categories, setCategories] = useState([])
+  const [catModal, setCatModal] = useState(null)
+  const [catForm, setCatForm] = useState({
+    name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0,
+  })
+
   const loadUsers = () => {
     if (!isAdmin) return
     setUsersLoading(true)
@@ -57,7 +64,14 @@ export default function Settings() {
       .finally(() => setUsersLoading(false))
   }
 
+  const loadCategories = () => {
+    api.categories.list({ include_inactive: true })
+      .then(setCategories)
+      .catch((err) => console.error(err))
+  }
+
   useEffect(loadUsers, [showInactive, isAdmin])
+  useEffect(loadCategories, [])
 
   const openAddUser = () => {
     setUserForm({ username: '', password: '', full_name: '', role: 'accountant', default_language: 'sr' })
@@ -425,6 +439,108 @@ export default function Settings() {
                 <button type="button" className="btn btn-secondary" onClick={() => setUserModal(null)}>
                   {tr('cancel')}
                 </button>
+                <button type="submit" className="btn btn-primary">{tr('save')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Categories CRUD section */}
+      <div className="card" style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2>{tr('categoriesTitle')}</h2>
+          <button className="btn btn-primary" onClick={() => {
+            setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
+            setCatModal('add')
+          }}>{tr('add')}</button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{tr('categoryNameRu')}</th>
+                <th>{tr('categoryNameSr')}</th>
+                <th>{tr('categoryGroup')}</th>
+                <th>{tr('sortOrder')}</th>
+                <th>{tr('status')}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.length === 0 ? (
+                <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
+              ) : categories.map((c) => (
+                <tr key={c.id} style={!c.is_active ? { opacity: 0.5 } : {}}>
+                  <td>{c.name_ru}</td>
+                  <td>{c.name_sr}</td>
+                  <td>{tr(`categoryGroup${c.category_group.charAt(0).toUpperCase() + c.category_group.slice(1)}`)}</td>
+                  <td>{c.sort_order}</td>
+                  <td>
+                    <span className="badge" style={{ backgroundColor: c.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
+                      {c.is_active ? tr('active') : tr('inactive')}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn btn-sm btn-secondary" onClick={() => {
+                      setCatForm({ name_ru: c.name_ru, name_sr: c.name_sr, category_type: c.category_type, category_group: c.category_group, is_active: c.is_active, sort_order: c.sort_order })
+                      setCatModal({ type: 'edit', id: c.id })
+                    }}>{tr('edit')}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {catModal && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{catModal === 'add' ? tr('add') : tr('edit')} — {tr('categoriesTitle')}</h2>
+              <button className="modal-close" onClick={() => setCatModal(null)}>×</button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              try {
+                if (catModal === 'add') {
+                  await api.categories.create(catForm)
+                } else {
+                  await api.categories.update(catModal.id, catForm)
+                }
+                setCatModal(null)
+                loadCategories()
+              } catch (err) { console.error(err) }
+            }}>
+              <div className="form-group">
+                <label className="form-label">{tr('categoryNameRu')}</label>
+                <input type="text" className="form-input" value={catForm.name_ru} onChange={(e) => setCatForm({ ...catForm, name_ru: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('categoryNameSr')}</label>
+                <input type="text" className="form-input" value={catForm.name_sr} onChange={(e) => setCatForm({ ...catForm, name_sr: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('categoryGroup')}</label>
+                <select className="form-input" value={catForm.category_group} onChange={(e) => setCatForm({ ...catForm, category_group: e.target.value })}>
+                  <option value="commercial">{tr('categoryGroupCommercial')}</option>
+                  <option value="admin">{tr('categoryGroupAdmin')}</option>
+                  <option value="tax">{tr('categoryGroupTax')}</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('sortOrder')}</label>
+                <input type="number" className="form-input" value={catForm.sort_order} onChange={(e) => setCatForm({ ...catForm, sort_order: parseInt(e.target.value) || 0 })} />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={catForm.is_active} onChange={(e) => setCatForm({ ...catForm, is_active: e.target.checked })} />
+                  <span>{tr('active')}</span>
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setCatModal(null)}>{tr('cancel')}</button>
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>

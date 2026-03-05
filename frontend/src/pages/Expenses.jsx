@@ -1,16 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
-import { tr } from '../i18n'
+import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-const getCategories = (tr) => [
-  { value: '', label: '—' },
-  { value: 'materials', label: tr('expenseCategoryMaterials') },
-  { value: 'services', label: tr('expenseCategoryServices') },
-  { value: 'rent', label: tr('expenseCategoryRent') },
-  { value: 'other', label: tr('expenseCategoryOther') },
-];
 
 export default function Expenses() {
   const [items, setItems] = useState([])
@@ -24,12 +17,14 @@ export default function Expenses() {
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [projects, setProjects] = useState([])
+  const [categories, setCategories] = useState([])
   const [assignProjectId, setAssignProjectId] = useState('')
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     description: '',
     amount: '',
     category: '',
+    category_id: '',
     project_id: '',
     note: '',
   })
@@ -44,6 +39,7 @@ export default function Expenses() {
   useEffect(load, [year, month])
   useEffect(() => {
     api.projects.list({ show_archived: true }).then(setProjects)
+    api.categories.list({ category_type: 'expense' }).then(setCategories)
   }, [])
 
   const toggleSelect = (id) => {
@@ -68,12 +64,15 @@ export default function Expenses() {
   }
 
   const openAdd = () => {
+    // Default project = INT-UNASSIGNED
+    const unassigned = projects.find(p => p.code === 'INT-UNASSIGNED')
     setForm({
       date: new Date().toISOString().slice(0, 10),
       description: '',
       amount: '',
       category: '',
-      project_id: '',
+      category_id: '',
+      project_id: unassigned ? String(unassigned.id) : '',
       note: '',
     })
     setModal('add')
@@ -85,6 +84,7 @@ export default function Expenses() {
       description: item.description || '',
       amount: item.amount,
       category: item.category || '',
+      category_id: item.category_id ?? '',
       project_id: item.project_id ?? '',
       note: item.note || '',
     })
@@ -100,6 +100,7 @@ export default function Expenses() {
         description: form.description.trim(),
         amount: parseFloat(form.amount) || 0,
         category: categoryValue,
+        category_id: form.category_id ? parseInt(form.category_id, 10) : null,
         project_id: form.project_id ? parseInt(form.project_id, 10) : null,
         note: form.note || null,
       }
@@ -155,12 +156,9 @@ export default function Expenses() {
   }
 
   const total = filtered.reduce((sum, i) => sum + i.amount, 0)
-  const defaultCategoryValues = getCategories(tr).filter((c) => c.value).map((c) => c.value)
-  const savedCategoryValues = items
-    .map((i) => (i.category || '').trim())
-    .filter(Boolean)
-  const categoryOptions = Array.from(new Set([...defaultCategoryValues, ...savedCategoryValues]))
-    .sort((a, b) => a.localeCompare(b))
+  const lang = getLang()
+  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
+  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
 
   return (
     <>
@@ -317,19 +315,20 @@ export default function Expenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('category')}</label>
-                <input
-                  list="expense-category-list"
-                  type="text"
+                <select
                   className="form-input"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  placeholder={tr('expenseCategoryOther')}
-                />
-                <datalist id="expense-category-list">
-                  {categoryOptions.map((value) => (
-                    <option key={value} value={value} />
+                  value={form.category_id}
+                  onChange={(e) => {
+                    const cid = e.target.value
+                    const cat = categories.find(c => String(c.id) === cid)
+                    setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
+                  }}
+                >
+                  <option value="">— {tr('allCategories')} —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}
-                </datalist>
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
@@ -337,11 +336,23 @@ export default function Expenses() {
                   className="form-input"
                   value={form.project_id}
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  required
                 >
-                  <option value="">— {tr('unassignProject')} —</option>
-                  {projects.filter((p) => p.status !== 'archived').map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
-                  ))}
+                  <option value="">—</option>
+                  {commercialProjects.length > 0 && (
+                    <optgroup label={tr('commercialProject')}>
+                      {commercialProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {internalProjects.length > 0 && (
+                    <optgroup label={tr('internalProject')}>
+                      {internalProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
               <div className="form-group">

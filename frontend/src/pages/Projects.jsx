@@ -15,11 +15,12 @@ export default function Projects() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '' })
+  const [form, setForm] = useState({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '', is_internal: false })
   const [showInactive, setShowInactive] = useState(false)
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
+  const [projectFilter, setProjectFilter] = useState('all') // all | commercial | internal
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -76,7 +77,7 @@ export default function Projects() {
   useEffect(() => { api.clients.listBrief().then(setClients) }, [])
 
   const openAdd = () => {
-    setForm({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '' })
+    setForm({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '', is_internal: false })
     setModal('add')
   }
 
@@ -92,6 +93,7 @@ export default function Projects() {
       planned_income: item.planned_income ?? '',
       planned_expense: item.planned_expense ?? '',
       notes: item.notes || '',
+      is_internal: item.is_internal || false,
     })
     setModal({ type: 'edit', id: item.id })
   }
@@ -103,7 +105,7 @@ export default function Projects() {
       code: form.code || undefined,
       status: form.status || 'active',
       client_id: form.client_id ? parseInt(form.client_id, 10) : null,
-      contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
+      is_internal: !!form.is_internal,
       start_date: form.start_date || undefined,
       end_date: form.end_date || undefined,
       planned_income: form.planned_income !== '' ? parseFloat(form.planned_income) : undefined,
@@ -141,7 +143,10 @@ export default function Projects() {
   const filteredProjects = useMemo(() => {
     const s = (search || '').trim().toLowerCase()
     let rows = projects
-    if (s) rows = projects.filter((p) =>
+    // Filter by internal/commercial
+    if (projectFilter === 'internal') rows = rows.filter(p => p.is_internal)
+    if (projectFilter === 'commercial') rows = rows.filter(p => !p.is_internal)
+    if (s) rows = rows.filter((p) =>
       (p.name || '').toLowerCase().includes(s) ||
       (p.code || '').toLowerCase().includes(s) ||
       (p.client_name || '').toLowerCase().includes(s)
@@ -187,6 +192,17 @@ export default function Projects() {
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
             <span>{tr('showInactive')}</span>
           </label>
+          <div style={{ display: 'flex', gap: '0.25rem' }}>
+            {['all', 'commercial', 'internal'].map((f) => (
+              <button
+                key={f}
+                className={`btn btn-sm ${projectFilter === f ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setProjectFilter(f)}
+              >
+                {tr(`filter${f.charAt(0).toUpperCase() + f.slice(1)}`)}
+              </button>
+            ))}
+          </div>
           <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
         </div>
       </div>
@@ -262,7 +278,7 @@ export default function Projects() {
                   const row = getRowData(p)
                   return (
                     <tr key={p.id} style={p.status === 'archived' ? { opacity: 0.6 } : {}}>
-                      <td>{p.name}</td>
+                      <td>{p.name}{p.is_internal ? ' 🏢' : ''}</td>
                       <td>{p.code || '—'}</td>
                       <td>{p.client_name || '—'}</td>
                       <td>{fmt(row.revenue)} RSD</td>
@@ -370,6 +386,12 @@ export default function Projects() {
                   <option value="completed">completed</option>
                   <option value="archived">archived</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.is_internal} onChange={(e) => setForm({ ...form, is_internal: e.target.checked })} />
+                  <span>{tr('isInternal')}</span>
+                </label>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('note')}</label>

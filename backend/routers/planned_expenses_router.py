@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.services import create_expense_reversal
-from backend.models import PlannedExpense, PlannedExpensePayment, Expense, User
+from backend.models import PlannedExpense, PlannedExpensePayment, Expense, User, Project
 from backend.planned_expenses_service import next_payment_dates, payment_dates_in_range
 from backend.schemas import (
     PlannedExpenseCreate,
@@ -20,6 +20,11 @@ from backend.schemas import (
 from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/planned-expenses", tags=["planned-expenses"])
+
+async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
+    r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
+    p = r.scalar_one_or_none()
+    return p.id if p else None
 
 
 @router.get("", response_model=list[PlannedExpenseResponse])
@@ -114,8 +119,10 @@ async def mark_planned_expense_paid(
         amount=pe.amount,
         currency=pe.currency or "RSD",
         category=pe.category or "other",
+        category_id=getattr(pe, "category_id", None),
         note=data.note,
         paid_date=paid_d,
+        project_id=getattr(pe, "project_id", None) or await _get_unassigned_project_id(db),
         source="planned",
         created_by=current_user.id,
     )
@@ -173,12 +180,17 @@ async def create_planned_expense(
     current_user: User = Depends(require_edit_access),
 ):
     """Добавить планируемый расход."""
+    project_id = data.project_id if hasattr(data, "project_id") else None
+    if not project_id:
+        project_id = await _get_unassigned_project_id(db)
     pe = PlannedExpense(
         name=data.name,
         description=data.description,
         amount=data.amount,
         currency=data.currency,
         category=data.category,
+        category_id=data.category_id if hasattr(data, "category_id") else None,
+        project_id=project_id,
         period=data.period,
         payment_day=data.payment_day,
         payment_day_of_week=data.payment_day_of_week,

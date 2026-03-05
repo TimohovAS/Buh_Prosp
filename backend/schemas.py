@@ -88,6 +88,7 @@ class ProjectBase(BaseModel):
     code: Optional[str] = None
     name: str
     client_id: Optional[int] = None
+    is_internal: Optional[bool] = False
     status: str = "active"  # lead | active | completed | archived
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
@@ -104,6 +105,7 @@ class ProjectUpdate(BaseModel):
     code: Optional[str] = None
     name: Optional[str] = None
     client_id: Optional[int] = None
+    is_internal: Optional[bool] = None
     status: Optional[str] = None
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
@@ -114,6 +116,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: int
+    is_internal: Optional[bool] = False
     client_name: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -552,6 +555,7 @@ class ExpenseBase(BaseModel):
     status: Optional[str] = None  # planned | paid | reversed
     is_tax_related: Optional[bool] = None
     project_id: Optional[int] = None
+    category_id: Optional[int] = None
     source: Optional[str] = None  # manual | planned | obligation | bank_import
     reversal_of_id: Optional[int] = None
     bank_reference: Optional[str] = None  # Номер платёжки / ID transakcije
@@ -575,11 +579,13 @@ class ExpenseUpdate(BaseModel):
     category: Optional[str] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
+    category_id: Optional[int] = None
     note: Optional[str] = None
 
 
 class ExpenseResponse(ExpenseBase):
     id: int
+    category_id: Optional[int] = None
     reversed_expense_id: Optional[int] = None
     created_at: datetime
 
@@ -594,6 +600,8 @@ class PlannedExpenseBase(BaseModel):
     amount: float
     currency: str = "RSD"
     category: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
     period: str = "monthly"  # weekly, monthly, quarterly, yearly
     payment_day: Optional[int] = None  # 1-31 для monthly/quarterly/yearly
     payment_day_of_week: Optional[int] = None  # 0-6 для weekly (0=пн)
@@ -614,6 +622,8 @@ class PlannedExpenseUpdate(BaseModel):
     amount: Optional[float] = None
     currency: Optional[str] = None
     category: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
     period: Optional[str] = None
     payment_day: Optional[int] = None
     payment_day_of_week: Optional[int] = None
@@ -626,6 +636,8 @@ class PlannedExpenseUpdate(BaseModel):
 
 class PlannedExpenseResponse(PlannedExpenseBase):
     id: int
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -713,3 +725,35 @@ class MatchCandidate(BaseModel):
 class MatchRequest(BaseModel):
     type: str  # income | expense | obligation
     id: int
+
+
+# ---------- TransactionCategory ----------
+
+class TransactionCategoryCreate(BaseModel):
+    name_ru: str
+    name_sr: str
+    category_type: str = "expense"  # expense | income
+    category_group: str = "admin"  # commercial | admin | tax
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class TransactionCategoryUpdate(BaseModel):
+    name_ru: Optional[str] = None
+    name_sr: Optional[str] = None
+    category_type: Optional[str] = None
+    category_group: Optional[str] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class TransactionCategoryResponse(BaseModel):
+    id: int
+    name_ru: str
+    name_sr: str
+    category_type: str
+    category_group: str
+    is_active: bool
+    sort_order: int
+
+    model_config = ConfigDict(from_attributes=True)

@@ -163,6 +163,15 @@ export const api = {
     delete: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   },
 
+  categories: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/categories?${q}`)
+    },
+    create: (data) => request('/categories', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  },
+
   contracts: {
     list: (params) => {
       const q = new URLSearchParams(params || {}).toString();

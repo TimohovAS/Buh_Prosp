@@ -13,12 +13,18 @@ from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
+async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
+    r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
+    p = r.scalar_one_or_none()
+    return p.id if p else None
+
 
 @router.get("", response_model=list[ExpenseResponse])
 async def list_expenses(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
     category: Optional[str] = Query(None),
+    category_id: Optional[int] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
@@ -34,6 +40,8 @@ async def list_expenses(
         q = q.where(Expense.date >= date(year, month, 1), Expense.date <= date(year, month, last))
     if category:
         q = q.where(Expense.category == category)
+    if category_id:
+        q = q.where(Expense.category_id == category_id)
     q = q.offset(skip).limit(limit)
     result = await db.execute(q)
     items = result.scalars().all()
@@ -47,15 +55,19 @@ async def create_expense(
     current_user: User = Depends(require_edit_access),
 ):
     """Добавить расход."""
+    project_id = data.project_id
+    if not project_id:
+        project_id = await _get_unassigned_project_id(db)
     expense = Expense(
         date=data.date,
         description=data.description,
         amount=data.amount,
         currency=data.currency,
         category=data.category,
+        category_id=data.category_id,
         note=data.note,
         paid_date=data.paid_date or data.date,
-        project_id=data.project_id,
+        project_id=project_id,
         source="manual",
         created_by=current_user.id,
     )
@@ -71,11 +83,14 @@ async def bulk_assign_project_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Массовое назначение проекта расходам. project_id=null — снять проект."""
+    """Массовое назначение проекта расходам. project_id=null → INT-UNASSIGNED."""
     if not data.ids:
         return {"updated": 0}
-    if data.project_id is not None:
-        r = await db.execute(select(Project).where(Project.id == data.project_id))
+    pid = data.project_id
+    if pid is None:
+        pid = await _get_unassigned_project_id(db)
+    if pid is not None:
+        r = await db.execute(select(Project).where(Project.id == pid))
         proj = r.scalar_one_or_none()
         if not proj:
             raise HTTPException(404, "Проект не найден")
@@ -84,7 +99,7 @@ async def bulk_assign_project_expenses(
     r = await db.execute(select(Expense).where(Expense.id.in_(data.ids)))
     items = r.scalars().all()
     for item in items:
-        item.project_id = data.project_id
+        item.project_id = pid
     await db.commit()
     return {"updated": len(items)}
 

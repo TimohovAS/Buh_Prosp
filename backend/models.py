@@ -169,7 +169,7 @@ class ProjectSequence(Base):
 
 
 class Project(Base):
-    """Проекты — центральная сущность, к ним привязываются доходы/расходы/договоры."""
+    """Проекты — центральная сущность (ЦФО), к ним привязываются доходы/расходы/договоры."""
     __tablename__ = "projects"
     __table_args__ = (UniqueConstraint("code", name="uq_projects_code"),)
 
@@ -177,6 +177,7 @@ class Project(Base):
     code = Column(String(50))  # PR-2026-0001, unique via __table_args__
     name = Column(String(200), nullable=False)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    is_internal = Column(Boolean, default=False)  # Внутренний (служебный) проект
     status = Column(String(20), nullable=False, default="active")  # lead | active | completed | archived
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
@@ -337,6 +338,19 @@ class Payment(Base):
     rates = relationship("ContributionRates", back_populates="payments")
 
 
+class TransactionCategory(Base):
+    """Справочник категорий доходов/расходов (статьи ДДС)."""
+    __tablename__ = "transaction_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name_ru = Column(String(100), nullable=False)
+    name_sr = Column(String(100), nullable=False)
+    category_type = Column(String(20), default="expense")  # expense | income
+    category_group = Column(String(20), default="admin")  # commercial | admin | tax
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+
+
 class Expense(Base):
     """Расходы. Сторно вместо удаления для obligation/bank_import."""
     __tablename__ = "expenses"
@@ -346,7 +360,8 @@ class Expense(Base):
     description = Column(String(500), nullable=False)
     amount = Column(Float, nullable=False)
     currency = Column(String(5), default="RSD")
-    category = Column(String(50))  # materials, services, other, tax, etc.
+    category = Column(String(50))  # legacy: materials, services, other, tax, etc.
+    category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
     bank_reference = Column(String(100))  # Референция банка при импорте из извода
     paid_date = Column(Date)
     status = Column(String(20), nullable=False, default="paid")  # planned | paid | reversed
@@ -359,6 +374,7 @@ class Expense(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"))
 
+    category_ref = relationship("TransactionCategory")
     project = relationship("Project", back_populates="expenses", foreign_keys=[project_id])
     reversal_of = relationship("Expense", remote_side=[id], foreign_keys=[reversal_of_id])
     reversed_by = relationship("Expense", remote_side=[id], foreign_keys=[reversed_expense_id])
@@ -384,7 +400,9 @@ class PlannedExpense(Base):
     description = Column(String(500))  # Доп. описание
     amount = Column(Float, nullable=False)
     currency = Column(String(5), default="RSD")
-    category = Column(String(50))  # rent, internet, phone, utilities, insurance, other
+    category = Column(String(50))  # legacy: rent, internet, phone, utilities, insurance, other
+    category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     period = Column(String(20), default="monthly")  # weekly, monthly, quarterly, yearly
     payment_day = Column(Integer)  # День месяца (1-31) для monthly/quarterly/yearly
     payment_day_of_week = Column(Integer)  # День недели (0=пн, 6=вс) для weekly
@@ -395,6 +413,9 @@ class PlannedExpense(Base):
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    category_ref = relationship("TransactionCategory")
+    project = relationship("Project")
 
 
 class PlannedExpensePayment(Base):

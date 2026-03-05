@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.database import get_db
-from backend.models import Contract, ContractItem, Client, User
+from backend.models import Contract, ContractItem, Client, User, Project
 from backend.schemas import ContractCreate, ContractUpdate, ContractResponse, ContractItemCreate, ContractItemResponse
 from backend.auth import get_current_user_required, require_edit_access
 
@@ -87,11 +87,25 @@ async def create_contract(
     else:
         amount = data.amount
 
+    # Auto-create Project if not provided
+    project_id = data.project_id
+    if not project_id:
+        proj_name = data.subject or f"Проект: {data.number}"
+        new_project = Project(
+            name=proj_name[:200],
+            client_id=data.client_id,
+            is_internal=False,
+            status="active",
+        )
+        db.add(new_project)
+        await db.flush()
+        project_id = new_project.id
+
     contract = Contract(
         number=data.number,
         date=data.date,
         client_id=data.client_id,
-        project_id=data.project_id,
+        project_id=project_id,
         contract_type=data.contract_type,
         subject=data.subject,
         amount=amount,
