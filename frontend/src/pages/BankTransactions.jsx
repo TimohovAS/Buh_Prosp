@@ -314,7 +314,8 @@ export default function BankTransactions() {
                         {suggestLoading ? <p>{tr('loading')}</p> : (() => {
                             const suggested = suggestions.filter(s => s.section === 'suggested')
                             const byCp = suggestions.filter(s => s.section === 'counterparty')
-                            const allInvoices = suggestions.filter(s => s.section === 'all')
+                            // backward-compatible: items without section go to 'all'
+                            const allInvoices = suggestions.filter(s => s.section === 'all' || !s.section)
                             const q = allInvoiceSearch.toLowerCase()
                             const filteredAll = allInvoices.filter(s =>
                                 !q ||
