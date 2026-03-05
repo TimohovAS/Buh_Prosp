@@ -9,17 +9,21 @@ from backend.services import _normalize_invoice_number, _extract_invoice_candida
 
 
 async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
-    """Вернуть до 5 подходящих кандидатов для сопоставления с банковской транзакцией."""
+    """Вернуть кандидатов для сопоставления с банковской транзакцией.
+    
+    Возвращает:
+    - Топ кандидатов по сумме/номеру (section='suggested')
+    - Все открытые фактуры контрагента (section='counterparty')
+    """
     if tx.status != "unmatched":
         return []
 
-    candidates = []
+    result = []
 
     if tx.direction == "in":
-        # Ищем Income (счета), которые не оплачены или оплачены частично
+        # Все незакрытые фактуры
         q = select(Income).where(
-            Income.status != "cancelled",
-            Income.status != "paid",   # полностью оплаченные пропускаем
+            Income.status.in_(["issued", "partial"]),
         )
         r = await db.execute(q)
         incomes = r.scalars().all()
@@ -29,8 +33,11 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             extracted_invoices.extend(_extract_invoice_candidates(tx.purpose))
         if tx.bank_reference:
             extracted_invoices.extend(_extract_invoice_candidates(tx.bank_reference))
-        
+
         normalized_extracted = {_normalize_invoice_number(x) for x in extracted_invoices if x}
+
+        # Нормализованное имя контрагента для нечёткого поиска
+        counterparty_norm = (tx.counterparty_name or "").lower().strip()
 
         def score_income(inc: Income) -> tuple[int, float, int]:
             score_inv = 1
@@ -38,58 +45,95 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
                 inv_norm = _normalize_invoice_number(inc.invoice_number)
                 if inv_norm in normalized_extracted:
                     score_inv = 0
-            
-            # Остаток для доплаты
+
             remaining = float(inc.amount_rsd) - float(inc.paid_amount or 0)
             amount_diff = abs(remaining - float(tx.amount))
             date_diff = abs((tx.date - inc.issued_date).days)
-            
+
             return (score_inv, amount_diff, date_diff)
 
+        def matches_counterparty(inc: Income) -> bool:
+            """Проверяет совпадение контрагента по имени клиента."""
+            if not counterparty_norm:
+                return False
+            client_norm = (inc.client_name or "").lower().strip()
+            if not client_norm:
+                return False
+            # Совпадение если одна строка содержит другую (хотя бы 6 символов)
+            min_len = min(len(counterparty_norm), len(client_norm))
+            if min_len < 4:
+                return False
+            # Первые слова совпадают
+            cp_words = counterparty_norm.split()[:3]
+            cl_words = client_norm.split()[:3]
+            common = sum(1 for w in cp_words if any(w in cw or cw in w for cw in cl_words))
+            return common >= 2 or client_norm in counterparty_norm or counterparty_norm in client_norm
+
+        # 1. Находим топ-5 scored кандидатов (по сумме + номеру)
         valid_incomes = []
+        counterparty_incomes = []
+
         for inc in incomes:
             sc = score_income(inc)
+            is_cp_match = matches_counterparty(inc)
+
+            # Добавляем в scored если хорошее совпадение
             if sc[0] == 0 or sc[1] <= 0.5:
-                if sc[0] == 1 and sc[2] > 60:
-                    continue
-                valid_incomes.append((sc, inc))
-        
+                if not (sc[0] == 1 and sc[2] > 60):
+                    valid_incomes.append((sc, inc))
+            
+            # Добавляем в список по контрагенту
+            if is_cp_match:
+                counterparty_incomes.append((sc, inc))
+
         valid_incomes.sort(key=lambda x: x[0])
-        
+
+        scored_ids = set()
         for sc, inc in valid_incomes[:5]:
             paid = float(inc.paid_amount or 0)
             remaining = float(inc.amount_rsd) - paid
-            is_partial = inc.status == "partial"
-            desc = f"Счёт {inc.invoice_number} ({inc.client_name or 'Без клиента'})"
-            if is_partial:
+            desc = f"Счёт {inc.invoice_number}"
+            if inc.status == "partial":
                 desc += f" — остаток {remaining:,.0f} RSD"
-            candidates.append({
-                "type": "income",
+            result.append({
                 "id": inc.id,
+                "type": "income",
                 "description": desc,
-                "amount": remaining,  # показываем остаток
-                "amount_full": inc.amount_rsd,
+                "amount": remaining,
+                "amount_full": float(inc.amount_rsd),
                 "amount_paid": paid,
                 "date": inc.issued_date,
-                "score": sc
+                "score": 100 if sc[0] == 0 else max(10, 90 - sc[2]),
+                "section": "suggested",
             })
-            
+            scored_ids.add(inc.id)
+
+        # 2. Добавляем остальные фактуры контрагента (не попавшие в топ)
+        counterparty_incomes.sort(key=lambda x: x[0][2])  # по дате
+        for sc, inc in counterparty_incomes:
+            if inc.id in scored_ids:
+                continue  # уже в топ
+            paid = float(inc.paid_amount or 0)
+            remaining = float(inc.amount_rsd) - paid
+            desc = f"Счёт {inc.invoice_number}"
+            if inc.status == "partial":
+                desc += f" — остаток {remaining:,.0f} RSD"
+            result.append({
+                "id": inc.id,
+                "type": "income",
+                "description": desc,
+                "amount": remaining,
+                "amount_full": float(inc.amount_rsd),
+                "amount_paid": paid,
+                "date": inc.issued_date,
+                "score": None,
+                "section": "counterparty",
+            })
+
     elif tx.direction == "out":
-        # TODO: Логика для расходов и налогов (MonthlyObligation). 
         pass
 
-    return [
-        {
-            "id": c["id"],
-            "type": c["type"],
-            "description": c["description"],
-            "amount": c["amount"],
-            "amount_full": c.get("amount_full"),
-            "amount_paid": c.get("amount_paid"),
-            "date": c["date"],
-            "score": 100 if c["score"][0] == 0 else max(10, 90 - c["score"][2])
-        } for c in candidates
-    ]
+    return result
 
 
 async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match_id: int):
