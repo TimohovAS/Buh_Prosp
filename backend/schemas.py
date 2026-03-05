@@ -88,7 +88,6 @@ class ProjectBase(BaseModel):
     code: Optional[str] = None
     name: str
     client_id: Optional[int] = None
-    contract_id: Optional[int] = None
     status: str = "active"  # lead | active | completed | archived
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
@@ -105,7 +104,6 @@ class ProjectUpdate(BaseModel):
     code: Optional[str] = None
     name: Optional[str] = None
     client_id: Optional[int] = None
-    contract_id: Optional[int] = None
     status: Optional[str] = None
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None

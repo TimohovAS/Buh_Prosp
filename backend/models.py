@@ -177,7 +177,6 @@ class Project(Base):
     code = Column(String(50))  # PR-2026-0001, unique via __table_args__
     name = Column(String(200), nullable=False)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
-    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     status = Column(String(20), nullable=False, default="active")  # lead | active | completed | archived
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
@@ -188,7 +187,6 @@ class Project(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     client = relationship("Client", back_populates="projects")
-    contract = relationship("Contract", back_populates="projects_as_main", foreign_keys="[Project.contract_id]")
     contracts = relationship("Contract", back_populates="project", foreign_keys="[Contract.project_id]")
     incomes = relationship("Income", back_populates="project")
     expenses = relationship("Expense", back_populates="project")
@@ -298,7 +296,6 @@ class Contract(Base):
 
     client = relationship("Client", back_populates="contracts")
     project = relationship("Project", back_populates="contracts", foreign_keys=[project_id])
-    projects_as_main = relationship("Project", back_populates="contract", foreign_keys="[Project.contract_id]")
     items = relationship("ContractItem", back_populates="contract", cascade="all, delete-orphan")
     incomes = relationship("Income", back_populates="contract", foreign_keys="Income.contract_id")
 
