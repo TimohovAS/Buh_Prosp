@@ -61,6 +61,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [ProspEl] Running DB migrations...
+.\venv\Scripts\python.exe backend\scripts\migrate_v3_drop_project_contract_id.py
+if errorlevel 1 (
+  echo [ERROR] DB migration failed.
+  exit /b 1
+)
+
 echo [ProspEl] Installing frontend dependencies...
 call npm --prefix ".\frontend" install
 if errorlevel 1 (
