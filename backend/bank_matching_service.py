@@ -108,32 +108,34 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             })
             scored_ids.add(inc.id)
 
-        # 2. Добавляем остальные фактуры контрагента (не попавшие в топ)
-        counterparty_incomes.sort(key=lambda x: x[0][2])  # по дате
-        for sc, inc in counterparty_incomes:
-            if inc.id in scored_ids:
-                continue  # уже в топ
+        # 3. Все остальные открытые фактуры (для ручного выбора)
+        promoted_ids = scored_ids | {inc.id for _, inc in counterparty_incomes}
+        for sc, inc in sorted([(score_income(i), i) for i in incomes if i.id not in promoted_ids],
+                               key=lambda x: x[0][2]):
             paid = float(inc.paid_amount or 0)
             remaining = float(inc.amount_rsd) - paid
-            desc = f"Счёт {inc.invoice_number}"
+            client_label = inc.client_name or (inc.client.name if inc.client else "")
+            desc = f"{inc.invoice_number}"
             if inc.status == "partial":
-                desc += f" — остаток {remaining:,.0f} RSD"
+                desc += f" — остаток {remaining:,.0f}"
             result.append({
                 "id": inc.id,
                 "type": "income",
                 "description": desc,
+                "client_name": client_label,
                 "amount": remaining,
                 "amount_full": float(inc.amount_rsd),
                 "amount_paid": paid,
                 "date": inc.issued_date,
                 "score": None,
-                "section": "counterparty",
+                "section": "all",
             })
 
     elif tx.direction == "out":
         pass
 
     return result
+
 
 
 async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match_id: int):

@@ -25,6 +25,7 @@ export default function BankTransactions() {
     const [suggestions, setSuggestions] = useState([])
     const [suggestLoading, setSuggestLoading] = useState(false)
     const [matchError, setMatchError] = useState('')
+    const [allInvoiceSearch, setAllInvoiceSearch] = useState('')
 
     // Projects State
     const [projects, setProjects] = useState([])
@@ -298,76 +299,106 @@ export default function BankTransactions() {
             </div>
 
             {/* MATCH MODAL */}
-            <Modal isOpen={!!matchTx} onClose={() => setMatchTx(null)} title={tr('bankTxMatchTitle')} style={{ maxWidth: 560 }}>
+            <Modal isOpen={!!matchTx} onClose={() => { setMatchTx(null); setAllInvoiceSearch('') }} title="Сопоставить транзакцию" style={{ maxWidth: 580 }}>
                 {matchTx && (
                     <div>
-                        <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--color-surface-hover)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                            <strong>{matchTx.counterparty_name}</strong><br />
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85em' }}>{matchTx.purpose}</span><br />
-                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-success)' }}>
+                        {/* Transaction info */}
+                        <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface-hover)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                            <strong style={{ fontSize: '0.9em' }}>{matchTx.counterparty_name}</strong><br />
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8em' }}>{matchTx.purpose}</span><br />
+                            <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-success)' }}>
                                 {matchTx.direction === 'in' ? '+' : '-'}{matchTx.amount.toLocaleString()} {matchTx.currency}
                             </span>
                         </div>
 
                         {suggestLoading ? <p>{tr('loading')}</p> : (() => {
                             const suggested = suggestions.filter(s => s.section === 'suggested')
-                            const byCounterparty = suggestions.filter(s => s.section === 'counterparty')
-
-                            const SuggCard = ({ s, idx }) => (
-                                <div key={idx} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.75rem', gap: '0.5rem' }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: '0.9em' }}>
-                                            {s.type === 'income' ? 'Фактура' : s.type === 'expense' ? 'Расход' : 'Обязательство'} #{s.id}
-                                        </div>
-                                        <div style={{ fontSize: '0.85em', color: 'var(--color-text-muted)' }}>{s.description}</div>
-                                        <div style={{ fontSize: '0.85em', fontWeight: 'bold', marginTop: '0.2rem' }}>
-                                            {s.amount ? Number(s.amount).toLocaleString('sr-RS') + ' RSD' : ''}
-                                            {s.amount_full && s.amount_full !== s.amount ? (
-                                                <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)' }}> (всего {Number(s.amount_full).toLocaleString('sr-RS')})</span>
-                                            ) : null}
-                                            {s.date ? <span style={{ fontWeight: 'normal', marginLeft: '0.5rem' }}>• {s.date}</span> : null}
-                                        </div>
-                                        {s.score != null && (
-                                            <div style={{ fontSize: '0.75rem', color: s.score >= 80 ? 'var(--color-success)' : 'var(--color-warning)', marginTop: '0.15rem' }}>
-                                                Совпадение: {s.score}%
-                                            </div>
-                                        )}
-                                    </div>
-                                    <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => performMatch(s.id, s.type)}>
-                                        Привязать
-                                    </button>
-                                </div>
+                            const byCp = suggestions.filter(s => s.section === 'counterparty')
+                            const allInvoices = suggestions.filter(s => s.section === 'all')
+                            const q = allInvoiceSearch.toLowerCase()
+                            const filteredAll = allInvoices.filter(s =>
+                                !q ||
+                                String(s.description || '').toLowerCase().includes(q) ||
+                                String(s.client_name || '').toLowerCase().includes(q) ||
+                                String(s.amount || '').includes(q)
                             )
+
+                            const SuggCard = ({ s }) => {
+                                const clientLabel = s.client_name || ''
+                                return (
+                                    <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', gap: '0.5rem' }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontWeight: 600, fontSize: '0.88em' }}>
+                                                Фактура #{s.id} — {s.description}
+                                                {clientLabel ? <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)' }}> ({clientLabel})</span> : null}
+                                            </div>
+                                            <div style={{ fontSize: '0.82em', marginTop: '0.1rem' }}>
+                                                <span style={{ fontWeight: 'bold' }}>{s.amount ? Number(s.amount).toLocaleString('sr-RS') + ' RSD' : ''}</span>
+                                                {s.amount_full && Number(s.amount_full) !== Number(s.amount) ?
+                                                    <span style={{ color: 'var(--color-text-muted)' }}> (всего {Number(s.amount_full).toLocaleString('sr-RS')})</span> : null}
+                                                {s.date ? <span style={{ color: 'var(--color-text-muted)', marginLeft: '0.4rem' }}>• {s.date}</span> : null}
+                                                {s.score != null ? <span style={{ color: s.score >= 80 ? 'var(--color-success)' : 'var(--color-warning)', marginLeft: '0.5rem' }}>✓ {s.score}%</span> : null}
+                                            </div>
+                                        </div>
+                                        <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => performMatch(s.id, s.type)}>
+                                            Привязать
+                                        </button>
+                                    </div>
+                                )
+                            }
 
                             return (
                                 <div>
+                                    {/* Auto-matched suggestions */}
                                     {suggested.length > 0 && (
                                         <div style={{ marginBottom: '1rem' }}>
-                                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                🎯 Найдено автоматически
+                                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                                                🎯 Автоматически найдено
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                                {suggested.map((s, idx) => <SuggCard key={idx} s={s} idx={idx} />)}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {byCounterparty.length > 0 && (
-                                        <div style={{ marginBottom: '0.5rem' }}>
-                                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                🏢 Все фактуры контрагента
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                                {byCounterparty.map((s, idx) => <SuggCard key={idx} s={s} idx={idx} />)}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                {suggested.map((s, i) => <SuggCard key={i} s={s} />)}
                                             </div>
                                         </div>
                                     )}
 
-                                    {suggested.length === 0 && byCounterparty.length === 0 && (
-                                        <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '1rem' }}>
-                                            Совпадений не найдено. Возможно, фактура не выставлена или уже оплачена.
-                                        </p>
+                                    {/* Counterparty invoices */}
+                                    {byCp.length > 0 && (
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                                                🏢 Фактуры контрагента
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                {byCp.map((s, i) => <SuggCard key={i} s={s} />)}
+                                            </div>
+                                        </div>
                                     )}
+
+                                    {/* All open invoices — manual search */}
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                                            📋 Все открытые фактуры
+                                        </div>
+                                        <input
+                                            className="input"
+                                            placeholder="Поиск по номеру, клиенту или сумме..."
+                                            value={allInvoiceSearch}
+                                            onChange={e => setAllInvoiceSearch(e.target.value)}
+                                            style={{ width: '100%', marginBottom: '0.5rem' }}
+                                        />
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '260px', overflowY: 'auto', paddingRight: '2px' }}>
+                                            {filteredAll.length === 0 && allInvoices.length === 0 && (
+                                                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85em', textAlign: 'center' }}>
+                                                    Нет открытых фактур
+                                                </p>
+                                            )}
+                                            {filteredAll.length === 0 && allInvoices.length > 0 && (
+                                                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85em', textAlign: 'center' }}>
+                                                    По запросу ничего не найдено
+                                                </p>
+                                            )}
+                                            {filteredAll.map((s, i) => <SuggCard key={i} s={s} />)}
+                                        </div>
+                                    </div>
                                 </div>
                             )
                         })()}
