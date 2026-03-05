@@ -325,28 +325,44 @@ export default function BankTransactions() {
                             )
 
                             const SuggCard = ({ s }) => {
-                                const clientLabel = s.client_name || ''
+                                const invoiceNum = s.invoice_number || s.description || `#${s.id}`
+                                const client = s.client_name || ''
+                                const desc = s.description || ''
+                                const remaining = s.amount ? Number(s.amount) : 0
+                                const fullAmt = s.amount_full ? Number(s.amount_full) : remaining
+                                const isPartial = fullAmt !== remaining && remaining < fullAmt
                                 return (
-                                    <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', gap: '0.5rem' }}>
+                                    <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.55rem 0.75rem', gap: '0.5rem' }}>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.88em' }}>
-                                                Фактура #{s.id} — {s.description}
-                                                {clientLabel ? <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)' }}> ({clientLabel})</span> : null}
+                                            {/* Row 1: date + invoice number */}
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: 700, fontSize: '0.88em' }}>№ {invoiceNum}</span>
+                                                {s.date ? <span style={{ fontSize: '0.78em', color: 'var(--color-text-muted)' }}>{s.date}</span> : null}
+                                                {s.score != null ? <span style={{ fontSize: '0.75em', color: s.score >= 80 ? 'var(--color-success)' : 'var(--color-warning)' }}>✓ {s.score}%</span> : null}
                                             </div>
-                                            <div style={{ fontSize: '0.82em', marginTop: '0.1rem' }}>
-                                                <span style={{ fontWeight: 'bold' }}>{s.amount ? Number(s.amount).toLocaleString('sr-RS') + ' RSD' : ''}</span>
-                                                {s.amount_full && Number(s.amount_full) !== Number(s.amount) ?
-                                                    <span style={{ color: 'var(--color-text-muted)' }}> (всего {Number(s.amount_full).toLocaleString('sr-RS')})</span> : null}
-                                                {s.date ? <span style={{ color: 'var(--color-text-muted)', marginLeft: '0.4rem' }}>• {s.date}</span> : null}
-                                                {s.score != null ? <span style={{ color: s.score >= 80 ? 'var(--color-success)' : 'var(--color-warning)', marginLeft: '0.5rem' }}>✓ {s.score}%</span> : null}
+                                            {/* Row 2: client */}
+                                            {client ? <div style={{ fontSize: '0.82em', fontWeight: 600, marginTop: '0.1rem' }}>{client}</div> : null}
+                                            {/* Row 3: description */}
+                                            {desc ? <div style={{ fontSize: '0.78em', color: 'var(--color-text-muted)', marginTop: '0.1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div> : null}
+                                            {/* Row 4: amount */}
+                                            <div style={{ fontSize: '0.83em', fontWeight: 'bold', marginTop: '0.15rem' }}>
+                                                {isPartial ? (
+                                                    <>
+                                                        <span style={{ color: 'var(--color-warning)' }}>Остаток: {remaining.toLocaleString('sr-RS')} RSD</span>
+                                                        <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)' }}> / {fullAmt.toLocaleString('sr-RS')}</span>
+                                                    </>
+                                                ) : (
+                                                    <span>{remaining.toLocaleString('sr-RS')} RSD</span>
+                                                )}
                                             </div>
                                         </div>
-                                        <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => performMatch(s.id, s.type)}>
+                                        <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap', flexShrink: 0, marginTop: '0.15rem' }} onClick={() => performMatch(s.id, s.type)}>
                                             Привязать
                                         </button>
                                     </div>
                                 )
                             }
+
 
                             return (
                                 <div>

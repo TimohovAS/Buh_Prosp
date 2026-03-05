@@ -40,6 +40,10 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
         # Нормализованное имя контрагента для нечёткого поиска
         counterparty_norm = (tx.counterparty_name or "").lower().strip()
 
+        def _paid(inc: Income) -> float:
+            """Безопасный доступ к paid_amount (может не быть если migrate не запускали)."""
+            return float(getattr(inc, 'paid_amount', None) or 0)
+
         def score_income(inc: Income) -> tuple[int, float, int]:
             score_inv = 1
             if normalized_extracted:
@@ -47,11 +51,31 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
                 if inv_norm in normalized_extracted:
                     score_inv = 0
 
-            remaining = float(inc.amount_rsd) - float(inc.paid_amount or 0)
+            remaining = float(inc.amount_rsd) - _paid(inc)
             amount_diff = abs(remaining - float(tx.amount))
             date_diff = abs((tx.date - inc.issued_date).days)
 
             return (score_inv, amount_diff, date_diff)
+
+        def _make_item(inc: Income, score_val, section: str) -> dict:
+            """Формирует словарь для ответа с полными данными фактуры."""
+            paid = _paid(inc)
+            remaining = float(inc.amount_rsd) - paid
+            client_label = inc.client_name or (inc.client.name if inc.client else "")
+            return {
+                "id": inc.id,
+                "type": "income",
+                "invoice_number": inc.invoice_number,
+                "client_name": client_label,
+                "description": (inc.description or "")[:80],
+                "amount": remaining,
+                "amount_full": float(inc.amount_rsd),
+                "amount_paid": paid,
+                "date": str(inc.issued_date),
+                "status": inc.status,
+                "score": score_val,
+                "section": section,
+            }
 
         def matches_counterparty(inc: Income) -> bool:
             """Проверяет совпадение контрагента по имени клиента.
@@ -90,46 +114,23 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
 
         scored_ids = set()
         for sc, inc in valid_incomes[:5]:
-            paid = float(inc.paid_amount or 0)
-            remaining = float(inc.amount_rsd) - paid
-            desc = f"Счёт {inc.invoice_number}"
-            if inc.status == "partial":
-                desc += f" — остаток {remaining:,.0f} RSD"
-            result.append({
-                "id": inc.id,
-                "type": "income",
-                "description": desc,
-                "amount": remaining,
-                "amount_full": float(inc.amount_rsd),
-                "amount_paid": paid,
-                "date": inc.issued_date,
-                "score": 100 if sc[0] == 0 else max(10, 90 - sc[2]),
-                "section": "suggested",
-            })
+            score_val = 100 if sc[0] == 0 else max(10, 90 - sc[2])
+            result.append(_make_item(inc, score_val, "suggested"))
             scored_ids.add(inc.id)
 
-        # 3. Все остальные открытые фактуры (для ручного выбора)
-        promoted_ids = scored_ids | {inc.id for _, inc in counterparty_incomes}
-        for sc, inc in sorted([(score_income(i), i) for i in incomes if i.id not in promoted_ids],
-                               key=lambda x: x[0][2]):
-            paid = float(inc.paid_amount or 0)
-            remaining = float(inc.amount_rsd) - paid
-            client_label = inc.client_name or (inc.client.name if inc.client else "")
-            desc = f"{inc.invoice_number}"
-            if inc.status == "partial":
-                desc += f" — остаток {remaining:,.0f}"
-            result.append({
-                "id": inc.id,
-                "type": "income",
-                "description": desc,
-                "client_name": client_label,
-                "amount": remaining,
-                "amount_full": float(inc.amount_rsd),
-                "amount_paid": paid,
-                "date": inc.issued_date,
-                "score": None,
-                "section": "all",
-            })
+        # 2. Фактуры контрагента
+        counterparty_incomes.sort(key=lambda x: x[0][2])
+        for sc, inc in counterparty_incomes:
+            if inc.id in scored_ids:
+                continue
+            result.append(_make_item(inc, None, "counterparty"))
+            scored_ids.add(inc.id)
+
+        # 3. Все остальные открытые фактуры (для ручного выбора) — сортировка по дате
+        remaining_incomes = [(score_income(i), i) for i in incomes if i.id not in scored_ids]
+        remaining_incomes.sort(key=lambda x: x[0][2])
+        for sc, inc in remaining_incomes:
+            result.append(_make_item(inc, None, "all"))
 
     elif tx.direction == "out":
         pass
