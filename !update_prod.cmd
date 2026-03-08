@@ -70,9 +70,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [ProspEl] DB migrations skipped.
-echo [ProspEl] Historical one-time migrations v3-v5 are already applied on production.
-rem Manual DB migrations for a new database only:
+echo [ProspEl] Running DB migrations...
+.\venv\Scripts\python.exe backend\scripts\migrate_v6_client_maticni_broj.py
+if errorlevel 1 (
+  echo [ERROR] DB migration v6 failed.
+  exit /b 1
+)
+rem Historical one-time migrations already applied on production:
 rem .\venv\Scripts\python.exe backend\scripts\migrate_v3_drop_project_contract_id.py
 rem .\venv\Scripts\python.exe backend\scripts\migrate_v4_erp.py
 rem .\venv\Scripts\python.exe backend\scripts\migrate_v5_expense_contracts.py

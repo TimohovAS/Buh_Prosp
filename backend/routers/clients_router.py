@@ -1,6 +1,6 @@
-"""Роутер справочника клиентов."""
+"""Clients router."""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -13,20 +13,25 @@ router = APIRouter(prefix="/clients", tags=["clients"])
 
 @router.get("", response_model=list[ClientResponse])
 async def list_clients(
-    search: str = Query("", description="Поиск по имени"),
-    archived: bool = Query(False, description="Включая архивных"),
+    search: str = Query("", description="Client search"),
+    archived: bool = Query(False, description="Include archived"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список клиентов."""
     q = select(Client)
     if not archived:
         q = q.where(Client.is_archived == False)
     if search:
-        q = q.where(Client.name.ilike(f"%{search}%"))
+        q = q.where(
+            or_(
+                Client.name.ilike(f"%{search}%"),
+                Client.pib.ilike(f"%{search}%"),
+                Client.maticni_broj.ilike(f"%{search}%"),
+            )
+        )
     q = q.order_by(Client.name)
     result = await db.execute(q)
-    return [ClientResponse.model_validate(c) for c in result.scalars().all()]
+    return [ClientResponse.model_validate(client) for client in result.scalars().all()]
 
 
 @router.get("/brief", response_model=list[ClientBrief])
@@ -35,13 +40,18 @@ async def list_clients_brief(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Краткий список для выпадающих списков."""
     q = select(Client).where(Client.is_archived == False)
     if search:
-        q = q.where(Client.name.ilike(f"%{search}%"))
+        q = q.where(
+            or_(
+                Client.name.ilike(f"%{search}%"),
+                Client.pib.ilike(f"%{search}%"),
+                Client.maticni_broj.ilike(f"%{search}%"),
+            )
+        )
     q = q.order_by(Client.name).limit(50)
     result = await db.execute(q)
-    return [ClientBrief(id=c.id, name=c.name) for c in result.scalars().all()]
+    return [ClientBrief(id=client.id, name=client.name) for client in result.scalars().all()]
 
 
 @router.post("", response_model=ClientResponse)
@@ -50,7 +60,6 @@ async def create_client(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Добавить клиента."""
     client = Client(**data.model_dump())
     db.add(client)
     await db.commit()
@@ -64,11 +73,10 @@ async def get_client(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Получить клиента."""
-    r = await db.execute(select(Client).where(Client.id == client_id))
-    client = r.scalar_one_or_none()
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
     if not client:
-        raise HTTPException(404, "Клиент не найден")
+        raise HTTPException(404, "Client not found")
     return ClientResponse.model_validate(client)
 
 
@@ -79,13 +87,12 @@ async def update_client(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Обновить клиента."""
-    r = await db.execute(select(Client).where(Client.id == client_id))
-    client = r.scalar_one_or_none()
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
     if not client:
-        raise HTTPException(404, "Клиент не найден")
-    for k, v in data.model_dump(exclude_unset=True).items():
-        setattr(client, k, v)
+        raise HTTPException(404, "Client not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(client, key, value)
     await db.commit()
     await db.refresh(client)
     return ClientResponse.model_validate(client)
@@ -97,11 +104,10 @@ async def delete_client(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Архивировать клиента (мягкое удаление)."""
-    r = await db.execute(select(Client).where(Client.id == client_id))
-    client = r.scalar_one_or_none()
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
     if not client:
-        raise HTTPException(404, "Клиент не найден")
+        raise HTTPException(404, "Client not found")
     client.is_archived = True
     await db.commit()
     return {"ok": True}

@@ -13,6 +13,7 @@ export default function Clients() {
     name: '',
     address: '',
     pib: '',
+    maticni_broj: '',
     contact: '',
     client_type: 'legal',
   })
@@ -25,7 +26,7 @@ export default function Clients() {
   useEffect(load, [search])
 
   const openAdd = () => {
-    setForm({ name: '', address: '', pib: '', contact: '', client_type: 'legal' })
+    setForm({ name: '', address: '', pib: '', maticni_broj: '', contact: '', client_type: 'legal' })
     setModal('add')
   }
 
@@ -34,14 +35,15 @@ export default function Clients() {
       name: item.name,
       address: item.address || '',
       pib: item.pib || '',
+      maticni_broj: item.maticni_broj || '',
       contact: item.contact || '',
       client_type: item.client_type || 'legal',
     })
     setModal({ type: 'edit', id: item.id })
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     try {
       if (modal === 'add') {
         await api.clients.create(form)
@@ -66,19 +68,23 @@ export default function Clients() {
   }
 
   const sorted = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const valA = a[sortCol] ?? ''
-      const valB = b[sortCol] ?? ''
-      if (valA < valB) return sortAsc ? -1 : 1
-      if (valA > valB) return sortAsc ? 1 : -1
+    return [...items].sort((left, right) => {
+      const leftValue = left[sortCol] ?? ''
+      const rightValue = right[sortCol] ?? ''
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
   }, [items, sortCol, sortAsc])
 
   const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else { setSortCol(col); setSortAsc(true) }
+    if (sortCol === col) setSortAsc((value) => !value)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
   }
+
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
     return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
@@ -94,7 +100,7 @@ export default function Clients() {
             className="form-input"
             placeholder={tr('search')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             style={{ width: 200 }}
           />
           <button className="btn btn-primary" onClick={openAdd}>
@@ -112,25 +118,27 @@ export default function Clients() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('name')} <SortIcon col="name" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('address')}>{tr('address')} <SortIcon col="address" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('pib')}>{tr('pib')} <SortIcon col="pib" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('maticni_broj')}>{tr('maticniBroj')} <SortIcon col="maticni_broj" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_type')}>{tr('type')} <SortIcon col="client_type" /></th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={6}>{tr('loading')}</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
+                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
                 ) : (
-                  sorted.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.name}</td>
-                      <td>{(c.address || '').slice(0, 40)}</td>
-                      <td>{c.pib || '-'}</td>
-                      <td>{c.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')}</td>
+                  sorted.map((client) => (
+                    <tr key={client.id}>
+                      <td>{client.name}</td>
+                      <td>{(client.address || '').slice(0, 40)}</td>
+                      <td>{client.pib || '-'}</td>
+                      <td>{client.maticni_broj || '-'}</td>
+                      <td>{client.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')}</td>
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(c)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(c.id)}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(client)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(client.id)}>
                           {tr('delete')}
                         </button>
                       </td>
@@ -145,7 +153,7 @@ export default function Clients() {
 
       {modal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('clientForm')}</h2>
               <button className="modal-close" onClick={() => setModal(null)}>{'\u00D7'}</button>
@@ -157,7 +165,7 @@ export default function Clients() {
                   type="text"
                   className="form-input"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
                   required
                 />
               </div>
@@ -167,7 +175,7 @@ export default function Clients() {
                   type="text"
                   className="form-input"
                   value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  onChange={(event) => setForm({ ...form, address: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -176,7 +184,16 @@ export default function Clients() {
                   type="text"
                   className="form-input"
                   value={form.pib}
-                  onChange={(e) => setForm({ ...form, pib: e.target.value })}
+                  onChange={(event) => setForm({ ...form, pib: event.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('maticniBroj')}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={form.maticni_broj}
+                  onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -185,7 +202,7 @@ export default function Clients() {
                   type="text"
                   className="form-input"
                   value={form.contact}
-                  onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                  onChange={(event) => setForm({ ...form, contact: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -193,7 +210,7 @@ export default function Clients() {
                 <select
                   className="form-input"
                   value={form.client_type}
-                  onChange={(e) => setForm({ ...form, client_type: e.target.value })}
+                  onChange={(event) => setForm({ ...form, client_type: event.target.value })}
                 >
                   <option value="legal">{tr('legalEntity')}</option>
                   <option value="individual">{tr('individualEntity')}</option>

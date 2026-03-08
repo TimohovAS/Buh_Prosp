@@ -37,6 +37,7 @@ class Client(Base):
     name = Column(String(200), nullable=False)
     address = Column(String(500))
     pib = Column(String(20))  # PIB/ИНН
+    maticni_broj = Column(String(20))  # MB / maticni broj
     contact = Column(String(200))
     client_type = Column(String(20), default="legal")  # legal, individual
     document_language = Column(String(5), default="sr")

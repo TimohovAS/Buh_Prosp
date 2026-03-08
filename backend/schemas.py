@@ -47,6 +47,7 @@ class ClientBase(BaseModel):
     name: str
     address: Optional[str] = None
     pib: Optional[str] = None
+    maticni_broj: Optional[str] = None
     contact: Optional[str] = None
     client_type: str = "legal"
     document_language: str = "sr"
@@ -60,6 +61,7 @@ class ClientUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     pib: Optional[str] = None
+    maticni_broj: Optional[str] = None
     contact: Optional[str] = None
     client_type: Optional[str] = None
     document_language: Optional[str] = None
