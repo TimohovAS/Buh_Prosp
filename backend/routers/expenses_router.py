@@ -1,14 +1,25 @@
-﻿from datetime import date
+from collections import defaultdict
+from datetime import date
 from typing import Optional
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
-from backend.models import Contract, Expense, Project, User
-from backend.schemas import BulkAssignProject, ExpenseCreate, ExpenseResponse, ExpenseReverseRequest, ExpenseUpdate
+from backend.models import BankTransaction, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
+from backend.schemas import (
+    BulkAssignProject,
+    ExpenseCreate,
+    ExpenseDuplicateGroup,
+    ExpenseDuplicateItem,
+    ExpenseMergeRequest,
+    ExpenseResponse,
+    ExpenseReverseRequest,
+    ExpenseUpdate,
+)
 from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -66,6 +77,127 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense
         expense.contract_id = None
 
 
+def _normalize_duplicate_text(value: str | None) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def _amount_key(value: float | int | None) -> str:
+    return f"{abs(float(value or 0)):.2f}"
+
+
+def _is_reversal_row(expense: Expense) -> bool:
+    return bool(expense.reversal_of_id) or getattr(expense, "status", None) == "reversed" or float(expense.amount or 0) < 0
+
+
+def _is_active_duplicate_candidate(expense: Expense) -> bool:
+    if _is_reversal_row(expense):
+        return False
+    if getattr(expense, "reversed_expense_id", None):
+        return False
+    return float(expense.amount or 0) > 0
+
+
+async def _load_expenses_for_period(
+    db: AsyncSession,
+    year: Optional[int],
+    month: Optional[int],
+) -> list[Expense]:
+    query = select(Expense).order_by(Expense.date.desc(), Expense.id.desc())
+    if year:
+        query = query.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
+    if month and year:
+        import calendar
+
+        last_day = calendar.monthrange(year, month)[1]
+        query = query.where(Expense.date >= date(year, month, 1), Expense.date <= date(year, month, last_day))
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def _find_duplicate_groups(
+    db: AsyncSession,
+    year: Optional[int],
+    month: Optional[int],
+) -> list[ExpenseDuplicateGroup]:
+    items = [item for item in await _load_expenses_for_period(db, year, month) if _is_active_duplicate_candidate(item)]
+    by_reference: dict[tuple[str, str], list[Expense]] = defaultdict(list)
+    by_description: dict[tuple[str, str], list[Expense]] = defaultdict(list)
+
+    for item in items:
+        amount_key = _amount_key(item.amount)
+        normalized_reference = _normalize_duplicate_text(item.bank_reference)
+        normalized_description = _normalize_duplicate_text(item.description)
+        if normalized_reference:
+            by_reference[(normalized_reference, amount_key)].append(item)
+        if normalized_description:
+            by_description[(normalized_description, amount_key)].append(item)
+
+    groups: list[ExpenseDuplicateGroup] = []
+    seen_ids: set[tuple[int, ...]] = set()
+
+    def add_group(reason: str, expenses: list[Expense], payment_reference: str | None = None, description: str | None = None) -> None:
+        ids = tuple(sorted(expense.id for expense in expenses))
+        if len(ids) < 2 or ids in seen_ids:
+            return
+        seen_ids.add(ids)
+        sorted_items = sorted(expenses, key=lambda expense: (expense.date, expense.id))
+        groups.append(
+            ExpenseDuplicateGroup(
+                reason=reason,
+                amount=float(sorted_items[0].amount or 0),
+                payment_reference=payment_reference,
+                description=description,
+                item_count=len(sorted_items),
+                items=[ExpenseDuplicateItem.model_validate(item) for item in sorted_items],
+            )
+        )
+
+    for (_, _), expenses in sorted(by_reference.items(), key=lambda item: item[0]):
+        if len(expenses) > 1:
+            add_group("payment_reference", expenses, payment_reference=expenses[0].bank_reference)
+
+    for (_, _), expenses in sorted(by_description.items(), key=lambda item: item[0]):
+        if len(expenses) > 1:
+            add_group("description_amount", expenses, description=expenses[0].description)
+
+    groups.sort(key=lambda group: (group.items[0].date if group.items else date.min, group.item_count), reverse=True)
+    return groups
+
+
+def _merge_notes(primary: str | None, secondary: str | None) -> str | None:
+    left = (primary or "").strip()
+    right = (secondary or "").strip()
+    if not left:
+        return right or None
+    if not right or right in left:
+        return left
+    if left in right:
+        return right
+    return f"{left}\n{right}"
+
+
+async def _merge_expense_links(
+    db: AsyncSession,
+    keep: Expense,
+    duplicate: Expense,
+) -> None:
+    await db.execute(
+        update(BankTransaction)
+        .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == duplicate.id)
+        .values(matched_id=keep.id)
+    )
+    await db.execute(
+        update(MonthlyObligation)
+        .where(MonthlyObligation.expense_id == duplicate.id)
+        .values(expense_id=keep.id)
+    )
+    await db.execute(
+        update(PlannedExpensePayment)
+        .where(PlannedExpensePayment.expense_id == duplicate.id)
+        .values(expense_id=keep.id)
+    )
+
+
 @router.get("", response_model=list[ExpenseResponse])
 async def list_expenses(
     year: Optional[int] = Query(None),
@@ -93,6 +225,78 @@ async def list_expenses(
     result = await db.execute(query)
     items = result.scalars().all()
     return [ExpenseResponse.model_validate(item) for item in items]
+
+
+@router.get("/duplicates", response_model=list[ExpenseDuplicateGroup])
+async def list_expense_duplicates(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    return await _find_duplicate_groups(db, year, month)
+
+
+@router.post("/merge-duplicates", response_model=ExpenseResponse)
+async def merge_expense_duplicates(
+    data: ExpenseMergeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    merge_ids = [expense_id for expense_id in data.merge_ids if expense_id != data.keep_id]
+    if not merge_ids:
+        raise HTTPException(400, "No duplicate expenses selected for merge")
+
+    result = await db.execute(select(Expense).where(Expense.id.in_([data.keep_id, *merge_ids])))
+    items = {item.id: item for item in result.scalars().all()}
+    keep = items.get(data.keep_id)
+    if not keep:
+        raise HTTPException(404, "Expense to keep was not found")
+    if _is_reversal_row(keep) or getattr(keep, "reversed_expense_id", None):
+        raise HTTPException(400, "Reversal expenses cannot be merged")
+
+    duplicates: list[Expense] = []
+    for expense_id in merge_ids:
+        duplicate = items.get(expense_id)
+        if not duplicate:
+            raise HTTPException(404, f"Expense {expense_id} was not found")
+        if _is_reversal_row(duplicate) or getattr(duplicate, "reversed_expense_id", None):
+            raise HTTPException(400, "Reversal expenses cannot be merged")
+        duplicates.append(duplicate)
+
+    unassigned_project_id = await _get_unassigned_project_id(db)
+    for duplicate in duplicates:
+        await _merge_expense_links(db, keep, duplicate)
+
+        if not keep.bank_reference and duplicate.bank_reference:
+            keep.bank_reference = duplicate.bank_reference
+        if keep.category_id is None and duplicate.category_id is not None:
+            keep.category_id = duplicate.category_id
+        if not keep.category and duplicate.category:
+            keep.category = duplicate.category
+        if keep.contract_id is None and duplicate.contract_id is not None:
+            keep.contract_id = duplicate.contract_id
+        if keep.project_id in (None, unassigned_project_id) and duplicate.project_id not in (None, unassigned_project_id):
+            keep.project_id = duplicate.project_id
+        if keep.paid_date is None and duplicate.paid_date is not None:
+            keep.paid_date = duplicate.paid_date
+        if keep.status != "paid" and duplicate.status == "paid":
+            keep.status = "paid"
+        keep.note = _merge_notes(keep.note, duplicate.note)
+
+        await db.delete(duplicate)
+
+    if keep.project_id is not None:
+        await _clear_contract_if_project_mismatch(db, keep, keep.project_id)
+        await db.execute(
+            update(BankTransaction)
+            .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == keep.id)
+            .values(project_id=keep.project_id)
+        )
+
+    await db.commit()
+    await db.refresh(keep)
+    return ExpenseResponse.model_validate(keep)
 
 
 @router.post("", response_model=ExpenseResponse)
@@ -205,7 +409,7 @@ async def reverse_expense(
     if not expense:
         raise HTTPException(404, "Expense not found")
     if getattr(expense, "status", "paid") == "reversed":
-        raise HTTPException(400, "Expense is already reversed")
+        raise HTTPException(400, "Expense is already a reversal entry")
     if getattr(expense, "reversed_expense_id", None):
         raise HTTPException(400, "Expense is already reversed")
 
@@ -268,8 +472,28 @@ async def delete_expense(
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
-    if getattr(expense, "status", "paid") == "reversed" or getattr(expense, "reversed_expense_id", None):
-        raise HTTPException(400, "Expense is already reversed")
+
+    if _is_reversal_row(expense):
+        original_expense = None
+        if expense.reversal_of_id:
+            original_result = await db.execute(select(Expense).where(Expense.id == expense.reversal_of_id))
+            original_expense = original_result.scalar_one_or_none()
+            if original_expense and original_expense.reversed_expense_id == expense.id:
+                original_expense.reversed_expense_id = None
+
+        await db.execute(
+            update(BankTransaction)
+            .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == expense.id)
+            .values(status="unmatched", matched_type=None, matched_id=None)
+        )
+        await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id == expense.id).values(expense_id=None))
+        await db.execute(update(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id).values(expense_id=None))
+        await db.delete(expense)
+        await db.commit()
+        return {"ok": True, "deleted": True, "restored_expense_id": original_expense.id if original_expense else None}
+
+    if getattr(expense, "reversed_expense_id", None):
+        raise HTTPException(400, "Delete the reversal entry to restore this expense")
 
     reversal = await create_expense_reversal(
         db,

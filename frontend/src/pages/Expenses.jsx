@@ -21,6 +21,7 @@ function buildContractLabel(contract) {
 
 export default function Expenses() {
   const [items, setItems] = useState([])
+  const [duplicateGroups, setDuplicateGroups] = useState([])
   const [year, setYear] = useState(new Date().getFullYear())
   const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
@@ -34,6 +35,8 @@ export default function Expenses() {
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
   const [assignProjectId, setAssignProjectId] = useState('')
+  const [pageError, setPageError] = useState('')
+  const [mergeKeepId, setMergeKeepId] = useState(null)
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     description: '',
@@ -47,30 +50,45 @@ export default function Expenses() {
 
   const load = () => {
     setLoading(true)
+    setPageError('')
     const params = { year }
     if (month) params.month = month
-    api.expenses.list(params).then(setItems).finally(() => setLoading(false))
+    return Promise.all([
+      api.expenses.list(params),
+      api.expenses.duplicates(params).catch(() => []),
+    ])
+      .then(([expenseItems, groups]) => {
+        setItems(expenseItems)
+        setDuplicateGroups(groups)
+      })
+      .catch((error) => {
+        setItems([])
+        setDuplicateGroups([])
+        setPageError(error.message || tr('loadError'))
+      })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
   }, [year, month])
+
   useEffect(() => {
     Promise.all([
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
       api.contracts.list({ limit: 500 }),
-    ]).then(([projectList, categoryList, contractList]) => {
-      setProjects(projectList)
-      setCategories(categoryList)
-      setContracts(contractList)
-    })
+    ])
+      .then(([projectList, categoryList, contractList]) => {
+        setProjects(projectList)
+        setCategories(categoryList)
+        setContracts(contractList)
+      })
+      .catch((error) => setPageError(error.message || tr('loadError')))
   }, [])
 
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
-  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
-  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
 
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
@@ -105,6 +123,7 @@ export default function Expenses() {
       setSelectedIds([])
       load()
     } catch (error) {
+      setPageError(error.message || tr('loadError'))
       console.error(error)
     }
   }
@@ -120,6 +139,7 @@ export default function Expenses() {
       contract_id: '',
       note: '',
     })
+    setPageError('')
     setModal('add')
   }
 
@@ -134,17 +154,17 @@ export default function Expenses() {
       contract_id: item.contract_id ?? '',
       note: item.note || '',
     })
+    setPageError('')
     setModal({ type: 'edit', id: item.id })
   }
 
   const updateProject = (projectId) => {
     setForm((previous) => {
-      const nextProjectId = projectId
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = selectedContract && String(selectedContract.project_id) === String(nextProjectId)
+      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
       return {
         ...previous,
-        project_id: nextProjectId,
+        project_id: projectId,
         contract_id: keepContract ? previous.contract_id : '',
       }
     })
@@ -166,6 +186,7 @@ export default function Expenses() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    setPageError('')
     try {
       const categoryValue = form.category?.trim() || null
       const payload = {
@@ -186,17 +207,38 @@ export default function Expenses() {
       setModal(null)
       load()
     } catch (error) {
+      setPageError(error.message || tr('loadError'))
       console.error(error)
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm(tr('confirmDeleteExpense'))) return
+  const handleDelete = async (item) => {
+    const isReversal = item.status === 'reversed' || !!item.reversal_of_id
+    const confirmKey = isReversal ? 'confirmDeleteReversalExpense' : 'confirmReverseExpense'
+    if (!confirm(tr(confirmKey))) return
     try {
-      await api.expenses.delete(id)
+      await api.expenses.delete(item.id)
       load()
     } catch (error) {
+      setPageError(error.message || tr('loadError'))
       console.error(error)
+    }
+  }
+
+  const handleMergeGroup = async (group, keepId) => {
+    const mergeIds = group.items.filter((item) => item.id !== keepId).map((item) => item.id)
+    if (mergeIds.length === 0) return
+    if (!confirm(tr('expenseMergeConfirm'))) return
+    setMergeKeepId(keepId)
+    setPageError('')
+    try {
+      await api.expenses.mergeDuplicates({ keep_id: keepId, merge_ids: mergeIds })
+      await load()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+      console.error(error)
+    } finally {
+      setMergeKeepId(null)
     }
   }
 
@@ -214,7 +256,8 @@ export default function Expenses() {
         getCategoryLabel(item).toLowerCase().includes(normalizedSearch) ||
         String(item.amount || '').includes(normalizedSearch) ||
         getProjectName(item.project_id).toLowerCase().includes(normalizedSearch) ||
-        getContractLabel(item.contract_id).toLowerCase().includes(normalizedSearch)
+        getContractLabel(item.contract_id).toLowerCase().includes(normalizedSearch) ||
+        String(item.bank_reference || '').toLowerCase().includes(normalizedSearch)
       )
     }
     return [...rows].sort((left, right) => {
@@ -307,6 +350,63 @@ export default function Expenses() {
       </div>
 
       <div className="page-body">
+        {pageError && (
+          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+            {pageError}
+          </div>
+        )}
+
+        {duplicateGroups.length > 0 && (
+          <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-warning)' }}>
+            <div style={{ padding: '1rem 1rem 0.5rem', fontWeight: 700 }}>{tr('expenseDuplicatesTitle')}</div>
+            <div style={{ padding: '0 1rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              {tr('expenseDuplicatesHint')}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0 1rem 1rem' }}>
+              {duplicateGroups.map((group, index) => (
+                <div key={`${group.reason}-${group.payment_reference || group.description || index}`} className="card" style={{ padding: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {group.reason === 'payment_reference' ? tr('expenseDuplicateByPaymentRef') : tr('expenseDuplicateByDescription')}
+                    </div>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}: {Number(group.amount || 0).toLocaleString('sr-RS')}</div>
+                  </div>
+                  {group.payment_reference && (
+                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+                      {tr('paymentRef')}: {group.payment_reference}
+                    </div>
+                  )}
+                  {group.description && (
+                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                      {tr('description')}: {group.description}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {group.items.map((item) => (
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.5rem' }}>
+                        <div style={{ minWidth: 260, flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{item.description}</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                            {item.date} {UI_DASH} {getProjectName(item.project_id) || tr('unassigned')} {UI_DASH} {getCategoryLabel(item)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={mergeKeepId === item.id}
+                          onClick={() => handleMergeGroup(group, item.id)}
+                        >
+                          {mergeKeepId === item.id ? tr('loading') : tr('expenseMergeKeepThis')}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="card">
           <div className="table-wrap">
             <table>
@@ -338,10 +438,10 @@ export default function Expenses() {
                       </td>
                       <td>{item.date}</td>
                       <td>{(item.description || '').slice(0, 50)}</td>
-                      <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
+                      <td title={getProjectName(item.project_id) || ''}>
                         {item.project_id ? (
                           <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
-                            {projects.find((project) => project.id === item.project_id)?.name || UI_DASH}
+                            {getProjectName(item.project_id) || UI_DASH}
                           </span>
                         ) : UI_DASH}
                       </td>
@@ -355,8 +455,8 @@ export default function Expenses() {
                         {item.bank_reference || item.note || UI_DASH}
                       </td>
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item.id)}>
+                        <button className="btn btn-sm btn-secondary" disabled={item.status === 'reversed' || !!item.reversal_of_id} onClick={() => openEdit(item)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item)}>
                           {tr('delete')}
                         </button>
                       </td>

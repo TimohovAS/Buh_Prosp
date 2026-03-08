@@ -204,6 +204,11 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return request(`/expenses?${q}`);
     },
+    duplicates: (params) => {
+      const q = new URLSearchParams(params || {}).toString();
+      return request(`/expenses/duplicates?${q}`);
+    },
+    mergeDuplicates: (data) => request('/expenses/merge-duplicates', { method: 'POST', body: JSON.stringify(data) }),
     get: (id) => request(`/expenses/${id}`),
     create: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

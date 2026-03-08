@@ -32,6 +32,7 @@ export default function Income() {
   const [assignProjectId, setAssignProjectId] = useState('')
   const [efakturaImporting, setEfakturaImporting] = useState(false)
   const [efakturaLastResult, setEfakturaLastResult] = useState(null)
+  const [pageError, setPageError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [paymentModal, setPaymentModal] = useState(null)
@@ -55,12 +56,17 @@ export default function Income() {
 
   const load = () => {
     setLoading(true)
+    setPageError('')
     const params = { year }
     if (month) params.month = month
     return Promise.all([api.income.list(params), api.income.years()])
       .then(([incomeItems, years]) => {
         setItems(incomeItems)
         setAvailableYears(years?.length ? years : [currentYear])
+      })
+      .catch((error) => {
+        setItems([])
+        setPageError(error.message || tr('loadError'))
       })
       .finally(() => setLoading(false))
   }
@@ -127,6 +133,7 @@ export default function Income() {
     }
     setForm(defaultForm)
     setSubmitError('')
+    setPageError('')
     setModal('add')
   }
 
@@ -145,6 +152,7 @@ export default function Income() {
       note: item.note || '',
     })
     setSubmitError('')
+    setPageError('')
     setModal({ type: 'edit', id: item.id })
   }
 
@@ -217,23 +225,26 @@ export default function Income() {
       : parseInt(assignProjectId, 10)
     try {
       await api.income.bulkAssignProject({ ids: selectedIds, project_id: pid })
+      setPageError('')
       setModalAssign(false)
       setAssignProjectId('')
       setSelectedIds([])
       load()
     } catch (err) {
-      setSubmitError(err.message || tr('loadError'))
+      setPageError(err.message || tr('loadError'))
       console.error(err)
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm(tr('deleteIncome'))) return
+  const handleDelete = async (item) => {
+    const confirmKey = item.status === 'cancelled' ? 'confirmDeleteCancelledIncome' : 'confirmCancelIncome'
+    if (!confirm(tr(confirmKey))) return
     try {
-      await api.income.delete(id)
+      await api.income.delete(item.id)
+      setPageError('')
       load()
     } catch (err) {
-      setSubmitError(err.message || tr('loadError'))
+      setPageError(err.message || tr('loadError'))
       console.error(err)
     }
   }
@@ -333,6 +344,9 @@ export default function Income() {
 
   const renderPaymentStatus = (item) => {
     let badge = null
+    if (item.status === 'cancelled') {
+      return <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fda4af' }}>{tr('cancelled')}</span>
+    }
     if (item.status === 'paid') {
       badge = <span className="badge badge-success" title={`${tr('paid')}: ${item.paid_date || UI_DASH}`}>{tr('paid')}</span>
     } else if (item.status === 'partial') {
@@ -482,6 +496,11 @@ export default function Income() {
       </div>
 
       <div className="page-body">
+        {pageError && (
+          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+            {pageError}
+          </div>
+        )}
         <div className="card">
           <div className="table-wrap">
             <table>
@@ -513,7 +532,7 @@ export default function Income() {
                   <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
-                    <tr key={item.id}>
+                    <tr key={item.id} className={item.status === 'cancelled' ? 'row-reversal' : ''}>
                       <td>
                         <input
                           type="checkbox"
@@ -544,8 +563,8 @@ export default function Income() {
                       <td>{item.amount_rsd.toLocaleString('sr-RS')}</td>
                       <td>{renderPaymentStatus(item)}</td>
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item.id)}>
+                        <button className="btn btn-sm btn-secondary" disabled={item.status === 'cancelled'} onClick={() => openEdit(item)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item)}>
                           {tr('delete')}
                         </button>
                       </td>

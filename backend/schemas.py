@@ -644,6 +644,35 @@ class ExpenseResponse(ExpenseBase):
 
 
 # --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
+
+class ExpenseDuplicateItem(BaseModel):
+    id: int
+    date: DateType
+    description: str
+    amount: float
+    bank_reference: Optional[str] = None
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    category_id: Optional[int] = None
+    status: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ExpenseDuplicateGroup(BaseModel):
+    reason: str
+    amount: float
+    payment_reference: Optional[str] = None
+    description: Optional[str] = None
+    item_count: int
+    items: list[ExpenseDuplicateItem] = Field(default_factory=list)
+
+
+class ExpenseMergeRequest(BaseModel):
+    keep_id: int
+    merge_ids: list[int]
+
 class PlannedExpenseBase(BaseModel):
     name: str
     description: Optional[str] = None

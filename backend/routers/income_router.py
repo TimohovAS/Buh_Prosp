@@ -93,6 +93,14 @@ async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> Inco
     await db.flush()
     return _build_income_payment_details(income, linked_transactions)
 
+
+async def _detach_income_transactions(db: AsyncSession, income_id: int) -> None:
+    linked_transactions = await _get_income_linked_transactions(db, income_id)
+    for transaction in linked_transactions:
+        transaction.status = "unmatched"
+        transaction.matched_type = None
+        transaction.matched_id = None
+
 from backend.income_service import (
     to_number_year_format,
     has_invoice_duplicate,
@@ -454,6 +462,8 @@ async def update_income(
     income = r.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
+    if income.status == "cancelled":
+        raise HTTPException(400, "Cancelled income cannot be updated")
     dump = data.model_dump(exclude_unset=True)
     if "project_id" in dump and not dump["project_id"]:
         dump["project_id"] = await _get_unassigned_project_id(db)
@@ -497,11 +507,23 @@ async def delete_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР°."""
+    """Delete income using cancel-first semantics."""
     r = await db.execute(select(Income).where(Income.id == income_id))
     income = r.scalar_one_or_none()
     if not income:
-        raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
-    await db.delete(income)
+        raise HTTPException(404, "Income record not found")
+
+    if income.status == "cancelled":
+        await _detach_income_transactions(db, income.id)
+        await db.delete(income)
+        await db.commit()
+        return {"ok": True, "deleted": True}
+
+    await _detach_income_transactions(db, income.id)
+    income.status = "cancelled"
+    income.is_paid = False
+    income.paid_amount = 0.0
+    income.paid_date = None
+    income.bank_reference = None
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "cancelled": True}
