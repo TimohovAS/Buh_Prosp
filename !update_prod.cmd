@@ -48,7 +48,17 @@ if exist "backup_db.ps1" (
 )
 
 echo [ProspEl] Pulling latest code from GitHub...
-git pull --ff-only origin main
+for /f %%i in ('git rev-parse --abbrev-ref HEAD') do set "GIT_BRANCH=%%i"
+if "%GIT_BRANCH%"=="" (
+  echo [ERROR] Failed to detect current git branch.
+  exit /b 1
+)
+if /I "%GIT_BRANCH%"=="HEAD" (
+  echo [ERROR] Detached HEAD detected. Please checkout a branch before update.
+  exit /b 1
+)
+echo [ProspEl] Current branch: %GIT_BRANCH%
+git pull --ff-only origin %GIT_BRANCH%
 if errorlevel 1 (
   echo [ERROR] git pull failed.
   exit /b 1
