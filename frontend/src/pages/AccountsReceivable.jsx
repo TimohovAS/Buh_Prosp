@@ -39,7 +39,9 @@ export default function AccountsReceivable() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   const filtered = useMemo(() => {
     const s = (search || '').trim().toLowerCase()

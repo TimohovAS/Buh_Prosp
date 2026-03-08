@@ -93,8 +93,12 @@ export default function PlannedExpenses() {
     api.plannedExpenses.upcoming(upcomingDays).then(setUpcoming)
   }
 
-  useEffect(load, [filterActive, filterCategory])
-  useEffect(loadUpcoming, [upcomingDays, items.length])
+  useEffect(() => {
+    load()
+  }, [filterActive, filterCategory])
+  useEffect(() => {
+    loadUpcoming()
+  }, [upcomingDays, items.length])
   useEffect(() => {
     api.projects.list({ show_archived: true }).then(setProjects)
     api.categories.list({ category_type: 'expense' }).then(setApiCategories)

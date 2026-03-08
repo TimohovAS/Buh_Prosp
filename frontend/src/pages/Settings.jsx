@@ -77,8 +77,12 @@ export default function Settings() {
       .catch((err) => console.error(err))
   }
 
-  useEffect(loadUsers, [showInactive, isAdmin])
-  useEffect(loadCategories, [])
+  useEffect(() => {
+    loadUsers()
+  }, [showInactive, isAdmin])
+  useEffect(() => {
+    loadCategories()
+  }, [])
 
   const openAddUser = () => {
     setUserForm({ username: '', password: '', full_name: '', role: 'accountant', default_language: 'sr' })

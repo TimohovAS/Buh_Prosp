@@ -70,7 +70,9 @@ export default function Obligations() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [year, paymentTypeFilter])
+  useEffect(() => {
+    load()
+  }, [year, paymentTypeFilter])
 
   const filteredItems = items.filter((ob) => {
     if (statusFilter === 'all') return true

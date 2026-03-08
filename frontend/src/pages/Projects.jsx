@@ -93,7 +93,9 @@ export default function Projects() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(loadAll, [showInactive, from, to, mode])
+  useEffect(() => {
+    loadAll()
+  }, [showInactive, from, to, mode])
   useEffect(() => {
     api.clients.listBrief().then(setClients)
   }, [])

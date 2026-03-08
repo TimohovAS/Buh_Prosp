@@ -23,7 +23,9 @@ export default function Clients() {
     api.clients.list({ search, archived: false }).then(setItems).finally(() => setLoading(false))
   }
 
-  useEffect(load, [search])
+  useEffect(() => {
+    load()
+  }, [search])
 
   const openAdd = () => {
     setForm({ name: '', address: '', pib: '', maticni_broj: '', contact: '', client_type: 'legal' })

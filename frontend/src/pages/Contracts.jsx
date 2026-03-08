@@ -42,7 +42,9 @@ export default function Contracts() {
     api.contracts.list({ ...params, limit: 500 }).then(setItems).finally(() => setLoading(false))
   }
 
-  useEffect(load, [statusFilter, clientFilter])
+  useEffect(() => {
+    load()
+  }, [statusFilter, clientFilter])
   useEffect(() => { api.clients.listBrief().then(setClients) }, [])
 
   const openAdd = () => {

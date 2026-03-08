@@ -65,7 +65,9 @@ export default function Income() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [year, month])
+  useEffect(() => {
+    load()
+  }, [year, month])
   useEffect(() => {
     if (availableYears.length === 0) return
     if (!availableYears.includes(year)) {

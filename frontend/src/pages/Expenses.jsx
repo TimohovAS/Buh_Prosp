@@ -52,7 +52,9 @@ export default function Expenses() {
     api.expenses.list(params).then(setItems).finally(() => setLoading(false))
   }
 
-  useEffect(load, [year, month])
+  useEffect(() => {
+    load()
+  }, [year, month])
   useEffect(() => {
     Promise.all([
       api.projects.list({ show_archived: true }),
