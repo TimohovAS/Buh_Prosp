@@ -104,6 +104,7 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return request(`/income?${q}`);
     },
+    years: () => request('/income/years'),
     get: (id) => request(`/income/${id}`),
     create: (data) => request('/income', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/income/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

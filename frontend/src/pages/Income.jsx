@@ -17,7 +17,9 @@ export default function Income() {
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [contracts, setContracts] = useState([])
-  const [year, setYear] = useState(new Date().getFullYear())
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear)
+  const [availableYears, setAvailableYears] = useState([currentYear])
   const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -50,10 +52,21 @@ export default function Income() {
     setLoading(true)
     const params = { year }
     if (month) params.month = month
-    api.income.list(params).then(setItems).finally(() => setLoading(false))
+    Promise.all([api.income.list(params), api.income.years()])
+      .then(([incomeItems, years]) => {
+        setItems(incomeItems)
+        setAvailableYears(years?.length ? years : [currentYear])
+      })
+      .finally(() => setLoading(false))
   }
 
   useEffect(load, [year, month])
+  useEffect(() => {
+    if (availableYears.length === 0) return
+    if (!availableYears.includes(year)) {
+      setYear(availableYears[0])
+    }
+  }, [availableYears, year])
   useEffect(() => { api.clients.listBrief().then(setClients) }, [])
   useEffect(() => {
     api.projects.list({ show_archived: true }).then(setProjects)
@@ -306,7 +319,7 @@ export default function Income() {
             value={year}
             onChange={(event) => setYear(parseInt(event.target.value, 10))}
           >
-            {[year - 2, year - 1, year, year + 1].map((value) => (
+            {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>

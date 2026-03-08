@@ -67,6 +67,22 @@ async def list_income(
     return out
 
 
+@router.get("/years", response_model=list[int])
+async def list_income_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Список годов, в которых есть доходы."""
+    result = await db.execute(select(Income.invoice_year, Income.issued_date))
+    years: set[int] = set()
+    for invoice_year, issued_date in result.fetchall():
+        year_value = int(invoice_year) if invoice_year is not None else (issued_date.year if issued_date else None)
+        if year_value is not None:
+            years.add(year_value)
+    if not years:
+        years.add(date.today().year)
+    return sorted(years, reverse=True)
+
 
 @router.post("", response_model=IncomeResponse)
 async def create_income(
