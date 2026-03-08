@@ -186,10 +186,12 @@ export default function Income() {
       load()
     } catch (err) {
       if (err.status === 409) {
-        const yearValue = new Date(form.date).getFullYear()
-        const response = await api.income.nextInvoice(yearValue).catch(() => ({}))
-        if (response.invoice_number) setForm((prev) => ({ ...prev, invoice_number: response.invoice_number }))
-        setSubmitError(err.message || tr('invoiceExistsWarning'))
+        if (modal === 'add') {
+          const yearValue = new Date(form.date).getFullYear()
+          const response = await api.income.nextInvoice(yearValue).catch(() => ({}))
+          if (response.invoice_number) setNextInvoiceHint(response.invoice_number)
+        }
+        setSubmitError(tr('invoiceExistsWarning'))
         return
       }
       setSubmitError(err.message || tr('loadError'))

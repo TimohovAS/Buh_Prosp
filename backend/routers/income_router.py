@@ -19,6 +19,9 @@ from backend.services import get_income_total, get_next_invoice_number, allocate
 
 router = APIRouter(prefix="/income", tags=["income"])
 
+INVOICE_DUPLICATE_DETAIL = "Invoice number already exists for this year."
+INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
+
 async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
     """РџРѕР»СѓС‡РёС‚СЊ id РїСЂРѕРµРєС‚Р° INT-UNASSIGNED."""
     r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
@@ -177,12 +180,12 @@ async def create_income(
                 allocated = True
                 break
         if not allocated:
-            raise HTTPException(409, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРѕР±СЂР°С‚СЊ СѓРЅРёРєР°Р»СЊРЅС‹Р№ РЅРѕРјРµСЂ СЃС‡С‘С‚Р° Р·Р° РіРѕРґ")
+            raise HTTPException(409, INVOICE_ALLOCATE_DETAIL)
     else:
         invoice_number = to_number_year_format(invoice_number, year)
         invoice_year_val = data.invoice_year or invoice_year_from_number(invoice_number) or (data.issued_date.year if data.issued_date else date.today().year)
         if await has_invoice_duplicate(db, invoice_number, invoice_year_val):
-            raise HTTPException(409, "РќРѕРјРµСЂ СЃС‡С‘С‚Р° СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ РІ СЌС‚РѕРј РіРѕРґСѓ (СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚СЊ РїРѕ РіРѕРґСѓ)")
+            raise HTTPException(409, INVOICE_DUPLICATE_DETAIL)
 
     status_val = data.status or ("paid" if data.paid_date else "issued")
     # Auto-assign project
@@ -218,7 +221,7 @@ async def create_income(
         msg = str(e.orig) if getattr(e, "orig", None) else str(e)
         low = msg.lower()
         if "unique" in low and ("invoice" in low or "uq_income_invoice_per_year" in low):
-            raise HTTPException(409, "РќРѕРјРµСЂ СЃС‡С‘С‚Р° СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ РІ СЌС‚РѕРј РіРѕРґСѓ (СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚СЊ РїРѕ РіРѕРґСѓ)") from e
+            raise HTTPException(409, INVOICE_DUPLICATE_DETAIL) from e
         raise
     if status_val == "paid" and data.paid_date:
         pass # BankTransaction now handles cash flow
@@ -469,7 +472,7 @@ async def update_income(
             if await has_invoice_duplicate(db, income.invoice_number, year_val, exclude_income_id=income_id):
                 raise HTTPException(
                     409,
-                    "Р—Р°РїРёСЃСЊ СЃ С‚Р°РєРёРј РЅРѕРјРµСЂРѕРј СЃС‡С‘С‚Р° Р·Р° СЌС‚РѕС‚ РіРѕРґ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ (invoice_year, invoice_number).",
+                    INVOICE_DUPLICATE_DETAIL,
                 )
     try:
         await db.flush()
@@ -477,7 +480,7 @@ async def update_income(
     except IntegrityError as e:
         msg = str(e.orig) if getattr(e, "orig", None) else str(e)
         if "UNIQUE" in msg and ("invoice" in msg or "income" in msg.lower()):
-            raise HTTPException(409, "Р—Р°РїРёСЃСЊ СЃ С‚Р°РєРёРј РЅРѕРјРµСЂРѕРј СЃС‡С‘С‚Р° Р·Р° СЌС‚РѕС‚ РіРѕРґ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚.") from e
+            raise HTTPException(409, INVOICE_DUPLICATE_DETAIL) from e
         raise
     # РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°, BankTransaction СЃР°Рј СѓРїСЂР°РІР»СЏРµС‚СЃСЏ
     r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client)).where(Income.id == income_id))
