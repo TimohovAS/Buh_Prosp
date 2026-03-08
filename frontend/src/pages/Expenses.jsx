@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 export default function Expenses() {
   const [items, setItems] = useState([])
@@ -45,13 +45,17 @@ export default function Expenses() {
   const toggleSelect = (id) => {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
+
   const toggleSelectAll = () => {
     if (selectedIds.length >= filtered.length) setSelectedIds([])
-    else setSelectedIds(filtered.map((i) => i.id))
+    else setSelectedIds(filtered.map((item) => item.id))
   }
+
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const pid = assignProjectId === '' || assignProjectId === '_none' ? (unassignedProject ? unassignedProject.id : null) : parseInt(assignProjectId, 10)
+    const pid = assignProjectId === '' || assignProjectId === '_none'
+      ? (unassignedProject ? unassignedProject.id : null)
+      : parseInt(assignProjectId, 10)
     try {
       await api.expenses.bulkAssignProject({ ids: selectedIds, project_id: pid })
       setModalAssign(false)
@@ -64,8 +68,7 @@ export default function Expenses() {
   }
 
   const openAdd = () => {
-    // Default project = INT-UNASSIGNED
-    const unassigned = projects.find(p => p.code === 'INT-UNASSIGNED')
+    const unassigned = projects.find((project) => project.code === 'INT-UNASSIGNED')
     setForm({
       date: new Date().toISOString().slice(0, 10),
       description: '',
@@ -91,8 +94,8 @@ export default function Expenses() {
     setModal({ type: 'edit', id: item.id })
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     try {
       const categoryValue = form.category?.trim() || null
       const payload = {
@@ -127,48 +130,57 @@ export default function Expenses() {
   }
 
   const lang = getLang()
-  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
-  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
-  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
-  const getProjectName = (projectId) => projects.find((p) => p.id === projectId)?.name || ''
+  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
+  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+
   const getCategoryLabel = (item) => {
     const selectedCategory = categories.find((category) => category.id === item.category_id)
     if (selectedCategory) {
       return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
     }
-    return item.category || 'вЂ”'
+    return item.category || '-'
   }
 
   const filtered = useMemo(() => {
-    const s = (search || '').trim().toLowerCase()
+    const normalizedSearch = (search || '').trim().toLowerCase()
     let rows = items
-    if (s) {
+    if (normalizedSearch) {
       rows = items.filter((item) =>
-        (item.description || '').toLowerCase().includes(s) ||
-        getCategoryLabel(item).toLowerCase().includes(s) ||
-        String(item.amount || '').includes(s) ||
-        getProjectName(item.project_id).toLowerCase().includes(s)
+        (item.description || '').toLowerCase().includes(normalizedSearch) ||
+        getCategoryLabel(item).toLowerCase().includes(normalizedSearch) ||
+        String(item.amount || '').includes(normalizedSearch) ||
+        getProjectName(item.project_id).toLowerCase().includes(normalizedSearch)
       )
     }
-    return [...rows].sort((a, b) => {
-      const valA = sortCol === 'project_id' ? getProjectName(a.project_id) : (sortCol === 'category' ? getCategoryLabel(a) : (a[sortCol] ?? ''))
-      const valB = sortCol === 'project_id' ? getProjectName(b.project_id) : (sortCol === 'category' ? getCategoryLabel(b) : (b[sortCol] ?? ''))
-      if (valA < valB) return sortAsc ? -1 : 1
-      if (valA > valB) return sortAsc ? 1 : -1
+    return [...rows].sort((left, right) => {
+      const leftValue = sortCol === 'project_id'
+        ? getProjectName(left.project_id)
+        : (sortCol === 'category' ? getCategoryLabel(left) : (left[sortCol] ?? ''))
+      const rightValue = sortCol === 'project_id'
+        ? getProjectName(right.project_id)
+        : (sortCol === 'category' ? getCategoryLabel(right) : (right[sortCol] ?? ''))
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
   }, [items, search, sortCol, sortAsc, projects, categories, lang])
 
   const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else { setSortCol(col); setSortAsc(true) }
-  }
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>РІвЂ вЂў</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? 'РІвЂ вЂ' : 'РІвЂ вЂњ'}</span>
+    if (sortCol === col) setSortAsc((value) => !value)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
   }
 
-  const total = filtered.reduce((sum, i) => sum + i.amount, 0)
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>^v</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '^' : 'v'}</span>
+  }
+
+  const total = filtered.reduce((sum, item) => sum + item.amount, 0)
 
   return (
     <>
@@ -189,21 +201,21 @@ export default function Expenses() {
             className="form-input"
             style={{ width: 'auto' }}
             value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
+            onChange={(event) => setYear(parseInt(event.target.value, 10))}
           >
-            {[year - 2, year - 1, year, year + 1].map((y) => (
-              <option key={y} value={y}>{y}</option>
+            {[year - 2, year - 1, year, year + 1].map((value) => (
+              <option key={value} value={value}>{value}</option>
             ))}
           </select>
           <select
             className="form-input"
             style={{ width: 'auto' }}
             value={month}
-            onChange={(e) => setMonth(e.target.value ? parseInt(e.target.value) : '')}
+            onChange={(event) => setMonth(event.target.value ? parseInt(event.target.value, 10) : '')}
           >
             <option value="">{tr('allMonths')}</option>
-            {MONTHS.map((m) => (
-              <option key={m} value={m}>{m}</option>
+            {MONTHS.map((value) => (
+              <option key={value} value={value}>{value}</option>
             ))}
           </select>
           <input
@@ -211,13 +223,16 @@ export default function Expenses() {
             className="form-input"
             placeholder={tr('search')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             style={{ width: 180 }}
           />
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}
-            onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}
+            onClick={() => {
+              setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
+              setModalAssign(true)
+            }}
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
@@ -255,35 +270,38 @@ export default function Expenses() {
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
-                  filtered.map((i) => (
+                  filtered.map((item) => (
                     <tr
-                      key={i.id}
-                      className={(i.status === 'reversed' || i.reversal_of_id) ? 'row-reversal' : ''}
+                      key={item.id}
+                      className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}
                     >
                       <td>
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(i.id)}
-                          onChange={() => toggleSelect(i.id)}
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td>{i.date}</td>
-                      <td>{(i.description || '').slice(0, 50)}</td>
-                      <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
-                        {i.project_id ? (
-                          <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
-                            {projects.find((p) => p.id === i.project_id)?.name || 'РІР‚вЂќ'}
+                      <td>{item.date}</td>
+                      <td>{(item.description || '').slice(0, 50)}</td>
+                      <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
+                        {item.project_id ? (
+                          <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
+                            {projects.find((project) => project.id === item.project_id)?.name || '-'}
                           </span>
-                        ) : 'РІР‚вЂќ'}
+                        ) : '-'}
                       </td>
-                      <td>{getCategoryLabel(i)}</td>
-                      <td>{i.amount.toLocaleString('sr-RS')}</td>
-                      <td title={(i.bank_reference || i.note) || ''} style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {i.bank_reference || i.note || 'РІР‚вЂќ'}
+                      <td>{getCategoryLabel(item)}</td>
+                      <td>{item.amount.toLocaleString('sr-RS')}</td>
+                      <td
+                        title={(item.bank_reference || item.note) || ''}
+                        style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {item.bank_reference || item.note || '-'}
                       </td>
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item.id)}>
                           {tr('delete')}
                         </button>
                       </td>
@@ -298,17 +316,17 @@ export default function Expenses() {
 
       {modal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} РІР‚вЂќ {tr('expenses')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>Р“вЂ”</button>
+              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('expenses')}</h2>
+              <button className="modal-close" onClick={() => setModal(null)}>x</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
                 <DatePicker
                   value={form.date}
-                  onChange={(v) => setForm({ ...form, date: v })}
+                  onChange={(value) => setForm({ ...form, date: value })}
                   required
                 />
               </div>
@@ -318,7 +336,7 @@ export default function Expenses() {
                   type="text"
                   className="form-input"
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
                   required
                   placeholder={tr('expensePurposePlaceholder')}
                 />
@@ -328,15 +346,15 @@ export default function Expenses() {
                 <select
                   className="form-input"
                   value={form.category_id}
-                  onChange={(e) => {
-                    const cid = e.target.value
-                    const cat = categories.find(c => String(c.id) === cid)
-                    setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
+                  onChange={(event) => {
+                    const categoryId = event.target.value
+                    const category = categories.find((item) => String(item.id) === categoryId)
+                    setForm({ ...form, category_id: categoryId, category: category ? category.name_ru : '' })
                   }}
                 >
-                  <option value="">РІР‚вЂќ {tr('allCategories')} РІР‚вЂќ</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
+                  <option value="">- {tr('allCategories')} -</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{lang === 'ru' ? category.name_ru : category.name_sr}</option>
                   ))}
                 </select>
               </div>
@@ -345,21 +363,21 @@ export default function Expenses() {
                 <select
                   className="form-input"
                   value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  onChange={(event) => setForm({ ...form, project_id: event.target.value })}
                   required
                 >
-                  <option value="">РІР‚вЂќ</option>
+                  <option value="">-</option>
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
-                      {commercialProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` РІР‚вЂќ ${p.code}` : ''}</option>
+                      {commercialProjects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
-                      {internalProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` РІР‚вЂќ ${p.code}` : ''}</option>
+                      {internalProjects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
@@ -372,7 +390,7 @@ export default function Expenses() {
                   step="0.01"
                   className="form-input"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  onChange={(event) => setForm({ ...form, amount: event.target.value })}
                   required
                 />
               </div>
@@ -382,7 +400,7 @@ export default function Expenses() {
                   type="text"
                   className="form-input"
                   value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  onChange={(event) => setForm({ ...form, note: event.target.value })}
                 />
               </div>
               <div className="modal-actions">
@@ -397,38 +415,38 @@ export default function Expenses() {
       )}
 
       {modalAssign && (
-        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>Р“вЂ”</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>x</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
               <select
                 className="form-input"
                 value={assignProjectId}
-                onChange={(e) => setAssignProjectId(e.target.value)}
+                onChange={(event) => setAssignProjectId(event.target.value)}
               >
-                <option value="">вЂ”</option>
+                <option value="">-</option>
                 {commercialProjects.length > 0 && (
                   <optgroup label={tr('commercialProject')}>
-                    {commercialProjects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` вЂ” ${p.code}` : ''}</option>
+                    {commercialProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
                 {internalProjects.length > 0 && (
                   <optgroup label={tr('internalProject')}>
-                    {internalProjects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` вЂ” ${p.code}` : ''}</option>
+                    {internalProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
               </select>
             </div>
             <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
                 {tr('cancel')}
               </button>
               <button type="button" className="btn btn-primary" onClick={handleBulkAssign}>

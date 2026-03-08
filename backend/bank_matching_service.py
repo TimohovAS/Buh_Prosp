@@ -1,259 +1,267 @@
-"""Модуль сопоставления банковских транзакций с документами системы (invoices, expenses, obligations)."""
-from datetime import date
-from typing import Optional
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
+﻿from datetime import date
 
-from backend.models import BankTransaction, Income, Expense, MonthlyObligation
-from backend.services import _normalize_invoice_number, _extract_invoice_candidates
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from backend.models import BankTransaction, Expense, Income, MonthlyObligation
+from backend.services import _extract_invoice_candidates, _normalize_invoice_number
+
+
+def _safe_paid_amount(income: Income) -> float:
+    return float(getattr(income, 'paid_amount', None) or 0)
+
+
+def _matches_counterparty_name(tx: BankTransaction, income: Income) -> bool:
+    counterparty_norm = (tx.counterparty_name or '').lower().strip()
+    if not counterparty_norm:
+        return False
+
+    raw_name = income.client_name or (income.client.name if income.client else '')
+    client_norm = raw_name.lower().strip()
+    if not client_norm:
+        return False
+
+    cp_words = counterparty_norm.split()[:4]
+    cl_words = client_norm.split()[:4]
+    common = sum(1 for word in cp_words if any(word == client_word or word in client_word or client_word in word for client_word in cl_words))
+    return common >= 2 or client_norm in counterparty_norm or counterparty_norm in client_norm
 
 
 async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
-    """Вернуть кандидатов для сопоставления с банковской транзакцией.
-    
-    Возвращает:
-    - Топ кандидатов по сумме/номеру (section='suggested')
-    - Все открытые фактуры контрагента (section='counterparty')
-    """
-    if tx.status != "unmatched":
+    if tx.status != 'unmatched':
         return []
 
-    result = []
+    result: list[dict] = []
 
-    if tx.direction == "in":
-        # Все незакрытые фактуры — загружаем клиента сразу, чтобы использовать client.name
-        q = select(Income).options(selectinload(Income.client)).where(
-            Income.status.in_(["issued", "partial"]),
+    if tx.direction == 'in':
+        query = select(Income).options(selectinload(Income.client)).where(
+            Income.status.in_(['issued', 'partial'])
         )
-        r = await db.execute(q)
-        incomes = r.scalars().all()
+        response = await db.execute(query)
+        incomes = response.scalars().all()
 
-        extracted_invoices = []
+        extracted_invoices: list[str] = []
         if tx.purpose:
             extracted_invoices.extend(_extract_invoice_candidates(tx.purpose))
         if tx.bank_reference:
             extracted_invoices.extend(_extract_invoice_candidates(tx.bank_reference))
+        normalized_extracted = {_normalize_invoice_number(item) for item in extracted_invoices if item}
 
-        normalized_extracted = {_normalize_invoice_number(x) for x in extracted_invoices if x}
-
-        # Нормализованное имя контрагента для нечёткого поиска
-        counterparty_norm = (tx.counterparty_name or "").lower().strip()
-
-        def _paid(inc: Income) -> float:
-            """Безопасный доступ к paid_amount (может не быть если migrate не запускали)."""
-            return float(getattr(inc, 'paid_amount', None) or 0)
-
-        def score_income(inc: Income) -> tuple[int, float, int]:
-            score_inv = 1
+        def score_income(income: Income) -> tuple[int, float, int]:
+            invoice_score = 1
             if normalized_extracted:
-                inv_norm = _normalize_invoice_number(inc.invoice_number)
-                if inv_norm in normalized_extracted:
-                    score_inv = 0
+                income_invoice = _normalize_invoice_number(income.invoice_number)
+                if income_invoice in normalized_extracted:
+                    invoice_score = 0
 
-            remaining = float(inc.amount_rsd) - _paid(inc)
+            remaining = float(income.amount_rsd) - _safe_paid_amount(income)
             amount_diff = abs(remaining - float(tx.amount))
-            date_diff = abs((tx.date - inc.issued_date).days)
+            date_diff = abs((tx.date - income.issued_date).days)
+            return (invoice_score, amount_diff, date_diff)
 
-            return (score_inv, amount_diff, date_diff)
-
-        def _make_item(inc: Income, score_val, section: str) -> dict:
-            """Формирует словарь для ответа с полными данными фактуры."""
-            paid = _paid(inc)
-            remaining = float(inc.amount_rsd) - paid
-            client_label = inc.client_name or (inc.client.name if inc.client else "")
+        def make_income_item(income: Income, score_value: int | None, section: str) -> dict:
+            paid = _safe_paid_amount(income)
+            remaining = float(income.amount_rsd) - paid
+            client_label = income.client_name or (income.client.name if income.client else '')
             return {
-                "id": inc.id,
-                "type": "income",
-                "invoice_number": inc.invoice_number,
-                "client_name": client_label,
-                "description": (inc.description or "")[:80],
-                "amount": remaining,
-                "amount_full": float(inc.amount_rsd),
-                "amount_paid": paid,
-                "date": str(inc.issued_date),
-                "status": inc.status,
-                "score": score_val,
-                "section": section,
+                'id': income.id,
+                'type': 'income',
+                'invoice_number': income.invoice_number,
+                'client_name': client_label,
+                'description': (income.description or '')[:80],
+                'amount': remaining,
+                'amount_full': float(income.amount_rsd),
+                'amount_paid': paid,
+                'date': str(income.issued_date),
+                'status': income.status,
+                'score': score_value,
+                'section': section,
             }
 
-        def matches_counterparty(inc: Income) -> bool:
-            """Проверяет совпадение контрагента по имени клиента.
-            Использует client_name (свободный текст) или client.name (из справочника)."""
-            if not counterparty_norm:
-                return False
-            # Берём имя из поля или из связанного клиента
-            raw_name = inc.client_name or (inc.client.name if inc.client else "")
-            client_norm = raw_name.lower().strip()
-            if not client_norm:
-                return False
-            # Первые слова банковского контрагента vs. клиента
-            cp_words = counterparty_norm.split()[:4]
-            cl_words = client_norm.split()[:4]
-            common = sum(1 for w in cp_words if any(w == cw or w in cw or cw in w for cw in cl_words))
-            return common >= 2 or client_norm in counterparty_norm or counterparty_norm in client_norm
+        scored: list[tuple[tuple[int, float, int], Income]] = []
+        counterparty_matches: list[tuple[tuple[int, float, int], Income]] = []
 
-        # 1. Находим топ-5 scored кандидатов (по сумме + номеру)
-        valid_incomes = []
-        counterparty_incomes = []
+        for income in incomes:
+            score = score_income(income)
+            if score[0] == 0 or score[1] <= 0.5:
+                if not (score[0] == 1 and score[2] > 60):
+                    scored.append((score, income))
+            if _matches_counterparty_name(tx, income):
+                counterparty_matches.append((score, income))
 
-        for inc in incomes:
-            sc = score_income(inc)
-            is_cp_match = matches_counterparty(inc)
+        scored.sort(key=lambda item: item[0])
+        picked_ids: set[int] = set()
 
-            # Добавляем в scored если хорошее совпадение
-            if sc[0] == 0 or sc[1] <= 0.5:
-                if not (sc[0] == 1 and sc[2] > 60):
-                    valid_incomes.append((sc, inc))
-            
-            # Добавляем в список по контрагенту
-            if is_cp_match:
-                counterparty_incomes.append((sc, inc))
+        for score, income in scored[:5]:
+            score_value = 100 if score[0] == 0 else max(10, 90 - score[2])
+            result.append(make_income_item(income, score_value, 'suggested'))
+            picked_ids.add(income.id)
 
-        valid_incomes.sort(key=lambda x: x[0])
-
-        scored_ids = set()
-        for sc, inc in valid_incomes[:5]:
-            score_val = 100 if sc[0] == 0 else max(10, 90 - sc[2])
-            result.append(_make_item(inc, score_val, "suggested"))
-            scored_ids.add(inc.id)
-
-        # 2. Фактуры контрагента
-        counterparty_incomes.sort(key=lambda x: x[0][2])
-        for sc, inc in counterparty_incomes:
-            if inc.id in scored_ids:
+        counterparty_matches.sort(key=lambda item: item[0][2])
+        for score, income in counterparty_matches:
+            if income.id in picked_ids:
                 continue
-            result.append(_make_item(inc, None, "counterparty"))
-            scored_ids.add(inc.id)
+            result.append(make_income_item(income, None, 'counterparty'))
+            picked_ids.add(income.id)
 
-        # 3. Все остальные открытые фактуры (для ручного выбора) — сортировка по дате
-        remaining_incomes = [(score_income(i), i) for i in incomes if i.id not in scored_ids]
-        remaining_incomes.sort(key=lambda x: x[0][2])
-        for sc, inc in remaining_incomes:
-            result.append(_make_item(inc, None, "all"))
+        remaining = [(score_income(income), income) for income in incomes if income.id not in picked_ids]
+        remaining.sort(key=lambda item: item[0][2])
+        for _, income in remaining:
+            result.append(make_income_item(income, None, 'all'))
 
-    elif tx.direction == "out":
-        pass
+    elif tx.direction == 'out':
+        query = select(Expense).options(selectinload(Expense.project)).where(Expense.status != 'reversed')
+        response = await db.execute(query)
+        expenses = response.scalars().all()
+
+        def score_expense(expense: Expense) -> tuple[int, int, float, int]:
+            reference_score = 1
+            if tx.bank_reference and expense.bank_reference and tx.bank_reference == expense.bank_reference:
+                reference_score = 0
+            project_score = 0 if tx.project_id and expense.project_id == tx.project_id else 1
+            amount_diff = abs(float(expense.amount or 0) - float(tx.amount or 0))
+            compare_date = expense.paid_date or expense.date or tx.date
+            date_diff = abs((tx.date - compare_date).days)
+            return (reference_score, project_score, amount_diff, date_diff)
+
+        matches: list[tuple[tuple[int, int, float, int], Expense]] = []
+        for expense in expenses:
+            if getattr(expense, 'reversal_of_id', None) or getattr(expense, 'reversed_expense_id', None):
+                continue
+            score = score_expense(expense)
+            if score[0] == 0 or score[2] <= 0.5 or score[3] <= 14:
+                matches.append((score, expense))
+
+        matches.sort(key=lambda item: item[0])
+        for score, expense in matches[:10]:
+            score_value = 100 if score[0] == 0 else max(10, 95 - min(score[3], 45) - int(score[2] * 10))
+            result.append({
+                'id': expense.id,
+                'type': 'expense',
+                'invoice_number': None,
+                'client_name': expense.project.name if getattr(expense, 'project', None) else None,
+                'description': (expense.description or '')[:80],
+                'amount': float(expense.amount or 0),
+                'amount_full': float(expense.amount or 0),
+                'amount_paid': None,
+                'date': str(expense.date),
+                'status': expense.status,
+                'score': score_value,
+                'section': 'suggested',
+            })
 
     return result
 
 
-
 async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match_id: int):
-    """Связать BankTransaction с сущностью. Поддерживает частичную оплату фактур."""
-    r = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
-    tx = r.scalar_one_or_none()
-    
+    response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    tx = response.scalar_one_or_none()
+
     if not tx:
-        raise ValueError("BankTransaction не найдена")
-    if tx.status != "unmatched":
-        raise ValueError("Транзакция уже сопоставлена или проигнорирована")
+        raise ValueError('BankTransaction не найдена')
+    if tx.status != 'unmatched':
+        raise ValueError('Транзакция уже сопоставлена или проигнорирована')
 
-    if match_type == "income":
-        r_inc = await db.execute(select(Income).where(Income.id == match_id))
-        inc = r_inc.scalar_one_or_none()
-        if not inc:
-            raise ValueError("Income не найден")
-        
-        # Суммируем уже полученные платежи
-        new_paid = float(inc.paid_amount or 0) + float(tx.amount)
-        inc.paid_amount = new_paid
-        
-        if new_paid >= float(inc.amount_rsd):
-            # Полностью оплачен
-            inc.status = "paid"
-            inc.is_paid = True
-            inc.paid_date = tx.date
+    if match_type == 'income':
+        income_response = await db.execute(select(Income).where(Income.id == match_id))
+        income = income_response.scalar_one_or_none()
+        if not income:
+            raise ValueError('Income не найден')
+
+        new_paid = float(income.paid_amount or 0) + float(tx.amount)
+        income.paid_amount = new_paid
+        if new_paid >= float(income.amount_rsd):
+            income.status = 'paid'
+            income.is_paid = True
+            income.paid_date = tx.date
         else:
-            # Частичная оплата
-            inc.status = "partial"
-            inc.is_paid = False
-            # paid_date не устанавливаем — не полностью оплачено
-            
-        if tx.bank_reference and not inc.bank_reference:
-            inc.bank_reference = tx.bank_reference
-            
-        tx.project_id = getattr(inc, "project_id", None)
-            
-    elif match_type == "expense":
-        r_exp = await db.execute(select(Expense).where(Expense.id == match_id))
-        exp = r_exp.scalar_one_or_none()
-        if not exp:
-            raise ValueError("Expense не найден")
-            
-        exp.status = "paid"
-        exp.paid_date = tx.date
+            income.status = 'partial'
+            income.is_paid = False
 
-        tx.project_id = getattr(exp, "project_id", None)
-        
-    elif match_type == "obligation":
-        r_ob = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == match_id))
-        ob = r_ob.scalar_one_or_none()
-        if not ob:
-            raise ValueError("MonthlyObligation не найдено")
-            
-        ob.status = "paid"
-        ob.paid_date = tx.date
-        
+        if tx.bank_reference and not income.bank_reference:
+            income.bank_reference = tx.bank_reference
+        tx.project_id = getattr(income, 'project_id', None) or tx.project_id
+
+    elif match_type == 'expense':
+        expense_response = await db.execute(select(Expense).where(Expense.id == match_id))
+        expense = expense_response.scalar_one_or_none()
+        if not expense:
+            raise ValueError('Expense не найден')
+
+        expense.status = 'paid'
+        expense.paid_date = tx.date
+        if tx.bank_reference and not expense.bank_reference:
+            expense.bank_reference = tx.bank_reference
+
+        project_id = tx.project_id or getattr(expense, 'project_id', None)
+        if project_id is not None:
+            expense.project_id = project_id
+            tx.project_id = project_id
+
+    elif match_type == 'obligation':
+        obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == match_id))
+        obligation = obligation_response.scalar_one_or_none()
+        if not obligation:
+            raise ValueError('MonthlyObligation не найдено')
+
+        obligation.status = 'paid'
+        obligation.paid_date = tx.date
+
     else:
-        raise ValueError("Неизвестный тип сопоставления")
+        raise ValueError('Неизвестный тип сопоставления')
 
-    tx.status = "matched"
+    tx.status = 'matched'
     tx.matched_type = match_type
     tx.matched_id = match_id
-    
+
     await db.flush()
     return tx
 
 
 async def unmatch_transaction(db: AsyncSession, tx_id: int):
-    """Отменить связь BankTransaction. При частичной оплате вычитает сумму транзакции."""
-    r = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
-    tx = r.scalar_one_or_none()
-    
+    response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    tx = response.scalar_one_or_none()
+
     if not tx:
-        raise ValueError("BankTransaction не найдена")
-    if tx.status != "matched" or not tx.matched_type or not tx.matched_id:
-        raise ValueError("Транзакция не сопоставлена")
+        raise ValueError('BankTransaction не найдена')
+    if tx.status != 'matched' or not tx.matched_type or not tx.matched_id:
+        raise ValueError('Транзакция не сопоставлена')
 
-    if tx.matched_type == "income":
-        r_inc = await db.execute(select(Income).where(Income.id == tx.matched_id))
-        inc = r_inc.scalar_one_or_none()
-        if inc:
-            # Вычитаем сумму этой транзакции из суммы оплат
-            new_paid = max(0.0, float(inc.paid_amount or 0) - float(tx.amount))
-            inc.paid_amount = new_paid
-            
+    if tx.matched_type == 'income':
+        income_response = await db.execute(select(Income).where(Income.id == tx.matched_id))
+        income = income_response.scalar_one_or_none()
+        if income:
+            new_paid = max(0.0, float(income.paid_amount or 0) - float(tx.amount))
+            income.paid_amount = new_paid
             if new_paid <= 0:
-                inc.status = "issued"
-                inc.is_paid = False
-                inc.paid_date = None
+                income.status = 'issued'
+                income.is_paid = False
+                income.paid_date = None
             else:
-                # Ещё есть другие платежи — статус partial
-                inc.status = "partial"
-                inc.is_paid = False
-                inc.paid_date = None
-            
-    elif tx.matched_type == "expense":
-        r_exp = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
-        exp = r_exp.scalar_one_or_none()
-        if exp:
-            exp.status = "planned"
-            exp.paid_date = None
-            
-    elif tx.matched_type == "obligation":
-        r_ob = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))
-        ob = r_ob.scalar_one_or_none()
-        if ob:
-            ob.status = "unpaid"
-            ob.paid_date = None
-            if ob.deadline < date.today():
-                ob.status = "overdue"
+                income.status = 'partial'
+                income.is_paid = False
+                income.paid_date = None
 
-    tx.status = "unmatched"
+    elif tx.matched_type == 'expense':
+        expense_response = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
+        expense = expense_response.scalar_one_or_none()
+        if expense:
+            expense.status = 'planned'
+            expense.paid_date = None
+
+    elif tx.matched_type == 'obligation':
+        obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))
+        obligation = obligation_response.scalar_one_or_none()
+        if obligation:
+            obligation.status = 'unpaid'
+            obligation.paid_date = None
+            if obligation.deadline < date.today():
+                obligation.status = 'overdue'
+
+    tx.status = 'unmatched'
     tx.matched_type = None
     tx.matched_id = None
-    tx.project_id = None
-    
+
     await db.flush()
     return tx

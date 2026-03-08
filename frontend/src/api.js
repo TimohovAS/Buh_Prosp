@@ -287,6 +287,7 @@ export const api = {
     },
     update: (id, payload) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     match: (id, payload) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
+    createExpense: (id, payload) => request(`/bank-transactions/${id}/create-expense`, { method: 'POST', body: JSON.stringify(payload) }),
     unmatch: (id) => request(`/bank-transactions/${id}/unmatch`, { method: 'POST' }),
     suggest: (id) => request(`/bank-transactions/${id}/suggest`),
     bulkAssignProject: (payload) => request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),

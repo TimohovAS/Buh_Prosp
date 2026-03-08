@@ -743,6 +743,21 @@ class BankTransactionBulkAssignProject(BaseModel):
     project_id: Optional[int] = None
 
 
+class BankTransactionCreateExpenseRequest(BaseModel):
+    date: Optional[DateType] = None
+    description: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
+    note: Optional[str] = None
+
+    @field_validator("project_id", "category_id", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, value):
+        if value == "" or value is None:
+            return None
+        return value
+
+
 class MatchCandidate(BaseModel):
     id: int
     type: str

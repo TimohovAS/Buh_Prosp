@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+﻿import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' };
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
 
 export default function Income() {
   const efakturaInputRef = useRef(null)
@@ -63,7 +63,7 @@ export default function Income() {
     const defaultForm = {
       date: new Date().toISOString().slice(0, 10),
       due_date: '',
-      invoice_number: '', // СЃРµСЂРІРµСЂ РїСЂРёСЃРІРѕРёС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё (Р±Р»РѕРєРёСЂРѕРІРєР° РєРѕРЅРєСѓСЂРµРЅС†РёРё)
+      invoice_number: '',
       client_id: '',
       client_name: '',
       contract_id: '',
@@ -75,7 +75,7 @@ export default function Income() {
     }
     setForm(defaultForm)
     setModal('add')
-    api.income.nextInvoice(y).then((r) => setNextInvoiceHint(r.invoice_number)).catch(() => setNextInvoiceHint(''))
+    api.income.nextInvoice(y).then((response) => setNextInvoiceHint(response.invoice_number)).catch(() => setNextInvoiceHint(''))
   }
 
   const openEdit = (item) => {
@@ -95,25 +95,25 @@ export default function Income() {
     setModal({ type: 'edit', id: item.id })
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     try {
-      const num = (v) => {
-        if (v === '' || v == null) return null
-        const n = parseInt(String(v), 10)
-        return Number.isNaN(n) ? null : n
+      const toInt = (value) => {
+        if (value === '' || value == null) return null
+        const parsed = parseInt(String(value), 10)
+        return Number.isNaN(parsed) ? null : parsed
       }
-      const invoiceVal = form.invoice_number?.trim() || null
+      const invoiceValue = form.invoice_number?.trim() || null
       const payload = {
         date: form.date,
         due_date: form.due_date || null,
-        invoice_number: modal === 'add' ? invoiceVal : (invoiceVal || undefined),
+        invoice_number: modal === 'add' ? invoiceValue : (invoiceValue || undefined),
         invoice_year: new Date(form.date).getFullYear(),
-        client_id: num(form.client_id),
+        client_id: toInt(form.client_id),
         client_name: form.client_name || null,
-        contract_id: num(form.contract_id),
+        contract_id: toInt(form.contract_id),
         contract_payment_type: form.contract_payment_type || null,
-        project_id: num(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
+        project_id: toInt(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
         description: form.description || null,
         amount_rsd: parseFloat(form.amount_rsd) || 0,
         note: form.note || null,
@@ -131,10 +131,10 @@ export default function Income() {
       setNextInvoiceHint('')
       load()
     } catch (err) {
-      if (err.status === 409 || (err.message && (err.message.includes('СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚') || err.message.includes('РІРµС› РїРѕСЃС‚РѕСРё')))) {
-        const y = new Date(form.date).getFullYear()
-        const r = await api.income.nextInvoice(y).catch(() => ({}))
-        if (r.invoice_number) setForm((f) => ({ ...f, invoice_number: r.invoice_number }))
+      if (err.status === 409) {
+        const yearValue = new Date(form.date).getFullYear()
+        const response = await api.income.nextInvoice(yearValue).catch(() => ({}))
+        if (response.invoice_number) setForm((prev) => ({ ...prev, invoice_number: response.invoice_number }))
         alert(tr('invoiceExistsConfirm'))
         return
       }
@@ -145,13 +145,17 @@ export default function Income() {
   const toggleSelect = (id) => {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
+
   const toggleSelectAll = () => {
     if (selectedIds.length >= filtered.length) setSelectedIds([])
-    else setSelectedIds(filtered.map((i) => i.id))
+    else setSelectedIds(filtered.map((item) => item.id))
   }
+
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const pid = assignProjectId === '' || assignProjectId === '_none' ? (unassignedProject ? unassignedProject.id : null) : parseInt(assignProjectId, 10)
+    const pid = assignProjectId === '' || assignProjectId === '_none'
+      ? (unassignedProject ? unassignedProject.id : null)
+      : parseInt(assignProjectId, 10)
     try {
       await api.income.bulkAssignProject({ ids: selectedIds, project_id: pid })
       setModalAssign(false)
@@ -178,9 +182,9 @@ export default function Income() {
     efakturaInputRef.current?.click()
   }
 
-  const handleEfakturaFiles = async (e) => {
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
+  const handleEfakturaFiles = async (event) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
     if (files.length === 0) return
     setEfakturaImporting(true)
     try {
@@ -188,8 +192,8 @@ export default function Income() {
       setEfakturaLastResult(result)
       load()
       if ((result.error_count || 0) > 0) {
-        const first = result.errors?.[0]?.error || tr('loadError')
-        alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${first}`)
+        const firstError = result.errors?.[0]?.error || tr('loadError')
+        alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${firstError}`)
       }
     } catch (err) {
       console.error(err)
@@ -199,44 +203,48 @@ export default function Income() {
   }
 
   const invoiceDuplicate = modal === 'add' && form.invoice_number?.trim() &&
-    items.some((i) => i.invoice_number === form.invoice_number.trim())
+    items.some((item) => item.invoice_number === form.invoice_number.trim())
 
-  const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((e) => console.error(e))
-  const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((e) => console.error(e))
+  const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((error) => console.error(error))
+  const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((error) => console.error(error))
 
-  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
-  const commercialProjects = projects.filter((p) => !p.is_internal && p.status !== 'archived')
-  const internalProjects = projects.filter((p) => p.is_internal && p.status !== 'archived')
-  const getProjectName = (projectId) => projects.find((p) => p.id === projectId)?.name || ''
+  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
+  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
 
   const filtered = useMemo(() => {
-    const s = (search || '').trim().toLowerCase()
+    const normalizedSearch = (search || '').trim().toLowerCase()
     let rows = items
-    if (s) {
+    if (normalizedSearch) {
       rows = items.filter((item) =>
-        (item.client_name || '').toLowerCase().includes(s) ||
-        (item.invoice_number || '').toLowerCase().includes(s) ||
-        (item.description || '').toLowerCase().includes(s) ||
-        String(item.amount_rsd || '').includes(s) ||
-        getProjectName(item.project_id).toLowerCase().includes(s)
+        (item.client_name || '').toLowerCase().includes(normalizedSearch) ||
+        (item.invoice_number || '').toLowerCase().includes(normalizedSearch) ||
+        (item.description || '').toLowerCase().includes(normalizedSearch) ||
+        String(item.amount_rsd || '').includes(normalizedSearch) ||
+        getProjectName(item.project_id).toLowerCase().includes(normalizedSearch)
       )
     }
-    return [...rows].sort((a, b) => {
-      const valA = sortCol === 'project_id' ? getProjectName(a.project_id) : (a[sortCol] ?? '')
-      const valB = sortCol === 'project_id' ? getProjectName(b.project_id) : (b[sortCol] ?? '')
-      if (valA < valB) return sortAsc ? -1 : 1
-      if (valA > valB) return sortAsc ? 1 : -1
+    return [...rows].sort((left, right) => {
+      const leftValue = sortCol === 'project_id' ? getProjectName(left.project_id) : (left[sortCol] ?? '')
+      const rightValue = sortCol === 'project_id' ? getProjectName(right.project_id) : (right[sortCol] ?? '')
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
   }, [items, search, sortCol, sortAsc, projects])
 
   const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else { setSortCol(col); setSortAsc(true) }
+    if (sortCol === col) setSortAsc((value) => !value)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
   }
+
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>в†•</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? 'в†‘' : 'в†“'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>^v</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '^' : 'v'}</span>
   }
 
   return (
@@ -256,21 +264,21 @@ export default function Income() {
             className="form-input"
             style={{ width: 'auto' }}
             value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
+            onChange={(event) => setYear(parseInt(event.target.value, 10))}
           >
-            {[year - 2, year - 1, year, year + 1].map((y) => (
-              <option key={y} value={y}>{y}</option>
+            {[year - 2, year - 1, year, year + 1].map((value) => (
+              <option key={value} value={value}>{value}</option>
             ))}
           </select>
           <select
             className="form-input"
             style={{ width: 'auto' }}
             value={month}
-            onChange={(e) => setMonth(e.target.value ? parseInt(e.target.value) : '')}
+            onChange={(event) => setMonth(event.target.value ? parseInt(event.target.value, 10) : '')}
           >
             <option value="">{tr('allMonths')}</option>
-            {MONTHS.map((m) => (
-              <option key={m} value={m}>{m}</option>
+            {MONTHS.map((value) => (
+              <option key={value} value={value}>{value}</option>
             ))}
           </select>
           <input
@@ -278,7 +286,7 @@ export default function Income() {
             className="form-input"
             placeholder={tr('search')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             style={{ width: 180 }}
           />
           <button className="btn btn-secondary" onClick={exportCsv}>
@@ -290,7 +298,10 @@ export default function Income() {
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}
-            onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}
+            onClick={() => {
+              setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
+              setModalAssign(true)
+            }}
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
@@ -339,55 +350,57 @@ export default function Income() {
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
-                  filtered.map((i) => (
-                    <tr key={i.id}>
+                  filtered.map((item) => (
+                    <tr key={item.id}>
                       <td>
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(i.id)}
-                          onChange={() => toggleSelect(i.id)}
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td>{i.date}</td>
-                      <td>{i.due_date || 'вЂ”'}</td>
-                      <td>{i.invoice_number}</td>
-                      <td>{i.client_name || '-'}</td>
-                      <td>{i.contract_number || '-'}</td>
-                      <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
-                        {i.project_id ? (
-                          <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
-                            {projects.find((p) => p.id === i.project_id)?.name || 'вЂ”'}
+                      <td>{item.date}</td>
+                      <td>{item.due_date || '-'}</td>
+                      <td>{item.invoice_number}</td>
+                      <td>{item.client_name || '-'}</td>
+                      <td>{item.contract_number || '-'}</td>
+                      <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
+                        {item.project_id ? (
+                          <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
+                            {projects.find((project) => project.id === item.project_id)?.name || '-'}
                           </span>
-                        ) : 'вЂ”'}
+                        ) : '-'}
                       </td>
                       <td>
-                        {(i.description || '').slice(0, 40)}
-                        {i.contract_payment_type && (
+                        {(item.description || '').slice(0, 40)}
+                        {item.contract_payment_type && (
                           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                            ({tr(PAYMENT_TYPE_KEYS[i.contract_payment_type] || i.contract_payment_type)})
+                            ({tr(PAYMENT_TYPE_KEYS[item.contract_payment_type] || item.contract_payment_type)})
                           </span>
                         )}
                       </td>
-                      <td>{i.amount_rsd.toLocaleString('sr-RS')}</td>
+                      <td>{item.amount_rsd.toLocaleString('sr-RS')}</td>
                       <td>
-                        {i.status === 'paid' ? (
-                          <span className="badge badge-success" title={`РћРїР»Р°С‡РµРЅ: ${i.paid_date}`}>{tr('paid')}</span>
-                        ) : i.status === 'partial' ? (
-                          <span className="badge" style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
-                            title={`РџРѕР»СѓС‡РµРЅРѕ ${(i.paid_amount || 0).toLocaleString('sr-RS')} РёР· ${i.amount_rsd.toLocaleString('sr-RS')} RSD`}>
-                            Р§Р°СЃС‚РёС‡РЅРѕ
+                        {item.status === 'paid' ? (
+                          <span className="badge badge-success" title={`${tr('paid')}: ${item.paid_date}`}>{tr('paid')}</span>
+                        ) : item.status === 'partial' ? (
+                          <span
+                            className="badge"
+                            style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
+                            title={`${tr('partial')}: ${(item.paid_amount || 0).toLocaleString('sr-RS')} / ${item.amount_rsd.toLocaleString('sr-RS')} RSD`}
+                          >
+                            {tr('partial')}
                             <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.9 }}>
-                              +{(i.paid_amount || 0).toLocaleString('sr-RS')} / {i.amount_rsd.toLocaleString('sr-RS')}
+                              +{(item.paid_amount || 0).toLocaleString('sr-RS')} / {item.amount_rsd.toLocaleString('sr-RS')}
                             </span>
                           </span>
                         ) : (
                           <span className="badge badge-warning">{tr('unpaid')}</span>
                         )}
                       </td>
-
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(i.id)}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item.id)}>
                           {tr('delete')}
                         </button>
                       </td>
@@ -402,17 +415,17 @@ export default function Income() {
 
       {modal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')}</h2>
-              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint(''); }}>Г—</button>
+              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint('') }}>x</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
                 <DatePicker
                   value={form.date}
-                  onChange={(v) => setForm({ ...form, date: v })}
+                  onChange={(value) => setForm({ ...form, date: value })}
                   required
                 />
               </div>
@@ -427,8 +440,8 @@ export default function Income() {
                   type="text"
                   className="form-input"
                   value={form.invoice_number}
-                  onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
-                  placeholder={modal === 'add' && nextInvoiceHint ? nextInvoiceHint : (modal === 'add' ? '' : '')}
+                  onChange={(event) => setForm({ ...form, invoice_number: event.target.value })}
+                  placeholder={modal === 'add' && nextInvoiceHint ? nextInvoiceHint : ''}
                   required={modal !== 'add'}
                 />
                 {invoiceDuplicate && (
@@ -441,7 +454,7 @@ export default function Income() {
                 <label className="form-label">{tr('valuta')}</label>
                 <DatePicker
                   value={form.due_date}
-                  onChange={(v) => setForm({ ...form, due_date: v })}
+                  onChange={(value) => setForm({ ...form, due_date: value })}
                 />
               </div>
               <div className="form-group">
@@ -449,15 +462,15 @@ export default function Income() {
                 <select
                   className="form-input"
                   value={form.client_id}
-                  onChange={(e) => {
-                    const id = e.target.value ? parseInt(e.target.value) : ''
-                    const c = clients.find((x) => x.id === id)
-                    setForm({ ...form, client_id: id, client_name: c ? c.name : '', contract_id: '' })
+                  onChange={(event) => {
+                    const id = event.target.value ? parseInt(event.target.value, 10) : ''
+                    const client = clients.find((item) => item.id === id)
+                    setForm({ ...form, client_id: id, client_name: client ? client.name : '', contract_id: '' })
                   }}
                 >
-                  <option value="">вЂ” {tr('incomeManual')} вЂ”</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="">- {tr('incomeManual')} -</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
               </div>
@@ -467,11 +480,11 @@ export default function Income() {
                   <select
                     className="form-input"
                     value={form.contract_id}
-                    onChange={(e) => setForm({ ...form, contract_id: e.target.value, contract_payment_type: '' })}
+                    onChange={(event) => setForm({ ...form, contract_id: event.target.value, contract_payment_type: '' })}
                   >
-                    <option value="">вЂ” {tr('incomeNoContract')} вЂ”</option>
-                    {contracts.map((c) => (
-                      <option key={c.id} value={c.id}>{c.number} вЂ” {c.client_name} ({c.amount?.toLocaleString?.('sr-RS')} RSD)</option>
+                    <option value="">- {tr('incomeNoContract')} -</option>
+                    {contracts.map((contract) => (
+                      <option key={contract.id} value={contract.id}>{contract.number} - {contract.client_name} ({contract.amount?.toLocaleString?.('sr-RS')} RSD)</option>
                     ))}
                   </select>
                 </div>
@@ -481,20 +494,20 @@ export default function Income() {
                 <select
                   className="form-input"
                   value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  onChange={(event) => setForm({ ...form, project_id: event.target.value })}
                   required
                 >
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
-                      {commercialProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      {commercialProjects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
-                      {internalProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      {internalProjects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
@@ -506,9 +519,9 @@ export default function Income() {
                   <select
                     className="form-input"
                     value={form.contract_payment_type}
-                    onChange={(e) => setForm({ ...form, contract_payment_type: e.target.value })}
+                    onChange={(event) => setForm({ ...form, contract_payment_type: event.target.value })}
                   >
-                    <option value="">вЂ” {tr('incomeNotSpecified')} вЂ”</option>
+                    <option value="">- {tr('incomeNotSpecified')} -</option>
                     <option value="advance">{tr('contractPaymentAdvance')}</option>
                     <option value="intermediate">{tr('contractPaymentIntermediate')}</option>
                     <option value="closing">{tr('contractPaymentClosing')}</option>
@@ -522,7 +535,7 @@ export default function Income() {
                     type="text"
                     className="form-input"
                     value={form.client_name}
-                    onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+                    onChange={(event) => setForm({ ...form, client_name: event.target.value })}
                   />
                 </div>
               )}
@@ -532,7 +545,7 @@ export default function Income() {
                   type="text"
                   className="form-input"
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
                   placeholder={tr('incomeDescriptionPlaceholder')}
                 />
               </div>
@@ -543,7 +556,7 @@ export default function Income() {
                   step="0.01"
                   className="form-input"
                   value={form.amount_rsd}
-                  onChange={(e) => setForm({ ...form, amount_rsd: e.target.value })}
+                  onChange={(event) => setForm({ ...form, amount_rsd: event.target.value })}
                   required
                 />
               </div>
@@ -553,7 +566,7 @@ export default function Income() {
                   type="text"
                   className="form-input"
                   value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  onChange={(event) => setForm({ ...form, note: event.target.value })}
                 />
               </div>
               <div className="modal-actions">
@@ -570,37 +583,37 @@ export default function Income() {
       )}
 
       {modalAssign && (
-        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>Г—</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>x</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
               <select
                 className="form-input"
                 value={assignProjectId}
-                onChange={(e) => setAssignProjectId(e.target.value)}
+                onChange={(event) => setAssignProjectId(event.target.value)}
               >
                 {commercialProjects.length > 0 && (
                   <optgroup label={tr('commercialProject')}>
-                    {commercialProjects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                    {commercialProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
                 {internalProjects.length > 0 && (
                   <optgroup label={tr('internalProject')}>
-                    {internalProjects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                    {internalProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
               </select>
             </div>
             <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
                 {tr('cancel')}
               </button>
               <button type="button" className="btn btn-primary" onClick={handleBulkAssign}>
