@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { api, getUser } from '../api'
-import { tr, getLang } from '../i18n'
+import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const ROLES = [
-  { value: 'admin', label: { sr: 'Администратор', ru: 'Администратор' } },
-  { value: 'accountant', label: { sr: 'Бухгалтер', ru: 'Бухгалтер' } },
-  { value: 'cashier', label: { sr: 'Благајник', ru: 'Кассир' } },
-  { value: 'observer', label: { sr: 'Посматрач', ru: 'Наблюдатель' } },
+  { value: 'admin', labelKey: 'roleAdmin' },
+  { value: 'accountant', labelKey: 'roleAccountant' },
+  { value: 'cashier', labelKey: 'roleCashier' },
+  { value: 'observer', labelKey: 'roleObserver' },
 ]
 
 const LANGS = [
-  { value: 'sr', label: 'Српски' },
-  { value: 'ru', label: 'Русский' },
+  { value: 'sr', labelKey: 'langSr' },
+  { value: 'ru', labelKey: 'langRu' },
 ]
+
+const UI_DASH = '\u2014'
+const UI_CLOSE = '\u00D7'
 
 export default function Settings() {
   const [data, setData] = useState(null)
@@ -48,11 +51,15 @@ export default function Settings() {
     default_language: 'sr',
   })
 
-  // Categories
   const [categories, setCategories] = useState([])
   const [catModal, setCatModal] = useState(null)
   const [catForm, setCatForm] = useState({
-    name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0,
+    name_ru: '',
+    name_sr: '',
+    category_type: 'expense',
+    category_group: 'admin',
+    is_active: true,
+    sort_order: 0,
   })
 
   const loadUsers = () => {
@@ -89,13 +96,17 @@ export default function Settings() {
     setUserModal({ type: 'edit', id: item.id })
   }
 
-  const handleUserSubmit = async (e) => {
-    e.preventDefault()
+  const handleUserSubmit = async (event) => {
+    event.preventDefault()
     try {
       if (userModal === 'add') {
         await api.users.create(userForm)
       } else {
-        const payload = { full_name: userForm.full_name, role: userForm.role, default_language: userForm.default_language }
+        const payload = {
+          full_name: userForm.full_name,
+          role: userForm.role,
+          default_language: userForm.default_language,
+        }
         if (userForm.password) payload.password = userForm.password
         await api.users.update(userModal.id, payload)
       }
@@ -107,7 +118,10 @@ export default function Settings() {
   }
 
   const handleDeactivate = async (id) => {
-    if (id === currentUser?.id) { alert(tr('cannotDeactivateSelf')); return }
+    if (id === currentUser?.id) {
+      alert(tr('cannotDeactivateSelf'))
+      return
+    }
     if (!confirm(tr('confirmDeactivateUser'))) return
     try {
       await api.users.deactivate(id)
@@ -126,31 +140,36 @@ export default function Settings() {
     }
   }
 
-  const roleLabel = (r) => ROLES.find((x) => x.value === r)?.label?.[getLang()] || r
+  const roleLabel = (role) => {
+    const option = ROLES.find((item) => item.value === role)
+    return option ? tr(option.labelKey) : role
+  }
 
   useEffect(() => {
-    api.enterprise.get().then((r) => {
-      setData(r)
-      if (r) {
-        const defaultDate = `${new Date().getFullYear()}-01-01`
-        setForm({
-          name: r.name || '',
-          address: r.address || '',
-          pib: r.pib || '',
-          maticni_broj: r.maticni_broj || '',
-          bank_name: r.bank_name || '',
-          bank_account: r.bank_account || '',
-          bank_swift: r.bank_swift || '',
-          main_activity_code: r.main_activity_code || '',
-          opening_cash_balance: r.opening_cash_balance ?? 0,
-          opening_cash_date: r.opening_cash_date || defaultDate,
-        })
-      }
-    }).finally(() => setLoading(false))
+    api.enterprise.get()
+      .then((response) => {
+        setData(response)
+        if (response) {
+          const defaultDate = `${new Date().getFullYear()}-01-01`
+          setForm({
+            name: response.name || '',
+            address: response.address || '',
+            pib: response.pib || '',
+            maticni_broj: response.maticni_broj || '',
+            bank_name: response.bank_name || '',
+            bank_account: response.bank_account || '',
+            bank_swift: response.bank_swift || '',
+            main_activity_code: response.main_activity_code || '',
+            opening_cash_balance: response.opening_cash_balance ?? 0,
+            opening_cash_date: response.opening_cash_date || defaultDate,
+          })
+        }
+      })
+      .finally(() => setLoading(false))
   }, [])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     try {
       await api.enterprise.update(form)
       setData({ ...data, ...form })
@@ -160,7 +179,7 @@ export default function Settings() {
     }
   }
 
-  if (loading) return <div>Загрузка...</div>
+  if (loading) return <div>{tr('loading')}</div>
 
   return (
     <>
@@ -177,11 +196,11 @@ export default function Settings() {
           {data ? (
             <div>
               <p><strong>{tr('name')}:</strong> {data.name}</p>
-              <p><strong>{tr('address')}:</strong> {data.address || '-'}</p>
-              <p><strong>{tr('pib')}:</strong> {data.pib || '-'}</p>
-              <p><strong>{tr('maticniBroj')}:</strong> {data.maticni_broj || '-'}</p>
-              <p><strong>{tr('bankName')}:</strong> {data.bank_name || '-'}</p>
-              <p><strong>{tr('bankAccount')}:</strong> {data.bank_account || '-'}</p>
+              <p><strong>{tr('address')}:</strong> {data.address || UI_DASH}</p>
+              <p><strong>{tr('pib')}:</strong> {data.pib || UI_DASH}</p>
+              <p><strong>{tr('maticniBroj')}:</strong> {data.maticni_broj || UI_DASH}</p>
+              <p><strong>{tr('bankName')}:</strong> {data.bank_name || UI_DASH}</p>
+              <p><strong>{tr('bankAccount')}:</strong> {data.bank_account || UI_DASH}</p>
             </div>
           ) : (
             <p style={{ color: 'var(--color-text-muted)' }}>{tr('fillEnterpriseData')}</p>
@@ -194,7 +213,7 @@ export default function Settings() {
               <span>{tr('users')}</span>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+                  <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
                   <span>{tr('showInactive')}</span>
                 </label>
                 <button className="btn btn-primary btn-sm" onClick={openAddUser}>{tr('add')}</button>
@@ -218,23 +237,23 @@ export default function Settings() {
                   ) : users.length === 0 ? (
                     <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noUsers')}</td></tr>
                   ) : (
-                    users.map((u) => (
-                      <tr key={u.id} style={!u.is_active ? { opacity: 0.6 } : {}}>
-                        <td>{u.username}</td>
-                        <td>{u.full_name || '-'}</td>
-                        <td>{roleLabel(u.role)}</td>
-                        <td>{u.default_language === 'ru' ? 'RU' : 'SR'}</td>
-                        <td>{u.is_active ? tr('active') : tr('inactive')}</td>
+                    users.map((user) => (
+                      <tr key={user.id} style={!user.is_active ? { opacity: 0.6 } : {}}>
+                        <td>{user.username}</td>
+                        <td>{user.full_name || UI_DASH}</td>
+                        <td>{roleLabel(user.role)}</td>
+                        <td>{user.default_language === 'ru' ? 'RU' : 'SR'}</td>
+                        <td>{user.is_active ? tr('active') : tr('inactive')}</td>
                         <td>
-                          <button className="btn btn-sm btn-secondary" onClick={() => openEditUser(u)}>{tr('edit')}</button>
-                          {u.is_active ? (
-                            u.id !== currentUser?.id && (
-                              <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDeactivate(u.id)}>
+                          <button className="btn btn-sm btn-secondary" onClick={() => openEditUser(user)}>{tr('edit')}</button>
+                          {user.is_active ? (
+                            user.id !== currentUser?.id && (
+                              <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDeactivate(user.id)}>
                                 {tr('deactivate')}
                               </button>
                             )
                           ) : (
-                            <button className="btn btn-sm btn-secondary" style={{ marginLeft: '0.5rem' }} onClick={() => handleActivate(u.id)}>
+                            <button className="btn btn-sm btn-secondary" style={{ marginLeft: '0.5rem' }} onClick={() => handleActivate(user.id)}>
                               {tr('activate')}
                             </button>
                           )}
@@ -256,10 +275,10 @@ export default function Settings() {
 
       {modal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('enterprise')}</h2>
-              <button className="modal-close" onClick={() => setModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setModal(false)}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -268,7 +287,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
                   required
                 />
               </div>
@@ -278,7 +297,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  onChange={(event) => setForm({ ...form, address: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -287,7 +306,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.pib}
-                  onChange={(e) => setForm({ ...form, pib: e.target.value })}
+                  onChange={(event) => setForm({ ...form, pib: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -296,7 +315,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.maticni_broj}
-                  onChange={(e) => setForm({ ...form, maticni_broj: e.target.value })}
+                  onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -305,7 +324,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.bank_name}
-                  onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                  onChange={(event) => setForm({ ...form, bank_name: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -314,7 +333,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.bank_account}
-                  onChange={(e) => setForm({ ...form, bank_account: e.target.value })}
+                  onChange={(event) => setForm({ ...form, bank_account: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -323,7 +342,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.bank_swift}
-                  onChange={(e) => setForm({ ...form, bank_swift: e.target.value })}
+                  onChange={(event) => setForm({ ...form, bank_swift: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -332,7 +351,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={form.main_activity_code}
-                  onChange={(e) => setForm({ ...form, main_activity_code: e.target.value })}
+                  onChange={(event) => setForm({ ...form, main_activity_code: event.target.value })}
                   placeholder={tr('bankCodePlaceholder')}
                 />
               </div>
@@ -343,7 +362,7 @@ export default function Settings() {
                   step="0.01"
                   className="form-input"
                   value={form.opening_cash_balance}
-                  onChange={(e) => setForm({ ...form, opening_cash_balance: parseFloat(e.target.value) || 0 })}
+                  onChange={(event) => setForm({ ...form, opening_cash_balance: parseFloat(event.target.value) || 0 })}
                   placeholder="0"
                 />
                 <small style={{ color: 'var(--color-text-muted)' }}>{tr('cashflowOpeningHint')}</small>
@@ -352,7 +371,7 @@ export default function Settings() {
                 <label className="form-label">{tr('cashflowOpeningDate')}</label>
                 <DatePicker
                   value={form.opening_cash_date}
-                  onChange={(v) => setForm({ ...form, opening_cash_date: v || `${new Date().getFullYear()}-01-01` })}
+                  onChange={(value) => setForm({ ...form, opening_cash_date: value || `${new Date().getFullYear()}-01-01` })}
                   className="form-input"
                   style={{ width: '100%' }}
                 />
@@ -370,10 +389,10 @@ export default function Settings() {
 
       {userModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="modal-header">
               <h2 className="modal-title">{userModal === 'add' ? tr('add') : tr('edit')} {tr('user')}</h2>
-              <button className="modal-close" onClick={() => setUserModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setUserModal(null)}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleUserSubmit}>
               <div className="form-group">
@@ -382,7 +401,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={userForm.username}
-                  onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                  onChange={(event) => setUserForm({ ...userForm, username: event.target.value })}
                   required
                   disabled={userModal !== 'add'}
                   autoComplete="username"
@@ -395,7 +414,7 @@ export default function Settings() {
                   type="password"
                   className="form-input"
                   value={userForm.password}
-                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  onChange={(event) => setUserForm({ ...userForm, password: event.target.value })}
                   placeholder={userModal === 'add' ? '' : tr('leaveEmptyHint')}
                   required={userModal === 'add'}
                   autoComplete={userModal === 'add' ? 'new-password' : 'current-password'}
@@ -407,7 +426,7 @@ export default function Settings() {
                   type="text"
                   className="form-input"
                   value={userForm.full_name}
-                  onChange={(e) => setUserForm({ ...userForm, full_name: e.target.value })}
+                  onChange={(event) => setUserForm({ ...userForm, full_name: event.target.value })}
                   placeholder={tr('fullNamePlaceholder')}
                 />
               </div>
@@ -416,10 +435,10 @@ export default function Settings() {
                 <select
                   className="form-input"
                   value={userForm.role}
-                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                  onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}
                 >
-                  {ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>{roleLabel(r.value)}</option>
+                  {ROLES.map((role) => (
+                    <option key={role.value} value={role.value}>{roleLabel(role.value)}</option>
                   ))}
                 </select>
               </div>
@@ -428,10 +447,10 @@ export default function Settings() {
                 <select
                   className="form-input"
                   value={userForm.default_language}
-                  onChange={(e) => setUserForm({ ...userForm, default_language: e.target.value })}
+                  onChange={(event) => setUserForm({ ...userForm, default_language: event.target.value })}
                 >
-                  {LANGS.map((l) => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
+                  {LANGS.map((lang) => (
+                    <option key={lang.value} value={lang.value}>{tr(lang.labelKey)}</option>
                   ))}
                 </select>
               </div>
@@ -446,7 +465,6 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Categories CRUD section */}
       <div className="card" style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h2>{tr('categoriesTitle')}</h2>
@@ -470,35 +488,42 @@ export default function Settings() {
             <tbody>
               {categories.length === 0 ? (
                 <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
-              ) : categories.map((c) => (
-                <tr key={c.id} style={!c.is_active ? { opacity: 0.5 } : {}}>
-                  <td>{c.name_ru}</td>
-                  <td>{c.name_sr}</td>
-                  <td>{tr(`categoryGroup${c.category_group.charAt(0).toUpperCase() + c.category_group.slice(1)}`)}</td>
-                  <td>{c.sort_order}</td>
+              ) : categories.map((category) => (
+                <tr key={category.id} style={!category.is_active ? { opacity: 0.5 } : {}}>
+                  <td>{category.name_ru}</td>
+                  <td>{category.name_sr}</td>
+                  <td>{tr(`categoryGroup${category.category_group.charAt(0).toUpperCase() + category.category_group.slice(1)}`)}</td>
+                  <td>{category.sort_order}</td>
                   <td>
-                    <span className="badge" style={{ backgroundColor: c.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
-                      {c.is_active ? tr('active') : tr('inactive')}
+                    <span className="badge" style={{ backgroundColor: category.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
+                      {category.is_active ? tr('active') : tr('inactive')}
                     </span>
                   </td>
                   <td>
                     <button className="btn btn-sm btn-secondary" onClick={() => {
-                      setCatForm({ name_ru: c.name_ru, name_sr: c.name_sr, category_type: c.category_type, category_group: c.category_group, is_active: c.is_active, sort_order: c.sort_order })
-                      setCatModal({ type: 'edit', id: c.id })
+                      setCatForm({
+                        name_ru: category.name_ru,
+                        name_sr: category.name_sr,
+                        category_type: category.category_type,
+                        category_group: category.category_group,
+                        is_active: category.is_active,
+                        sort_order: category.sort_order,
+                      })
+                      setCatModal({ type: 'edit', id: category.id })
                     }}>{tr('edit')}</button>
                     <button
-                      className={`btn btn-sm ${c.is_active ? 'btn-danger' : 'btn-secondary'}`}
+                      className={`btn btn-sm ${category.is_active ? 'btn-danger' : 'btn-secondary'}`}
                       style={{ marginLeft: '0.5rem' }}
                       onClick={async () => {
                         try {
-                          await api.categories.update(c.id, { is_active: !c.is_active })
+                          await api.categories.update(category.id, { is_active: !category.is_active })
                           loadCategories()
                         } catch (err) {
                           console.error(err)
                         }
                       }}
                     >
-                      {c.is_active ? tr('deactivate') : tr('activate')}
+                      {category.is_active ? tr('deactivate') : tr('activate')}
                     </button>
                   </td>
                 </tr>
@@ -510,34 +535,33 @@ export default function Settings() {
 
       {catModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="modal-header">
-              <h2 className="modal-title">{catModal === 'add' ? tr('add') : tr('edit')} — {tr('categoriesTitle')}</h2>
-              <button className="modal-close" onClick={() => setCatModal(null)}>×</button>
+              <h2 className="modal-title">{catModal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('categoriesTitle')}</h2>
+              <button className="modal-close" onClick={() => setCatModal(null)}>{UI_CLOSE}</button>
             </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault()
+            <form onSubmit={async (event) => {
+              event.preventDefault()
               try {
-                if (catModal === 'add') {
-                  await api.categories.create(catForm)
-                } else {
-                  await api.categories.update(catModal.id, catForm)
-                }
+                if (catModal === 'add') await api.categories.create(catForm)
+                else await api.categories.update(catModal.id, catForm)
                 setCatModal(null)
                 loadCategories()
-              } catch (err) { console.error(err) }
+              } catch (err) {
+                console.error(err)
+              }
             }}>
               <div className="form-group">
                 <label className="form-label">{tr('categoryNameRu')}</label>
-                <input type="text" className="form-input" value={catForm.name_ru} onChange={(e) => setCatForm({ ...catForm, name_ru: e.target.value })} required />
+                <input type="text" className="form-input" value={catForm.name_ru} onChange={(event) => setCatForm({ ...catForm, name_ru: event.target.value })} required />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('categoryNameSr')}</label>
-                <input type="text" className="form-input" value={catForm.name_sr} onChange={(e) => setCatForm({ ...catForm, name_sr: e.target.value })} required />
+                <input type="text" className="form-input" value={catForm.name_sr} onChange={(event) => setCatForm({ ...catForm, name_sr: event.target.value })} required />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('categoryGroup')}</label>
-                <select className="form-input" value={catForm.category_group} onChange={(e) => setCatForm({ ...catForm, category_group: e.target.value })}>
+                <select className="form-input" value={catForm.category_group} onChange={(event) => setCatForm({ ...catForm, category_group: event.target.value })}>
                   <option value="commercial">{tr('categoryGroupCommercial')}</option>
                   <option value="admin">{tr('categoryGroupAdmin')}</option>
                   <option value="tax">{tr('categoryGroupTax')}</option>
@@ -545,11 +569,11 @@ export default function Settings() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('sortOrder')}</label>
-                <input type="number" className="form-input" value={catForm.sort_order} onChange={(e) => setCatForm({ ...catForm, sort_order: parseInt(e.target.value) || 0 })} />
+                <input type="number" className="form-input" value={catForm.sort_order} onChange={(event) => setCatForm({ ...catForm, sort_order: parseInt(event.target.value, 10) || 0 })} />
               </div>
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={catForm.is_active} onChange={(e) => setCatForm({ ...catForm, is_active: e.target.checked })} />
+                  <input type="checkbox" checked={catForm.is_active} onChange={(event) => setCatForm({ ...catForm, is_active: event.target.checked })} />
                   <span>{tr('active')}</span>
                 </label>
               </div>

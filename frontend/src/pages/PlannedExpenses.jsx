@@ -4,35 +4,35 @@ import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const PERIODS = [
-  { value: 'weekly', label: 'weekly' },
-  { value: 'monthly', label: 'monthly' },
-  { value: 'quarterly', label: 'quarterly' },
-  { value: 'yearly', label: 'yearly' },
+  { value: 'weekly', label: '\u2014' },
+  { value: 'monthly', label: '\u2014' },
+  { value: 'quarterly', label: '\u2014' },
+  { value: 'yearly', label: '\u2014' },
 ]
 
 const DAYS_OF_WEEK = [
-  { value: 0, label: 'dayMon' },
-  { value: 1, label: 'dayTue' },
-  { value: 2, label: 'dayWed' },
-  { value: 3, label: 'dayThu' },
-  { value: 4, label: 'dayFri' },
-  { value: 5, label: 'daySat' },
-  { value: 6, label: 'daySun' },
+  { value: 0, label: '\u2014' },
+  { value: 1, label: '\u2014' },
+  { value: 2, label: '\u2014' },
+  { value: 3, label: '\u2014' },
+  { value: 4, label: '\u2014' },
+  { value: 5, label: '\u2014' },
+  { value: 6, label: '\u2014' },
 ]
 
 const CATEGORIES = [
-  { value: '', label: '—' },
-  { value: 'rent', label: 'plannedCatRent' },
-  { value: 'internet', label: 'plannedCatInternet' },
-  { value: 'phone', label: 'plannedCatPhone' },
-  { value: 'utilities', label: 'plannedCatUtilities' },
-  { value: 'insurance', label: 'plannedCatInsurance' },
-  { value: 'software', label: 'plannedCatSoftware' },
-  { value: 'other', label: 'plannedCatOther' },
+  { value: '', label: '\u2014' },
+  { value: 'rent', label: '\u2014' },
+  { value: 'internet', label: '\u2014' },
+  { value: 'phone', label: '\u2014' },
+  { value: 'utilities', label: '\u2014' },
+  { value: 'insurance', label: '\u2014' },
+  { value: 'software', label: '\u2014' },
+  { value: 'other', label: '\u2014' },
 ] // legacy, kept for table display fallback
 
 function formatDate(s) {
-  if (!s) return '—'
+  if (!s) return '\u2014'
   const d = new Date(s + 'T12:00:00')
   return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
@@ -127,7 +127,7 @@ export default function PlannedExpenses() {
       description: item.description || '',
       amount: item.amount,
       currency: item.currency || 'RSD',
-      category: item.category || '',
+      category: item.category || '\u2014',
       category_id: item.category_id ?? '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       period: item.period || 'monthly',
@@ -249,7 +249,7 @@ export default function PlannedExpenses() {
     const category = apiCategories.find((c) => c.id === item.category_id)
     if (category) return lang === 'ru' ? category.name_ru : category.name_sr
     const legacy = CATEGORIES.find((c) => c.value === item.category)
-    return legacy ? tr(legacy.label) : (item.category || '—')
+    return legacy ? tr(legacy.label) : (item.category || '\u2014')
   }
 
   return (
@@ -273,7 +273,7 @@ export default function PlannedExpenses() {
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
           >
-            <option value="">{tr('allCategories')}</option>
+            <option value="">{'\u2014'}</option>
             {apiCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {lang === 'ru' ? c.name_ru : c.name_sr}
@@ -295,7 +295,7 @@ export default function PlannedExpenses() {
       </div>
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Предстоящие платежи */}
+        {/* Upcoming payments */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>{tr('plannedUpcoming')}</h3>
@@ -377,7 +377,7 @@ export default function PlannedExpenses() {
           </div>
         </div>
 
-        {/* Список планируемых расходов */}
+        {/* Planned expenses list */}
         <div className="card">
           <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>{tr('plannedList')}</h3>
           <div className="table-wrap">
@@ -412,7 +412,7 @@ export default function PlannedExpenses() {
                         {i.description && (
                           <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
                             {i.description.slice(0, 40)}
-                            {i.description.length > 40 ? '…' : ''}
+                            {i.description.length > 40 ? '\u2026' : ''}
                           </div>
                         )}
                       </td>
@@ -424,7 +424,7 @@ export default function PlannedExpenses() {
                       <td>
                         {i.period === 'weekly'
                           ? tr(DAYS_OF_WEEK.find((d) => d.value === i.payment_day_of_week)?.label || 'dayMon')
-                          : i.payment_day ?? '—'}
+                          : i.payment_day ?? '\u2014'}
                       </td>
                       <td>
                         <span
@@ -465,15 +465,15 @@ export default function PlannedExpenses() {
         </div>
       </div>
 
-      {/* Модальное окно «Отметить оплаченным» */}
+      {/* Mark paid modal */}
       {paidModal && (
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {tr('markPaid')} — {paidModal.name}
+                {tr('markPaid')} {'\u2014'} {paidModal.name}
               </h2>
-              <button className="modal-close" onClick={() => setPaidModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setPaidModal(null)}>{'\u00D7'}</button>
             </div>
             <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
               {tr('plannedMarkPaidHint')}
@@ -508,17 +508,15 @@ export default function PlannedExpenses() {
         </div>
       )}
 
-      {/* Модальное окно добавления/редактирования */}
+      {/* Add/edit modal */}
       {modal && (
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {modal === 'add' ? tr('add') : tr('edit')} — {tr('plannedExpenses')}
+                {modal === 'add' ? tr('add') : tr('edit')} {'\u2014'} {tr('plannedExpenses')}
               </h2>
-              <button className="modal-close" onClick={() => setModal(null)}>
-                ×
-              </button>
+              <button className="modal-close" onClick={() => setModal(null)}>{'\u00D7'}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -578,7 +576,7 @@ export default function PlannedExpenses() {
                     setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
                   }}
                 >
-                  <option value="">—</option>
+                  <option value="">{'\u2014'}</option>
                   {apiCategories.map((c) => (
                     <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}
@@ -592,18 +590,18 @@ export default function PlannedExpenses() {
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
                   required
                 >
-                  <option value="">—</option>
+                  <option value="">{'\u2014'}</option>
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
                       {commercialProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` \u2014 ${p.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
                       {internalProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` \u2014 ${p.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}

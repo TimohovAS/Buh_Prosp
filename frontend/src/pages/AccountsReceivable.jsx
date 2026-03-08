@@ -8,7 +8,7 @@ function fmt(n) {
 }
 
 function formatDate(s) {
-  if (!s) return '—'
+  if (!s) return '\u2014'
   const d = new Date(s + 'T12:00:00')
   return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
@@ -46,7 +46,7 @@ export default function AccountsReceivable() {
     let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
     if (s) rows = rows.filter(i =>
       (i.invoice_number || '').toLowerCase().includes(s) ||
-      (i.client_name || '').toLowerCase().includes(s)
+      (i.client_name || '\u2014').toLowerCase().includes(s)
     )
     return [...rows].sort((a, b) => {
       const valA = a[sortCol] ?? 0
@@ -62,8 +62,8 @@ export default function AccountsReceivable() {
     else { setSortCol(col); setSortAsc(true) }
   }
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
   }
 
   if (loading && items.length === 0) {
@@ -141,7 +141,7 @@ export default function AccountsReceivable() {
                 filtered.map((i) => (
                   <tr key={i.income_id}>
                     <td>{i.invoice_number}</td>
-                    <td>{i.client_name || '—'}</td>
+                    <td>{i.client_name || '\u2014'}</td>
                     <td>{formatDate(i.issued_date)}</td>
                     <td>{formatDate(i.due_date)}</td>
                     <td>{fmt(i.amount)} RSD</td>
@@ -154,7 +154,7 @@ export default function AccountsReceivable() {
                         className="btn btn-sm btn-primary"
                         style={{ textDecoration: 'none' }}
                       >
-                        🔗 {tr('bankTransactions')}
+                        {'\uD83D\uDD17'} {tr('bankTransactions')}
                       </a>
                     </td>
                   </tr>

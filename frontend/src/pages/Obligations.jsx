@@ -4,7 +4,7 @@ import { tr, getMonthNamesShort, getMonthNamesFull } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 function formatDate(s) {
-  if (!s) return '—'
+  if (!s) return '\u2014'
   const d = new Date(s + 'T12:00:00')
   return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
@@ -40,7 +40,7 @@ export default function Obligations() {
     monthly_amount: '',
     base_amount: '',
     rate_percent: '',
-    recipient_name: 'Пореска управа Републике Србије',
+    recipient_name: '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
     recipient_account: '',
     sifra_placanja: '253',
     model: '97',
@@ -133,7 +133,7 @@ export default function Obligations() {
         monthly_amount: '',
         base_amount: '',
         rate_percent: '',
-        recipient_name: 'Пореска управа Републике Србије',
+        recipient_name: '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
         recipient_account: '',
         sifra_placanja: '253',
         model: '97',
@@ -153,7 +153,7 @@ export default function Obligations() {
         monthly_amount: mode.monthly_amount ?? '',
         base_amount: mode.base_amount ?? '',
         rate_percent: mode.rate_percent ?? '',
-        recipient_name: mode.recipient_name || 'Пореска управа Републике Србије',
+        recipient_name: mode.recipient_name || '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
         recipient_account: mode.recipient_account || '',
         sifra_placanja: mode.sifra_placanja || '253',
         model: mode.model || '97',
@@ -176,7 +176,7 @@ export default function Obligations() {
         monthly_amount: parseFloat(decisionForm.monthly_amount) || 0,
         base_amount: decisionForm.base_amount ? parseFloat(decisionForm.base_amount) : null,
         rate_percent: decisionForm.rate_percent ? parseFloat(decisionForm.rate_percent) : null,
-        recipient_name: decisionForm.recipient_name || 'Пореска управа Републике Србије',
+        recipient_name: decisionForm.recipient_name || '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
         recipient_account: decisionForm.recipient_account.trim(),
         sifra_placanja: decisionForm.sifra_placanja || '253',
         model: decisionForm.model || '97',
@@ -257,7 +257,7 @@ export default function Obligations() {
       </div>
 
       <div className="page-body">
-        {/* Таблица обязательств */}
+        {/* Р В Р’В Р РЋРЎвЂєР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В° Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В Р РЏР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В  */}
         <div className="card">
           <h3 style={{ margin: 0, marginBottom: '1rem', fontSize: '1rem' }}>{tr('obligationsCalendar')}</h3>
           <div className="table-wrap">
@@ -308,9 +308,9 @@ export default function Obligations() {
                           {ob.status === 'paid' ? tr('paid') : ob.status === 'overdue' ? tr('obligationsOverdue') : tr('unpaid')}
                         </span>
                       </td>
-                      <td>{ob.paid_date ? formatDate(ob.paid_date) : '—'}</td>
+                      <td>{ob.paid_date ? formatDate(ob.paid_date) : 'Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ'}</td>
                       <td style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={ob.payment_reference}>
-                        {ob.payment_reference || '—'}
+                        {ob.payment_reference || 'Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ'}
                       </td>
                       <td>
                         {ob.status === 'paid' ? (
@@ -332,13 +332,13 @@ export default function Obligations() {
         </div>
       </div>
 
-      {/* Модалка «Настройки обязательств» */}
+      {/* Р В Р’В Р РЋРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В РІР‚в„ўР вЂ™Р’В«Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В Р РЏР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В РІР‚в„ўР вЂ™Р’В» */}
       {settingsModal && (
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 800, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('obligationsSettings')}</h2>
-              <button className="modal-close" onClick={() => setSettingsModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setSettingsModal(false)}>{'\u00D7'}</button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <button className="btn btn-primary" onClick={() => openDecisionForm('add')}>
@@ -401,15 +401,15 @@ export default function Obligations() {
         </div>
       )}
 
-      {/* Модалка «Отметить оплаченным» */}
+      {/* Paid modal */}
       {paidModal && (
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {tr('markPaid')} — {getTypeName(paidModal.payment_type_code)} {monthNamesShort[paidModal.month - 1]}
+                {tr('markPaid')} {'\u2014'} {getTypeName(paidModal.payment_type_code)} {monthNamesShort[paidModal.month - 1]}
               </h2>
-              <button className="modal-close" onClick={() => setPaidModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setPaidModal(null)}>{'\u00D7'}</button>
             </div>
             <form onSubmit={handleMarkPaidSubmit}>
               <div className="form-group">
@@ -441,15 +441,15 @@ export default function Obligations() {
         </div>
       )}
 
-      {/* Модалка формы решения */}
+      {/* Decision form modal */}
       {decisionFormModal && (
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {decisionFormModal === 'add' ? tr('add') : tr('edit')} — {tr('decisionFormTitle')}
+                {decisionFormModal === 'add' ? tr('add') : tr('edit')} {'\u2014'} {tr('decisionFormTitle')}
               </h2>
-              <button className="modal-close" onClick={() => setDecisionFormModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setDecisionFormModal(null)}>{'\u00D7'}</button>
             </div>
             <form onSubmit={handleDecisionFormSubmit}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -520,7 +520,7 @@ export default function Obligations() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('paymentPurpose')} *</label>
-                <input type="text" className="form-input" value={decisionForm.payment_purpose} onChange={(e) => setDecisionForm({ ...decisionForm, payment_purpose: e.target.value })} required placeholder="Porez na paušalni prihod za YYYY. godinu" />
+                <input type="text" className="form-input" value={decisionForm.payment_purpose} onChange={(e) => setDecisionForm({ ...decisionForm, payment_purpose: e.target.value })} required placeholder="Porez na pauР В РІР‚СћР В Р вЂ№alni prihod za YYYY. godinu" />
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{tr('purposeYearHint')}</div>
               </div>
               <div className="form-group">

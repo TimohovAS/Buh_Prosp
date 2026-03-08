@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -6,6 +6,12 @@ import DatePicker from '../components/DatePicker'
 function fmt(n) {
   return (n ?? 0).toLocaleString('sr-RS')
 }
+
+const UI_DASH = '\u2014'
+const UI_CLOSE = '\u00D7'
+const UI_SORT_BOTH = '\u2195'
+const UI_SORT_ASC = '\u2191'
+const UI_SORT_DESC = '\u2193'
 
 export default function Projects() {
   const [projects, setProjects] = useState([])
@@ -15,36 +21,49 @@ export default function Projects() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '', is_internal: false })
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    status: 'active',
+    client_id: '',
+    contract_id: '',
+    start_date: '',
+    end_date: '',
+    planned_income: '',
+    planned_expense: '',
+    notes: '',
+    is_internal: false,
+  })
   const [showInactive, setShowInactive] = useState(false)
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
-  const [projectFilter, setProjectFilter] = useState('all') // all | commercial | internal
+  const [projectFilter, setProjectFilter] = useState('all')
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [mode, setMode] = useState('accrual')
 
   const currentYear = new Date().getFullYear()
+
   const getPeriod = () => {
     if (periodQuick === 'month') {
-      const m = new Date().getMonth() + 1
-      const lastDay = new Date(currentYear, m, 0).getDate()
+      const month = new Date().getMonth() + 1
+      const lastDay = new Date(currentYear, month, 0).getDate()
       return {
-        from: `${currentYear}-${String(m).padStart(2, '0')}-01`,
-        to: `${currentYear}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+        from: `${currentYear}-${String(month).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
       }
     }
     if (periodQuick === 'quarter') {
-      const m = new Date().getMonth() + 1
-      const q = Math.ceil(m / 3)
-      const startM = (q - 1) * 3 + 1
-      const endM = q * 3
-      const lastDay = new Date(currentYear, endM + 1, 0).getDate()
+      const month = new Date().getMonth() + 1
+      const quarter = Math.ceil(month / 3)
+      const startMonth = (quarter - 1) * 3 + 1
+      const endMonth = quarter * 3
+      const lastDay = new Date(currentYear, endMonth + 1, 0).getDate()
       return {
-        from: `${currentYear}-${String(startM).padStart(2, '0')}-01`,
-        to: `${currentYear}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+        from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
       }
     }
     if (periodQuick === 'year') {
@@ -60,24 +79,39 @@ export default function Projects() {
 
   const loadAll = () => {
     setLoading(true)
-    Promise.all([api.projects.list({ show_archived: showInactive }), api.finance.byProject({ from, to, mode })])
-      .then(([projs, fin]) => {
-        setProjects(projs)
-        setByProject(fin.by_project || [])
-        setUnassigned(fin.unassigned || null)
+    Promise.all([
+      api.projects.list({ show_archived: showInactive }),
+      api.finance.byProject({ from, to, mode }),
+    ])
+      .then(([projectList, finance]) => {
+        setProjects(projectList)
+        setByProject(finance.by_project || [])
+        setUnassigned(finance.unassigned || null)
         setError(null)
       })
-      .catch((e) => {
-        setError(e.message)
-      })
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }
 
   useEffect(loadAll, [showInactive, from, to, mode])
-  useEffect(() => { api.clients.listBrief().then(setClients) }, [])
+  useEffect(() => {
+    api.clients.listBrief().then(setClients)
+  }, [])
 
   const openAdd = () => {
-    setForm({ name: '', code: '', status: 'active', client_id: '', contract_id: '', start_date: '', end_date: '', planned_income: '', planned_expense: '', notes: '', is_internal: false })
+    setForm({
+      name: '',
+      code: '',
+      status: 'active',
+      client_id: '',
+      contract_id: '',
+      start_date: '',
+      end_date: '',
+      planned_income: '',
+      planned_expense: '',
+      notes: '',
+      is_internal: false,
+    })
     setModal('add')
   }
 
@@ -98,8 +132,8 @@ export default function Projects() {
     setModal({ type: 'edit', id: item.id })
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     const payload = {
       name: form.name || undefined,
       code: form.code || undefined,
@@ -113,11 +147,8 @@ export default function Projects() {
       notes: form.notes || undefined,
     }
     try {
-      if (modal === 'add') {
-        await api.projects.create(payload)
-      } else {
-        await api.projects.update(modal.id, payload)
-      }
+      if (modal === 'add') await api.projects.create(payload)
+      else await api.projects.update(modal.id, payload)
       setModal(null)
       loadAll()
     } catch (err) {
@@ -135,44 +166,50 @@ export default function Projects() {
     }
   }
 
-  const getRowData = (p) => {
-    const row = byProject.find((r) => r.project_id === p.id)
-    return row || { project_name: p.name, revenue: 0, expenses: 0, profit: 0 }
+  const getRowData = (project) => {
+    const row = byProject.find((item) => item.project_id === project.id)
+    return row || { project_name: project.name, revenue: 0, expenses: 0, profit: 0 }
   }
 
   const filteredProjects = useMemo(() => {
-    const s = (search || '').trim().toLowerCase()
+    const normalizedSearch = (search || '').trim().toLowerCase()
     let rows = projects
-    // Filter by internal/commercial
-    if (projectFilter === 'internal') rows = rows.filter(p => p.is_internal)
-    if (projectFilter === 'commercial') rows = rows.filter(p => !p.is_internal)
-    if (s) rows = rows.filter((p) =>
-      (p.name || '').toLowerCase().includes(s) ||
-      (p.code || '').toLowerCase().includes(s) ||
-      (p.client_name || '').toLowerCase().includes(s)
-    )
-    return [...rows].sort((a, b) => {
-      let valA, valB
+    if (projectFilter === 'internal') rows = rows.filter((project) => project.is_internal)
+    if (projectFilter === 'commercial') rows = rows.filter((project) => !project.is_internal)
+    if (normalizedSearch) {
+      rows = rows.filter((project) =>
+        (project.name || '').toLowerCase().includes(normalizedSearch) ||
+        (project.code || '').toLowerCase().includes(normalizedSearch) ||
+        (project.client_name || '').toLowerCase().includes(normalizedSearch)
+      )
+    }
+    return [...rows].sort((left, right) => {
+      let leftValue
+      let rightValue
       if (sortCol === 'revenue' || sortCol === 'expenses' || sortCol === 'profit') {
-        valA = getRowData(a)[sortCol] ?? 0
-        valB = getRowData(b)[sortCol] ?? 0
+        leftValue = getRowData(left)[sortCol] ?? 0
+        rightValue = getRowData(right)[sortCol] ?? 0
       } else {
-        valA = a[sortCol] ?? ''
-        valB = b[sortCol] ?? ''
+        leftValue = left[sortCol] ?? ''
+        rightValue = right[sortCol] ?? ''
       }
-      if (valA < valB) return sortAsc ? -1 : 1
-      if (valA > valB) return sortAsc ? 1 : -1
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
   }, [projects, search, sortCol, sortAsc, byProject, projectFilter])
 
   const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else { setSortCol(col); setSortAsc(true) }
+    if (sortCol === col) setSortAsc((value) => !value)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
   }
+
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
   }
 
   return (
@@ -185,21 +222,21 @@ export default function Projects() {
             className="form-input"
             placeholder={tr('search')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             style={{ width: 180 }}
           />
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
             <span>{tr('showInactive')}</span>
           </label>
           <div style={{ display: 'flex', gap: '0.25rem' }}>
-            {['all', 'commercial', 'internal'].map((f) => (
+            {['all', 'commercial', 'internal'].map((filterValue) => (
               <button
-                key={f}
-                className={`btn btn-sm ${projectFilter === f ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setProjectFilter(f)}
+                key={filterValue}
+                className={`btn btn-sm ${projectFilter === filterValue ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setProjectFilter(filterValue)}
               >
-                {tr(`filter${f.charAt(0).toUpperCase() + f.slice(1)}`)}
+                {tr(`filter${filterValue.charAt(0).toUpperCase() + filterValue.slice(1)}`)}
               </button>
             ))}
           </div>
@@ -207,19 +244,18 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Фильтр периода и режима */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
           <div>
             <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              {['month', 'quarter', 'year', 'custom'].map((q) => (
+              {['month', 'quarter', 'year', 'custom'].map((quickPeriod) => (
                 <button
-                  key={q}
-                  className={`btn btn-sm ${periodQuick === q ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setPeriodQuick(q)}
+                  key={quickPeriod}
+                  className={`btn btn-sm ${periodQuick === quickPeriod ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setPeriodQuick(quickPeriod)}
                 >
-                  {tr(`financePeriod${q.charAt(0).toUpperCase() + q.slice(1)}`)}
+                  {tr(`financePeriod${quickPeriod.charAt(0).toUpperCase() + quickPeriod.slice(1)}`)}
                 </button>
               ))}
             </div>
@@ -227,20 +263,20 @@ export default function Projects() {
           {periodQuick === 'custom' && (
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <DatePicker value={customFrom} onChange={setCustomFrom} placeholder={tr('periodFrom')} className="form-input" />
-              <span>—</span>
+              <span>{UI_DASH}</span>
               <DatePicker value={customTo} onChange={setCustomTo} placeholder={tr('periodTo')} className="form-input" />
             </div>
           )}
           <div>
             <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financeMode')}</label>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              {['accrual', 'cash'].map((m) => (
+              {['accrual', 'cash'].map((modeValue) => (
                 <button
-                  key={m}
-                  className={`btn btn-sm ${mode === m ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setMode(m)}
+                  key={modeValue}
+                  className={`btn btn-sm ${mode === modeValue ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setMode(modeValue)}
                 >
-                  {tr(`financeMode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
+                  {tr(`financeMode${modeValue.charAt(0).toUpperCase() + modeValue.slice(1)}`)}
                 </button>
               ))}
             </div>
@@ -248,11 +284,8 @@ export default function Projects() {
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>
-      )}
+      {error && <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>}
 
-      {/* Таблица проектов с revenue/profit */}
       <div className="card">
         <div className="card-title">{tr('projectsTable')}</div>
         <div className="table-wrap">
@@ -274,24 +307,28 @@ export default function Projects() {
               ) : filteredProjects.length === 0 ? (
                 <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noProjects')}</td></tr>
               ) : (
-                filteredProjects.map((p) => {
-                  const row = getRowData(p)
+                filteredProjects.map((project) => {
+                  const row = getRowData(project)
                   return (
-                    <tr key={p.id} style={p.status === 'archived' ? { opacity: 0.6 } : {}}>
-                      <td>{p.name}{p.is_internal ? <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'var(--color-info, #0ea5e9)', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: 999 }}>{tr('internalProject')}</span> : null}</td>
-                      <td>{p.code || '—'}</td>
-                      <td>{p.client_name || '—'}</td>
+                    <tr key={project.id} style={project.status === 'archived' ? { opacity: 0.6 } : {}}>
+                      <td>
+                        {project.name}
+                        {project.is_internal ? (
+                          <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'var(--color-info, #0ea5e9)', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: 999 }}>
+                            {tr('internalProject')}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>{project.code || UI_DASH}</td>
+                      <td>{project.client_name || UI_DASH}</td>
                       <td>{fmt(row.revenue)} RSD</td>
                       <td>{fmt(row.expenses)} RSD</td>
-                      <td style={{
-                        fontWeight: 600,
-                        color: (row.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                      }}>
+                      <td style={{ fontWeight: 600, color: (row.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                         {fmt(row.profit)} RSD
                       </td>
                       <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(p)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(p.id)}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(project)}>{tr('edit')}</button>
+                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(project.id)}>
                           {tr('delete')}
                         </button>
                       </td>
@@ -304,7 +341,6 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Карточка «Без проекта» — из unassigned, не из by_project */}
       {unassigned && (unassigned.revenue > 0 || unassigned.expenses > 0) && (
         <div className="card">
           <div className="card-title">{tr('projectWithoutProject')}</div>
@@ -333,13 +369,12 @@ export default function Projects() {
         </div>
       )}
 
-      {/* Модалка Add/Edit */}
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('project')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>×</button>
+              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('project')}</h2>
+              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -348,7 +383,7 @@ export default function Projects() {
                   type="text"
                   className="form-input"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
                   required
                 />
               </div>
@@ -358,7 +393,7 @@ export default function Projects() {
                   type="text"
                   className="form-input"
                   value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  onChange={(event) => setForm({ ...form, code: event.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -366,11 +401,11 @@ export default function Projects() {
                 <select
                   className="form-input"
                   value={form.client_id}
-                  onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+                  onChange={(event) => setForm({ ...form, client_id: event.target.value })}
                 >
-                  <option value="">—</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="">{UI_DASH}</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
               </div>
@@ -379,7 +414,7 @@ export default function Projects() {
                 <select
                   className="form-input"
                   value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  onChange={(event) => setForm({ ...form, status: event.target.value })}
                 >
                   <option value="lead">lead</option>
                   <option value="active">active</option>
@@ -389,7 +424,7 @@ export default function Projects() {
               </div>
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.is_internal} onChange={(e) => setForm({ ...form, is_internal: e.target.checked })} />
+                  <input type="checkbox" checked={form.is_internal} onChange={(event) => setForm({ ...form, is_internal: event.target.checked })} />
                   <span>{tr('isInternal')}</span>
                 </label>
               </div>
@@ -399,7 +434,7 @@ export default function Projects() {
                   className="form-input"
                   rows={2}
                   value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 />
               </div>
               <div className="modal-actions">

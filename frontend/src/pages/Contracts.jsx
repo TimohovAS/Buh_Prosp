@@ -58,7 +58,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: 'шт', price: 0 }])
+        setItemsForm([{ description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
         setModal('add')
       })
       .catch(() => {
@@ -74,7 +74,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: 'шт', price: 0 }])
+        setItemsForm([{ description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
         setModal('add')
       })
   }
@@ -101,7 +101,7 @@ export default function Contracts() {
   }
 
   const addItem = () => {
-    setItemsForm([...itemsForm, { description: '', quantity: 1, unit: 'шт', price: 0 }])
+    setItemsForm([...itemsForm, { description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
   }
 
   const removeItem = (idx) => {
@@ -139,14 +139,14 @@ export default function Contracts() {
             ? itemsForm.filter((i) => i.description.trim()).map((i) => ({
               description: i.description,
               quantity: parseFloat(i.quantity) || 1,
-              unit: i.unit || 'шт',
+              unit: i.unit || 'Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р Р‹Р Р†Р вЂљРЎв„ў',
               price: parseFloat(i.price) || 0,
             }))
             : null)
           : itemsForm.filter((i) => i.description.trim()).map((i) => ({
             description: i.description,
             quantity: parseFloat(i.quantity) || 1,
-            unit: i.unit || 'шт',
+            unit: i.unit || 'Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р Р‹Р Р†Р вЂљРЎв„ў',
             price: parseFloat(i.price) || 0,
           })),
       }
@@ -184,8 +184,8 @@ export default function Contracts() {
     else { setSortCol(col); setSortAsc(true) }
   }
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
   }
 
   const handleDelete = async (id) => {
@@ -245,7 +245,7 @@ export default function Contracts() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>№ <SortIcon col="number" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>{'\u2116'} <SortIcon col="number" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
                   <th>{tr('type')}</th>
@@ -266,7 +266,7 @@ export default function Contracts() {
                     <tr key={c.id}>
                       <td>{c.number}</td>
                       <td>{c.date}</td>
-                      <td>{c.client_name || '-'}</td>
+                      <td>{c.client_name || '\u2014'}</td>
                       <td>{tr(CONTRACT_TYPE_KEYS[c.contract_type] || 'service')}</td>
                       <td>{(c.subject || '').slice(0, 30)}</td>
                       <td>{c.amount.toLocaleString('sr-RS')}</td>
@@ -274,7 +274,7 @@ export default function Contracts() {
                         {(c.total_received || 0).toLocaleString('sr-RS')}
                         {(c.total_received || 0) > 0 && (
                           <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                            А:{((c.advance_sum || 0)).toLocaleString('sr-RS')} П:{((c.intermediate_sum || 0)).toLocaleString('sr-RS')} З:{((c.closing_sum || 0)).toLocaleString('sr-RS')}
+                            {'\u0410:'}{((c.advance_sum || 0)).toLocaleString('sr-RS')} {'\u041F:'}{((c.intermediate_sum || 0)).toLocaleString('sr-RS')} {'\u0417:'}{((c.closing_sum || 0)).toLocaleString('sr-RS')}
                           </div>
                         )}
                       </td>
@@ -303,7 +303,7 @@ export default function Contracts() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('contractForm')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setModal(null)}>{'\u00D7'}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -334,7 +334,7 @@ export default function Contracts() {
                   onChange={(e) => setForm({ ...form, client_id: e.target.value })}
                   required
                 >
-                  <option value="">— {tr('selectClient')} —</option>
+                  <option value="">{'\u2014'} {tr('selectClient')} {'\u2014'}</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -406,7 +406,7 @@ export default function Contracts() {
                     value={item.price}
                     onChange={(e) => updateItem(idx, 'price', e.target.value)}
                   />
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => removeItem(idx)}>×</button>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => removeItem(idx)}>{'\u00D7'}</button>
                 </div>
               ))}
               <button type="button" className="btn btn-sm btn-secondary" onClick={addItem} style={{ marginBottom: '1rem' }}>

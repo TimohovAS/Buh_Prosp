@@ -80,8 +80,8 @@ export default function Clients() {
     else { setSortCol(col); setSortAsc(true) }
   }
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
   }
 
   return (
@@ -148,7 +148,7 @@ export default function Clients() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('clientForm')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>×</button>
+              <button className="modal-close" onClick={() => setModal(null)}>{'\u00D7'}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
