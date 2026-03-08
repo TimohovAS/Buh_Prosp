@@ -4,7 +4,7 @@ from datetime import date, datetime
 # РђР»РёР°СЃ РґР»СЏ РёР·Р±РµР¶Р°РЅРёСЏ РєРѕРЅС„Р»РёРєС‚Р° РёРјРµРЅРё РїРѕР»СЏ date СЃ С‚РёРїРѕРј date
 DateType = date
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # --- User ---
