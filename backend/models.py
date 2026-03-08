@@ -405,7 +405,6 @@ class PlannedExpense(Base):
     currency = Column(String(5), default="RSD")
     category = Column(String(50))  # legacy: rent, internet, phone, utilities, insurance, other
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
-    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     period = Column(String(20), default="monthly")  # weekly, monthly, quarterly, yearly
     payment_day = Column(Integer)  # День месяца (1-31) для monthly/quarterly/yearly
