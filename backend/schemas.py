@@ -239,6 +239,32 @@ class IncomeResponse(IncomeBase):
         from_attributes = True
 
 
+class IncomePaymentTransactionResponse(BaseModel):
+    id: int
+    date: DateType
+    amount: float
+    currency: str = "RSD"
+    counterparty_name: Optional[str] = None
+    purpose: Optional[str] = None
+    bank_reference: Optional[str] = None
+    project_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncomePaymentDetailsResponse(BaseModel):
+    income_id: int
+    status: str
+    amount_rsd: float
+    paid_amount: float = 0.0
+    paid_date: Optional[DateType] = None
+    linked_total: float = 0.0
+    manual_paid_amount: float = 0.0
+    manual_paid_date: Optional[DateType] = None
+    has_manual_payment: bool = False
+    linked_transactions: list[IncomePaymentTransactionResponse] = Field(default_factory=list)
+
 class DashboardIncomeResponse(BaseModel):
     """Р Р€Р С—РЎР‚Р С•РЎвЂ°РЎвЂР Р…Р Р…РЎвЂ№Р в„– Р С•РЎвЂљР Р†Р ВµРЎвЂљ Р Т‘Р В»РЎРЏ Р С—Р В°Р Р…Р ВµР В»Р С‘."""
     id: int

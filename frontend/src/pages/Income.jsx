@@ -34,6 +34,11 @@ export default function Income() {
   const [efakturaLastResult, setEfakturaLastResult] = useState(null)
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [paymentModal, setPaymentModal] = useState(null)
+  const [paymentDetails, setPaymentDetails] = useState(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     due_date: '',
@@ -52,7 +57,7 @@ export default function Income() {
     setLoading(true)
     const params = { year }
     if (month) params.month = month
-    Promise.all([api.income.list(params), api.income.years()])
+    return Promise.all([api.income.list(params), api.income.years()])
       .then(([incomeItems, years]) => {
         setItems(incomeItems)
         setAvailableYears(years?.length ? years : [currentYear])
@@ -255,6 +260,106 @@ export default function Income() {
     }
   }
 
+  const loadPaymentDetails = async (incomeId) => {
+    setPaymentLoading(true)
+    setPaymentError('' )
+    try {
+      const details = await api.income.payments(incomeId)
+      setPaymentDetails(details)
+      return details
+    } catch (err) {
+      const message = err.message || tr('loadError')
+      setPaymentError(message)
+      throw err
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
+  const openPaymentModal = async (item) => {
+    setPaymentModal(item)
+    setPaymentDetails(null)
+    setPaymentActionLoading(false)
+    try {
+      await loadPaymentDetails(item.id)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const closePaymentModal = () => {
+    setPaymentModal(null)
+    setPaymentDetails(null)
+    setPaymentLoading(false)
+    setPaymentActionLoading(false)
+    setPaymentError('' )
+  }
+
+  const handleUnlinkIncomePayment = async (transactionId) => {
+    if (!paymentModal) return
+    if (!confirm(tr('incomeUnlinkPaymentConfirm'))) return
+    setPaymentActionLoading(true)
+    try {
+      await api.bankTransactions.unmatch(transactionId)
+      await load()
+      await loadPaymentDetails(paymentModal.id)
+    } catch (err) {
+      setPaymentError(err.message || tr('loadError'))
+      console.error(err)
+    } finally {
+      setPaymentActionLoading(false)
+    }
+  }
+
+  const handleClearManualPayment = async () => {
+    if (!paymentModal) return
+    if (!confirm(tr('incomeClearPaymentConfirm'))) return
+    setPaymentActionLoading(true)
+    try {
+      await api.income.clearManualPayment(paymentModal.id)
+      await load()
+      await loadPaymentDetails(paymentModal.id)
+    } catch (err) {
+      setPaymentError(err.message || tr('loadError'))
+      console.error(err)
+    } finally {
+      setPaymentActionLoading(false)
+    }
+  }
+
+  const renderPaymentStatus = (item) => {
+    let badge = null
+    if (item.status === 'paid') {
+      badge = <span className="badge badge-success" title={`${tr('paid')}: ${item.paid_date || UI_DASH}`}>{tr('paid')}</span>
+    } else if (item.status === 'partial') {
+      badge = (
+        <span
+          className="badge"
+          style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
+          title={`${tr('partial')}: ${(item.paid_amount || 0).toLocaleString('sr-RS')} / ${item.amount_rsd.toLocaleString('sr-RS')} RSD`}
+        >
+          {tr('partial')}
+          <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.9 }}>
+            +{(item.paid_amount || 0).toLocaleString('sr-RS')} / {item.amount_rsd.toLocaleString('sr-RS')}
+          </span>
+        </span>
+      )
+    } else {
+      return <span className="badge badge-warning">{tr('unpaid')}</span>
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => openPaymentModal(item)}
+        title={tr('incomePaymentDetails')}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+      >
+        {badge}
+      </button>
+    )
+  }
+
   const invoiceDuplicate = modal === 'add' && form.invoice_number?.trim() &&
     items.some((item) => item.invoice_number === form.invoice_number.trim())
 
@@ -433,24 +538,7 @@ export default function Income() {
                         )}
                       </td>
                       <td>{item.amount_rsd.toLocaleString('sr-RS')}</td>
-                      <td>
-                        {item.status === 'paid' ? (
-                          <span className="badge badge-success" title={`${tr('paid')}: ${item.paid_date}`}>{tr('paid')}</span>
-                        ) : item.status === 'partial' ? (
-                          <span
-                            className="badge"
-                            style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
-                            title={`${tr('partial')}: ${(item.paid_amount || 0).toLocaleString('sr-RS')} / ${item.amount_rsd.toLocaleString('sr-RS')} RSD`}
-                          >
-                            {tr('partial')}
-                            <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.9 }}>
-                              +{(item.paid_amount || 0).toLocaleString('sr-RS')} / {item.amount_rsd.toLocaleString('sr-RS')}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="badge badge-warning">{tr('unpaid')}</span>
-                        )}
-                      </td>
+                      <td>{renderPaymentStatus(item)}</td>
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
                         <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item.id)}>
@@ -465,6 +553,89 @@ export default function Income() {
           </div>
         </div>
       </div>
+
+      {paymentModal && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 760 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('incomePaymentDetails')} {UI_DASH} {paymentModal.invoice_number}</h2>
+              <button className="modal-close" onClick={closePaymentModal}>{UI_CLOSE}</button>
+            </div>
+            <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
+              <div style={{ fontWeight: 700 }}>{paymentModal.client_name || UI_DASH}</div>
+              <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{paymentModal.description || UI_DASH}</div>
+              <div style={{ marginTop: '0.5rem', fontWeight: 700 }}>{paymentModal.amount_rsd.toLocaleString('sr-RS')} RSD</div>
+            </div>
+            {paymentError && (
+              <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+                {paymentError}
+              </div>
+            )}
+            {paymentLoading ? (
+              <p>{tr('loading')}</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1rem' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                    {tr('incomeLinkedBankPayments')}
+                  </div>
+                  {paymentDetails?.linked_transactions?.length ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {paymentDetails.linked_transactions.map((transaction) => (
+                        <div key={transaction.id} className="card" style={{ padding: '0.75rem', display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700 }}>{transaction.amount.toLocaleString('sr-RS')} {transaction.currency || 'RSD'}</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{transaction.date}</div>
+                            <div style={{ marginTop: '0.35rem' }}>{transaction.counterparty_name || UI_DASH}</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{transaction.purpose || UI_DASH}</div>
+                            {transaction.bank_reference ? (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                                {tr('bankTxReference')}: {transaction.bank_reference}
+                              </div>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleUnlinkIncomePayment(transaction.id)}
+                            disabled={paymentActionLoading}
+                          >
+                            {paymentActionLoading ? tr('loading') : tr('bankTxUnmatchBtn')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{tr('incomeNoLinkedPayments')}</div>
+                  )}
+                </div>
+                {paymentDetails?.has_manual_payment && (
+                  <div className="card" style={{ padding: '1rem', borderColor: 'var(--color-warning)' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                      {tr('incomeManualPaymentMark')}
+                    </div>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+                      {tr('incomeManualPaymentHint')}
+                    </div>
+                    <div>{tr('amount')}: {Number(paymentDetails.manual_paid_amount || 0).toLocaleString('sr-RS')} RSD</div>
+                    <div style={{ marginTop: '0.25rem' }}>{tr('dateOfPayment')}: {paymentDetails.manual_paid_date || UI_DASH}</div>
+                    <div className="modal-actions" style={{ marginTop: '1rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={handleClearManualPayment}
+                        disabled={paymentActionLoading}
+                      >
+                        {paymentActionLoading ? tr('loading') : tr('incomeClearPaymentMark')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">

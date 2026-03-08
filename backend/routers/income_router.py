@@ -12,8 +12,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_db
-from backend.models import Income, Client, User, Project
-from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject
+from backend.models import Income, Client, User, Project, BankTransaction
+from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
 
@@ -25,6 +25,70 @@ async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
     p = r.scalar_one_or_none()
     return p.id if p else None
 
+
+async def _get_income_linked_transactions(db: AsyncSession, income_id: int) -> list[BankTransaction]:
+    result = await db.execute(
+        select(BankTransaction)
+        .where(BankTransaction.matched_type == "income", BankTransaction.matched_id == income_id)
+        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+    )
+    return list(result.scalars().all())
+
+
+def _build_income_payment_details(income: Income, linked_transactions: list[BankTransaction]) -> IncomePaymentDetailsResponse:
+    linked_total = sum(float(tx.amount or 0) for tx in linked_transactions)
+    recorded_paid = float(income.paid_amount or 0)
+    manual_paid_amount = max(0.0, recorded_paid - linked_total)
+    has_manual_payment = manual_paid_amount > 0 or (
+        linked_total == 0 and (income.status in ("paid", "partial") or bool(income.is_paid) or income.paid_date is not None or recorded_paid > 0)
+    )
+    if has_manual_payment and manual_paid_amount <= 0:
+        if recorded_paid > 0:
+            manual_paid_amount = recorded_paid
+        elif income.status == "paid":
+            manual_paid_amount = float(income.amount_rsd or 0)
+    manual_paid_date = income.paid_date if has_manual_payment else None
+    return IncomePaymentDetailsResponse(
+        income_id=income.id,
+        status=income.status,
+        amount_rsd=float(income.amount_rsd or 0),
+        paid_amount=recorded_paid,
+        paid_date=income.paid_date,
+        linked_total=linked_total,
+        manual_paid_amount=manual_paid_amount,
+        manual_paid_date=manual_paid_date,
+        has_manual_payment=has_manual_payment,
+        linked_transactions=[IncomePaymentTransactionResponse.model_validate(tx) for tx in linked_transactions],
+    )
+
+
+async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> IncomePaymentDetailsResponse:
+    linked_transactions = await _get_income_linked_transactions(db, income.id)
+    linked_total = sum(float(tx.amount or 0) for tx in linked_transactions)
+    amount_total = float(income.amount_rsd or 0)
+    latest_linked_date = max((tx.date for tx in linked_transactions), default=None)
+
+    income.paid_amount = linked_total
+    if linked_total >= amount_total and linked_total > 0:
+        income.status = "paid"
+        income.is_paid = True
+        income.paid_date = latest_linked_date
+    elif linked_total > 0:
+        income.status = "partial"
+        income.is_paid = False
+        income.paid_date = None
+    else:
+        income.status = "issued"
+        income.is_paid = False
+        income.paid_date = None
+
+    if linked_transactions:
+        income.bank_reference = next((tx.bank_reference for tx in linked_transactions if tx.bank_reference), None)
+    else:
+        income.bank_reference = None
+
+    await db.flush()
+    return _build_income_payment_details(income, linked_transactions)
 
 from backend.income_service import (
     to_number_year_format,
@@ -143,6 +207,7 @@ async def create_income(
         project_id=project_id,
         income_type=data.income_type or {"advance":"advance","intermediate":"intermediate","closing":"final"}.get(data.contract_payment_type or "", None),
         note=data.note,
+        paid_amount=(float(data.amount_rsd or 0) if status_val == "paid" else 0.0),
         is_paid=(status_val == "paid"),
         created_by=current_user.id,
     )
@@ -326,6 +391,36 @@ async def import_efaktura(
         "errors": errors,
     }
 
+
+@router.get("/{income_id}/payments", response_model=IncomePaymentDetailsResponse)
+async def get_income_payments(
+    income_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    income_result = await db.execute(select(Income).where(Income.id == income_id))
+    income = income_result.scalar_one_or_none()
+    if not income:
+        raise HTTPException(404, "Income not found")
+    linked_transactions = await _get_income_linked_transactions(db, income_id)
+    return _build_income_payment_details(income, linked_transactions)
+
+
+@router.post("/{income_id}/clear-manual-payment", response_model=IncomePaymentDetailsResponse)
+async def clear_income_manual_payment(
+    income_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    income_result = await db.execute(select(Income).where(Income.id == income_id))
+    income = income_result.scalar_one_or_none()
+    if not income:
+        raise HTTPException(404, "Income not found")
+    if income.status == "cancelled":
+        raise HTTPException(400, "Cancelled income cannot be updated")
+    details = await _clear_income_manual_payment(db, income)
+    await db.commit()
+    return details
 
 @router.get("/{income_id}", response_model=IncomeResponse)
 async def get_income(

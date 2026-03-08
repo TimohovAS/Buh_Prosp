@@ -106,6 +106,8 @@ export const api = {
     },
     years: () => request('/income/years'),
     get: (id) => request(`/income/${id}`),
+    payments: (id) => request(`/income/${id}/payments`),
+    clearManualPayment: (id) => request(`/income/${id}/clear-manual-payment`, { method: 'POST' }),
     create: (data) => request('/income', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/income/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => request(`/income/${id}`, { method: 'DELETE' }),

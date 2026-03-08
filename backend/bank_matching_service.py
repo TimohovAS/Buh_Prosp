@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,16 +204,33 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
         income_response = await db.execute(select(Income).where(Income.id == tx.matched_id))
         income = income_response.scalar_one_or_none()
         if income:
-            new_paid = max(0.0, float(income.paid_amount or 0) - float(tx.amount))
-            income.paid_amount = new_paid
-            if new_paid <= 0:
-                income.status = "issued"
-                income.is_paid = False
-                income.paid_date = None
-            else:
+            remaining_response = await db.execute(
+                select(BankTransaction)
+                .where(
+                    BankTransaction.matched_type == "income",
+                    BankTransaction.matched_id == income.id,
+                    BankTransaction.id != tx.id,
+                )
+                .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+            )
+            remaining_transactions = list(remaining_response.scalars().all())
+            remaining_paid = sum(float(item.amount or 0) for item in remaining_transactions)
+            amount_total = float(income.amount_rsd or 0)
+            income.paid_amount = remaining_paid
+            if remaining_paid >= amount_total and remaining_paid > 0:
+                income.status = "paid"
+                income.is_paid = True
+                income.paid_date = remaining_transactions[0].date
+            elif remaining_paid > 0:
                 income.status = "partial"
                 income.is_paid = False
                 income.paid_date = None
+            else:
+                income.status = "issued"
+                income.is_paid = False
+                income.paid_date = None
+
+            income.bank_reference = next((item.bank_reference for item in remaining_transactions if item.bank_reference), None)
 
     elif tx.matched_type == "expense":
         expense_response = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
