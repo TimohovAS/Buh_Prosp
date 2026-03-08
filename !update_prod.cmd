@@ -7,7 +7,6 @@ echo [ProspEl] Production update started...
 echo [ProspEl] Working dir: %CD%
 echo.
 
-:: Check for Administrator privileges
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo =======================================================
@@ -71,22 +70,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [ProspEl] Running DB migrations...
-.\venv\Scripts\python.exe backend\scripts\migrate_v3_drop_project_contract_id.py
-if errorlevel 1 (
-  echo [ERROR] DB migration failed.
-  exit /b 1
-)
-.\venv\Scripts\python.exe backend\scripts\migrate_v4_erp.py
-if errorlevel 1 (
-  echo [ERROR] DB migration failed.
-  exit /b 1
-)
-.\venv\Scripts\python.exe backend\scripts\migrate_v5_expense_contracts.py
-if errorlevel 1 (
-  echo [ERROR] DB migration failed.
-  exit /b 1
-)
+echo [ProspEl] DB migrations skipped.
+echo [ProspEl] Historical one-time migrations v3-v5 are already applied on production.
+rem Manual DB migrations for a new database only:
+rem .\venv\Scripts\python.exe backend\scripts\migrate_v3_drop_project_contract_id.py
+rem .\venv\Scripts\python.exe backend\scripts\migrate_v4_erp.py
+rem .\venv\Scripts\python.exe backend\scripts\migrate_v5_expense_contracts.py
 
 echo [ProspEl] Installing frontend dependencies...
 call npm --prefix ".\frontend" install
@@ -112,8 +101,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-timeout /t 2 /nobreak >nul
-
 net start ProspEl-Web
 if errorlevel 1 (
   echo [ERROR] Failed to start ProspEl-Web service.
@@ -121,13 +108,13 @@ if errorlevel 1 (
 )
 
 echo [ProspEl] Health checks...
-powershell -NoProfile -Command "$r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/prospel' -TimeoutSec 10; Write-Host ('Backend: ' + $r.StatusCode)"
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; $ok=$false; for ($i=0; $i -lt 15; $i++) { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/prospel' -TimeoutSec 5; Write-Host ('Backend: ' + $r.StatusCode); $ok=$true; break } catch { Start-Sleep -Seconds 2 } }; if (-not $ok) { throw 'Backend health check failed.' }"
 if errorlevel 1 (
   echo [ERROR] Backend health check failed.
   exit /b 1
 )
 
-powershell -NoProfile -Command "$ok=$false; try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1/' -TimeoutSec 6; Write-Host ('Web (80): ' + $r.StatusCode); $ok=$true } catch {}; if (-not $ok) { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173/' -TimeoutSec 10; Write-Host ('Web (5173): ' + $r.StatusCode) }"
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; $ok=$false; for ($i=0; $i -lt 10; $i++) { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173/' -TimeoutSec 5; Write-Host ('Web (5173): ' + $r.StatusCode); $ok=$true; break } catch { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1/' -TimeoutSec 5; Write-Host ('Web (80): ' + $r.StatusCode); $ok=$true; break } catch {}; Start-Sleep -Seconds 2 } }; if (-not $ok) { throw 'Web health check failed.' }"
 if errorlevel 1 (
   echo [ERROR] Web health check failed.
   exit /b 1
@@ -135,6 +122,6 @@ if errorlevel 1 (
 
 echo.
 echo [ProspEl] Update completed successfully.
-echo [ProspEl] URL: http://192.168.10.20/
+echo [ProspEl] URL: http://192.168.10.20:5173/
 echo.
 exit /b 0
