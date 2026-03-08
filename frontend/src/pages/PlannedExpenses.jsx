@@ -84,7 +84,7 @@ export default function PlannedExpenses() {
     const params = {}
     if (filterActive === 'active') params.is_active = true
     else if (filterActive === 'inactive') params.is_active = false
-    if (filterCategory) params.category = filterCategory
+    if (filterCategory) params.category_id = filterCategory
     api.plannedExpenses.list(params).then(setItems).finally(() => setLoading(false))
   }
 
@@ -129,7 +129,7 @@ export default function PlannedExpenses() {
       currency: item.currency || 'RSD',
       category: item.category || '',
       category_id: item.category_id ?? '',
-      project_id: item.project_id ?? '',
+      project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       period: item.period || 'monthly',
       payment_day: item.payment_day ?? 5,
       payment_day_of_week: item.payment_day_of_week ?? 0,
@@ -152,7 +152,7 @@ export default function PlannedExpenses() {
         currency: form.currency || 'RSD',
         category: form.category || null,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: form.project_id ? parseInt(form.project_id, 10) : null,
+        project_id: form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
         period: form.period || 'monthly',
         payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
@@ -242,8 +242,15 @@ export default function PlannedExpenses() {
     }, 0)
 
   const lang = getLang()
+  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
   const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
   const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
+  const getCategoryLabel = (item) => {
+    const category = apiCategories.find((c) => c.id === item.category_id)
+    if (category) return lang === 'ru' ? category.name_ru : category.name_sr
+    const legacy = CATEGORIES.find((c) => c.value === item.category)
+    return legacy ? tr(legacy.label) : (item.category || '—')
+  }
 
   return (
     <>
@@ -267,9 +274,9 @@ export default function PlannedExpenses() {
             onChange={(e) => setFilterCategory(e.target.value)}
           >
             <option value="">{tr('allCategories')}</option>
-            {CATEGORIES.filter((c) => c.value).map((c) => (
-              <option key={c.value} value={c.value}>
-                {tr(c.label)}
+            {apiCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {lang === 'ru' ? c.name_ru : c.name_sr}
               </option>
             ))}
           </select>
@@ -409,7 +416,7 @@ export default function PlannedExpenses() {
                           </div>
                         )}
                       </td>
-                      <td>{CATEGORIES.find((c) => c.value === i.category)?.label ? tr(CATEGORIES.find((c) => c.value === i.category).label) : i.category || '—'}</td>
+                      <td>{getCategoryLabel(i)}</td>
                       <td>
                         {i.amount.toLocaleString('sr-RS')} {i.currency}
                       </td>
@@ -583,6 +590,7 @@ export default function PlannedExpenses() {
                   className="form-input"
                   value={form.project_id}
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  required
                 >
                   <option value="">—</option>
                   {commercialProjects.length > 0 && (

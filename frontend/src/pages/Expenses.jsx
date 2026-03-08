@@ -51,7 +51,7 @@ export default function Expenses() {
   }
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const pid = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
+    const pid = assignProjectId === '' || assignProjectId === '_none' ? (unassignedProject ? unassignedProject.id : null) : parseInt(assignProjectId, 10)
     try {
       await api.expenses.bulkAssignProject({ ids: selectedIds, project_id: pid })
       setModalAssign(false)
@@ -85,7 +85,7 @@ export default function Expenses() {
       amount: item.amount,
       category: item.category || '',
       category_id: item.category_id ?? '',
-      project_id: item.project_id ?? '',
+      project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       note: item.note || '',
     })
     setModal({ type: 'edit', id: item.id })
@@ -101,7 +101,7 @@ export default function Expenses() {
         amount: parseFloat(form.amount) || 0,
         category: categoryValue,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: form.project_id ? parseInt(form.project_id, 10) : null,
+        project_id: form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
         note: form.note || null,
       }
       if (modal === 'add') {
@@ -126,39 +126,49 @@ export default function Expenses() {
     }
   }
 
+  const lang = getLang()
+  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
+  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
+  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
+  const getProjectName = (projectId) => projects.find((p) => p.id === projectId)?.name || ''
+  const getCategoryLabel = (item) => {
+    const selectedCategory = categories.find((category) => category.id === item.category_id)
+    if (selectedCategory) {
+      return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
+    }
+    return item.category || 'вЂ”'
+  }
+
   const filtered = useMemo(() => {
     const s = (search || '').trim().toLowerCase()
     let rows = items
     if (s) {
-      rows = items.filter((i) =>
-        (i.description || '').toLowerCase().includes(s) ||
-        (i.category || '').toLowerCase().includes(s) ||
-        String(i.amount || '').includes(s) ||
-        (projects.find(p => p.id === i.project_id)?.name || '').toLowerCase().includes(s)
+      rows = items.filter((item) =>
+        (item.description || '').toLowerCase().includes(s) ||
+        getCategoryLabel(item).toLowerCase().includes(s) ||
+        String(item.amount || '').includes(s) ||
+        getProjectName(item.project_id).toLowerCase().includes(s)
       )
     }
     return [...rows].sort((a, b) => {
-      let valA = sortCol === 'project_id' ? (projects.find(p => p.id === a.project_id)?.name || '') : (a[sortCol] ?? '')
-      let valB = sortCol === 'project_id' ? (projects.find(p => p.id === b.project_id)?.name || '') : (b[sortCol] ?? '')
+      const valA = sortCol === 'project_id' ? getProjectName(a.project_id) : (sortCol === 'category' ? getCategoryLabel(a) : (a[sortCol] ?? ''))
+      const valB = sortCol === 'project_id' ? getProjectName(b.project_id) : (sortCol === 'category' ? getCategoryLabel(b) : (b[sortCol] ?? ''))
       if (valA < valB) return sortAsc ? -1 : 1
       if (valA > valB) return sortAsc ? 1 : -1
       return 0
     })
-  }, [items, search, sortCol, sortAsc, projects])
+  }, [items, search, sortCol, sortAsc, projects, categories, lang])
 
   const toggleSort = (col) => {
     if (sortCol === col) setSortAsc(v => !v)
     else { setSortCol(col); setSortAsc(true) }
   }
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>РІвЂ вЂў</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? 'РІвЂ вЂ' : 'РІвЂ вЂњ'}</span>
   }
 
   const total = filtered.reduce((sum, i) => sum + i.amount, 0)
-  const lang = getLang()
-  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
-  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
 
   return (
     <>
@@ -207,7 +217,7 @@ export default function Expenses() {
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}
-            onClick={() => setModalAssign(true)}
+            onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
@@ -262,14 +272,14 @@ export default function Expenses() {
                       <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
                         {i.project_id ? (
                           <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
-                            {projects.find((p) => p.id === i.project_id)?.name || '—'}
+                            {projects.find((p) => p.id === i.project_id)?.name || 'РІР‚вЂќ'}
                           </span>
-                        ) : '—'}
+                        ) : 'РІР‚вЂќ'}
                       </td>
-                      <td>{getCategories(tr).find(c => c.value === i.category)?.label || i.category || '-'}</td>
+                      <td>{getCategoryLabel(i)}</td>
                       <td>{i.amount.toLocaleString('sr-RS')}</td>
                       <td title={(i.bank_reference || i.note) || ''} style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {i.bank_reference || i.note || '—'}
+                        {i.bank_reference || i.note || 'РІР‚вЂќ'}
                       </td>
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>{tr('edit')}</button>
@@ -290,8 +300,8 @@ export default function Expenses() {
         <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} — {tr('expenses')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>×</button>
+              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} РІР‚вЂќ {tr('expenses')}</h2>
+              <button className="modal-close" onClick={() => setModal(null)}>Р“вЂ”</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -324,7 +334,7 @@ export default function Expenses() {
                     setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
                   }}
                 >
-                  <option value="">— {tr('allCategories')} —</option>
+                  <option value="">РІР‚вЂќ {tr('allCategories')} РІР‚вЂќ</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}
@@ -338,18 +348,18 @@ export default function Expenses() {
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
                   required
                 >
-                  <option value="">—</option>
+                  <option value="">РІР‚вЂќ</option>
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
                       {commercialProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` РІР‚вЂќ ${p.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
                       {internalProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` РІР‚вЂќ ${p.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
@@ -391,7 +401,7 @@ export default function Expenses() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>×</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>Р“вЂ”</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
@@ -400,10 +410,21 @@ export default function Expenses() {
                 value={assignProjectId}
                 onChange={(e) => setAssignProjectId(e.target.value)}
               >
-                <option value="_none">— {tr('unassignProject')} —</option>
-                {projects.filter((p) => p.status !== 'archived').map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
-                ))}
+                <option value="">вЂ”</option>
+                {commercialProjects.length > 0 && (
+                  <optgroup label={tr('commercialProject')}>
+                    {commercialProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` вЂ” ${p.code}` : ''}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {internalProjects.length > 0 && (
+                  <optgroup label={tr('internalProject')}>
+                    {internalProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` вЂ” ${p.code}` : ''}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>

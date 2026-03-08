@@ -486,6 +486,20 @@ export default function Settings() {
                       setCatForm({ name_ru: c.name_ru, name_sr: c.name_sr, category_type: c.category_type, category_group: c.category_group, is_active: c.is_active, sort_order: c.sort_order })
                       setCatModal({ type: 'edit', id: c.id })
                     }}>{tr('edit')}</button>
+                    <button
+                      className={`btn btn-sm ${c.is_active ? 'btn-danger' : 'btn-secondary'}`}
+                      style={{ marginLeft: '0.5rem' }}
+                      onClick={async () => {
+                        try {
+                          await api.categories.update(c.id, { is_active: !c.is_active })
+                          loadCategories()
+                        } catch (err) {
+                          console.error(err)
+                        }
+                      }}
+                    >
+                      {c.is_active ? tr('deactivate') : tr('activate')}
+                    </button>
                   </td>
                 </tr>
               ))}

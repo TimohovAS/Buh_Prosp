@@ -164,7 +164,7 @@ export default function Projects() {
       if (valA > valB) return sortAsc ? 1 : -1
       return 0
     })
-  }, [projects, search, sortCol, sortAsc, byProject])
+  }, [projects, search, sortCol, sortAsc, byProject, projectFilter])
 
   const toggleSort = (col) => {
     if (sortCol === col) setSortAsc(v => !v)
@@ -278,7 +278,7 @@ export default function Projects() {
                   const row = getRowData(p)
                   return (
                     <tr key={p.id} style={p.status === 'archived' ? { opacity: 0.6 } : {}}>
-                      <td>{p.name}{p.is_internal ? ' 🏢' : ''}</td>
+                      <td>{p.name}{p.is_internal ? <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'var(--color-info, #0ea5e9)', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: 999 }}>{tr('internalProject')}</span> : null}</td>
                       <td>{p.code || '—'}</td>
                       <td>{p.client_name || '—'}</td>
                       <td>{fmt(row.revenue)} RSD</td>

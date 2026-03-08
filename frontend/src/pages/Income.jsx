@@ -63,12 +63,12 @@ export default function Income() {
     const defaultForm = {
       date: new Date().toISOString().slice(0, 10),
       due_date: '',
-      invoice_number: '', // сервер присвоит автоматически (блокировка конкуренции)
+      invoice_number: '', // СЃРµСЂРІРµСЂ РїСЂРёСЃРІРѕРёС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё (Р±Р»РѕРєРёСЂРѕРІРєР° РєРѕРЅРєСѓСЂРµРЅС†РёРё)
       client_id: '',
       client_name: '',
       contract_id: '',
       contract_payment_type: '',
-      project_id: '',
+      project_id: unassignedProject ? String(unassignedProject.id) : '',
       description: '',
       amount_rsd: '',
       note: '',
@@ -87,7 +87,7 @@ export default function Income() {
       client_name: item.client_name || '',
       contract_id: item.contract_id || '',
       contract_payment_type: item.contract_payment_type || '',
-      project_id: item.project_id ?? '',
+      project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       description: item.description || '',
       amount_rsd: item.amount_rsd,
       note: item.note || '',
@@ -113,7 +113,7 @@ export default function Income() {
         client_name: form.client_name || null,
         contract_id: num(form.contract_id),
         contract_payment_type: form.contract_payment_type || null,
-        project_id: num(form.project_id),
+        project_id: num(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
         description: form.description || null,
         amount_rsd: parseFloat(form.amount_rsd) || 0,
         note: form.note || null,
@@ -131,7 +131,7 @@ export default function Income() {
       setNextInvoiceHint('')
       load()
     } catch (err) {
-      if (err.status === 409 || (err.message && (err.message.includes('уже существует') || err.message.includes('већ постоји')))) {
+      if (err.status === 409 || (err.message && (err.message.includes('СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚') || err.message.includes('РІРµС› РїРѕСЃС‚РѕСРё')))) {
         const y = new Date(form.date).getFullYear()
         const r = await api.income.nextInvoice(y).catch(() => ({}))
         if (r.invoice_number) setForm((f) => ({ ...f, invoice_number: r.invoice_number }))
@@ -151,7 +151,7 @@ export default function Income() {
   }
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const pid = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
+    const pid = assignProjectId === '' || assignProjectId === '_none' ? (unassignedProject ? unassignedProject.id : null) : parseInt(assignProjectId, 10)
     try {
       await api.income.bulkAssignProject({ ids: selectedIds, project_id: pid })
       setModalAssign(false)
@@ -204,21 +204,26 @@ export default function Income() {
   const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((e) => console.error(e))
   const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((e) => console.error(e))
 
+  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
+  const commercialProjects = projects.filter((p) => !p.is_internal && p.status !== 'archived')
+  const internalProjects = projects.filter((p) => p.is_internal && p.status !== 'archived')
+  const getProjectName = (projectId) => projects.find((p) => p.id === projectId)?.name || ''
+
   const filtered = useMemo(() => {
     const s = (search || '').trim().toLowerCase()
     let rows = items
     if (s) {
-      rows = items.filter((i) =>
-        (i.client_name || '').toLowerCase().includes(s) ||
-        (i.invoice_number || '').toLowerCase().includes(s) ||
-        (i.description || '').toLowerCase().includes(s) ||
-        String(i.amount_rsd || '').includes(s) ||
-        (projects.find(p => p.id === i.project_id)?.name || '').toLowerCase().includes(s)
+      rows = items.filter((item) =>
+        (item.client_name || '').toLowerCase().includes(s) ||
+        (item.invoice_number || '').toLowerCase().includes(s) ||
+        (item.description || '').toLowerCase().includes(s) ||
+        String(item.amount_rsd || '').includes(s) ||
+        getProjectName(item.project_id).toLowerCase().includes(s)
       )
     }
     return [...rows].sort((a, b) => {
-      let valA = sortCol === 'project_id' ? (projects.find(p => p.id === a.project_id)?.name || '') : (a[sortCol] ?? '')
-      let valB = sortCol === 'project_id' ? (projects.find(p => p.id === b.project_id)?.name || '') : (b[sortCol] ?? '')
+      const valA = sortCol === 'project_id' ? getProjectName(a.project_id) : (a[sortCol] ?? '')
+      const valB = sortCol === 'project_id' ? getProjectName(b.project_id) : (b[sortCol] ?? '')
       if (valA < valB) return sortAsc ? -1 : 1
       if (valA > valB) return sortAsc ? 1 : -1
       return 0
@@ -230,8 +235,8 @@ export default function Income() {
     else { setSortCol(col); setSortAsc(true) }
   }
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>в†•</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? 'в†‘' : 'в†“'}</span>
   }
 
   return (
@@ -285,7 +290,7 @@ export default function Income() {
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}
-            onClick={() => setModalAssign(true)}
+            onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
@@ -344,16 +349,16 @@ export default function Income() {
                         />
                       </td>
                       <td>{i.date}</td>
-                      <td>{i.due_date || '—'}</td>
+                      <td>{i.due_date || 'вЂ”'}</td>
                       <td>{i.invoice_number}</td>
                       <td>{i.client_name || '-'}</td>
                       <td>{i.contract_number || '-'}</td>
                       <td title={projects.find((p) => p.id === i.project_id)?.name || ''}>
                         {i.project_id ? (
                           <span title={projects.find(p => p.id === i.project_id)?.code || ''}>
-                            {projects.find((p) => p.id === i.project_id)?.name || '—'}
+                            {projects.find((p) => p.id === i.project_id)?.name || 'вЂ”'}
                           </span>
-                        ) : '—'}
+                        ) : 'вЂ”'}
                       </td>
                       <td>
                         {(i.description || '').slice(0, 40)}
@@ -366,11 +371,11 @@ export default function Income() {
                       <td>{i.amount_rsd.toLocaleString('sr-RS')}</td>
                       <td>
                         {i.status === 'paid' ? (
-                          <span className="badge badge-success" title={`Оплачен: ${i.paid_date}`}>{tr('paid')}</span>
+                          <span className="badge badge-success" title={`РћРїР»Р°С‡РµРЅ: ${i.paid_date}`}>{tr('paid')}</span>
                         ) : i.status === 'partial' ? (
                           <span className="badge" style={{ background: 'var(--color-info, #0ea5e9)', color: '#fff' }}
-                            title={`Получено ${(i.paid_amount || 0).toLocaleString('sr-RS')} из ${i.amount_rsd.toLocaleString('sr-RS')} RSD`}>
-                            Частично
+                            title={`РџРѕР»СѓС‡РµРЅРѕ ${(i.paid_amount || 0).toLocaleString('sr-RS')} РёР· ${i.amount_rsd.toLocaleString('sr-RS')} RSD`}>
+                            Р§Р°СЃС‚РёС‡РЅРѕ
                             <span style={{ display: 'block', fontSize: '0.75em', opacity: 0.9 }}>
                               +{(i.paid_amount || 0).toLocaleString('sr-RS')} / {i.amount_rsd.toLocaleString('sr-RS')}
                             </span>
@@ -400,7 +405,7 @@ export default function Income() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')}</h2>
-              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint(''); }}>×</button>
+              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint(''); }}>Г—</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -450,7 +455,7 @@ export default function Income() {
                     setForm({ ...form, client_id: id, client_name: c ? c.name : '', contract_id: '' })
                   }}
                 >
-                  <option value="">— {tr('incomeManual')} —</option>
+                  <option value="">вЂ” {tr('incomeManual')} вЂ”</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -464,9 +469,9 @@ export default function Income() {
                     value={form.contract_id}
                     onChange={(e) => setForm({ ...form, contract_id: e.target.value, contract_payment_type: '' })}
                   >
-                    <option value="">— {tr('incomeNoContract')} —</option>
+                    <option value="">вЂ” {tr('incomeNoContract')} вЂ”</option>
                     {contracts.map((c) => (
-                      <option key={c.id} value={c.id}>{c.number} — {c.client_name} ({c.amount?.toLocaleString?.('sr-RS')} RSD)</option>
+                      <option key={c.id} value={c.id}>{c.number} вЂ” {c.client_name} ({c.amount?.toLocaleString?.('sr-RS')} RSD)</option>
                     ))}
                   </select>
                 </div>
@@ -477,11 +482,22 @@ export default function Income() {
                   className="form-input"
                   value={form.project_id}
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  required
                 >
-                  <option value="">— {tr('unassignProject')} —</option>
-                  {projects.filter((p) => p.status !== 'archived').map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
-                  ))}
+                  {commercialProjects.length > 0 && (
+                    <optgroup label={tr('commercialProject')}>
+                      {commercialProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {internalProjects.length > 0 && (
+                    <optgroup label={tr('internalProject')}>
+                      {internalProjects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
               {form.contract_id && (
@@ -492,7 +508,7 @@ export default function Income() {
                     value={form.contract_payment_type}
                     onChange={(e) => setForm({ ...form, contract_payment_type: e.target.value })}
                   >
-                    <option value="">— {tr('incomeNotSpecified')} —</option>
+                    <option value="">вЂ” {tr('incomeNotSpecified')} вЂ”</option>
                     <option value="advance">{tr('contractPaymentAdvance')}</option>
                     <option value="intermediate">{tr('contractPaymentIntermediate')}</option>
                     <option value="closing">{tr('contractPaymentClosing')}</option>
@@ -558,7 +574,7 @@ export default function Income() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>×</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId(''); }}>Г—</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
@@ -567,10 +583,20 @@ export default function Income() {
                 value={assignProjectId}
                 onChange={(e) => setAssignProjectId(e.target.value)}
               >
-                <option value="_none">— {tr('unassignProject')} —</option>
-                {projects.filter((p) => p.status !== 'archived').map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
-                ))}
+                {commercialProjects.length > 0 && (
+                  <optgroup label={tr('commercialProject')}>
+                    {commercialProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {internalProjects.length > 0 && (
+                  <optgroup label={tr('internalProject')}>
+                    {internalProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` — ${p.code}` : ''}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>
