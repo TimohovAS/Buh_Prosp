@@ -71,12 +71,12 @@ if errorlevel 1 (
 )
 
 echo [ProspEl] DB migrations are not part of the regular update.
-echo [ProspEl] Run one-time migrations manually when needed.
-rem Historical one-time migrations:
-rem .\venv\Scripts\python.exe backend\scripts\migrate_v3_drop_project_contract_id.py
-rem .\venv\Scripts\python.exe backend\scripts\migrate_v4_erp.py
-rem .\venv\Scripts\python.exe backend\scripts\migrate_v5_expense_contracts.py
-rem .\venv\Scripts\python.exe backend\scripts\migrate_v6_client_maticni_broj.py
+echo [ProspEl] Run one-time migration scripts from .\manual_migrations\ when needed.
+rem One-time migration scripts:
+rem .\manual_migrations\v3_drop_project_contract_id.cmd
+rem .\manual_migrations\v4_erp.cmd
+rem .\manual_migrations\v5_expense_contracts.cmd
+rem .\manual_migrations\v6_client_maticni_broj.cmd
 
 echo [ProspEl] Installing frontend dependencies...
 call npm --prefix ".\frontend" install
