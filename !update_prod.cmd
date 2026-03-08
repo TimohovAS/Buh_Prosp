@@ -67,6 +67,11 @@ if errorlevel 1 (
   echo [ERROR] DB migration failed.
   exit /b 1
 )
+.\venv\Scripts\python.exe backend\scripts\migrate_v4_erp.py
+if errorlevel 1 (
+  echo [ERROR] DB migration failed.
+  exit /b 1
+)
 
 echo [ProspEl] Installing frontend dependencies...
 call npm --prefix ".\frontend" install
