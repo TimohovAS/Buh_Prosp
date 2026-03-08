@@ -1,9 +1,14 @@
-﻿import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const UI_DASH = '\u2014'
+const UI_CLOSE = '\u00D7'
+const UI_SORT_BOTH = '\u2195'
+const UI_SORT_ASC = '\u2191'
+const UI_SORT_DESC = '\u2193'
 
 export default function Expenses() {
   const [items, setItems] = useState([])
@@ -140,7 +145,7 @@ export default function Expenses() {
     if (selectedCategory) {
       return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
     }
-    return item.category || '-'
+    return item.category || UI_DASH
   }
 
   const filtered = useMemo(() => {
@@ -176,8 +181,8 @@ export default function Expenses() {
   }
 
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>^v</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '^' : 'v'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
   }
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0)
@@ -287,9 +292,9 @@ export default function Expenses() {
                       <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
                         {item.project_id ? (
                           <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
-                            {projects.find((project) => project.id === item.project_id)?.name || '-'}
+                            {projects.find((project) => project.id === item.project_id)?.name || UI_DASH}
                           </span>
-                        ) : '-'}
+                        ) : UI_DASH}
                       </td>
                       <td>{getCategoryLabel(item)}</td>
                       <td>{item.amount.toLocaleString('sr-RS')}</td>
@@ -297,7 +302,7 @@ export default function Expenses() {
                         title={(item.bank_reference || item.note) || ''}
                         style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
-                        {item.bank_reference || item.note || '-'}
+                        {item.bank_reference || item.note || UI_DASH}
                       </td>
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(item)}>{tr('edit')}</button>
@@ -318,8 +323,8 @@ export default function Expenses() {
         <div className="modal-overlay">
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('expenses')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>x</button>
+              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('expenses')}</h2>
+              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -352,7 +357,7 @@ export default function Expenses() {
                     setForm({ ...form, category_id: categoryId, category: category ? category.name_ru : '' })
                   }}
                 >
-                  <option value="">- {tr('allCategories')} -</option>
+                  <option value="">{`${UI_DASH} ${tr('allCategories')} ${UI_DASH}`}</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>{lang === 'ru' ? category.name_ru : category.name_sr}</option>
                   ))}
@@ -366,18 +371,18 @@ export default function Expenses() {
                   onChange={(event) => setForm({ ...form, project_id: event.target.value })}
                   required
                 >
-                  <option value="">-</option>
+                  <option value="">{UI_DASH}</option>
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
                       {commercialProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
                       {internalProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
@@ -419,7 +424,7 @@ export default function Expenses() {
           <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>x</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{UI_CLOSE}</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
@@ -428,18 +433,18 @@ export default function Expenses() {
                 value={assignProjectId}
                 onChange={(event) => setAssignProjectId(event.target.value)}
               >
-                <option value="">-</option>
+                <option value="">{UI_DASH}</option>
                 {commercialProjects.length > 0 && (
                   <optgroup label={tr('commercialProject')}>
                     {commercialProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
                 {internalProjects.length > 0 && (
                   <optgroup label={tr('internalProject')}>
                     {internalProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}

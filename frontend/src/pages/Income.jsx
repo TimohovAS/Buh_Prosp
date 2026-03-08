@@ -1,10 +1,15 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
+const UI_DASH = '\u2014'
+const UI_CLOSE = '\u00D7'
+const UI_SORT_BOTH = '\u2195'
+const UI_SORT_ASC = '\u2191'
+const UI_SORT_DESC = '\u2193'
 
 export default function Income() {
   const efakturaInputRef = useRef(null)
@@ -243,8 +248,8 @@ export default function Income() {
   }
 
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>^v</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '^' : 'v'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
   }
 
   return (
@@ -360,16 +365,16 @@ export default function Income() {
                         />
                       </td>
                       <td>{item.date}</td>
-                      <td>{item.due_date || '-'}</td>
+                      <td>{item.due_date || UI_DASH}</td>
                       <td>{item.invoice_number}</td>
                       <td>{item.client_name || '-'}</td>
                       <td>{item.contract_number || '-'}</td>
                       <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
                         {item.project_id ? (
                           <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
-                            {projects.find((project) => project.id === item.project_id)?.name || '-'}
+                            {projects.find((project) => project.id === item.project_id)?.name || UI_DASH}
                           </span>
-                        ) : '-'}
+                        ) : UI_DASH}
                       </td>
                       <td>
                         {(item.description || '').slice(0, 40)}
@@ -418,7 +423,7 @@ export default function Income() {
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')}</h2>
-              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint('') }}>x</button>
+              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint('') }}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -468,7 +473,7 @@ export default function Income() {
                     setForm({ ...form, client_id: id, client_name: client ? client.name : '', contract_id: '' })
                   }}
                 >
-                  <option value="">- {tr('incomeManual')} -</option>
+                  <option value="">{`${UI_DASH} ${tr('incomeManual')} ${UI_DASH}`}</option>
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
@@ -482,9 +487,9 @@ export default function Income() {
                     value={form.contract_id}
                     onChange={(event) => setForm({ ...form, contract_id: event.target.value, contract_payment_type: '' })}
                   >
-                    <option value="">- {tr('incomeNoContract')} -</option>
+                    <option value="">{`${UI_DASH} ${tr('incomeNoContract')} ${UI_DASH}`}</option>
                     {contracts.map((contract) => (
-                      <option key={contract.id} value={contract.id}>{contract.number} - {contract.client_name} ({contract.amount?.toLocaleString?.('sr-RS')} RSD)</option>
+                      <option key={contract.id} value={contract.id}>{contract.number} {UI_DASH} {contract.client_name} ({contract.amount?.toLocaleString?.('sr-RS')} RSD)</option>
                     ))}
                   </select>
                 </div>
@@ -500,14 +505,14 @@ export default function Income() {
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
                       {commercialProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
                   {internalProjects.length > 0 && (
                     <optgroup label={tr('internalProject')}>
                       {internalProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                       ))}
                     </optgroup>
                   )}
@@ -521,7 +526,7 @@ export default function Income() {
                     value={form.contract_payment_type}
                     onChange={(event) => setForm({ ...form, contract_payment_type: event.target.value })}
                   >
-                    <option value="">- {tr('incomeNotSpecified')} -</option>
+                    <option value="">{`${UI_DASH} ${tr('incomeNotSpecified')} ${UI_DASH}`}</option>
                     <option value="advance">{tr('contractPaymentAdvance')}</option>
                     <option value="intermediate">{tr('contractPaymentIntermediate')}</option>
                     <option value="closing">{tr('contractPaymentClosing')}</option>
@@ -587,7 +592,7 @@ export default function Income() {
           <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>x</button>
+              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{UI_CLOSE}</button>
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
@@ -599,14 +604,14 @@ export default function Income() {
                 {commercialProjects.length > 0 && (
                   <optgroup label={tr('commercialProject')}>
                     {commercialProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}
                 {internalProjects.length > 0 && (
                   <optgroup label={tr('internalProject')}>
                     {internalProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                     ))}
                   </optgroup>
                 )}

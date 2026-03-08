@@ -1,10 +1,14 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const UI_DASH = '\u2014'
+const UI_SORT_BOTH = '\u2195'
+const UI_SORT_ASC = '\u2191'
+const UI_SORT_DESC = '\u2193'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -51,10 +55,10 @@ export default function BankTransactions() {
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
 
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || '-'
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || UI_DASH
   const getCategoryName = (categoryId) => {
     const category = categories.find((item) => item.id === categoryId)
-    if (!category) return '-'
+    if (!category) return UI_DASH
     return lang === 'ru' ? category.name_ru : category.name_sr
   }
 
@@ -119,8 +123,8 @@ export default function BankTransactions() {
   }
 
   const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.35, marginLeft: 4 }}>^v</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '^' : 'v'}</span>
+    if (sortCol !== col) return <span style={{ opacity: 0.35, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
   }
 
   const buildExpenseForm = (transaction) => ({
@@ -375,7 +379,7 @@ export default function BankTransactions() {
               value={expenseForm.category_id}
               onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}
             >
-              <option value="">-</option>
+              <option value="">{UI_DASH}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {lang === 'ru' ? category.name_ru : category.name_sr}
@@ -394,14 +398,14 @@ export default function BankTransactions() {
               {commercialProjects.length > 0 && (
                 <optgroup label={tr('commercialProject')}>
                   {commercialProjects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                   ))}
                 </optgroup>
               )}
               {internalProjects.length > 0 && (
                 <optgroup label={tr('internalProject')}>
                   {internalProjects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                   ))}
                 </optgroup>
               )}
@@ -504,10 +508,10 @@ export default function BankTransactions() {
                         <input type="checkbox" checked={selectedIds.includes(transaction.id)} onChange={() => toggleSelect(transaction.id)} />
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{transaction.date}</td>
-                      <td>{transaction.counterparty_name || '-'}</td>
+                      <td>{transaction.counterparty_name || UI_DASH}</td>
                       <td style={{ maxWidth: 320 }}>
                         <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={transaction.purpose || ''}>
-                          {transaction.purpose || '-'}
+                          {transaction.purpose || UI_DASH}
                         </div>
                         {transaction.bank_reference ? <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Ref: {transaction.bank_reference}</div> : null}
                       </td>
@@ -555,8 +559,8 @@ export default function BankTransactions() {
         {matchTx && (
           <div>
             <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
-              <div style={{ fontWeight: 700 }}>{matchTx.counterparty_name || '-'}</div>
-              <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{matchTx.purpose || '-'}</div>
+              <div style={{ fontWeight: 700 }}>{matchTx.counterparty_name || UI_DASH}</div>
+              <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{matchTx.purpose || UI_DASH}</div>
               <div style={{ marginTop: '0.5rem', fontWeight: 700 }}>
                 {matchTx.direction === 'in' ? '+' : '-'}{Number(matchTx.amount || 0).toLocaleString('sr-RS')} {matchTx.currency || 'RSD'}
               </div>
@@ -582,19 +586,19 @@ export default function BankTransactions() {
         <div className="form-group">
           <label className="form-label">{tr('project')}</label>
           <select className="form-input" value={assignProjectId} onChange={(event) => setAssignProjectId(event.target.value)}>
-            <option value="">-</option>
-            <option value="_none">-</option>
+            <option value="">{UI_DASH}</option>
+            <option value="_none">{UI_DASH}</option>
             {commercialProjects.length > 0 && (
               <optgroup label={tr('commercialProject')}>
                 {commercialProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                 ))}
               </optgroup>
             )}
             {internalProjects.length > 0 && (
               <optgroup label={tr('internalProject')}>
                 {internalProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` - ${project.code}` : ''}</option>
+                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
                 ))}
               </optgroup>
             )}
