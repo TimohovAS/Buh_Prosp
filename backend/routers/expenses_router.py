@@ -1,4 +1,4 @@
-"""Роутер расходов."""
+"""Р РѕСѓС‚РµСЂ СЂР°СЃС…РѕРґРѕРІ."""
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,7 +30,7 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список расходов с фильтрацией."""
+    """РЎРїРёСЃРѕРє СЂР°СЃС…РѕРґРѕРІ СЃ С„РёР»СЊС‚СЂР°С†РёРµР№."""
     q = select(Expense).order_by(Expense.date.desc(), Expense.id.desc())
     if year:
         q = q.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
@@ -54,7 +54,7 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Добавить расход."""
+    """Р”РѕР±Р°РІРёС‚СЊ СЂР°СЃС…РѕРґ."""
     project_id = data.project_id
     if not project_id:
         project_id = await _get_unassigned_project_id(db)
@@ -83,7 +83,7 @@ async def bulk_assign_project_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Массовое назначение проекта расходам. project_id=null → INT-UNASSIGNED."""
+    """РњР°СЃСЃРѕРІРѕРµ РЅР°Р·РЅР°С‡РµРЅРёРµ РїСЂРѕРµРєС‚Р° СЂР°СЃС…РѕРґР°Рј. project_id=null в†’ INT-UNASSIGNED."""
     if not data.ids:
         return {"updated": 0}
     pid = data.project_id
@@ -93,9 +93,9 @@ async def bulk_assign_project_expenses(
         r = await db.execute(select(Project).where(Project.id == pid))
         proj = r.scalar_one_or_none()
         if not proj:
-            raise HTTPException(404, "Проект не найден")
+            raise HTTPException(404, "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ")
         if proj.status == "archived":
-            raise HTTPException(400, "Нельзя назначить архивированный проект")
+            raise HTTPException(400, "РќРµР»СЊР·СЏ РЅР°Р·РЅР°С‡РёС‚СЊ Р°СЂС…РёРІРёСЂРѕРІР°РЅРЅС‹Р№ РїСЂРѕРµРєС‚")
     r = await db.execute(select(Expense).where(Expense.id.in_(data.ids)))
     items = r.scalars().all()
     for item in items:
@@ -111,7 +111,7 @@ async def get_expense_totals(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Суммы расходов за год и месяц."""
+    """РЎСѓРјРјС‹ СЂР°СЃС…РѕРґРѕРІ Р·Р° РіРѕРґ Рё РјРµСЃСЏС†."""
     today = date.today()
     y = year or today.year
     m = month or today.month
@@ -143,11 +143,11 @@ async def get_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Получить расход."""
+    """РџРѕР»СѓС‡РёС‚СЊ СЂР°СЃС…РѕРґ."""
     r = await db.execute(select(Expense).where(Expense.id == expense_id))
     expense = r.scalar_one_or_none()
     if not expense:
-        raise HTTPException(404, "Расход не найден")
+        raise HTTPException(404, "Р Р°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
     return ExpenseResponse.model_validate(expense)
 
 
@@ -158,15 +158,15 @@ async def reverse_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Сторно расхода. Создаётся запись с amount=-original, оригинал остаётся paid."""
+    """РЎС‚РѕСЂРЅРѕ СЂР°СЃС…РѕРґР°. РЎРѕР·РґР°С‘С‚СЃСЏ Р·Р°РїРёСЃСЊ СЃ amount=-original, РѕСЂРёРіРёРЅР°Р» РѕСЃС‚Р°С‘С‚СЃСЏ paid."""
     r = await db.execute(select(Expense).where(Expense.id == expense_id))
     expense = r.scalar_one_or_none()
     if not expense:
-        raise HTTPException(404, "Расход не найден")
+        raise HTTPException(404, "Р Р°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
     if getattr(expense, "status", "paid") == "reversed":
-        raise HTTPException(400, "Расход уже сторнирован")
+        raise HTTPException(400, "Р Р°СЃС…РѕРґ СѓР¶Рµ СЃС‚РѕСЂРЅРёСЂРѕРІР°РЅ")
     if getattr(expense, "reversed_expense_id", None):
-        raise HTTPException(400, "Расход уже сторнирован")
+        raise HTTPException(400, "Р Р°СЃС…РѕРґ СѓР¶Рµ СЃС‚РѕСЂРЅРёСЂРѕРІР°РЅ")
     reverse_date = data.date if data.date else None
     reversal = await create_expense_reversal(
         db, expense,
@@ -186,12 +186,15 @@ async def update_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Обновить расход."""
+    """РћР±РЅРѕРІРёС‚СЊ СЂР°СЃС…РѕРґ."""
     r = await db.execute(select(Expense).where(Expense.id == expense_id))
     expense = r.scalar_one_or_none()
     if not expense:
-        raise HTTPException(404, "Расход не найден")
-    for k, v in data.model_dump(exclude_unset=True).items():
+        raise HTTPException(404, "Р Р°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
+    dump = data.model_dump(exclude_unset=True)
+    if "project_id" in dump and not dump["project_id"]:
+        dump["project_id"] = await _get_unassigned_project_id(db)
+    for k, v in dump.items():
         setattr(expense, k, v)
     await db.flush()
     await db.commit()
@@ -205,13 +208,13 @@ async def delete_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Сторно расхода вместо удаления (никогда не удаляем физически)."""
+    """РЎС‚РѕСЂРЅРѕ СЂР°СЃС…РѕРґР° РІРјРµСЃС‚Рѕ СѓРґР°Р»РµРЅРёСЏ (РЅРёРєРѕРіРґР° РЅРµ СѓРґР°Р»СЏРµРј С„РёР·РёС‡РµСЃРєРё)."""
     r = await db.execute(select(Expense).where(Expense.id == expense_id))
     expense = r.scalar_one_or_none()
     if not expense:
-        raise HTTPException(404, "Расход не найден")
+        raise HTTPException(404, "Р Р°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
     if getattr(expense, "status", "paid") == "reversed" or getattr(expense, "reversed_expense_id", None):
-        raise HTTPException(400, "Расход уже сторнирован")
+        raise HTTPException(400, "Р Р°СЃС…РѕРґ СѓР¶Рµ СЃС‚РѕСЂРЅРёСЂРѕРІР°РЅ")
     source = getattr(expense, "source", None) or "manual"
     reversal = await create_expense_reversal(
         db, expense,

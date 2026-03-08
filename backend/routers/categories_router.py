@@ -1,17 +1,18 @@
-"""Роутер справочника категорий (статьи ДДС)."""
+﻿"""Роутер справочника категорий доходов и расходов."""
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
 from backend.models import TransactionCategory, User
 from backend.schemas import (
     TransactionCategoryCreate,
-    TransactionCategoryUpdate,
     TransactionCategoryResponse,
+    TransactionCategoryUpdate,
 )
-from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -23,16 +24,18 @@ async def list_categories(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список категорий (по умолчанию только активные)."""
-    q = select(TransactionCategory).order_by(
-        TransactionCategory.sort_order, TransactionCategory.name_ru
-    )
+    query = select(TransactionCategory)
     if category_type:
-        q = q.where(TransactionCategory.category_type == category_type)
+        query = query.where(TransactionCategory.category_type == category_type)
     if not include_inactive:
-        q = q.where(TransactionCategory.is_active == True)
-    result = await db.execute(q)
-    return [TransactionCategoryResponse.model_validate(c) for c in result.scalars().all()]
+        query = query.where(TransactionCategory.is_active.is_(True))
+    query = query.order_by(
+        TransactionCategory.sort_order,
+        TransactionCategory.name_ru,
+        TransactionCategory.name_sr,
+    )
+    result = await db.execute(query)
+    return [TransactionCategoryResponse.model_validate(item) for item in result.scalars().all()]
 
 
 @router.post("", response_model=TransactionCategoryResponse)
@@ -41,19 +44,11 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Создать категорию."""
-    cat = TransactionCategory(
-        name_ru=data.name_ru,
-        name_sr=data.name_sr,
-        category_type=data.category_type,
-        category_group=data.category_group,
-        is_active=data.is_active,
-        sort_order=data.sort_order,
-    )
-    db.add(cat)
+    category = TransactionCategory(**data.model_dump())
+    db.add(category)
     await db.commit()
-    await db.refresh(cat)
-    return TransactionCategoryResponse.model_validate(cat)
+    await db.refresh(category)
+    return TransactionCategoryResponse.model_validate(category)
 
 
 @router.patch("/{category_id}", response_model=TransactionCategoryResponse)
@@ -63,15 +58,16 @@ async def update_category(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Обновить категорию (включая деактивацию через is_active=false)."""
-    r = await db.execute(
+    result = await db.execute(
         select(TransactionCategory).where(TransactionCategory.id == category_id)
     )
-    cat = r.scalar_one_or_none()
-    if not cat:
+    category = result.scalar_one_or_none()
+    if not category:
         raise HTTPException(404, "Категория не найдена")
-    for k, v in data.model_dump(exclude_unset=True).items():
-        setattr(cat, k, v)
+
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(category, key, value)
+
     await db.commit()
-    await db.refresh(cat)
-    return TransactionCategoryResponse.model_validate(cat)
+    await db.refresh(category)
+    return TransactionCategoryResponse.model_validate(category)
