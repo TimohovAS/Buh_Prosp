@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -24,6 +24,8 @@ function buildContractLabel(contract) {
 }
 
 export default function BankTransactions() {
+  const pageBodyRef = useRef(null)
+  const pendingScrollTopRef = useRef(null)
   const [data, setData] = useState([])
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -75,7 +77,11 @@ export default function BankTransactions() {
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
   const getContractsForProject = (projectId) => contracts.filter((contract) => contract.project_id === projectId)
 
-  const loadData = async () => {
+  const loadData = async ({ preserveScroll = false } = {}) => {
+    if (preserveScroll && pageBodyRef.current) {
+      pendingScrollTopRef.current = pageBodyRef.current.scrollTop
+    }
+
     setLoading(true)
     try {
       const params = {}
@@ -98,6 +104,17 @@ export default function BankTransactions() {
       console.error(error)
     } finally {
       setLoading(false)
+      if (preserveScroll && pendingScrollTopRef.current != null) {
+        const scrollTop = pendingScrollTopRef.current
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (pageBodyRef.current) {
+              pageBodyRef.current.scrollTop = scrollTop
+            }
+            pendingScrollTopRef.current = null
+          })
+        })
+      }
     }
   }
 
@@ -163,7 +180,7 @@ export default function BankTransactions() {
   const handleUpdateStatus = async (id, newStatus) => {
     try {
       await api.bankTransactions.update(id, { status: newStatus })
-      loadData()
+      await loadData({ preserveScroll: true })
     } catch (error) {
       console.error(error)
     }
@@ -179,7 +196,7 @@ export default function BankTransactions() {
       setModalAssign(false)
       setAssignProjectId('')
       setSelectedIds([])
-      loadData()
+      await loadData({ preserveScroll: true })
     } catch (error) {
       console.error(error)
     }
@@ -189,7 +206,7 @@ export default function BankTransactions() {
     if (!confirm(tr('bankTxUnmatchBtn'))) return
     try {
       await api.bankTransactions.unmatch(id)
-      loadData()
+      await loadData({ preserveScroll: true })
     } catch (error) {
       console.error(error)
     }
@@ -240,7 +257,7 @@ export default function BankTransactions() {
     try {
       await api.bankTransactions.match(matchTx.id, { type: targetType, id: targetId })
       closeMatchModal()
-      loadData()
+      await loadData({ preserveScroll: true })
     } catch (error) {
       setMatchError(error.message)
     }
@@ -287,7 +304,7 @@ export default function BankTransactions() {
         note: expenseForm.note?.trim() || null,
       })
       closeMatchModal()
-      loadData()
+      await loadData({ preserveScroll: true })
     } catch (error) {
       setMatchError(error.message)
     } finally {
@@ -493,7 +510,7 @@ export default function BankTransactions() {
         </div>
       </div>
 
-      <div className="page-body">
+      <div className="page-body" ref={pageBodyRef}>
         <div className="card">
           <div className="table-wrap">
             <table>
