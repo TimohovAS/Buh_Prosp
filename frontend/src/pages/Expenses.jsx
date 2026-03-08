@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { tr, getLang } from '../i18n'
+import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -9,6 +9,14 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+
+function buildContractLabel(contract) {
+  if (!contract) return ''
+  const parts = []
+  if (contract.number) parts.push(contract.number)
+  if (contract.subject) parts.push(contract.subject)
+  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
+}
 
 export default function Expenses() {
   const [items, setItems] = useState([])
@@ -22,6 +30,7 @@ export default function Expenses() {
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [projects, setProjects] = useState([])
+  const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
   const [assignProjectId, setAssignProjectId] = useState('')
   const [form, setForm] = useState({
@@ -31,6 +40,7 @@ export default function Expenses() {
     category: '',
     category_id: '',
     project_id: '',
+    contract_id: '',
     note: '',
   })
 
@@ -43,12 +53,36 @@ export default function Expenses() {
 
   useEffect(load, [year, month])
   useEffect(() => {
-    api.projects.list({ show_archived: true }).then(setProjects)
-    api.categories.list({ category_type: 'expense' }).then(setCategories)
+    Promise.all([
+      api.projects.list({ show_archived: true }),
+      api.categories.list({ category_type: 'expense' }),
+      api.contracts.list({ limit: 500 }),
+    ]).then(([projectList, categoryList, contractList]) => {
+      setProjects(projectList)
+      setCategories(categoryList)
+      setContracts(contractList)
+    })
   }, [])
 
+  const lang = getLang()
+  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
+  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
+
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
+  const getContractsForProject = (projectId) => contracts.filter((contract) => contract.project_id === projectId)
+
+  const getCategoryLabel = (item) => {
+    const selectedCategory = categories.find((category) => category.id === item.category_id)
+    if (selectedCategory) {
+      return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
+    }
+    return item.category || UI_DASH
+  }
+
   const toggleSelect = (id) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]))
   }
 
   const toggleSelectAll = () => {
@@ -58,29 +92,29 @@ export default function Expenses() {
 
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const pid = assignProjectId === '' || assignProjectId === '_none'
+    const projectId = assignProjectId === '' || assignProjectId === '_none'
       ? (unassignedProject ? unassignedProject.id : null)
       : parseInt(assignProjectId, 10)
     try {
-      await api.expenses.bulkAssignProject({ ids: selectedIds, project_id: pid })
+      await api.expenses.bulkAssignProject({ ids: selectedIds, project_id: projectId })
       setModalAssign(false)
       setAssignProjectId('')
       setSelectedIds([])
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
   const openAdd = () => {
-    const unassigned = projects.find((project) => project.code === 'INT-UNASSIGNED')
     setForm({
       date: new Date().toISOString().slice(0, 10),
       description: '',
       amount: '',
       category: '',
       category_id: '',
-      project_id: unassigned ? String(unassigned.id) : '',
+      project_id: unassignedProject ? String(unassignedProject.id) : '',
+      contract_id: '',
       note: '',
     })
     setModal('add')
@@ -94,9 +128,37 @@ export default function Expenses() {
       category: item.category || '',
       category_id: item.category_id ?? '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
+      contract_id: item.contract_id ?? '',
       note: item.note || '',
     })
     setModal({ type: 'edit', id: item.id })
+  }
+
+  const updateProject = (projectId) => {
+    setForm((previous) => {
+      const nextProjectId = projectId
+      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const keepContract = selectedContract && String(selectedContract.project_id) === String(nextProjectId)
+      return {
+        ...previous,
+        project_id: nextProjectId,
+        contract_id: keepContract ? previous.contract_id : '',
+      }
+    })
+  }
+
+  const updateContract = (contractId) => {
+    setForm((previous) => {
+      if (!contractId) {
+        return { ...previous, contract_id: '' }
+      }
+      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
+      return {
+        ...previous,
+        contract_id: contractId,
+        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
+      }
+    })
   }
 
   const handleSubmit = async (event) => {
@@ -110,6 +172,7 @@ export default function Expenses() {
         category: categoryValue,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
         project_id: form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
+        contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
         note: form.note || null,
       }
       if (modal === 'add') {
@@ -119,8 +182,8 @@ export default function Expenses() {
       }
       setModal(null)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -129,24 +192,15 @@ export default function Expenses() {
     try {
       await api.expenses.delete(id)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  const lang = getLang()
-  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
-  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
-  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
-
-  const getCategoryLabel = (item) => {
-    const selectedCategory = categories.find((category) => category.id === item.category_id)
-    if (selectedCategory) {
-      return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
-    }
-    return item.category || UI_DASH
-  }
+  const filteredContracts = useMemo(() => {
+    const selectedProjectId = form.project_id ? parseInt(form.project_id, 10) : null
+    return selectedProjectId ? getContractsForProject(selectedProjectId) : []
+  }, [contracts, form.project_id])
 
   const filtered = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -156,21 +210,30 @@ export default function Expenses() {
         (item.description || '').toLowerCase().includes(normalizedSearch) ||
         getCategoryLabel(item).toLowerCase().includes(normalizedSearch) ||
         String(item.amount || '').includes(normalizedSearch) ||
-        getProjectName(item.project_id).toLowerCase().includes(normalizedSearch)
+        getProjectName(item.project_id).toLowerCase().includes(normalizedSearch) ||
+        getContractLabel(item.contract_id).toLowerCase().includes(normalizedSearch)
       )
     }
     return [...rows].sort((left, right) => {
       const leftValue = sortCol === 'project_id'
         ? getProjectName(left.project_id)
-        : (sortCol === 'category' ? getCategoryLabel(left) : (left[sortCol] ?? ''))
+        : sortCol === 'contract_id'
+          ? getContractLabel(left.contract_id)
+          : sortCol === 'category'
+            ? getCategoryLabel(left)
+            : (left[sortCol] ?? '')
       const rightValue = sortCol === 'project_id'
         ? getProjectName(right.project_id)
-        : (sortCol === 'category' ? getCategoryLabel(right) : (right[sortCol] ?? ''))
+        : sortCol === 'contract_id'
+          ? getContractLabel(right.contract_id)
+          : sortCol === 'category'
+            ? getCategoryLabel(right)
+            : (right[sortCol] ?? '')
       if (leftValue < rightValue) return sortAsc ? -1 : 1
       if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
-  }, [items, search, sortCol, sortAsc, projects, categories, lang])
+  }, [items, search, sortCol, sortAsc, contracts, projects, categories, lang])
 
   const toggleSort = (col) => {
     if (sortCol === col) setSortAsc((value) => !value)
@@ -202,12 +265,7 @@ export default function Expenses() {
           >
             {tr('total')}: {total.toLocaleString('sr-RS')} RSD
           </div>
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
-            value={year}
-            onChange={(event) => setYear(parseInt(event.target.value, 10))}
-          >
+          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => setYear(parseInt(event.target.value, 10))}>
             {[year - 2, year - 1, year, year + 1].map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
@@ -241,9 +299,7 @@ export default function Expenses() {
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
-          <button className="btn btn-primary" onClick={openAdd}>
-            {tr('add')}
-          </button>
+          <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
         </div>
       </div>
 
@@ -254,15 +310,12 @@ export default function Expenses() {
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
-                    <input
-                      type="checkbox"
-                      checked={filtered.length > 0 && selectedIds.length >= filtered.length}
-                      onChange={toggleSelectAll}
-                    />
+                    <input type="checkbox" checked={filtered.length > 0 && selectedIds.length >= filtered.length} onChange={toggleSelectAll} />
                   </th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIcon col="description" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('contract_id')}>{tr('contract')} <SortIcon col="contract_id" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIcon col="category" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
                   <th>{tr('paymentRef')}</th>
@@ -271,21 +324,14 @@ export default function Expenses() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={9}>{tr('loading')}</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}
-                    >
+                    <tr key={item.id} className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}>
                       <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item.id)}
-                          onChange={() => toggleSelect(item.id)}
-                        />
+                        <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
                       </td>
                       <td>{item.date}</td>
                       <td>{(item.description || '').slice(0, 50)}</td>
@@ -296,6 +342,7 @@ export default function Expenses() {
                           </span>
                         ) : UI_DASH}
                       </td>
+                      <td title={getContractLabel(item.contract_id) || ''}>{item.contract_id ? getContractLabel(item.contract_id) : UI_DASH}</td>
                       <td>{getCategoryLabel(item)}</td>
                       <td>{item.amount.toLocaleString('sr-RS')}</td>
                       <td
@@ -329,11 +376,7 @@ export default function Expenses() {
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
-                <DatePicker
-                  value={form.date}
-                  onChange={(value) => setForm({ ...form, date: value })}
-                  required
-                />
+                <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('description')}</label>
@@ -365,12 +408,7 @@ export default function Expenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
-                <select
-                  className="form-input"
-                  value={form.project_id}
-                  onChange={(event) => setForm({ ...form, project_id: event.target.value })}
-                  required
-                >
+                <select className="form-input" value={form.project_id} onChange={(event) => updateProject(event.target.value)} required>
                   <option value="">{UI_DASH}</option>
                   {commercialProjects.length > 0 && (
                     <optgroup label={tr('commercialProject')}>
@@ -389,6 +427,15 @@ export default function Expenses() {
                 </select>
               </div>
               <div className="form-group">
+                <label className="form-label">{tr('contract')}</label>
+                <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
+                  <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                  {filteredContracts.map((contract) => (
+                    <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
                 <label className="form-label">{tr('amount')}</label>
                 <input
                   type="number"
@@ -401,17 +448,10 @@ export default function Expenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('note')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.note}
-                  onChange={(event) => setForm({ ...form, note: event.target.value })}
-                />
+                <input type="text" className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
-                  {tr('cancel')}
-                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>{tr('cancel')}</button>
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
@@ -428,11 +468,7 @@ export default function Expenses() {
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
-              <select
-                className="form-input"
-                value={assignProjectId}
-                onChange={(event) => setAssignProjectId(event.target.value)}
-              >
+              <select className="form-input" value={assignProjectId} onChange={(event) => setAssignProjectId(event.target.value)}>
                 <option value="">{UI_DASH}</option>
                 {commercialProjects.length > 0 && (
                   <optgroup label={tr('commercialProject')}>
@@ -450,13 +486,9 @@ export default function Expenses() {
                 )}
               </select>
             </div>
-            <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
-                {tr('cancel')}
-              </button>
-              <button type="button" className="btn btn-primary" onClick={handleBulkAssign}>
-                {tr('save')}
-              </button>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{tr('cancel')}</button>
+              <button type="button" className="btn btn-primary" onClick={handleBulkAssign}>{tr('save')}</button>
             </div>
           </div>
         </div>

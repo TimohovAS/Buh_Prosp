@@ -1,7 +1,7 @@
-"""Pydantic СЃС…РµРјС‹ РґР»СЏ API."""
+"""Pydantic РЎРѓРЎвЂ¦Р ВµР СРЎвЂ№ Р Т‘Р В»РЎРЏ API."""
 from datetime import date, datetime
 
-# РђР»РёР°СЃ РґР»СЏ РёР·Р±РµР¶Р°РЅРёСЏ РєРѕРЅС„Р»РёРєС‚Р° РёРјРµРЅРё РїРѕР»СЏ date СЃ С‚РёРїРѕРј date
+# Р С’Р В»Р С‘Р В°РЎРѓ Р Т‘Р В»РЎРЏ Р С‘Р В·Р В±Р ВµР В¶Р В°Р Р…Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂћР В»Р С‘Р С”РЎвЂљР В° Р С‘Р СР ВµР Р…Р С‘ Р С—Р С•Р В»РЎРЏ date РЎРѓ РЎвЂљР С‘Р С—Р С•Р С date
 DateType = date
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -136,8 +136,8 @@ class ProjectBrief(BaseModel):
 
 # --- Income ---
 class IncomeBase(BaseModel):
-    issued_date: DateType = Field(serialization_alias="date")  # РґР°С‚Р° СЃС‡С‘С‚Р° (РІ Р‘Р”: date)
-    due_date: Optional[DateType] = None  # Valuta / СЃСЂРѕРє РѕРїР»Р°С‚С‹
+    issued_date: DateType = Field(serialization_alias="date")  # Р Т‘Р В°РЎвЂљР В° РЎРѓРЎвЂЎРЎвЂРЎвЂљР В° (Р Р† Р вЂР вЂќ: date)
+    due_date: Optional[DateType] = None  # Valuta / РЎРѓРЎР‚Р С•Р С” Р С•Р С—Р В»Р В°РЎвЂљРЎвЂ№
     invoice_number: str
     invoice_year: Optional[int] = None
     client_id: Optional[int] = None
@@ -156,9 +156,9 @@ class IncomeBase(BaseModel):
 
 
 class IncomeCreate(IncomeBase):
-    invoice_number: Optional[str] = None  # РїСѓСЃС‚Рѕ = РїСЂРёСЃРІРѕРёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё
+    invoice_number: Optional[str] = None  # Р С—РЎС“РЎРѓРЎвЂљР С• = Р С—РЎР‚Р С‘РЎРѓР Р†Р С•Р С‘РЎвЂљРЎРЉ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘
     invoice_year: Optional[int] = None
-    issued_date: Optional[DateType] = None  # РїСЂРё РїСѓСЃС‚Рѕ Р±РµСЂС‘С‚СЃСЏ date (backward compat)
+    issued_date: Optional[DateType] = None  # Р С—РЎР‚Р С‘ Р С—РЎС“РЎРѓРЎвЂљР С• Р В±Р ВµРЎР‚РЎвЂРЎвЂљРЎРѓРЎРЏ date (backward compat)
     status: Optional[str] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
@@ -221,7 +221,7 @@ class IncomeMarkPaid(BaseModel):
 
 
 class BulkAssignProject(BaseModel):
-    """РњР°СЃСЃРѕРІРѕРµ РЅР°Р·РЅР°С‡РµРЅРёРµ РїСЂРѕРµРєС‚Р°: ids + project_id (null = СЃРЅСЏС‚СЊ РїСЂРѕРµРєС‚)."""
+    """Р СљР В°РЎРѓРЎРѓР С•Р Р†Р С•Р Вµ Р Р…Р В°Р В·Р Р…Р В°РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР В°: ids + project_id (null = РЎРѓР Р…РЎРЏРЎвЂљРЎРЉ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљ)."""
     ids: list[int]
     project_id: Optional[int] = None
 
@@ -238,7 +238,7 @@ class IncomeResponse(IncomeBase):
 
 
 class DashboardIncomeResponse(BaseModel):
-    """РЈРїСЂРѕС‰С‘РЅРЅС‹Р№ РѕС‚РІРµС‚ РґР»СЏ РїР°РЅРµР»Рё."""
+    """Р Р€Р С—РЎР‚Р С•РЎвЂ°РЎвЂР Р…Р Р…РЎвЂ№Р в„– Р С•РЎвЂљР Р†Р ВµРЎвЂљ Р Т‘Р В»РЎРЏ Р С—Р В°Р Р…Р ВµР В»Р С‘."""
     id: int
     issued_date: DateType = Field(serialization_alias="date")
     invoice_number: str
@@ -253,7 +253,7 @@ class DashboardIncomeResponse(BaseModel):
 class ContractItemBase(BaseModel):
     description: str
     quantity: float = 1
-    unit: str = "С€С‚"
+    unit: str = "РЎв‚¬РЎвЂљ"
     price: float = 0
 
 
@@ -310,11 +310,13 @@ class ContractResponse(ContractBase):
     created_at: datetime
     client_name: Optional[str] = None
     items: Optional[list[ContractItemResponse]] = None
-    # РЎСѓРјРјС‹ РїРѕ С‚РёРїР°Рј РїР»Р°С‚РµР¶РµР№ (Р°РІР°РЅСЃ, РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹Рµ, Р·Р°РєСЂС‹РІР°СЋС‰РёР№)
+    # Р РЋРЎС“Р СР СРЎвЂ№ Р С—Р С• РЎвЂљР С‘Р С—Р В°Р С Р С—Р В»Р В°РЎвЂљР ВµР В¶Р ВµР в„– (Р В°Р Р†Р В°Р Р…РЎРѓ, Р С—РЎР‚Р С•Р СР ВµР В¶РЎС“РЎвЂљР С•РЎвЂЎР Р…РЎвЂ№Р Вµ, Р В·Р В°Р С”РЎР‚РЎвЂ№Р Р†Р В°РЎР‹РЎвЂ°Р С‘Р в„–)
     advance_sum: float = 0
     intermediate_sum: float = 0
     closing_sum: float = 0
     total_received: float = 0
+    total_expenses: float = 0
+    profit: float = 0
 
     class Config:
         from_attributes = True
@@ -346,7 +348,7 @@ class EnterpriseResponse(EnterpriseBase):
         from_attributes = True
 
 
-# --- PaymentType, YearDecision, MonthlyObligation (РўР—: РћР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїР»Р°С‚РµР¶Рё) ---
+# --- PaymentType, YearDecision, MonthlyObligation (Р СћР вЂ”: Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘) ---
 class PaymentTypeResponse(BaseModel):
     id: int
     code: str
@@ -366,7 +368,7 @@ class YearDecisionBase(BaseModel):
     monthly_amount: float
     base_amount: Optional[float] = None
     rate_percent: Optional[float] = None
-    recipient_name: str = "РџРѕСЂРµСЃРєР° СѓРїСЂР°РІР° Р РµРїСѓР±Р»РёРєРµ РЎСЂР±РёСРµ"
+    recipient_name: str = "Р СџР С•РЎР‚Р ВµРЎРѓР С”Р В° РЎС“Р С—РЎР‚Р В°Р Р†Р В° Р В Р ВµР С—РЎС“Р В±Р В»Р С‘Р С”Р Вµ Р РЋРЎР‚Р В±Р С‘РЎВР Вµ"
     recipient_account: str
     sifra_placanja: str = "253"
     model: str = "97"
@@ -431,7 +433,7 @@ class ObligationMarkPaid(BaseModel):
 
 
 class IPSQRData(BaseModel):
-    """Р”Р°РЅРЅС‹Рµ РґР»СЏ IPS QR (NBS)."""
+    """Р вЂќР В°Р Р…Р Р…РЎвЂ№Р Вµ Р Т‘Р В»РЎРЏ IPS QR (NBS)."""
     payer: str
     recipient: str
     account: str
@@ -508,17 +510,17 @@ class IncomeLimitStatus(BaseModel):
 
 
 class UpcomingObligationItem(BaseModel):
-    """РќРµРѕРїР»Р°С‡РµРЅРЅРѕРµ РѕР±СЏР·Р°С‚РµР»СЊСЃС‚РІРѕ РґР»СЏ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ РЅР° РґР°С€Р±РѕСЂРґРµ."""
+    """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
     id: int
     payment_type_name: str
     amount: float
     deadline: str  # YYYY-MM-DD
     status: str  # overdue | upcoming
-    days_until: int  # РѕС‚СЂРёС†Р°С‚РµР»СЊРЅРѕРµ РµСЃР»Рё РїСЂРѕСЃСЂРѕС‡РµРЅРѕ
+    days_until: int  # Р С•РЎвЂљРЎР‚Р С‘РЎвЂ Р В°РЎвЂљР ВµР В»РЎРЉР Р…Р С•Р Вµ Р ВµРЎРѓР В»Р С‘ Р С—РЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р С•
 
 
 class UpcomingPlannedItem(BaseModel):
-    """РџСЂРѕСЃСЂРѕС‡РµРЅРЅС‹Р№ РёР»Рё РїСЂРёР±Р»РёР¶Р°СЋС‰РёР№СЃСЏ РїРµСЂРёРѕРґРёС‡РµСЃРєРёР№ СЂР°СЃС…РѕРґ."""
+    """Р СџРЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р Р…РЎвЂ№Р в„– Р С‘Р В»Р С‘ Р С—РЎР‚Р С‘Р В±Р В»Р С‘Р В¶Р В°РЎР‹РЎвЂ°Р С‘Р в„–РЎРѓРЎРЏ Р С—Р ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘."""
     planned_expense_id: int
     name: str
     amount: float
@@ -535,7 +537,7 @@ class DashboardStats(BaseModel):
     month_expenses: float
     balance_month: float  # month_income - month_expenses
     balance_year: float   # year_income - year_expenses
-    planned_expenses_until_month_end: float  # РїР»Р°РЅРёСЂСѓРµРјС‹Рµ СЂР°СЃС…РѕРґС‹ + РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїР»Р°С‚РµР¶Рё РґРѕ РєРѕРЅС†Р° РјРµСЃСЏС†Р°
+    planned_expenses_until_month_end: float  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None
@@ -555,13 +557,14 @@ class ExpenseBase(BaseModel):
     status: Optional[str] = None  # planned | paid | reversed
     is_tax_related: Optional[bool] = None
     project_id: Optional[int] = None
+    contract_id: Optional[int] = None
     category_id: Optional[int] = None
     source: Optional[str] = None  # manual | planned | obligation | bank_import
     reversal_of_id: Optional[int] = None
-    bank_reference: Optional[str] = None  # РќРѕРјРµСЂ РїР»Р°С‚С‘Р¶РєРё / ID transakcije
+    bank_reference: Optional[str] = None  # Р СњР С•Р СР ВµРЎР‚ Р С—Р В»Р В°РЎвЂљРЎвЂР В¶Р С”Р С‘ / ID transakcije
     note: Optional[str] = None
 
-    @field_validator("project_id", "category_id", mode="before")
+    @field_validator("project_id", "contract_id", "category_id", mode="before")
     @classmethod
     def empty_str_to_none(cls, value):
         if value == "" or value is None:
@@ -586,6 +589,7 @@ class ExpenseUpdate(BaseModel):
     category: Optional[str] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
+    contract_id: Optional[int] = None
     category_id: Optional[int] = None
     note: Optional[str] = None
 
@@ -595,7 +599,7 @@ class ExpenseUpdate(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        for key in ("project_id", "category_id"):
+        for key in ("project_id", "contract_id", "category_id"):
             if key in result and (result[key] == "" or result[key] is None):
                 result[key] = None
         return result
@@ -611,7 +615,7 @@ class ExpenseResponse(ExpenseBase):
         from_attributes = True
 
 
-# --- PlannedExpense (РџР»Р°РЅРёСЂСѓРµРјС‹Рµ СЂР°СЃС…РѕРґС‹) ---
+# --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
 class PlannedExpenseBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -621,8 +625,8 @@ class PlannedExpenseBase(BaseModel):
     category_id: Optional[int] = None
     project_id: Optional[int] = None
     period: str = "monthly"  # weekly, monthly, quarterly, yearly
-    payment_day: Optional[int] = None  # 1-31 РґР»СЏ monthly/quarterly/yearly
-    payment_day_of_week: Optional[int] = None  # 0-6 РґР»СЏ weekly (0=РїРЅ)
+    payment_day: Optional[int] = None  # 1-31 Р Т‘Р В»РЎРЏ monthly/quarterly/yearly
+    payment_day_of_week: Optional[int] = None  # 0-6 Р Т‘Р В»РЎРЏ weekly (0=Р С—Р Р…)
     start_date: DateType
     end_date: Optional[DateType] = None
     reminder_days: int = 3
@@ -748,9 +752,10 @@ class BankTransactionCreateExpenseRequest(BaseModel):
     description: Optional[str] = None
     category_id: Optional[int] = None
     project_id: Optional[int] = None
+    contract_id: Optional[int] = None
     note: Optional[str] = None
 
-    @field_validator("project_id", "category_id", mode="before")
+    @field_validator("project_id", "contract_id", "category_id", mode="before")
     @classmethod
     def empty_str_to_none(cls, value):
         if value == "" or value is None:

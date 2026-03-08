@@ -1,17 +1,25 @@
-"""Роутер договоров (по образцу 1С Моя фирма)."""
-from datetime import date
+﻿from datetime import date
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.database import get_db
-from backend.models import Contract, ContractItem, Client, User, Project
-from backend.schemas import ContractCreate, ContractUpdate, ContractResponse, ContractItemCreate, ContractItemResponse
 from backend.auth import get_current_user_required, require_edit_access
+from backend.database import get_db
+from backend.models import Client, Contract, ContractItem, Project, User
+from backend.schemas import ContractCreate, ContractItemCreate, ContractItemResponse, ContractResponse, ContractUpdate
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
+
+
+async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    return project
 
 
 @router.get("", response_model=list[ContractResponse])
@@ -24,21 +32,21 @@ async def list_contracts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список договоров."""
-    q = select(Contract).options(selectinload(Contract.client), selectinload(Contract.items), selectinload(Contract.incomes))
+    query = select(Contract).options(
+        selectinload(Contract.client),
+        selectinload(Contract.items),
+        selectinload(Contract.incomes),
+        selectinload(Contract.expenses),
+    )
     if client_id:
-        q = q.where(Contract.client_id == client_id)
+        query = query.where(Contract.client_id == client_id)
     if status:
-        q = q.where(Contract.status == status)
+        query = query.where(Contract.status == status)
     if year:
-        q = q.where(
-            Contract.date >= date(year, 1, 1),
-            Contract.date <= date(year, 12, 31)
-        )
-    q = q.order_by(Contract.date.desc(), Contract.id.desc()).offset(skip).limit(limit)
-    result = await db.execute(q)
-    contracts = result.scalars().all()
-    return [_contract_to_response(c) for c in contracts]
+        query = query.where(Contract.date >= date(year, 1, 1), Contract.date <= date(year, 12, 31))
+    query = query.order_by(Contract.date.desc(), Contract.id.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return [_contract_to_response(contract) for contract in result.scalars().all()]
 
 
 @router.get("/next-number/")
@@ -47,22 +55,18 @@ async def next_contract_number(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Следующий номер договора."""
-    y = year or date.today().year
-    r = await db.execute(
-        select(Contract).where(
-            Contract.date >= date(y, 1, 1),
-            Contract.date <= date(y, 12, 31)
-        )
+    selected_year = year or date.today().year
+    result = await db.execute(
+        select(Contract).where(Contract.date >= date(selected_year, 1, 1), Contract.date <= date(selected_year, 12, 31))
     )
-    contracts = r.scalars().all()
-    nums = []
-    for c in contracts:
-        parts = str(c.number).split("-")
+    contracts = result.scalars().all()
+    numbers = []
+    for contract in contracts:
+        parts = str(contract.number).split("-")
         if len(parts) == 2 and parts[1].isdigit():
-            nums.append(int(parts[1]))
-    next_num = max(nums, default=0) + 1
-    return {"number": f"{y}-{next_num:04d}"}
+            numbers.append(int(parts[1]))
+    next_num = max(numbers, default=0) + 1
+    return {"number": f"{selected_year}-{next_num:04d}"}
 
 
 @router.post("/create", response_model=ContractResponse)
@@ -71,28 +75,28 @@ async def create_contract(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Создать договор."""
-    r = await db.execute(select(Client).where(Client.id == data.client_id))
-    client = r.scalar_one_or_none()
+    result = await db.execute(select(Client).where(Client.id == data.client_id))
+    client = result.scalar_one_or_none()
     if not client:
-        raise HTTPException(404, "Клиент не найден")
+        raise HTTPException(404, "Client not found")
 
-    amount = 0
-    items_data = []
+    amount = 0.0
+    items_data: list[tuple[ContractItemCreate, float, int]] = []
     if data.items:
-        for i, item in enumerate(data.items):
-            amt = item.quantity * item.price
-            amount += amt
-            items_data.append((item, amt, i))
+        for index, item in enumerate(data.items):
+            item_amount = item.quantity * item.price
+            amount += item_amount
+            items_data.append((item, item_amount, index))
     else:
         amount = data.amount
 
-    # Auto-create Project if not provided
     project_id = data.project_id
-    if not project_id:
-        proj_name = data.subject or f"Проект: {data.number}"
+    if project_id:
+        await _get_project_or_404(db, project_id)
+    else:
+        project_name = data.subject or f"Project: {data.number}"
         new_project = Project(
-            name=proj_name[:200],
+            name=project_name[:200],
             client_id=data.client_id,
             is_internal=False,
             status="active",
@@ -119,60 +123,67 @@ async def create_contract(
     db.add(contract)
     await db.flush()
 
-    for item, amt, idx in items_data:
-        ci = ContractItem(
-            contract_id=contract.id,
-            description=item.description,
-            quantity=item.quantity,
-            unit=item.unit,
-            price=item.price,
-            amount=amt,
-            sort_order=idx,
+    for item, item_amount, index in items_data:
+        db.add(
+            ContractItem(
+                contract_id=contract.id,
+                description=item.description,
+                quantity=item.quantity,
+                unit=item.unit,
+                price=item.price,
+                amount=item_amount,
+                sort_order=index,
+            )
         )
-        db.add(ci)
 
     await db.commit()
     await db.refresh(contract)
-    await db.refresh(contract, ["client", "items"])
+    await db.refresh(contract, ["client", "items", "incomes", "expenses"])
     return _contract_to_response(contract)
 
 
-def _contract_to_response(c: Contract) -> ContractResponse:
-    items = [ContractItemResponse.model_validate(i) for i in c.items] if c.items else []
-    advance_sum = intermediate_sum = closing_sum = 0.0
-    # Для create/update связь incomes может быть не предзагружена.
-    # Не триггерим lazy-load в async-контексте, чтобы избежать MissingGreenlet (HTTP 500).
-    incomes = c.__dict__.get("incomes") or []
-    for inc in incomes:
-        amt = inc.amount_rsd * (inc.exchange_rate or 1)
-        if inc.contract_payment_type == "advance":
-            advance_sum += amt
-        elif inc.contract_payment_type == "intermediate":
-            intermediate_sum += amt
-        elif inc.contract_payment_type == "closing":
-            closing_sum += amt
+def _contract_to_response(contract: Contract) -> ContractResponse:
+    items = [ContractItemResponse.model_validate(item) for item in contract.items] if contract.items else []
+
+    advance_sum = 0.0
+    intermediate_sum = 0.0
+    closing_sum = 0.0
+    for income in contract.__dict__.get("incomes") or []:
+        amount = income.amount_rsd * (income.exchange_rate or 1)
+        if income.contract_payment_type == "advance":
+            advance_sum += amount
+        elif income.contract_payment_type == "intermediate":
+            intermediate_sum += amount
+        elif income.contract_payment_type == "closing":
+            closing_sum += amount
+
     total_received = advance_sum + intermediate_sum + closing_sum
+    total_expenses = float(sum(float(expense.amount or 0) for expense in (contract.__dict__.get("expenses") or [])))
+    profit = total_received - total_expenses
+
     return ContractResponse(
-        id=c.id,
-        number=c.number,
-        date=c.date,
-        client_id=c.client_id,
-        project_id=c.project_id,
-        client_name=c.client.name if c.client else None,
-        contract_type=c.contract_type,
-        subject=c.subject,
-        amount=c.amount,
-        currency=c.currency,
-        validity_start=c.validity_start,
-        validity_end=c.validity_end,
-        status=c.status,
-        note=c.note,
-        created_at=c.created_at,
+        id=contract.id,
+        number=contract.number,
+        date=contract.date,
+        client_id=contract.client_id,
+        project_id=contract.project_id,
+        client_name=contract.client.name if contract.client else None,
+        contract_type=contract.contract_type,
+        subject=contract.subject,
+        amount=contract.amount,
+        currency=contract.currency,
+        validity_start=contract.validity_start,
+        validity_end=contract.validity_end,
+        status=contract.status,
+        note=contract.note,
+        created_at=contract.created_at,
         items=items,
         advance_sum=advance_sum,
         intermediate_sum=intermediate_sum,
         closing_sum=closing_sum,
         total_received=total_received,
+        total_expenses=total_expenses,
+        profit=profit,
     )
 
 
@@ -182,14 +193,19 @@ async def get_contract(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Получить договор."""
-    r = await db.execute(
-        select(Contract).options(selectinload(Contract.client), selectinload(Contract.items), selectinload(Contract.incomes))
+    result = await db.execute(
+        select(Contract)
+        .options(
+            selectinload(Contract.client),
+            selectinload(Contract.items),
+            selectinload(Contract.incomes),
+            selectinload(Contract.expenses),
+        )
         .where(Contract.id == contract_id)
     )
-    contract = r.scalar_one_or_none()
+    contract = result.scalar_one_or_none()
     if not contract:
-        raise HTTPException(404, "Договор не найден")
+        raise HTTPException(404, "Contract not found")
     return _contract_to_response(contract)
 
 
@@ -200,44 +216,61 @@ async def update_contract(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Обновить договор."""
-    r = await db.execute(
-        select(Contract).options(selectinload(Contract.client), selectinload(Contract.items), selectinload(Contract.incomes))
+    result = await db.execute(
+        select(Contract)
+        .options(
+            selectinload(Contract.client),
+            selectinload(Contract.items),
+            selectinload(Contract.incomes),
+            selectinload(Contract.expenses),
+        )
         .where(Contract.id == contract_id)
     )
-    contract = r.scalar_one_or_none()
+    contract = result.scalar_one_or_none()
     if not contract:
-        raise HTTPException(404, "Договор не найден")
+        raise HTTPException(404, "Contract not found")
+
     data_dict = data.model_dump(exclude_unset=True)
     items_data = data_dict.pop("items", None)
-    for k, v in data_dict.items():
-        setattr(contract, k, v)
+    if data_dict.get("project_id"):
+        await _get_project_or_404(db, data_dict["project_id"])
+
+    for key, value in data_dict.items():
+        setattr(contract, key, value)
+
     if items_data is not None:
-        for ci in list(contract.items):
-            await db.delete(ci)
+        for item in list(contract.items):
+            await db.delete(item)
         await db.flush()
+
         amount = 0.0
         has_items = False
-        for i, item in enumerate(items_data):
+        for index, item in enumerate(items_data):
             item_obj = ContractItemCreate(**item)
-            amt = item_obj.quantity * item_obj.price
-            amount += amt
+            item_amount = item_obj.quantity * item_obj.price
+            amount += item_amount
             has_items = True
-            ci = ContractItem(
-                contract_id=contract.id,
-                description=item_obj.description,
-                quantity=item_obj.quantity,
-                unit=item_obj.unit,
-                price=item_obj.price,
-                amount=amt,
-                sort_order=i,
+            db.add(
+                ContractItem(
+                    contract_id=contract.id,
+                    description=item_obj.description,
+                    quantity=item_obj.quantity,
+                    unit=item_obj.unit,
+                    price=item_obj.price,
+                    amount=item_amount,
+                    sort_order=index,
+                )
             )
-            db.add(ci)
         if has_items:
             contract.amount = amount
+
+    if "project_id" in data_dict:
+        for expense in contract.expenses or []:
+            expense.project_id = contract.project_id
+
     await db.commit()
     await db.refresh(contract)
-    await db.refresh(contract, ["client", "items"])
+    await db.refresh(contract, ["client", "items", "incomes", "expenses"])
     return _contract_to_response(contract)
 
 
@@ -247,11 +280,10 @@ async def delete_contract(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Удалить договор."""
-    r = await db.execute(select(Contract).where(Contract.id == contract_id))
-    contract = r.scalar_one_or_none()
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
     if not contract:
-        raise HTTPException(404, "Договор не найден")
+        raise HTTPException(404, "Contract not found")
     await db.delete(contract)
     await db.commit()
     return {"ok": True}

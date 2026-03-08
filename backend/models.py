@@ -299,6 +299,7 @@ class Contract(Base):
     project = relationship("Project", back_populates="contracts", foreign_keys=[project_id])
     items = relationship("ContractItem", back_populates="contract", cascade="all, delete-orphan")
     incomes = relationship("Income", back_populates="contract", foreign_keys="Income.contract_id")
+    expenses = relationship("Expense", back_populates="contract", foreign_keys="Expense.contract_id")
 
 
 class ContractItem(Base):
@@ -362,6 +363,7 @@ class Expense(Base):
     currency = Column(String(5), default="RSD")
     category = Column(String(50))  # legacy: materials, services, other, tax, etc.
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     bank_reference = Column(String(100))  # Референция банка при импорте из извода
     paid_date = Column(Date)
     status = Column(String(20), nullable=False, default="paid")  # planned | paid | reversed
@@ -376,6 +378,7 @@ class Expense(Base):
 
     category_ref = relationship("TransactionCategory")
     project = relationship("Project", back_populates="expenses", foreign_keys=[project_id])
+    contract = relationship("Contract", back_populates="expenses", foreign_keys=[contract_id])
     reversal_of = relationship("Expense", remote_side=[id], foreign_keys=[reversal_of_id])
     reversed_by = relationship("Expense", remote_side=[id], foreign_keys=[reversed_expense_id])
 
@@ -402,6 +405,7 @@ class PlannedExpense(Base):
     currency = Column(String(5), default="RSD")
     category = Column(String(50))  # legacy: rent, internet, phone, utilities, insurance, other
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     period = Column(String(20), default="monthly")  # weekly, monthly, quarterly, yearly
     payment_day = Column(Integer)  # День месяца (1-31) для monthly/quarterly/yearly

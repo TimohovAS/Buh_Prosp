@@ -14,9 +14,18 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function buildContractLabel(contract) {
+  if (!contract) return ''
+  const parts = []
+  if (contract.number) parts.push(contract.number)
+  if (contract.subject) parts.push(contract.subject)
+  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
+}
+
 export default function BankTransactions() {
   const [data, setData] = useState([])
   const [projects, setProjects] = useState([])
+  const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -44,6 +53,7 @@ export default function BankTransactions() {
     description: '',
     category_id: '',
     project_id: '',
+    contract_id: '',
     note: '',
   })
 
@@ -61,6 +71,8 @@ export default function BankTransactions() {
     if (!category) return UI_DASH
     return lang === 'ru' ? category.name_ru : category.name_sr
   }
+  const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
+  const getContractsForProject = (projectId) => contracts.filter((contract) => contract.project_id === projectId)
 
   const loadData = async () => {
     setLoading(true)
@@ -71,13 +83,15 @@ export default function BankTransactions() {
       if (statusFilter !== 'all') params.status = statusFilter
       if (directionFilter !== 'all') params.direction = directionFilter
 
-      const [transactions, projectList, categoryList] = await Promise.all([
+      const [transactions, projectList, contractList, categoryList] = await Promise.all([
         api.bankTransactions.list(params),
         api.projects.list({ show_archived: true }),
+        api.contracts.list({ limit: 500 }),
         api.categories.list({ category_type: 'expense' }),
       ])
       setData(transactions)
       setProjects(projectList)
+      setContracts(contractList)
       setCategories(categoryList)
     } catch (error) {
       console.error(error)
@@ -112,7 +126,7 @@ export default function BankTransactions() {
       if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
-  }, [data, getProjectName, search, sortAsc, sortCol])
+  }, [data, search, sortAsc, sortCol, projects])
 
   const toggleSort = (column) => {
     if (sortCol === column) setSortAsc((value) => !value)
@@ -132,6 +146,7 @@ export default function BankTransactions() {
     description: transaction?.purpose || transaction?.counterparty_name || '',
     category_id: '',
     project_id: transaction?.project_id ? String(transaction.project_id) : (unassignedProject ? String(unassignedProject.id) : ''),
+    contract_id: '',
     note: '',
   })
 
@@ -155,7 +170,9 @@ export default function BankTransactions() {
 
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const projectId = assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
+    const projectId = assignProjectId === '' || assignProjectId === '_none'
+      ? null
+      : parseInt(assignProjectId, 10)
     try {
       await api.bankTransactions.bulkAssignProject({ ids: selectedIds, project_id: projectId })
       setModalAssign(false)
@@ -183,6 +200,12 @@ export default function BankTransactions() {
     setAllInvoiceSearch('')
     setSuggestions([])
     setExpenseForm(buildExpenseForm(transaction))
+
+    if (transaction.direction === 'out') {
+      setSuggestLoading(false)
+      return
+    }
+
     setSuggestLoading(true)
     try {
       const response = await api.bankTransactions.suggest(transaction.id)
@@ -206,6 +229,7 @@ export default function BankTransactions() {
       description: '',
       category_id: '',
       project_id: '',
+      contract_id: '',
       note: '',
     })
   }
@@ -221,6 +245,32 @@ export default function BankTransactions() {
     }
   }
 
+  const updateExpenseProject = (projectId) => {
+    setExpenseForm((previous) => {
+      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      return {
+        ...previous,
+        project_id: projectId,
+        contract_id: keepContract ? previous.contract_id : '',
+      }
+    })
+  }
+
+  const updateExpenseContract = (contractId) => {
+    setExpenseForm((previous) => {
+      if (!contractId) {
+        return { ...previous, contract_id: '' }
+      }
+      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
+      return {
+        ...previous,
+        contract_id: contractId,
+        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
+      }
+    })
+  }
+
   const handleCreateExpense = async (event) => {
     event.preventDefault()
     if (!matchTx) return
@@ -232,6 +282,7 @@ export default function BankTransactions() {
         description: expenseForm.description.trim(),
         category_id: expenseForm.category_id ? parseInt(expenseForm.category_id, 10) : null,
         project_id: expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
+        contract_id: expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null,
         note: expenseForm.note?.trim() || null,
       })
       closeMatchModal()
@@ -340,95 +391,78 @@ export default function BankTransactions() {
   }
 
   const renderOutgoingModalContent = () => {
-    const existingExpenses = suggestions.filter((item) => item.type === 'expense')
+    const selectedProjectId = expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : null
+    const filteredContracts = selectedProjectId ? getContractsForProject(selectedProjectId) : []
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {existingExpenses.length > 0 && (
-          <div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
-              {tr('bankTxExistingExpenses')}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              {existingExpenses.map(renderSuggestionCard)}
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-            {tr('bankTxCreateExpenseHint')}
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('date')}</label>
-            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('description')}</label>
-            <input
-              className="form-input"
-              value={expenseForm.description}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('category')}</label>
-            <select
-              className="form-input"
-              value={expenseForm.category_id}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}
-            >
-              <option value="">{UI_DASH}</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {lang === 'ru' ? category.name_ru : category.name_sr}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('project')}</label>
-            <select
-              className="form-input"
-              value={expenseForm.project_id}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, project_id: event.target.value }))}
-              required
-            >
-              {commercialProjects.length > 0 && (
-                <optgroup label={tr('commercialProject')}>
-                  {commercialProjects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                  ))}
-                </optgroup>
-              )}
-              {internalProjects.length > 0 && (
-                <optgroup label={tr('internalProject')}>
-                  {internalProjects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('amount')}</label>
-            <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('note')}</label>
-            <input
-              className="form-input"
-              value={expenseForm.note}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))}
-            />
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
-          </div>
-        </form>
-      </div>
+      <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
+        <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+          {tr('bankTxCreateExpenseHint')}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('date')}</label>
+          <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('description')}</label>
+          <input
+            className="form-input"
+            value={expenseForm.description}
+            onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('category')}</label>
+          <select className="form-input" value={expenseForm.category_id} onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}>
+            <option value="">{UI_DASH}</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('project')}</label>
+          <select className="form-input" value={expenseForm.project_id} onChange={(event) => updateExpenseProject(event.target.value)} required>
+            <option value="">{UI_DASH}</option>
+            {commercialProjects.length > 0 && (
+              <optgroup label={tr('commercialProject')}>
+                {commercialProjects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
+                ))}
+              </optgroup>
+            )}
+            {internalProjects.length > 0 && (
+              <optgroup label={tr('internalProject')}>
+                {internalProjects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('contract')}</label>
+          <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+            <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+            {filteredContracts.map((contract) => (
+              <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('amount')}</label>
+          <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{tr('note')}</label>
+          <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
+          <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
+        </div>
+      </form>
     )
   }
 
@@ -460,18 +494,9 @@ export default function BankTransactions() {
             <option value="in">{tr('bankTxDirectionIn')}</option>
             <option value="out">{tr('bankTxDirectionOut')}</option>
           </select>
-          <input
-            className="form-input"
-            placeholder={tr('search')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            style={{ minWidth: 180 }}
-          />
+          <input className="form-input" placeholder={tr('search')} value={search} onChange={(event) => setSearch(event.target.value)} style={{ minWidth: 180 }} />
           {selectedIds.length > 0 && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}
-            >
+            <button className="btn btn-secondary" onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}>
               {tr('assignProject')} ({selectedIds.length})
             </button>
           )}
