@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import ProjectSelect from '../components/ProjectSelect'
 
 const PERIODS = [
   { value: 'weekly', label: '\u2014' },
@@ -584,28 +585,12 @@ export default function PlannedExpenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
-                <select
-                  className="form-input"
+                <ProjectSelect
+                  projects={projects}
                   value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                  onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
                   required
-                >
-                  <option value="">{'\u2014'}</option>
-                  {commercialProjects.length > 0 && (
-                    <optgroup label={tr('commercialProject')}>
-                      {commercialProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` \u2014 ${p.code}` : ''}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {internalProjects.length > 0 && (
-                    <optgroup label={tr('internalProject')}>
-                      {internalProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}{p.code ? ` \u2014 ${p.code}` : ''}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('plannedPeriod')}</label>

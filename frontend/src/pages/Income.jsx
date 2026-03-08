@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import ProjectSelect from '../components/ProjectSelect'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
@@ -496,27 +497,12 @@ export default function Income() {
               )}
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
-                <select
-                  className="form-input"
+                <ProjectSelect
+                  projects={projects}
                   value={form.project_id}
-                  onChange={(event) => setForm({ ...form, project_id: event.target.value })}
+                  onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
                   required
-                >
-                  {commercialProjects.length > 0 && (
-                    <optgroup label={tr('commercialProject')}>
-                      {commercialProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {internalProjects.length > 0 && (
-                    <optgroup label={tr('internalProject')}>
-                      {internalProjects.map((project) => (
-                        <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                />
               </div>
               {form.contract_id && (
                 <div className="form-group">
@@ -596,26 +582,13 @@ export default function Income() {
             </div>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
-              <select
-                className="form-input"
+              <ProjectSelect
+                projects={projects}
                 value={assignProjectId}
-                onChange={(event) => setAssignProjectId(event.target.value)}
-              >
-                {commercialProjects.length > 0 && (
-                  <optgroup label={tr('commercialProject')}>
-                    {commercialProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                    ))}
-                  </optgroup>
-                )}
-                {internalProjects.length > 0 && (
-                  <optgroup label={tr('internalProject')}>
-                    {internalProjects.map((project) => (
-                      <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
+                onChange={setAssignProjectId}
+                allowEmpty
+                emptyLabel={UI_DASH}
+              />
             </div>
             <div className="modal-actions" style={{ padding: '0 1rem 1rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>

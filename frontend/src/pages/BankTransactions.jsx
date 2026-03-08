@@ -3,6 +3,7 @@ import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
+import ProjectSelect from '../components/ProjectSelect'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
@@ -423,23 +424,12 @@ export default function BankTransactions() {
         </div>
         <div className="form-group">
           <label className="form-label">{tr('project')}</label>
-          <select className="form-input" value={expenseForm.project_id} onChange={(event) => updateExpenseProject(event.target.value)} required>
-            <option value="">{UI_DASH}</option>
-            {commercialProjects.length > 0 && (
-              <optgroup label={tr('commercialProject')}>
-                {commercialProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                ))}
-              </optgroup>
-            )}
-            {internalProjects.length > 0 && (
-              <optgroup label={tr('internalProject')}>
-                {internalProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          <ProjectSelect
+            projects={projects}
+            value={expenseForm.project_id}
+            onChange={updateExpenseProject}
+            required
+          />
         </div>
         <div className="form-group">
           <label className="form-label">{tr('contract')}</label>
@@ -610,24 +600,13 @@ export default function BankTransactions() {
       <Modal isOpen={modalAssign} onClose={() => { setModalAssign(false); setAssignProjectId('') }} title={tr('assignProject')}>
         <div className="form-group">
           <label className="form-label">{tr('project')}</label>
-          <select className="form-input" value={assignProjectId} onChange={(event) => setAssignProjectId(event.target.value)}>
-            <option value="">{UI_DASH}</option>
-            <option value="_none">{UI_DASH}</option>
-            {commercialProjects.length > 0 && (
-              <optgroup label={tr('commercialProject')}>
-                {commercialProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                ))}
-              </optgroup>
-            )}
-            {internalProjects.length > 0 && (
-              <optgroup label={tr('internalProject')}>
-                {internalProjects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.name}{project.code ? ` ${UI_DASH} ${project.code}` : ''}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          <ProjectSelect
+            projects={projects}
+            value={assignProjectId}
+            onChange={setAssignProjectId}
+            allowEmpty
+            emptyLabel={UI_DASH}
+          />
         </div>
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{tr('cancel')}</button>
