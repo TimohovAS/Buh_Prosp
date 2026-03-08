@@ -141,6 +141,7 @@ async def create_income(
         raise
     if status_val == "paid" and data.paid_date:
         pass # BankTransaction now handles cash flow
+    await db.commit()
     await db.refresh(income)
     return IncomeResponse.model_validate(income)
 
@@ -388,4 +389,5 @@ async def delete_income(
     if not income:
         raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
     await db.delete(income)
+    await db.commit()
     return {"ok": True}
