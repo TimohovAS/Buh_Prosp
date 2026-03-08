@@ -30,6 +30,8 @@ export default function Income() {
   const [assignProjectId, setAssignProjectId] = useState('')
   const [efakturaImporting, setEfakturaImporting] = useState(false)
   const [efakturaLastResult, setEfakturaLastResult] = useState(null)
+  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     due_date: '',
@@ -64,10 +66,34 @@ export default function Income() {
   }, [modal, form.client_id])
 
   const [nextInvoiceHint, setNextInvoiceHint] = useState('')
+  const getDefaultIncomeDate = () => {
+    const today = new Date()
+    const targetYear = Number.isInteger(year) ? year : today.getFullYear()
+    const targetMonth = month ? Number(month) : (today.getMonth() + 1)
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate()
+    const targetDay = Math.min(today.getDate(), lastDay)
+    return targetYear + '-' + String(targetMonth).padStart(2, '0') + '-' + String(targetDay).padStart(2, '0')
+  }
+  const closeModal = () => {
+    setModal(null)
+    setNextInvoiceHint('')
+    setSubmitError('')
+  }
+
+  useEffect(() => {
+    if (modal !== 'add') {
+      setNextInvoiceHint('')
+      return
+    }
+    const hintYear = /^\d{4}-\d{2}-\d{2}$/.test(form.date || '')
+      ? parseInt(form.date.slice(0, 4), 10)
+      : year
+    api.income.nextInvoice(hintYear).then((response) => setNextInvoiceHint(response.invoice_number)).catch(() => setNextInvoiceHint(''))
+  }, [modal, form.date, year])
+
   const openAdd = () => {
-    const y = new Date().getFullYear()
     const defaultForm = {
-      date: new Date().toISOString().slice(0, 10),
+      date: getDefaultIncomeDate(),
       due_date: '',
       invoice_number: '',
       client_id: '',
@@ -80,8 +106,8 @@ export default function Income() {
       note: '',
     }
     setForm(defaultForm)
+    setSubmitError('')
     setModal('add')
-    api.income.nextInvoice(y).then((response) => setNextInvoiceHint(response.invoice_number)).catch(() => setNextInvoiceHint(''))
   }
 
   const openEdit = (item) => {
@@ -98,11 +124,14 @@ export default function Income() {
       amount_rsd: item.amount_rsd,
       note: item.note || '',
     })
+    setSubmitError('')
     setModal({ type: 'edit', id: item.id })
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    setSubmitError('')
+    setSubmitting(true)
     try {
       const toInt = (value) => {
         if (value === '' || value == null) return null
@@ -133,18 +162,20 @@ export default function Income() {
       } else {
         await api.income.update(modal.id, payload)
       }
-      setModal(null)
-      setNextInvoiceHint('')
+      closeModal()
       load()
     } catch (err) {
       if (err.status === 409) {
         const yearValue = new Date(form.date).getFullYear()
         const response = await api.income.nextInvoice(yearValue).catch(() => ({}))
         if (response.invoice_number) setForm((prev) => ({ ...prev, invoice_number: response.invoice_number }))
-        alert(tr('invoiceExistsConfirm'))
+        setSubmitError(err.message || tr('invoiceExistsWarning'))
         return
       }
+      setSubmitError(err.message || tr('loadError'))
       console.error(err)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -169,6 +200,7 @@ export default function Income() {
       setSelectedIds([])
       load()
     } catch (err) {
+      setSubmitError(err.message || tr('loadError'))
       console.error(err)
     }
   }
@@ -179,6 +211,7 @@ export default function Income() {
       await api.income.delete(id)
       load()
     } catch (err) {
+      setSubmitError(err.message || tr('loadError'))
       console.error(err)
     }
   }
@@ -202,6 +235,7 @@ export default function Income() {
         alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${firstError}`)
       }
     } catch (err) {
+      setSubmitError(err.message || tr('loadError'))
       console.error(err)
     } finally {
       setEfakturaImporting(false)
@@ -424,7 +458,7 @@ export default function Income() {
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')}</h2>
-              <button className="modal-close" onClick={() => { setModal(null); setNextInvoiceHint('') }}>{UI_CLOSE}</button>
+              <button className="modal-close" onClick={closeModal}>{UI_CLOSE}</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -560,11 +594,16 @@ export default function Income() {
                   onChange={(event) => setForm({ ...form, note: event.target.value })}
                 />
               </div>
+              {submitError && (
+                <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+                  {submitError}
+                </div>
+              )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
+                <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
                   {tr('cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center' }}>
+                <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center' }} disabled={submitting}>
                   {tr('save')}
                 </button>
               </div>
@@ -574,7 +613,7 @@ export default function Income() {
       )}
 
       {modalAssign && (
-        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>

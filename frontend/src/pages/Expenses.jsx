@@ -450,7 +450,7 @@ export default function Expenses() {
       )}
 
       {modalAssign && (
-        <div className="modal-overlay" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('assignProject')}</h2>
