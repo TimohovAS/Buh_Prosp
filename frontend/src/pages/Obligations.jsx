@@ -1,12 +1,26 @@
-import { useState, useEffect } from 'react'
-import { api } from '../api'
-import { tr, getMonthNamesShort, getMonthNamesFull } from '../i18n'
+import { useEffect, useState } from 'react'
 import DatePicker from '../components/DatePicker'
+import { api } from '../api'
+import { getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
 
-function formatDate(s) {
-  if (!s) return '\u2014'
-  const d = new Date(s + 'T12:00:00')
-  return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function formatDate(value) {
+  if (!value) return '\u2014'
+  const date = new Date(`${value}T12:00:00`)
+  return date.toLocaleDateString('sr-RS', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function emptyValue() {
+  const translated = tr('notSet')
+  return translated && translated !== 'notSet' ? translated : '\u2014'
+}
+
+function defaultRecipientName() {
+  const translated = tr('taxAuthority')
+  return translated && translated !== 'taxAuthority' ? translated : ''
 }
 
 const STATUS_FILTERS = [
@@ -40,7 +54,7 @@ export default function Obligations() {
     monthly_amount: '',
     base_amount: '',
     rate_percent: '',
-    recipient_name: '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
+    recipient_name: defaultRecipientName(),
     recipient_account: '',
     sifra_placanja: '253',
     model: '97',
@@ -57,10 +71,10 @@ export default function Obligations() {
       api.obligations.calendar(year, paymentTypeFilter || undefined),
       api.obligations.decisions(year),
     ])
-      .then(([t, cal, dec]) => {
-        setTypes(t)
-        setItems(cal)
-        setDecisions(dec)
+      .then(([paymentTypes, calendarItems, decisionItems]) => {
+        setTypes(paymentTypes)
+        setItems(calendarItems)
+        setDecisions(decisionItems)
       })
       .catch(() => {
         setItems([])
@@ -74,9 +88,9 @@ export default function Obligations() {
     load()
   }, [year, paymentTypeFilter])
 
-  const filteredItems = items.filter((ob) => {
+  const filteredItems = items.filter((obligation) => {
     if (statusFilter === 'all') return true
-    return ob.status === statusFilter
+    return obligation.status === statusFilter
   })
 
   const handleGenerate = async () => {
@@ -84,23 +98,23 @@ export default function Obligations() {
     try {
       await api.obligations.generate(year)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     } finally {
       setGenerating(false)
     }
   }
 
-  const openPaidModal = (ob) => {
+  const openPaidModal = (obligation) => {
     setPaidForm({
       paid_date: new Date().toISOString().slice(0, 10),
-      payment_reference: ob.payment_reference || '',
+      payment_reference: obligation.payment_reference || '',
     })
-    setPaidModal(ob)
+    setPaidModal(obligation)
   }
 
-  const handleMarkPaidSubmit = async (e) => {
-    e.preventDefault()
+  const handleMarkPaidSubmit = async (event) => {
+    event.preventDefault()
     if (!paidModal) return
     try {
       await api.obligations.markPaid(paidModal.id, {
@@ -109,33 +123,33 @@ export default function Obligations() {
       })
       setPaidModal(null)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  const markUnpaid = async (ob) => {
+  const markUnpaid = async (obligation) => {
     if (!confirm(tr('confirmUnpaid'))) return
     try {
-      await api.obligations.markUnpaid(ob.id)
+      await api.obligations.markUnpaid(obligation.id)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
   const openDecisionForm = (mode) => {
     if (mode === 'add') {
-      const y = year
+      const selectedYear = year
       setDecisionForm({
-        year: y,
+        year: selectedYear,
         payment_type_id: types[0]?.id || '',
-        period_start: `${y}-01-01`,
-        period_end: `${y}-12-31`,
+        period_start: `${selectedYear}-01-01`,
+        period_end: `${selectedYear}-12-31`,
         monthly_amount: '',
         base_amount: '',
         rate_percent: '',
-        recipient_name: '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
+        recipient_name: defaultRecipientName(),
         recipient_account: '',
         sifra_placanja: '253',
         model: '97',
@@ -145,40 +159,41 @@ export default function Obligations() {
         is_provisional: false,
       })
       setDecisionFormModal('add')
-    } else {
-      setDecisionFormModal({ type: 'edit', id: mode.id })
-      setDecisionForm({
-        year: mode.year,
-        payment_type_id: mode.payment_type_id,
-        period_start: typeof mode.period_start === 'string' ? mode.period_start : mode.period_start?.slice(0, 10) || '',
-        period_end: typeof mode.period_end === 'string' ? mode.period_end : mode.period_end?.slice(0, 10) || '',
-        monthly_amount: mode.monthly_amount ?? '',
-        base_amount: mode.base_amount ?? '',
-        rate_percent: mode.rate_percent ?? '',
-        recipient_name: mode.recipient_name || '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
-        recipient_account: mode.recipient_account || '',
-        sifra_placanja: mode.sifra_placanja || '253',
-        model: mode.model || '97',
-        poziv_na_broj: mode.poziv_na_broj || '',
-        poziv_na_broj_next: mode.poziv_na_broj_next || '',
-        payment_purpose: mode.payment_purpose || '',
-        is_provisional: mode.is_provisional ?? false,
-      })
+      return
     }
+
+    setDecisionFormModal({ type: 'edit', id: mode.id })
+    setDecisionForm({
+      year: mode.year,
+      payment_type_id: mode.payment_type_id,
+      period_start: typeof mode.period_start === 'string' ? mode.period_start : mode.period_start?.slice(0, 10) || '',
+      period_end: typeof mode.period_end === 'string' ? mode.period_end : mode.period_end?.slice(0, 10) || '',
+      monthly_amount: mode.monthly_amount ?? '',
+      base_amount: mode.base_amount ?? '',
+      rate_percent: mode.rate_percent ?? '',
+      recipient_name: mode.recipient_name || defaultRecipientName(),
+      recipient_account: mode.recipient_account || '',
+      sifra_placanja: mode.sifra_placanja || '253',
+      model: mode.model || '97',
+      poziv_na_broj: mode.poziv_na_broj || '',
+      poziv_na_broj_next: mode.poziv_na_broj_next || '',
+      payment_purpose: mode.payment_purpose || '',
+      is_provisional: mode.is_provisional ?? false,
+    })
   }
 
-  const handleDecisionFormSubmit = async (e) => {
-    e.preventDefault()
+  const handleDecisionFormSubmit = async (event) => {
+    event.preventDefault()
     try {
       const payload = {
-        year: parseInt(decisionForm.year),
-        payment_type_id: parseInt(decisionForm.payment_type_id),
+        year: parseInt(decisionForm.year, 10),
+        payment_type_id: parseInt(decisionForm.payment_type_id, 10),
         period_start: decisionForm.period_start,
         period_end: decisionForm.period_end,
         monthly_amount: parseFloat(decisionForm.monthly_amount) || 0,
         base_amount: decisionForm.base_amount ? parseFloat(decisionForm.base_amount) : null,
         rate_percent: decisionForm.rate_percent ? parseFloat(decisionForm.rate_percent) : null,
-        recipient_name: decisionForm.recipient_name || '\u041F\u043E\u0440\u0435\u0441\u043A\u0430 \u0443\u043F\u0440\u0430\u0432\u0430 \u0420\u0435\u043F\u0443\u0431\u043B\u0438\u043A\u0435 \u0421\u0440\u0431\u0438\u0458\u0435',
+        recipient_name: decisionForm.recipient_name || defaultRecipientName(),
         recipient_account: decisionForm.recipient_account.trim(),
         sifra_placanja: decisionForm.sifra_placanja || '253',
         model: decisionForm.model || '97',
@@ -194,8 +209,8 @@ export default function Obligations() {
       }
       setDecisionFormModal(null)
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -204,14 +219,15 @@ export default function Obligations() {
     try {
       await api.obligations.applyPreset2026()
       load()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  const getTypeName = (code) => types.find(t => t.code === code)?.name_sr || code
+  const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
   const monthNamesFull = getMonthNamesFull()
   const monthNamesShort = getMonthNamesShort()
+  const empty = emptyValue()
 
   return (
     <div className="page">
@@ -222,34 +238,34 @@ export default function Obligations() {
             className="form-input"
             style={{ width: 'auto' }}
             value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
+            onChange={(event) => setYear(parseInt(event.target.value, 10))}
             title={tr('filterYear')}
           >
-            {[year - 2, year - 1, year, year + 1].map((y) => (
-              <option key={y} value={y}>{y}</option>
+            {[year - 2, year - 1, year, year + 1].map((optionYear) => (
+              <option key={optionYear} value={optionYear}>{optionYear}</option>
             ))}
           </select>
           <select
             className="form-input"
             style={{ width: 'auto' }}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(event) => setStatusFilter(event.target.value)}
             title={tr('filterStatus')}
           >
-            {STATUS_FILTERS.map((f) => (
-              <option key={f.value} value={f.value}>{tr(f.label)}</option>
+            {STATUS_FILTERS.map((filter) => (
+              <option key={filter.value} value={filter.value}>{tr(filter.label)}</option>
             ))}
           </select>
           <select
             className="form-input"
             style={{ width: 'auto' }}
             value={paymentTypeFilter}
-            onChange={(e) => setPaymentTypeFilter(e.target.value)}
+            onChange={(event) => setPaymentTypeFilter(event.target.value)}
             title={tr('filterPaymentType')}
           >
             <option value="">{tr('statusFilterAll')}</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.code}>{t.name_sr}</option>
+            {types.map((type) => (
+              <option key={type.id} value={type.code}>{type.name_sr}</option>
             ))}
           </select>
           <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
@@ -259,7 +275,6 @@ export default function Obligations() {
       </div>
 
       <div className="page-body">
-        {/* Р В Р’В Р РЋРЎвЂєР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В° Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В Р РЏР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В  */}
         <div className="card">
           <h3 style={{ margin: 0, marginBottom: '1rem', fontSize: '1rem' }}>{tr('obligationsCalendar')}</h3>
           <div className="table-wrap">
@@ -287,40 +302,42 @@ export default function Obligations() {
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((ob) => (
-                    <tr key={ob.id} style={ob.status === 'paid' ? { opacity: 0.85 } : {}}>
-                      <td>{ob.year}</td>
-                      <td>{monthNamesFull[ob.month - 1] || ob.month}</td>
-                      <td>{getTypeName(ob.payment_type_code) || ob.payment_type_code}</td>
-                      <td>{ob.amount?.toLocaleString('sr-RS')} RSD</td>
-                      <td>{formatDate(ob.deadline)}</td>
+                  filteredItems.map((obligation) => (
+                    <tr key={obligation.id} style={obligation.status === 'paid' ? { opacity: 0.85 } : {}}>
+                      <td>{obligation.year}</td>
+                      <td>{monthNamesFull[obligation.month - 1] || obligation.month}</td>
+                      <td>{getTypeName(obligation.payment_type_code) || obligation.payment_type_code}</td>
+                      <td>{obligation.amount?.toLocaleString('sr-RS')} RSD</td>
+                      <td>{formatDate(obligation.deadline)}</td>
                       <td>
                         <span
                           className="badge"
                           style={{
                             backgroundColor:
-                              ob.status === 'paid' ? 'var(--color-success)'
-                                : ob.status === 'overdue' ? 'var(--color-danger)'
+                              obligation.status === 'paid'
+                                ? 'var(--color-success)'
+                                : obligation.status === 'overdue'
+                                  ? 'var(--color-danger)'
                                   : 'var(--color-warning)',
                             color: '#fff',
                             padding: '0.2rem 0.5rem',
                             borderRadius: 4,
                           }}
                         >
-                          {ob.status === 'paid' ? tr('paid') : ob.status === 'overdue' ? tr('obligationsOverdue') : tr('unpaid')}
+                          {obligation.status === 'paid' ? tr('paid') : obligation.status === 'overdue' ? tr('obligationsOverdue') : tr('unpaid')}
                         </span>
                       </td>
-                      <td>{ob.paid_date ? formatDate(ob.paid_date) : 'Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ'}</td>
-                      <td style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={ob.payment_reference}>
-                        {ob.payment_reference || 'Р В Р вЂ Р В РІР‚С™Р Р†Р вЂљРЎСљ'}
+                      <td>{obligation.paid_date ? formatDate(obligation.paid_date) : empty}</td>
+                      <td style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={obligation.payment_reference || empty}>
+                        {obligation.payment_reference || empty}
                       </td>
                       <td>
-                        {ob.status === 'paid' ? (
-                          <button className="btn btn-sm btn-secondary" onClick={() => markUnpaid(ob)}>
+                        {obligation.status === 'paid' ? (
+                          <button className="btn btn-sm btn-secondary" onClick={() => markUnpaid(obligation)}>
                             {tr('markUnpaid')}
                           </button>
                         ) : (
-                          <button className="btn btn-sm btn-primary" onClick={() => openPaidModal(ob)}>
+                          <button className="btn btn-sm btn-primary" onClick={() => openPaidModal(obligation)}>
                             {tr('markPaid')}
                           </button>
                         )}
@@ -334,10 +351,9 @@ export default function Obligations() {
         </div>
       </div>
 
-      {/* Р В Р’В Р РЋРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В РІР‚в„ўР вЂ™Р’В«Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В Р РЏР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В РІР‚в„ўР вЂ™Р’В» */}
       {settingsModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 800, maxHeight: '90vh', overflow: 'auto' }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 800, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('obligationsSettings')}</h2>
               <button className="modal-close" onClick={() => setSettingsModal(false)}>{'\u00D7'}</button>
@@ -368,15 +384,15 @@ export default function Obligations() {
                       <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noDecisions')}</td>
                     </tr>
                   ) : (
-                    decisions.map((d) => (
-                      <tr key={d.id}>
-                        <td>{d.year}</td>
-                        <td>{d.payment_type_name || d.payment_type_code}</td>
-                        <td>{d.monthly_amount?.toLocaleString('sr-RS')} RSD</td>
-                        <td style={{ fontSize: '0.85rem' }}>{d.recipient_account}</td>
-                        <td style={{ fontSize: '0.8rem', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.poziv_na_broj}>{d.poziv_na_broj}</td>
+                    decisions.map((decision) => (
+                      <tr key={decision.id}>
+                        <td>{decision.year}</td>
+                        <td>{decision.payment_type_name || decision.payment_type_code}</td>
+                        <td>{decision.monthly_amount?.toLocaleString('sr-RS')} RSD</td>
+                        <td style={{ fontSize: '0.85rem' }}>{decision.recipient_account}</td>
+                        <td style={{ fontSize: '0.8rem', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }} title={decision.poziv_na_broj}>{decision.poziv_na_broj}</td>
                         <td>
-                          <button className="btn btn-sm btn-secondary" onClick={() => openDecisionForm(d)}>
+                          <button className="btn btn-sm btn-secondary" onClick={() => openDecisionForm(decision)}>
                             {tr('edit')}
                           </button>
                         </td>
@@ -390,7 +406,7 @@ export default function Obligations() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => { handleGenerate(); }}
+                onClick={handleGenerate}
                 disabled={generating || loading}
               >
                 {generating ? tr('loading') : tr('obligationsGenerate')}
@@ -403,10 +419,9 @@ export default function Obligations() {
         </div>
       )}
 
-      {/* Paid modal */}
       {paidModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 className="modal-title">
                 {tr('markPaid')} {'\u2014'} {getTypeName(paidModal.payment_type_code)} {monthNamesShort[paidModal.month - 1]}
@@ -418,7 +433,7 @@ export default function Obligations() {
                 <label className="form-label">{tr('date')}</label>
                 <DatePicker
                   value={paidForm.paid_date}
-                  onChange={(v) => setPaidForm({ ...paidForm, paid_date: v })}
+                  onChange={(value) => setPaidForm({ ...paidForm, paid_date: value })}
                   required
                 />
               </div>
@@ -428,7 +443,7 @@ export default function Obligations() {
                   type="text"
                   className="form-input"
                   value={paidForm.payment_reference}
-                  onChange={(e) => setPaidForm({ ...paidForm, payment_reference: e.target.value })}
+                  onChange={(event) => setPaidForm({ ...paidForm, payment_reference: event.target.value })}
                   placeholder={tr('paymentRef')}
                 />
               </div>
@@ -443,10 +458,9 @@ export default function Obligations() {
         </div>
       )}
 
-      {/* Decision form modal */}
       {decisionFormModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h2 className="modal-title">
                 {decisionFormModal === 'add' ? tr('add') : tr('edit')} {'\u2014'} {tr('decisionFormTitle')}
@@ -457,13 +471,13 @@ export default function Obligations() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{tr('yearLabel')} *</label>
-                  <input type="number" className="form-input" value={decisionForm.year} onChange={(e) => setDecisionForm({ ...decisionForm, year: e.target.value })} required min={2020} max={2035} />
+                  <input type="number" className="form-input" value={decisionForm.year} onChange={(event) => setDecisionForm({ ...decisionForm, year: event.target.value })} required min={2020} max={2035} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('paymentTypeLabel')} *</label>
-                  <select className="form-input" value={decisionForm.payment_type_id} onChange={(e) => setDecisionForm({ ...decisionForm, payment_type_id: e.target.value })} required disabled={decisionFormModal !== 'add'}>
-                    {types.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name_sr}</option>
+                  <select className="form-input" value={decisionForm.payment_type_id} onChange={(event) => setDecisionForm({ ...decisionForm, payment_type_id: event.target.value })} required disabled={decisionFormModal !== 'add'}>
+                    {types.map((type) => (
+                      <option key={type.id} value={type.id}>{type.name_sr}</option>
                     ))}
                   </select>
                 </div>
@@ -471,63 +485,63 @@ export default function Obligations() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{tr('periodFrom')} *</label>
-                  <DatePicker value={decisionForm.period_start} onChange={(v) => setDecisionForm({ ...decisionForm, period_start: v })} required />
+                  <DatePicker value={decisionForm.period_start} onChange={(value) => setDecisionForm({ ...decisionForm, period_start: value })} required />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('periodTo')} *</label>
-                  <DatePicker value={decisionForm.period_end} onChange={(v) => setDecisionForm({ ...decisionForm, period_end: v })} required />
+                  <DatePicker value={decisionForm.period_end} onChange={(value) => setDecisionForm({ ...decisionForm, period_end: value })} required />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{tr('monthlyAmount')} *</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.monthly_amount} onChange={(e) => setDecisionForm({ ...decisionForm, monthly_amount: e.target.value })} required />
+                  <input type="number" step="0.01" className="form-input" value={decisionForm.monthly_amount} onChange={(event) => setDecisionForm({ ...decisionForm, monthly_amount: event.target.value })} required />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('baseAmount')}</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.base_amount} onChange={(e) => setDecisionForm({ ...decisionForm, base_amount: e.target.value })} />
+                  <input type="number" step="0.01" className="form-input" value={decisionForm.base_amount} onChange={(event) => setDecisionForm({ ...decisionForm, base_amount: event.target.value })} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('ratePercent')}</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.rate_percent} onChange={(e) => setDecisionForm({ ...decisionForm, rate_percent: e.target.value })} />
+                  <input type="number" step="0.01" className="form-input" value={decisionForm.rate_percent} onChange={(event) => setDecisionForm({ ...decisionForm, rate_percent: event.target.value })} />
                 </div>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('recipient')}</label>
-                <input type="text" className="form-input" value={decisionForm.recipient_name} onChange={(e) => setDecisionForm({ ...decisionForm, recipient_name: e.target.value })} placeholder={tr('taxAuthority')} />
+                <input type="text" className="form-input" value={decisionForm.recipient_name} onChange={(event) => setDecisionForm({ ...decisionForm, recipient_name: event.target.value })} placeholder={tr('taxAuthority')} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{tr('recipientAccount')} *</label>
-                  <input type="text" className="form-input" value={decisionForm.recipient_account} onChange={(e) => setDecisionForm({ ...decisionForm, recipient_account: e.target.value })} required placeholder="840-71122843-32" />
+                  <input type="text" className="form-input" value={decisionForm.recipient_account} onChange={(event) => setDecisionForm({ ...decisionForm, recipient_account: event.target.value })} required placeholder="840-71122843-32" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('sifraPlacanja')}</label>
-                  <input type="text" className="form-input" value={decisionForm.sifra_placanja} onChange={(e) => setDecisionForm({ ...decisionForm, sifra_placanja: e.target.value })} placeholder="253" />
+                  <input type="text" className="form-input" value={decisionForm.sifra_placanja} onChange={(event) => setDecisionForm({ ...decisionForm, sifra_placanja: event.target.value })} placeholder="253" />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{tr('model')}</label>
-                  <input type="text" className="form-input" value={decisionForm.model} onChange={(e) => setDecisionForm({ ...decisionForm, model: e.target.value })} placeholder="97" />
+                  <input type="text" className="form-input" value={decisionForm.model} onChange={(event) => setDecisionForm({ ...decisionForm, model: event.target.value })} placeholder="97" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('pozivNaBroj')} *</label>
-                  <input type="text" className="form-input" value={decisionForm.poziv_na_broj} onChange={(e) => setDecisionForm({ ...decisionForm, poziv_na_broj: e.target.value })} required placeholder="2624190000007887475" />
+                  <input type="text" className="form-input" value={decisionForm.poziv_na_broj} onChange={(event) => setDecisionForm({ ...decisionForm, poziv_na_broj: event.target.value })} required placeholder="2624190000007887475" />
                 </div>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('pozivNaBrojNext')}</label>
-                <input type="text" className="form-input" value={decisionForm.poziv_na_broj_next} onChange={(e) => setDecisionForm({ ...decisionForm, poziv_na_broj_next: e.target.value })} placeholder="2024190000008031910" />
+                <input type="text" className="form-input" value={decisionForm.poziv_na_broj_next} onChange={(event) => setDecisionForm({ ...decisionForm, poziv_na_broj_next: event.target.value })} placeholder="2024190000008031910" />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('paymentPurpose')} *</label>
-                <input type="text" className="form-input" value={decisionForm.payment_purpose} onChange={(e) => setDecisionForm({ ...decisionForm, payment_purpose: e.target.value })} required placeholder="Porez na pauР В РІР‚СћР В Р вЂ№alni prihod za YYYY. godinu" />
+                <input type="text" className="form-input" value={decisionForm.payment_purpose} onChange={(event) => setDecisionForm({ ...decisionForm, payment_purpose: event.target.value })} required placeholder={tr('paymentPurpose')} />
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{tr('purposeYearHint')}</div>
               </div>
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={decisionForm.is_provisional} onChange={(e) => setDecisionForm({ ...decisionForm, is_provisional: e.target.checked })} />
+                  <input type="checkbox" checked={decisionForm.is_provisional} onChange={(event) => setDecisionForm({ ...decisionForm, is_provisional: event.target.checked })} />
                   {tr('provisional')}
                 </label>
               </div>
