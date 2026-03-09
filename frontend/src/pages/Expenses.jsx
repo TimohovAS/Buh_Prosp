@@ -10,6 +10,7 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
 
 function buildContractLabel(contract) {
   if (!contract) return ''
@@ -17,6 +18,22 @@ function buildContractLabel(contract) {
   if (contract.number) parts.push(contract.number)
   if (contract.subject) parts.push(contract.subject)
   return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
+}
+
+function getDuplicateGroupKey(group) {
+  const itemIds = (group.items || []).map((item) => item.id).sort((left, right) => left - right).join(',')
+  return [group.reason, group.payment_reference || '', group.description || '', group.amount || 0, itemIds].join('|')
+}
+
+function loadDismissedDuplicateGroups() {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(DUPLICATE_DISMISS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 export default function Expenses() {
@@ -37,6 +54,7 @@ export default function Expenses() {
   const [assignProjectId, setAssignProjectId] = useState('')
   const [pageError, setPageError] = useState('')
   const [mergeKeepId, setMergeKeepId] = useState(null)
+  const [dismissedDuplicateGroups, setDismissedDuplicateGroups] = useState(() => loadDismissedDuplicateGroups())
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     description: '',
@@ -86,6 +104,11 @@ export default function Expenses() {
       })
       .catch((error) => setPageError(error.message || tr('loadError')))
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(DUPLICATE_DISMISS_STORAGE_KEY, JSON.stringify(dismissedDuplicateGroups))
+  }, [dismissedDuplicateGroups])
 
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
@@ -242,6 +265,16 @@ export default function Expenses() {
     }
   }
 
+  const handleDismissDuplicateGroup = (group) => {
+    const groupKey = getDuplicateGroupKey(group)
+    setDismissedDuplicateGroups((previous) => previous.includes(groupKey) ? previous : [...previous, groupKey])
+  }
+
+  const visibleDuplicateGroups = useMemo(
+    () => duplicateGroups.filter((group) => !dismissedDuplicateGroups.includes(getDuplicateGroupKey(group))),
+    [dismissedDuplicateGroups, duplicateGroups],
+  )
+
   const filteredContracts = useMemo(() => {
     const selectedProjectId = form.project_id ? parseInt(form.project_id, 10) : null
     return selectedProjectId ? getContractsForProject(selectedProjectId) : []
@@ -356,20 +389,23 @@ export default function Expenses() {
           </div>
         )}
 
-        {duplicateGroups.length > 0 && (
+        {visibleDuplicateGroups.length > 0 && (
           <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-warning)' }}>
             <div style={{ padding: '1rem 1rem 0.5rem', fontWeight: 700 }}>{tr('expenseDuplicatesTitle')}</div>
             <div style={{ padding: '0 1rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
               {tr('expenseDuplicatesHint')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0 1rem 1rem' }}>
-              {duplicateGroups.map((group, index) => (
+              {visibleDuplicateGroups.map((group, index) => (
                 <div key={`${group.reason}-${group.payment_reference || group.description || index}`} className="card" style={{ padding: '0.75rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                     <div style={{ fontWeight: 700 }}>
                       {group.reason === 'payment_reference' ? tr('expenseDuplicateByPaymentRef') : tr('expenseDuplicateByDescription')}
                     </div>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}: {Number(group.amount || 0).toLocaleString('sr-RS')}</div>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}: {Number(group.amount || 0).toLocaleString('sr-RS')}</div>
+                      <button type="button" className="btn btn-secondary" onClick={() => handleDismissDuplicateGroup(group)}>{tr('skip')}</button>
+                    </div>
                   </div>
                   {group.payment_reference && (
                     <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
