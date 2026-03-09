@@ -50,7 +50,7 @@ export default function Layout({ lang, toggleLang }) {
             <div className="sidebar-group-title">Обзор</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/" end><LayoutDashboard size={18} /> {tr('dashboard')}</NavLink></li>
-              <li><NavLink to="/finance"><LineChart size={18} /> {tr('finance')}</NavLink></li>
+              <li><NavLink to="/finance" end><LineChart size={18} /> {tr('finance')}</NavLink></li>
               <li><NavLink to="/finance/cashflow"><Wallet size={18} /> {tr('cashflowTitle')}</NavLink></li>
               <li><NavLink to="/finance/ar"><AlertCircle size={18} /> {tr('financeAR')}</NavLink></li>
             </ul>
