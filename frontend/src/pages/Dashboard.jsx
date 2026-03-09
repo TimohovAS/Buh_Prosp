@@ -32,18 +32,14 @@ function getMetricColor(value, positive = 'var(--color-success)', negative = 'va
   return value >= 0 ? positive : negative
 }
 
-function SummaryCard({ title, value, subtitle, accentColor = 'var(--color-border)', valueColor }) {
+function SummaryCard({ title, value, subtitle, tone = 'accent', valueColor }) {
   return (
-    <div className="card" style={{ marginBottom: 0, borderLeft: `4px solid ${accentColor}` }}>
+    <div className={`card dashboard-summary-card dashboard-summary-card--${tone}`}>
       <div className="card-title">{title}</div>
-      <div style={{ fontSize: '1.6rem', fontWeight: 700, color: valueColor || 'var(--color-text)' }}>
+      <div className="dashboard-summary-value" style={{ color: valueColor || 'var(--color-text)' }}>
         {fmtCurrency(value)}
       </div>
-      {subtitle ? (
-        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.35rem' }}>
-          {subtitle}
-        </div>
-      ) : null}
+      {subtitle ? <div className="dashboard-summary-note">{subtitle}</div> : null}
     </div>
   )
 }
@@ -56,16 +52,16 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
 
   if (data.length === 0) {
     return (
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 240, marginBottom: 0 }}>
-        <div className="card-title">{title}</div>
+      <section className="dashboard-pie-card" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div className="dashboard-pie-title">{title}</div>
         <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{tr('noData')}</div>
-      </div>
+      </section>
     )
   }
 
   return (
-    <div className="card" style={{ minHeight: 240, marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
-      <div className="card-title">{title}</div>
+    <section className="dashboard-pie-card">
+      <div className="dashboard-pie-title">{title}</div>
       <div style={{ flex: 1, minHeight: 180 }}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
@@ -88,23 +84,24 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
         </ResponsiveContainer>
       </div>
       {onExpensesClick ? (
-        <Link to="/expenses" style={{ fontSize: '0.85rem', display: 'inline-block', marginTop: '0.25rem' }}>
+        <Link to="/expenses" className="dashboard-link dashboard-pie-link">
           {tr('allExpenses')} {UI_ARROW}
         </Link>
       ) : null}
-    </div>
+    </section>
   )
 }
 
 function LimitCard({ title, current, limit, percent, warning, exceeded }) {
   const fillClass = exceeded ? 'danger' : warning ? 'warning' : ''
+  const percentClass = exceeded ? 'dashboard-limit-percent danger' : warning ? 'dashboard-limit-percent warning' : 'dashboard-limit-percent'
 
   return (
-    <div className="card" style={{ marginBottom: 0 }}>
+    <div className="card dashboard-limit-card">
       <div className="card-title">{title}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{fmt(current)} / {fmt(limit)} RSD</div>
-        <div style={{ fontSize: '0.9rem', color: exceeded ? 'var(--color-danger)' : warning ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+      <div className="dashboard-limit-head">
+        <div className="dashboard-limit-current">{fmt(current)} / {fmt(limit)} RSD</div>
+        <div className={percentClass}>
           {percent.toFixed(1)}% {exceeded ? tr('exceeded') : ''}
         </div>
       </div>
@@ -148,86 +145,62 @@ export default function Dashboard() {
       </div>
 
       <div className="page-body">
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '1rem',
-          marginBottom: '2rem',
-        }}>
+        <div className="dashboard-summary-grid">
           <SummaryCard
             title={tr('balanceMonth')}
             value={data.balance_month}
             valueColor={getMetricColor(data.balance_month)}
-            accentColor="var(--color-accent)"
+            tone="accent"
             subtitle={`${tr('monthIncome')}: ${fmtCurrency(data.month_income)}${UI_SEPARATOR}${tr('monthExpenses')}: ${fmtCurrency(data.month_expenses)}`}
           />
           <SummaryCard
             title={tr('balanceYear')}
             value={data.balance_year}
             valueColor={getMetricColor(data.balance_year)}
-            accentColor="var(--color-success)"
+            tone="success"
             subtitle={`${tr('yearIncome')}: ${fmtCurrency(data.year_income)}${UI_SEPARATOR}${tr('yearExpenses')}: ${fmtCurrency(data.year_expenses)}`}
           />
           <SummaryCard
             title={tr('balanceAllTime')}
             value={data.balance_all_time}
             valueColor={getMetricColor(data.balance_all_time)}
-            accentColor="var(--color-text-muted)"
+            tone="muted"
           />
-          <div className="card" style={{ marginBottom: 0, borderLeft: '4px solid var(--color-warning)' }}>
+          <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
-              {tr('plannedExpenses')} + {tr('payments')}
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-warning)' }}>
+            <div className="dashboard-summary-label">{tr('plannedExpenses')} + {tr('payments')}</div>
+            <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
               {fmtCurrency(data.planned_expenses_until_month_end)}
             </div>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-              <Link to="/planned-expenses" style={{ fontSize: '0.875rem', display: 'inline-block' }}>
+            <div className="dashboard-summary-links">
+              <Link to="/planned-expenses" className="dashboard-link">
                 {tr('plannedExpenses')} {UI_ARROW}
               </Link>
-              <Link to="/payments" style={{ fontSize: '0.875rem', display: 'inline-block' }}>
+              <Link to="/payments" className="dashboard-link">
                 {tr('goToPayments')} {UI_ARROW}
               </Link>
             </div>
           </div>
         </div>
 
-        <div style={{
-          display: 'flex',
-          gap: '1rem',
-          flexWrap: 'wrap',
-          marginBottom: '2rem',
-          alignItems: 'stretch',
-        }}>
-          <div style={{
-            flex: '2 1 680px',
-            minWidth: 0,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '1rem',
-          }}>
-            <IncomeExpensePie
-              title={`${tr('monthIncome')} / ${tr('monthExpenses')}`}
-              income={data.month_income}
-              expenses={data.month_expenses}
-            />
-            <IncomeExpensePie
-              title={`${tr('yearIncome')} / ${tr('yearExpenses')}`}
-              income={data.year_income}
-              expenses={data.year_expenses}
-              onExpensesClick
-            />
+        <div className="dashboard-visual-grid">
+          <div className="card dashboard-pies-panel">
+            <div className="dashboard-pies-grid">
+              <IncomeExpensePie
+                title={`${tr('monthIncome')} / ${tr('monthExpenses')}`}
+                income={data.month_income}
+                expenses={data.month_expenses}
+              />
+              <IncomeExpensePie
+                title={`${tr('yearIncome')} / ${tr('yearExpenses')}`}
+                income={data.year_income}
+                expenses={data.year_expenses}
+                onExpensesClick
+              />
+            </div>
           </div>
 
-          <div style={{
-            flex: '1 1 340px',
-            minWidth: 0,
-            maxWidth: 420,
-            display: 'grid',
-            gap: '1rem',
-            alignContent: 'start',
-          }}>
+          <div className="dashboard-limit-stack">
             <LimitCard
               title={`${tr('limit6m')} (6M RSD)`}
               current={lim.year_income}
@@ -371,10 +344,9 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-          <Link to="/income" style={{ marginTop: '1rem', display: 'inline-block' }}>{tr('income')} {UI_ARROW}</Link>
+          <Link to="/income" className="dashboard-link" style={{ marginTop: '1rem', display: 'inline-block' }}>{tr('income')} {UI_ARROW}</Link>
         </div>
       </div>
     </>
   )
 }
-
