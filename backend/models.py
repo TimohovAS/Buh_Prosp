@@ -126,7 +126,6 @@ class YearDecision(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    emblem_data_url = Column(Text)
 
     payment_type = relationship("PaymentType", back_populates="decisions")
     obligations = relationship("MonthlyObligation", back_populates="decision", cascade="all, delete-orphan")
@@ -189,7 +188,6 @@ class Project(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    emblem_data_url = Column(Text)
 
     client = relationship("Client", back_populates="projects")
     contracts = relationship("Contract", back_populates="project", foreign_keys="[Contract.project_id]")
@@ -264,7 +262,6 @@ class Income(Base):
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    emblem_data_url = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"))
 
     client = relationship("Client", back_populates="incomes")
@@ -298,7 +295,6 @@ class Contract(Base):
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    emblem_data_url = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"))
 
     client = relationship("Client", back_populates="contracts")
@@ -422,7 +418,6 @@ class PlannedExpense(Base):
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    emblem_data_url = Column(Text)
 
     category_ref = relationship("TransactionCategory")
     project = relationship("Project")
