@@ -139,6 +139,7 @@ const t = {
     balance: 'Биланс',
     balanceMonth: 'Биланс за месец',
     balanceYear: 'Биланс за годину',
+    balanceAllTime: '\u0411\u0438\u043b\u0430\u043d\u0441 \u0437\u0430 \u0441\u0432\u0435 \u0432\u0440\u0435\u043c\u0435',
     plannedUntilMonthEnd: 'Периодични расходи до краја месеца',
     obligationsOverdue: 'Кашњење',
     obligationsDueSoon: 'Приближава се рок',
@@ -527,6 +528,7 @@ const t = {
     balance: 'Баланс',
     balanceMonth: 'Баланс за месяц',
     balanceYear: 'Баланс за год',
+    balanceAllTime: '\u0411\u0430\u043b\u0430\u043d\u0441 \u0437\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f',
     plannedUntilMonthEnd: 'Периодические расходы до конца месяца',
     obligationsOverdue: 'Просрочено',
     obligationsDueSoon: 'Приближается срок',
@@ -804,3 +806,4 @@ export function getMonthNamesShort() {
 export function getMonthNamesFull() {
   return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR;
 }
+
