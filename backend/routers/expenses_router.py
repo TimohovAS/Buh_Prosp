@@ -129,7 +129,7 @@ async def _find_duplicate_groups(
         normalized_description = _normalize_duplicate_text(item.description)
         if normalized_reference:
             by_reference[(normalized_reference, amount_key)].append(item)
-        if normalized_description:
+        elif normalized_description:
             by_description[(normalized_description, amount_key)].append(item)
 
     groups: list[ExpenseDuplicateGroup] = []
@@ -162,6 +162,15 @@ async def _find_duplicate_groups(
 
     groups.sort(key=lambda group: (group.items[0].date if group.items else date.min, group.item_count), reverse=True)
     return groups
+
+
+def _non_empty_payment_refs(expenses: list[Expense]) -> set[str]:
+    refs: set[str] = set()
+    for expense in expenses:
+        normalized_reference = _normalize_duplicate_text(getattr(expense, "bank_reference", None))
+        if normalized_reference:
+            refs.add(normalized_reference)
+    return refs
 
 
 def _merge_notes(primary: str | None, secondary: str | None) -> str | None:
@@ -263,6 +272,10 @@ async def merge_expense_duplicates(
         if _is_reversal_row(duplicate) or getattr(duplicate, "reversed_expense_id", None):
             raise HTTPException(400, "Reversal expenses cannot be merged")
         duplicates.append(duplicate)
+
+    payment_refs = _non_empty_payment_refs([keep, *duplicates])
+    if len(payment_refs) > 1:
+        raise HTTPException(400, "Expenses with different payment references cannot be merged")
 
     unassigned_project_id = await _get_unassigned_project_id(db)
     for duplicate in duplicates:
