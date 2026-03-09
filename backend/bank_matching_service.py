@@ -42,7 +42,7 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense
 
 
 async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
-    if tx.status != "unmatched":
+    if tx.status not in {"unmatched", "ignored"}:
         return []
 
     if tx.direction != "in":
@@ -131,8 +131,8 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
 
     if not tx:
         raise ValueError("BankTransaction not found")
-    if tx.status != "unmatched":
-        raise ValueError("Transaction is already matched or ignored")
+    if tx.status not in {"unmatched", "ignored"}:
+        raise ValueError("Transaction is already matched")
 
     if match_type == "income":
         income_response = await db.execute(select(Income).where(Income.id == match_id))

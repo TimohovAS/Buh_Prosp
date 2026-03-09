@@ -177,14 +177,6 @@ export default function BankTransactions() {
     else setSelectedIds(displayed.map((item) => item.id))
   }
 
-  const handleUpdateStatus = async (id, newStatus) => {
-    try {
-      await api.bankTransactions.update(id, { status: newStatus })
-      await loadData({ preserveScroll: true })
-    } catch (error) {
-      console.error(error)
-    }
-  }
 
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
@@ -494,7 +486,6 @@ export default function BankTransactions() {
             <option value="all">{tr('filterAll')}</option>
             <option value="unmatched">{tr('bankTxUnmatched')}</option>
             <option value="matched">{tr('bankTxMatched')}</option>
-            <option value="ignored">{tr('bankTxIgnored')}</option>
           </select>
           <select className="form-input" style={{ width: 'auto' }} value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)}>
             <option value="all">{tr('filterAll')}</option>
@@ -552,25 +543,17 @@ export default function BankTransactions() {
                         {transaction.direction === 'in' ? '+' : '-'}{Number(transaction.amount || 0).toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
                       </td>
                       <td>
-                        {transaction.status === 'unmatched' && <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
-                        {transaction.status === 'matched' && <span className="badge badge-success">{tr('bankTxMatched')} ({transaction.matched_type})</span>}
-                        {transaction.status === 'ignored' && <span className="badge badge-secondary">{tr('bankTxIgnored')}</span>}
+                        {transaction.status === 'matched'
+                          ? <span className="badge badge-success">{tr('bankTxMatched')} ({transaction.matched_type})</span>
+                          : <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        {transaction.status === 'unmatched' && (
+                        {transaction.status !== 'matched' && (
                           <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
                             <button className="btn btn-sm btn-primary" onClick={() => openMatchModal(transaction)}>
                               {transaction.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchBtn')}
                             </button>
-                            <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(transaction.id, 'ignored')}>
-                              {tr('bankTxIgnore')}
-                            </button>
                           </div>
-                        )}
-                        {transaction.status === 'ignored' && (
-                          <button className="btn btn-sm btn-secondary" onClick={() => handleUpdateStatus(transaction.id, 'unmatched')}>
-                            {tr('restore')}
-                          </button>
                         )}
                         {transaction.status === 'matched' && (
                           <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(transaction.id)}>

@@ -85,7 +85,9 @@ async def list_bank_transactions(
     current_user: User = Depends(get_current_user_required),
 ):
     query = select(BankTransaction)
-    if status:
+    if status == "unmatched":
+        query = query.where(BankTransaction.status.in_(["unmatched", "ignored"]))
+    elif status:
         query = query.where(BankTransaction.status == status)
     if direction:
         query = query.where(BankTransaction.direction == direction)
@@ -201,8 +203,8 @@ async def create_expense_from_transaction(
         raise HTTPException(404, "Transaction not found")
     if transaction.direction != "out":
         raise HTTPException(400, "Expense can only be created from an outgoing transaction")
-    if transaction.status != "unmatched":
-        raise HTTPException(400, "Transaction is already matched or ignored")
+    if transaction.status not in {"unmatched", "ignored"}:
+        raise HTTPException(400, "Transaction is already matched")
 
     project_id, contract_id = await _resolve_expense_links(
         db,
