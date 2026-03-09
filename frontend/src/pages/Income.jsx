@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
-import { getLang, tr } from '../i18n'
+import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
 
@@ -11,10 +11,6 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
-function getAllTimeLabel() {
-  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
-}
-
 export default function Income() {
   const efakturaInputRef = useRef(null)
   const [items, setItems] = useState([])
@@ -450,7 +446,7 @@ export default function Income() {
               if (!event.target.value) setMonth('')
             }}
           >
-            <option value="">{getAllTimeLabel()}</option>
+            <option value="">{tr('allTime')}</option>
             {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}

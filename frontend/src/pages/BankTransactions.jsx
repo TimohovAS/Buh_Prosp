@@ -10,10 +10,6 @@ const UI_DASH = '\u2014'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
-function getAllTimeLabel() {
-  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
-}
-
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -484,7 +480,7 @@ export default function BankTransactions() {
         <h1>{tr('bankTransactions')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
-            <option value="">{getAllTimeLabel()}</option>
+            <option value="">{tr('allTime')}</option>
             {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}

@@ -11,10 +11,6 @@ const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
-function getAllTimeLabel() {
-  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
-}
-
 function buildContractLabel(contract) {
   if (!contract) return ''
   const parts = []
@@ -360,7 +356,7 @@ export default function Expenses() {
             {tr('total')}: {total.toLocaleString('sr-RS')} RSD
           </div>
           <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { const nextYear = event.target.value ? parseInt(event.target.value, 10) : ''; setYear(nextYear); if (!event.target.value) setMonth('') }}>
-            <option value="">{getAllTimeLabel()}</option>
+            <option value="">{tr('allTime')}</option>
             {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
