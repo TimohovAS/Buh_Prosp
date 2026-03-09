@@ -57,6 +57,22 @@ async def list_payment_types(
     return [PaymentTypeResponse.model_validate(t) for t in r.scalars().all()]
 
 
+@router.get("/years", response_model=list[int])
+async def list_obligation_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Р”РѕСЃС‚СѓРїРЅС‹Рµ РіРѕРґС‹ РґР»СЏ РєР°Р»РµРЅРґР°СЂСЏ РѕР±СЏР·Р°С‚РµР»СЊСЃС‚РІ."""
+    decision_result = await db.execute(select(YearDecision.year))
+    obligation_result = await db.execute(select(MonthlyObligation.year))
+    years = {
+        value
+        for (value,) in [*decision_result.all(), *obligation_result.all()]
+        if value is not None
+    }
+    years.add(date.today().year)
+    return sorted(years, reverse=True)
+
 @router.get("/calendar", response_model=list[MonthlyObligationResponse])
 async def list_obligations(
     year: int = Query(..., description="Год"),

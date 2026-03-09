@@ -244,6 +244,7 @@ export const api = {
 
   obligations: {
     types: () => request('/obligations/types'),
+    years: () => request('/obligations/years'),
     calendar: (year, paymentType) => {
       let url = `/obligations/calendar?year=${year}`;
       if (paymentType) url += `&payment_type=${paymentType}`;

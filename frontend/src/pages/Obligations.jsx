@@ -31,7 +31,9 @@ const STATUS_FILTERS = [
 ]
 
 export default function Obligations() {
-  const [year, setYear] = useState(new Date().getFullYear())
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear)
+  const [availableYears, setAvailableYears] = useState([currentYear])
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('')
   const [items, setItems] = useState([])
@@ -70,16 +72,19 @@ export default function Obligations() {
       api.obligations.types(),
       api.obligations.calendar(year, paymentTypeFilter || undefined),
       api.obligations.decisions(year),
+      api.obligations.years(),
     ])
-      .then(([paymentTypes, calendarItems, decisionItems]) => {
+      .then(([paymentTypes, calendarItems, decisionItems, years]) => {
         setTypes(paymentTypes)
         setItems(calendarItems)
         setDecisions(decisionItems)
+        setAvailableYears(years?.length ? years : [currentYear])
       })
       .catch(() => {
         setItems([])
         setTypes([])
         setDecisions([])
+        setAvailableYears([currentYear])
       })
       .finally(() => setLoading(false))
   }
@@ -87,6 +92,13 @@ export default function Obligations() {
   useEffect(() => {
     load()
   }, [year, paymentTypeFilter])
+
+  useEffect(() => {
+    if (!availableYears.length) return
+    if (!availableYears.includes(year)) {
+      setYear(availableYears[0])
+    }
+  }, [availableYears, year])
 
   const filteredItems = items.filter((obligation) => {
     if (statusFilter === 'all') return true
@@ -241,7 +253,7 @@ export default function Obligations() {
             onChange={(event) => setYear(parseInt(event.target.value, 10))}
             title={tr('filterYear')}
           >
-            {[year - 2, year - 1, year, year + 1].map((optionYear) => (
+            {availableYears.map((optionYear) => (
               <option key={optionYear} value={optionYear}>{optionYear}</option>
             ))}
           </select>
