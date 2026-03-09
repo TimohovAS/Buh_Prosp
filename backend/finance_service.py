@@ -217,13 +217,13 @@ async def get_finance_summary(
         if group_by == "day":
             grp_bt = func.strftime("%Y-%m-%d", bt_date)
         elif group_by == "month":
-            grp_ct = func.strftime("%Y-%m", bt_date)
+            grp_bt = func.strftime("%Y-%m", bt_date)
         else:
-            grp_ct = func.strftime("%Y", bt_date)
+            grp_bt = func.strftime("%Y", bt_date)
 
         # Inflow - все поступления (direction="in", status != "ignored")
         q_rc = (
-            select(grp_ct.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .where(
                 bt_direction == "in",
                 bt_status != "ignored",
@@ -244,7 +244,7 @@ async def get_finance_summary(
             if project_id is not None:
                 q_rc = q_rc.where(Income.project_id == project_id)
 
-        q_rc = q_rc.group_by(grp_ct)
+        q_rc = q_rc.group_by(grp_bt)
         r = await db.execute(q_rc)
         for row in r.fetchall():
             p = str(row.period)
@@ -254,7 +254,7 @@ async def get_finance_summary(
         # Outflow (expenses + obligations)
         # Если нет фильтров tax / category, просто берем все out != ignored
         q_ec = (
-            select(grp_ct.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .where(
                 bt_direction == "out",
                 bt_status != "ignored",
@@ -273,7 +273,7 @@ async def get_finance_summary(
             if is_tax_related is not None:
                 q_ec = q_ec.where(Expense.is_tax_related == (1 if is_tax_related else 0))
 
-        q_ec = q_ec.group_by(grp_ct)
+        q_ec = q_ec.group_by(grp_bt)
         r = await db.execute(q_ec)
         for row in r.fetchall():
             p = str(row.period)
@@ -286,7 +286,7 @@ async def get_finance_summary(
         elif is_tax_related:
              # Если искали налоги, obligation (зарплатные налоги) туда тоже плюсуем
              q_ob = (
-                select(grp_ct.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+                select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
                 .where(
                     bt_direction == "out",
                     bt_status != "ignored",
@@ -295,7 +295,7 @@ async def get_finance_summary(
                     bt_type == "obligation"
                 )
              )
-             q_ob = q_ob.group_by(grp_ct)
+             q_ob = q_ob.group_by(grp_bt)
              r = await db.execute(q_ob)
              for row in r.fetchall():
                 p = str(row.period)
@@ -305,16 +305,17 @@ async def get_finance_summary(
         # taxes_cash (is_tax_related == True или obligations)
         # Суммируем Expense is_tax=True и все MonthlyObligation
         q_tc1 = (
-            select(grp_ct.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .join(Expense, BankTransaction.matched_id == Expense.id)
             .where(
                 bt_direction == "out",
+                bt_status != "ignored",
                 BankTransaction.matched_type == "expense",
                 Expense.is_tax_related == True,
                 bt_date >= date_from,
                 bt_date <= date_to,
             )
-            .group_by(grp_ct)
+            .group_by(grp_bt)
         )
         r = await db.execute(q_tc1)
         for row in r.fetchall():
@@ -323,7 +324,7 @@ async def get_finance_summary(
                 periods_data[p]["taxes_cash"] += float(row.s)
 
         q_tc2 = (
-            select(grp_ct.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .where(
                 bt_direction == "out",
                 bt_status != "ignored",
@@ -331,7 +332,7 @@ async def get_finance_summary(
                 bt_date >= date_from,
                 bt_date <= date_to,
             )
-            .group_by(grp_ct)
+            .group_by(grp_bt)
         )
         r = await db.execute(q_tc2)
         for row in r.fetchall():
@@ -364,14 +365,15 @@ async def get_finance_summary(
     }
 
 
-async def get_accounts_receivable(db: AsyncSession) -> dict:
+async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None) -> dict:
     """
     Дебиторская задолженность: unpaid и partial incomes.
     Для partial показывает остаток (amount_rsd - paid_amount).
     """
-    today = date.today()
+    today = as_of or date.today()
     q = select(Income).options(selectinload(Income.client)).where(
         Income.status.in_(["issued", "partial"]),
+        Income.issued_date <= today,
     ).order_by(Income.issued_date.asc())
     r = await db.execute(q)
     incomes = r.scalars().all()
@@ -417,20 +419,44 @@ async def get_cashflow(
     """
     Cash flow: opening + inflow - outflow = closing (cumulative).
     inflow = revenue_cash, outflow = expense_cash.
-    opening для первой точки = opening_cash_balance.
+    opening for the first point is the balance at the selected range start.
     """
-    # Получаем opening_cash_balance из enterprise
     r = await db.execute(select(Enterprise).limit(1))
     ent = r.scalar_one_or_none()
     opening_cash_balance = float(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else 0.0
+    opening_cash_date = ent.opening_cash_date if ent and ent.opening_cash_date is not None else None
 
-    # Финансовый агрегат по cash
+    bt_date = BankTransaction.date
+    bt_amount = BankTransaction.amount
+    bt_direction = BankTransaction.direction
+    bt_status = BankTransaction.status
+
+    async def _sum_bank(direction: str, start: Optional[date] = None, end: Optional[date] = None) -> float:
+        conditions = [bt_direction == direction, bt_status != "ignored"]
+        if start is not None:
+            conditions.append(bt_date >= start)
+        if end is not None:
+            conditions.append(bt_date < end)
+        q = select(func.coalesce(func.sum(bt_amount), 0)).where(*conditions)
+        value = await db.scalar(q)
+        return float(value or 0)
+
+    opening_balance_at_range_start = opening_cash_balance
+    if opening_cash_date is None or opening_cash_date < date_from:
+        inflow_before = await _sum_bank("in", opening_cash_date, date_from)
+        outflow_before = await _sum_bank("out", opening_cash_date, date_from)
+        opening_balance_at_range_start += inflow_before - outflow_before
+    elif opening_cash_date > date_from:
+        inflow_after = await _sum_bank("in", date_from, opening_cash_date)
+        outflow_after = await _sum_bank("out", date_from, opening_cash_date)
+        opening_balance_at_range_start -= inflow_after - outflow_after
+
     summary = await get_finance_summary(db, date_from, date_to, group_by, "cash", None)
     series = summary.get("series", [])
 
     result_series = []
-    prev_closing = opening_cash_balance
-    for i, s in enumerate(series):
+    prev_closing = opening_balance_at_range_start
+    for s in series:
         inflow = float(s.get("revenue_cash", 0) or 0)
         outflow = float(s.get("expense_cash", 0) or 0)
         opening = prev_closing
@@ -447,7 +473,7 @@ async def get_cashflow(
     return {
         "range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
         "group_by": group_by,
-        "opening_cash_balance": opening_cash_balance,
+        "opening_cash_balance": opening_balance_at_range_start,
         "series": result_series,
     }
 

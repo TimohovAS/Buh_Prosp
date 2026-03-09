@@ -43,11 +43,12 @@ async def finance_summary(
 
 @router.get("/ar")
 async def finance_ar(
+    as_of: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     """Дебиторская задолженность: unpaid incomes (paid_date is null)."""
-    return await get_accounts_receivable(db)
+    return await get_accounts_receivable(db, as_of)
 
 
 @router.get("/cashflow")

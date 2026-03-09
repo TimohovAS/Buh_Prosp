@@ -24,7 +24,7 @@ function getPeriodRange(quick, customFrom, customTo) {
     const q = Math.ceil(m / 3)
     const startM = (q - 1) * 3 + 1
     const endM = q * 3
-    const lastDay = new Date(y, endM + 1, 0).getDate()
+    const lastDay = new Date(y, endM, 0).getDate()
     return {
       from: `${y}-${String(startM).padStart(2, '0')}-01`,
       to: `${y}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
