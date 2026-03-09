@@ -22,7 +22,11 @@ async def get_income_total(
     from datetime import date as date_type
     import calendar
 
-    q = select(func.coalesce(func.sum(Income.amount_rsd), 0)).select_from(Income)
+    q = (
+        select(func.coalesce(func.sum(Income.amount_rsd), 0))
+        .select_from(Income)
+        .where(Income.status != "cancelled")
+    )
     if year and month:
         last_day = calendar.monthrange(year, month)[1]
         q = q.where(

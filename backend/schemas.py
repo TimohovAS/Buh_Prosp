@@ -567,6 +567,7 @@ class DashboardStats(BaseModel):
     balance_month: float  # month_income - month_expenses
     balance_year: float   # year_income - year_expenses
     balance_all_time: float
+    financial_result_all_time: float
     planned_expenses_until_month_end: float  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int

@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from backend.auth import get_current_user_required
 from backend.config import get_settings
 from backend.database import get_db
-from backend.models import Expense, Income, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
+from backend.models import BankTransaction, Expense, Income, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
 from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
 from backend.schemas import DashboardIncomeResponse, DashboardStats, IncomeLimitStatus, UpcomingObligationItem, UpcomingPlannedItem
@@ -58,9 +58,24 @@ async def get_dashboard(
     )
     all_time_expenses = float(all_time_expenses_result.scalar() or 0)
 
+    cash_in_all_time_result = await db.execute(
+        select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
+            BankTransaction.direction == "in",
+        )
+    )
+    cash_in_all_time = float(cash_in_all_time_result.scalar() or 0)
+
+    cash_out_all_time_result = await db.execute(
+        select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
+            BankTransaction.direction == "out",
+        )
+    )
+    cash_out_all_time = float(cash_out_all_time_result.scalar() or 0)
+
     balance_month = month_income - month_expenses
     balance_year = year_income - year_expenses
-    balance_all_time = income_all_time - all_time_expenses
+    financial_result_all_time = income_all_time - all_time_expenses
+    balance_all_time = cash_in_all_time - cash_out_all_time
 
     month_end = date(selected_year, today.month, last_day)
     range_start = date(selected_year, 1, 1)
@@ -172,6 +187,7 @@ async def get_dashboard(
         balance_month=balance_month,
         balance_year=balance_year,
         balance_all_time=balance_all_time,
+        financial_result_all_time=financial_result_all_time,
         planned_expenses_until_month_end=planned_expenses_until_month_end,
         income_limit_status=IncomeLimitStatus(
             year_income=limit_status["year_income"],
@@ -203,4 +219,3 @@ async def get_income_limits(
     selected_year = year or date.today().year
     status = await get_income_limit_status(db, selected_year)
     return IncomeLimitStatus(**status)
-

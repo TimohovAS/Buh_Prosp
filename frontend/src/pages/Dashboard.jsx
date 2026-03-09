@@ -165,6 +165,7 @@ export default function Dashboard() {
             value={data.balance_all_time}
             valueColor={getMetricColor(data.balance_all_time)}
             tone="muted"
+            subtitle={`(${tr('financialResult')}: ${fmtCurrency(data.financial_result_all_time)})`}
           />
           <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>
