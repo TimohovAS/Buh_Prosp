@@ -226,13 +226,15 @@ tr.row-reversal {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  overflow: visible;
   position: relative;
   isolation: isolate;
 }
 
 .table-wrap table {
   position: relative;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 table {
@@ -250,6 +252,12 @@ th {
   font-weight: 600;
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+.table-wrap thead {
+  position: sticky;
+  top: 0;
+  z-index: 9;
 }
 
 .table-wrap thead th {
@@ -394,7 +402,8 @@ tr:hover td {
   }
 
   .table-wrap {
-    overflow-x: scroll;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   th, td {
@@ -465,3 +474,4 @@ tr:hover td {
 .react-datepicker__input-container input::placeholder {
   color: var(--color-text-muted) !important;
 }
+
