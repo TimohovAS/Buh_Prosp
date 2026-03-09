@@ -11,6 +11,9 @@ const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
+function getAllTimeLabel() {
+  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
+}
 
 function buildContractLabel(contract) {
   if (!contract) return ''
@@ -37,9 +40,11 @@ function loadDismissedDuplicateGroups() {
 }
 
 export default function Expenses() {
+  const currentYear = new Date().getFullYear()
   const [items, setItems] = useState([])
   const [duplicateGroups, setDuplicateGroups] = useState([])
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [year, setYear] = useState(currentYear)
+  const [availableYears, setAvailableYears] = useState([currentYear])
   const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -69,15 +74,18 @@ export default function Expenses() {
   const load = () => {
     setLoading(true)
     setPageError('')
-    const params = { year }
-    if (month) params.month = month
+    const params = {}
+    if (year) params.year = year
+    if (month && year) params.month = month
     return Promise.all([
       api.expenses.list(params),
       api.expenses.duplicates(params).catch(() => []),
+      api.expenses.years(),
     ])
-      .then(([expenseItems, groups]) => {
+      .then(([expenseItems, groups, years]) => {
         setItems(expenseItems)
         setDuplicateGroups(groups)
+        setAvailableYears(years?.length ? years : [currentYear])
       })
       .catch((error) => {
         setItems([])
@@ -90,6 +98,13 @@ export default function Expenses() {
   useEffect(() => {
     load()
   }, [year, month])
+
+  useEffect(() => {
+    if (availableYears.length === 0) return
+    if (year !== '' && !availableYears.includes(year)) {
+      setYear(availableYears[0])
+    }
+  }, [availableYears, year])
 
   useEffect(() => {
     Promise.all([
@@ -344,8 +359,9 @@ export default function Expenses() {
           >
             {tr('total')}: {total.toLocaleString('sr-RS')} RSD
           </div>
-          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => setYear(parseInt(event.target.value, 10))}>
-            {[year - 2, year - 1, year, year + 1].map((value) => (
+          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { const nextYear = event.target.value ? parseInt(event.target.value, 10) : ''; setYear(nextYear); if (!event.target.value) setMonth('') }}>
+            <option value="">{getAllTimeLabel()}</option>
+            {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
@@ -354,6 +370,7 @@ export default function Expenses() {
             style={{ width: 'auto' }}
             value={month}
             onChange={(event) => setMonth(event.target.value ? parseInt(event.target.value, 10) : '')}
+            disabled={!year}
           >
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (

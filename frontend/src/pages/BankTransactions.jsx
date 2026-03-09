@@ -10,6 +10,9 @@ const UI_DASH = '\u2014'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+function getAllTimeLabel() {
+  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -32,7 +35,11 @@ export default function BankTransactions() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const lang = getLang()
+  const currentYear = new Date().getFullYear()
+
   const [year, setYear] = useState('')
+  const [availableYears, setAvailableYears] = useState([currentYear])
   const [month, setMonth] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
@@ -60,9 +67,6 @@ export default function BankTransactions() {
     note: '',
   })
 
-  const lang = getLang()
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 5 }, (_, index) => currentYear - index)
 
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
@@ -90,16 +94,18 @@ export default function BankTransactions() {
       if (statusFilter !== 'all') params.status = statusFilter
       if (directionFilter !== 'all') params.direction = directionFilter
 
-      const [transactions, projectList, contractList, categoryList] = await Promise.all([
+      const [transactions, projectList, contractList, categoryList, years] = await Promise.all([
         api.bankTransactions.list(params),
         api.projects.list({ show_archived: true }),
         api.contracts.list({ limit: 500 }),
         api.categories.list({ category_type: 'expense' }),
+        api.bankTransactions.years(),
       ])
       setData(transactions)
       setProjects(projectList)
       setContracts(contractList)
       setCategories(categoryList)
+      setAvailableYears(years?.length ? years : [currentYear])
     } catch (error) {
       console.error(error)
     } finally {
@@ -121,6 +127,13 @@ export default function BankTransactions() {
   useEffect(() => {
     loadData()
   }, [statusFilter, directionFilter, year, month])
+
+  useEffect(() => {
+    if (availableYears.length === 0) return
+    if (year !== '' && !availableYears.includes(year)) {
+      setYear(availableYears[0])
+    }
+  }, [availableYears, year])
 
   const displayed = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -471,12 +484,12 @@ export default function BankTransactions() {
         <h1>{tr('bankTransactions')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
-            <option value="">{tr('allYears')}</option>
-            {years.map((value) => (
+            <option value="">{getAllTimeLabel()}</option>
+            {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-          <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)}>
+          <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (
               <option key={value} value={value}>{String(value).padStart(2, '0')}</option>

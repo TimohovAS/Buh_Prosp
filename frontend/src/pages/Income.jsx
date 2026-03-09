@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api'
-import { tr } from '../i18n'
+import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
 
@@ -11,6 +11,9 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+function getAllTimeLabel() {
+  return getLang() === 'ru' ? '\u0417\u0430 \u0432\u0441\u0435 \u0432\u0440\u0435\u043c\u044f' : 'Za sve vreme'
+}
 
 export default function Income() {
   const efakturaInputRef = useRef(null)
@@ -57,8 +60,9 @@ export default function Income() {
   const load = () => {
     setLoading(true)
     setPageError('')
-    const params = { year }
-    if (month) params.month = month
+    const params = {}
+    if (year) params.year = year
+    if (month && year) params.month = month
     return Promise.all([api.income.list(params), api.income.years()])
       .then(([incomeItems, years]) => {
         setItems(incomeItems)
@@ -76,7 +80,7 @@ export default function Income() {
   }, [year, month])
   useEffect(() => {
     if (availableYears.length === 0) return
-    if (!availableYears.includes(year)) {
+    if (year !== '' && !availableYears.includes(year)) {
       setYear(availableYears[0])
     }
   }, [availableYears, year])
@@ -440,8 +444,13 @@ export default function Income() {
             className="form-input"
             style={{ width: 'auto' }}
             value={year}
-            onChange={(event) => setYear(parseInt(event.target.value, 10))}
+            onChange={(event) => {
+              const nextYear = event.target.value ? parseInt(event.target.value, 10) : ''
+              setYear(nextYear)
+              if (!event.target.value) setMonth('')
+            }}
           >
+            <option value="">{getAllTimeLabel()}</option>
             {availableYears.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
@@ -451,6 +460,7 @@ export default function Income() {
             style={{ width: 'auto' }}
             value={month}
             onChange={(event) => setMonth(event.target.value ? parseInt(event.target.value, 10) : '')}
+            disabled={!year}
           >
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (

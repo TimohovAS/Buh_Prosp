@@ -236,6 +236,18 @@ async def list_expenses(
     return [ExpenseResponse.model_validate(item) for item in items]
 
 
+@router.get("/years", response_model=list[int])
+async def list_expense_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(select(Expense.date))
+    years = {value.year for (value,) in result.fetchall() if value is not None}
+    if not years:
+        years.add(date.today().year)
+    return sorted(years, reverse=True)
+
+
 @router.get("/duplicates", response_model=list[ExpenseDuplicateGroup])
 async def list_expense_duplicates(
     year: Optional[int] = Query(None),

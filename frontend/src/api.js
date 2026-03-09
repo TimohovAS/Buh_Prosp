@@ -211,6 +211,7 @@ export const api = {
       const q = new URLSearchParams(params || {}).toString();
       return request(`/expenses/duplicates?${q}`);
     },
+    years: () => request('/expenses/years'),
     mergeDuplicates: (data) => request('/expenses/merge-duplicates', { method: 'POST', body: JSON.stringify(data) }),
     get: (id) => request(`/expenses/${id}`),
     create: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
@@ -296,6 +297,7 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/bank-transactions?${q}`)
     },
+    years: () => request('/bank-transactions/years'),
     update: (id, payload) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     match: (id, payload) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
     createExpense: (id, payload) => request(`/bank-transactions/${id}/create-expense`, { method: 'POST', body: JSON.stringify(payload) }),

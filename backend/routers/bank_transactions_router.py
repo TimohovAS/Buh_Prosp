@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -101,6 +101,18 @@ async def list_bank_transactions(
     query = query.order_by(desc(BankTransaction.date), desc(BankTransaction.id))
     result = await db.execute(query)
     return [BankTransactionResponse.model_validate(item) for item in result.scalars().all()]
+
+
+@router.get("/years", response_model=list[int])
+async def list_bank_transaction_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(select(BankTransaction.date))
+    years = {value.year for (value,) in result.fetchall() if value is not None}
+    if not years:
+        years.add(date.today().year)
+    return sorted(years, reverse=True)
 
 
 @router.post("", response_model=BankTransactionResponse)
