@@ -6,6 +6,8 @@ DateType = date
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+MAX_EMBLEM_DATA_URL_LENGTH = 350000
+
 
 # --- User ---
 class UserBase(BaseModel):
@@ -362,6 +364,21 @@ class EnterpriseBase(BaseModel):
     main_activity_code: Optional[str] = None
     opening_cash_balance: Optional[float] = 0
     opening_cash_date: Optional[DateType] = None
+    emblem_data_url: Optional[str] = None
+
+    @field_validator("emblem_data_url", mode="before")
+    @classmethod
+    def validate_emblem_data_url(cls, value):
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Enterprise emblem must be an image data URL")
+        normalized = value.strip()
+        if not normalized.startswith("data:image/"):
+            raise ValueError("Enterprise emblem must be an image data URL")
+        if len(normalized) > MAX_EMBLEM_DATA_URL_LENGTH:
+            raise ValueError("Enterprise emblem image is too large")
+        return normalized
 
 
 class EnterpriseUpdate(EnterpriseBase):
@@ -375,6 +392,13 @@ class EnterpriseResponse(EnterpriseBase):
     class Config:
         from_attributes = True
 
+
+class EnterpriseBrandResponse(BaseModel):
+    name: Optional[str] = None
+    emblem_data_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 # --- PaymentType, YearDecision, MonthlyObligation (Р СћР вЂ”: Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘) ---
 class PaymentTypeResponse(BaseModel):

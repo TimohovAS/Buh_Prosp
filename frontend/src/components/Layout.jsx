@@ -1,7 +1,7 @@
-import { Outlet } from 'react-router-dom'
-import { NavLink } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import { useEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 import {
   LayoutDashboard,
   LineChart,
@@ -21,11 +21,22 @@ import {
 } from 'lucide-react'
 
 export default function Layout({ lang, toggleLang }) {
+  const brand = useEnterpriseBrand()
+  const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
+
   return (
     <div className="app">
       <aside className="sidebar">
-        <div style={{ padding: '2rem 1.25rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong style={{ fontSize: '1.25rem' }}>ProspEl <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>v2</span></strong>
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-main">
+            <div className="brand-mark" aria-hidden="true">
+              {brand.emblem_data_url ? <img src={brand.emblem_data_url} alt="" /> : <Building2 size={20} />}
+            </div>
+            <div className="sidebar-brand-copy">
+              <strong style={{ fontSize: '1.25rem' }}>ProspEl <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>v2</span></strong>
+              {enterpriseName ? <div className="sidebar-brand-subtitle">{enterpriseName}</div> : null}
+            </div>
+          </div>
           <button
             onClick={toggleLang}
             className="btn btn-sm btn-secondary"

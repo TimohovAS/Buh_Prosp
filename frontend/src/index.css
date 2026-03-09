@@ -105,6 +105,83 @@ input, select, textarea {
   flex-direction: column;
 }
 
+.sidebar-brand {
+  padding: 1.75rem 1.25rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.sidebar-brand-main {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.sidebar-brand-copy {
+  min-width: 0;
+}
+
+.sidebar-brand-subtitle {
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.brand-mark {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, rgba(36, 48, 68, 0.95), rgba(20, 28, 40, 0.95));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--color-accent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.brand-mark span {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.brand-mark svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.brand-mark-lg {
+  width: 3.75rem;
+  height: 3.75rem;
+  border-radius: 1.15rem;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.login-brand-copy {
+  min-width: 0;
+}
+
 .sidebar-group {
   margin-bottom: 1.5rem;
 }
@@ -629,7 +706,6 @@ tr:hover td {
     font-size: 0.875rem;
   }
 }
-
 /* react-datepicker — тёмная тема */
 .react-datepicker {
   background: var(--color-surface) !important;

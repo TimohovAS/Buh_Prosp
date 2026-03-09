@@ -1,7 +1,8 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 
 const ROLES = [
   { value: 'admin', labelKey: 'roleAdmin' },
@@ -17,6 +18,7 @@ const LANGS = [
 
 const UI_DASH = '\u2014'
 const UI_CLOSE = '\u00D7'
+const MAX_EMBLEM_FILE_SIZE = 256 * 1024
 
 export default function Settings() {
   const [data, setData] = useState(null)
@@ -28,6 +30,7 @@ export default function Settings() {
     address: '',
     pib: '',
     maticni_broj: '',
+    emblem_data_url: '',
     bank_name: '',
     bank_account: '',
     bank_swift: '',
@@ -149,6 +152,30 @@ export default function Settings() {
     return option ? tr(option.labelKey) : role
   }
 
+  const handleEmblemSelected = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert(tr('invalidImageFile'))
+      return
+    }
+    if (file.size > MAX_EMBLEM_FILE_SIZE) {
+      alert(tr('emblemTooLarge'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      setForm((current) => ({ ...current, emblem_data_url: result }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleEmblemRemove = () => {
+    setForm((current) => ({ ...current, emblem_data_url: '' }))
+  }
+
   useEffect(() => {
     api.enterprise.get()
       .then((response) => {
@@ -160,6 +187,7 @@ export default function Settings() {
             address: response.address || '',
             pib: response.pib || '',
             maticni_broj: response.maticni_broj || '',
+            emblem_data_url: response.emblem_data_url || '',
             bank_name: response.bank_name || '',
             bank_account: response.bank_account || '',
             bank_swift: response.bank_swift || '',
@@ -175,8 +203,10 @@ export default function Settings() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     try {
-      await api.enterprise.update(form)
-      setData({ ...data, ...form })
+      const updated = await api.enterprise.update(form)
+      setData(updated)
+      setForm((current) => ({ ...current, emblem_data_url: updated?.emblem_data_url || '' }))
+      broadcastEnterpriseBrand(updated)
       setModal(false)
     } catch (err) {
       console.error(err)
@@ -199,6 +229,15 @@ export default function Settings() {
           <div className="card-title">{tr('enterpriseData')}</div>
           {data ? (
             <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <div className="brand-mark" style={{ width: '4rem', height: '4rem' }} aria-hidden="true">
+                  {data.emblem_data_url ? <img src={data.emblem_data_url} alt="" /> : <span>P</span>}
+                </div>
+                <div>
+                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{tr('emblemPreview')}</div>
+                  <div style={{ fontWeight: 600 }}>{data.name}</div>
+                </div>
+              </div>
               <p><strong>{tr('name')}:</strong> {data.name}</p>
               <p><strong>{tr('address')}:</strong> {data.address || UI_DASH}</p>
               <p><strong>{tr('pib')}:</strong> {data.pib || UI_DASH}</p>
@@ -321,6 +360,31 @@ export default function Settings() {
                   value={form.maticni_broj}
                   onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
                 />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('enterpriseEmblem')}</label>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="brand-mark" style={{ width: '4rem', height: '4rem' }} aria-hidden="true">
+                    {form.emblem_data_url ? <img src={form.emblem_data_url} alt="" /> : <span>P</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <label className="btn btn-secondary" style={{ position: 'relative', overflow: 'hidden' }}>
+                      {tr('chooseImage')}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={handleEmblemSelected}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+                      />
+                    </label>
+                    {form.emblem_data_url ? (
+                      <button type="button" className="btn btn-secondary" onClick={handleEmblemRemove}>
+                        {tr('removeImage')}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <small style={{ color: 'var(--color-text-muted)' }}>{tr('enterpriseEmblemHint')}</small>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('bankName')}</label>

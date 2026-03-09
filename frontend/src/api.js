@@ -307,6 +307,7 @@ export const api = {
   },
   enterprise: {
     get: () => request('/enterprise'),
+    branding: () => request('/enterprise/branding'),
     update: (data) => request('/enterprise', { method: 'PUT', body: JSON.stringify(data) }),
   },
 

@@ -1,14 +1,26 @@
 """Роутер настроек предприятия."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Enterprise, User
-from backend.schemas import EnterpriseBase, EnterpriseUpdate, EnterpriseResponse
+from backend.schemas import EnterpriseBrandResponse, EnterpriseBase, EnterpriseUpdate, EnterpriseResponse
 from backend.auth import get_current_user_required, require_admin
 
 router = APIRouter(prefix="/enterprise", tags=["enterprise"])
+
+
+@router.get("/branding", response_model=EnterpriseBrandResponse)
+async def get_enterprise_branding(
+    db: AsyncSession = Depends(get_db),
+):
+    """РџРѕР»СѓС‡РёС‚СЊ РїСѓР±Р»РёС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ Р±СЂРµРЅРґР° РїСЂРµРґРїСЂРёСЏС‚РёСЏ."""
+    r = await db.execute(select(Enterprise).limit(1))
+    ent = r.scalar_one_or_none()
+    if not ent:
+        return EnterpriseBrandResponse(name="ProspEl", emblem_data_url=None)
+    return EnterpriseBrandResponse.model_validate(ent)
 
 
 @router.get("", response_model=EnterpriseResponse | None)

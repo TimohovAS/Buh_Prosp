@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Building2 } from 'lucide-react'
 import { api } from '../api'
 import { tr } from '../i18n'
+import { useEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 
 export default function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('')
@@ -9,6 +11,8 @@ export default function Login({ onLoginSuccess }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const brand = useEnterpriseBrand()
+  const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -33,8 +37,16 @@ export default function Login({ onLoginSuccess }) {
       justifyContent: 'center',
       background: 'var(--color-bg)',
     }}>
-      <div className="card" style={{ maxWidth: 360, width: '100%' }}>
-        <h1 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem' }}>ProspEl</h1>
+      <div className="card" style={{ maxWidth: 380, width: '100%' }}>
+        <div className="login-brand">
+          <div className="brand-mark brand-mark-lg" aria-hidden="true">
+            {brand.emblem_data_url ? <img src={brand.emblem_data_url} alt="" /> : <Building2 size={28} />}
+          </div>
+          <div className="login-brand-copy">
+            <h1 style={{ margin: 0, fontSize: '1.35rem' }}>ProspEl</h1>
+            {enterpriseName ? <p style={{ margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{enterpriseName}</p> : null}
+          </div>
+        </div>
         <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
           {tr('login')}
         </p>
