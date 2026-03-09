@@ -83,11 +83,7 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
-      {onExpensesClick ? (
-        <Link to="/expenses" className="dashboard-link dashboard-pie-link">
-          {tr('allExpenses')} {UI_ARROW}
-        </Link>
-      ) : null}
+
     </section>
   )
 }
