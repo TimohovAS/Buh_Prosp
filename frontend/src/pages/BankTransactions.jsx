@@ -75,7 +75,14 @@ export default function BankTransactions() {
     return lang === 'ru' ? category.name_ru : category.name_sr
   }
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
-  const getContractsForProject = (projectId) => contracts.filter((contract) => contract.project_id === projectId)
+  const getContractsForProject = (projectId) => contracts
+    .filter((contract) => contract.project_id === projectId || contract.project_id == null)
+    .sort((left, right) => {
+      const leftRank = left.project_id === projectId ? 0 : 1
+      const rightRank = right.project_id === projectId ? 0 : 1
+      if (leftRank !== rightRank) return leftRank - rightRank
+      return buildContractLabel(left).localeCompare(buildContractLabel(right), 'sr')
+    })
 
   const loadData = async ({ preserveScroll = false } = {}) => {
     if (preserveScroll && pageBodyRef.current) {

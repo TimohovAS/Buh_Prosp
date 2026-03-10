@@ -60,7 +60,11 @@ async def _resolve_expense_links(
     if resolved_contract_id is not None:
         contract = await _get_contract_or_404(db, resolved_contract_id)
         if contract.project_id is None:
-            raise HTTPException(400, "Contract must be linked to a project before using it in expenses")
+            if resolved_project_id is None:
+                raise HTTPException(400, "Select a project before linking this contract")
+            await _get_project_or_404(db, resolved_project_id)
+            contract.project_id = resolved_project_id
+            await db.flush()
         resolved_project_id = contract.project_id
 
     if resolved_project_id is not None:
