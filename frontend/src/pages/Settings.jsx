@@ -314,6 +314,74 @@ export default function Settings() {
           <div className="card-title">{tr('limits')}</div>
           <p>{tr('limitsDescription')}</p>
         </div>
+
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2>{tr('categoriesTitle')}</h2>
+            <button className="btn btn-primary" onClick={() => {
+              setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
+              setCatModal('add')
+            }}>{tr('add')}</button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tr('categoryNameRu')}</th>
+                  <th>{tr('categoryNameSr')}</th>
+                  <th>{tr('categoryGroup')}</th>
+                  <th>{tr('sortOrder')}</th>
+                  <th>{tr('status')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.length === 0 ? (
+                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
+                ) : categories.map((category) => (
+                  <tr key={category.id} style={!category.is_active ? { opacity: 0.5 } : {}}>
+                    <td>{category.name_ru}</td>
+                    <td>{category.name_sr}</td>
+                    <td>{tr(`categoryGroup${category.category_group.charAt(0).toUpperCase() + category.category_group.slice(1)}`)}</td>
+                    <td>{category.sort_order}</td>
+                    <td>
+                      <span className="badge" style={{ backgroundColor: category.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
+                        {category.is_active ? tr('active') : tr('inactive')}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="btn btn-sm btn-secondary" onClick={() => {
+                        setCatForm({
+                          name_ru: category.name_ru,
+                          name_sr: category.name_sr,
+                          category_type: category.category_type,
+                          category_group: category.category_group,
+                          is_active: category.is_active,
+                          sort_order: category.sort_order,
+                        })
+                        setCatModal({ type: 'edit', id: category.id })
+                      }}>{tr('edit')}</button>
+                      <button
+                        className={`btn btn-sm ${category.is_active ? 'btn-danger' : 'btn-secondary'}`}
+                        style={{ marginLeft: '0.5rem' }}
+                        onClick={async () => {
+                          try {
+                            await api.categories.update(category.id, { is_active: !category.is_active })
+                            loadCategories()
+                          } catch (err) {
+                            console.error(err)
+                          }
+                        }}
+                      >
+                        {category.is_active ? tr('deactivate') : tr('activate')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {modal && (
@@ -532,74 +600,6 @@ export default function Settings() {
           </div>
         </div>
       )}
-
-      <div className="card" style={{ marginTop: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2>{tr('categoriesTitle')}</h2>
-          <button className="btn btn-primary" onClick={() => {
-            setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
-            setCatModal('add')
-          }}>{tr('add')}</button>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{tr('categoryNameRu')}</th>
-                <th>{tr('categoryNameSr')}</th>
-                <th>{tr('categoryGroup')}</th>
-                <th>{tr('sortOrder')}</th>
-                <th>{tr('status')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.length === 0 ? (
-                <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
-              ) : categories.map((category) => (
-                <tr key={category.id} style={!category.is_active ? { opacity: 0.5 } : {}}>
-                  <td>{category.name_ru}</td>
-                  <td>{category.name_sr}</td>
-                  <td>{tr(`categoryGroup${category.category_group.charAt(0).toUpperCase() + category.category_group.slice(1)}`)}</td>
-                  <td>{category.sort_order}</td>
-                  <td>
-                    <span className="badge" style={{ backgroundColor: category.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
-                      {category.is_active ? tr('active') : tr('inactive')}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn btn-sm btn-secondary" onClick={() => {
-                      setCatForm({
-                        name_ru: category.name_ru,
-                        name_sr: category.name_sr,
-                        category_type: category.category_type,
-                        category_group: category.category_group,
-                        is_active: category.is_active,
-                        sort_order: category.sort_order,
-                      })
-                      setCatModal({ type: 'edit', id: category.id })
-                    }}>{tr('edit')}</button>
-                    <button
-                      className={`btn btn-sm ${category.is_active ? 'btn-danger' : 'btn-secondary'}`}
-                      style={{ marginLeft: '0.5rem' }}
-                      onClick={async () => {
-                        try {
-                          await api.categories.update(category.id, { is_active: !category.is_active })
-                          loadCategories()
-                        } catch (err) {
-                          console.error(err)
-                        }
-                      }}
-                    >
-                      {category.is_active ? tr('deactivate') : tr('activate')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {catModal && (
         <div className="modal-overlay">
