@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
+import ProjectSelect from '../components/ProjectSelect'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
@@ -13,6 +14,7 @@ const UI_SORT_DESC = '\u2193'
 export default function Contracts() {
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
+  const [projects, setProjects] = useState([])
   const [statusFilter, setStatusFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -24,6 +26,7 @@ export default function Contracts() {
     number: '',
     date: new Date().toISOString().slice(0, 10),
     client_id: '',
+    project_id: '',
     contract_type: 'service',
     subject: '',
     amount: 0,
@@ -33,6 +36,8 @@ export default function Contracts() {
     note: '',
   })
   const [itemsForm, setItemsForm] = useState([])
+
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
 
   const load = () => {
     setLoading(true)
@@ -45,7 +50,16 @@ export default function Contracts() {
   useEffect(() => {
     load()
   }, [statusFilter, clientFilter])
-  useEffect(() => { api.clients.listBrief().then(setClients) }, [])
+
+  useEffect(() => {
+    Promise.all([
+      api.clients.listBrief(),
+      api.projects.list({ show_archived: true }),
+    ]).then(([clientList, projectList]) => {
+      setClients(clientList)
+      setProjects(projectList)
+    })
+  }, [])
 
   const openAdd = () => {
     const currentYear = new Date().getFullYear()
@@ -56,6 +70,7 @@ export default function Contracts() {
           number: response.number || fallbackNumber,
           date: new Date().toISOString().slice(0, 10),
           client_id: '',
+          project_id: '',
           contract_type: 'service',
           subject: '',
           amount: 0,
@@ -72,6 +87,7 @@ export default function Contracts() {
           number: fallbackNumber,
           date: new Date().toISOString().slice(0, 10),
           client_id: '',
+          project_id: '',
           contract_type: 'service',
           subject: '',
           amount: 0,
@@ -90,6 +106,7 @@ export default function Contracts() {
       number: contract.number,
       date: contract.date,
       client_id: contract.client_id,
+      project_id: contract.project_id ?? '',
       contract_type: contract.contract_type,
       subject: contract.subject,
       amount: contract.amount,
@@ -138,6 +155,7 @@ export default function Contracts() {
       const payload = {
         ...form,
         client_id: parseInt(form.client_id, 10),
+        project_id: form.project_id ? parseInt(form.project_id, 10) : null,
         amount: itemsForm.filter((item) => item.description?.trim()).length ? 0 : (parseFloat(form.amount) || 0),
         validity_start: form.validity_start || null,
         validity_end: form.validity_end || null,
@@ -176,17 +194,18 @@ export default function Contracts() {
       rows = items.filter((contract) =>
         (contract.number || '').toLowerCase().includes(normalizedSearch) ||
         (contract.subject || '').toLowerCase().includes(normalizedSearch) ||
-        (contract.client_name || '').toLowerCase().includes(normalizedSearch)
+        (contract.client_name || '').toLowerCase().includes(normalizedSearch) ||
+        getProjectName(contract.project_id).toLowerCase().includes(normalizedSearch)
       )
     }
     return [...rows].sort((left, right) => {
-      const leftValue = left[sortCol] ?? ''
-      const rightValue = right[sortCol] ?? ''
+      const leftValue = sortCol === 'project_name' ? getProjectName(left.project_id) : (left[sortCol] ?? '')
+      const rightValue = sortCol === 'project_name' ? getProjectName(right.project_id) : (right[sortCol] ?? '')
       if (leftValue < rightValue) return sortAsc ? -1 : 1
       if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
-  }, [items, search, sortCol, sortAsc])
+  }, [items, projects, search, sortCol, sortAsc])
 
   const toggleSort = (column) => {
     if (sortCol === column) setSortAsc((value) => !value)
@@ -249,6 +268,7 @@ export default function Contracts() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>{'\u2116'} <SortIcon col="number" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_name')}>{tr('project')} <SortIcon col="project_name" /></th>
                   <th>{tr('type')}</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('subject')}>{tr('contractSubject')} <SortIcon col="subject" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
@@ -261,15 +281,16 @@ export default function Contracts() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={11}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={12}>{tr('loading')}</td></tr>
                 ) : filteredItems.length === 0 ? (
-                  <tr><td colSpan={11} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
+                  <tr><td colSpan={12} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
                 ) : (
                   filteredItems.map((contract) => (
                     <tr key={contract.id}>
                       <td>{contract.number}</td>
                       <td>{contract.date}</td>
                       <td>{contract.client_name || UI_DASH}</td>
+                      <td>{getProjectName(contract.project_id) || UI_DASH}</td>
                       <td>{tr(CONTRACT_TYPE_KEYS[contract.contract_type] || 'service')}</td>
                       <td>{(contract.subject || '').slice(0, 36)}</td>
                       <td>{Number(contract.amount || 0).toLocaleString('sr-RS')}</td>
@@ -327,6 +348,16 @@ export default function Contracts() {
                     <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect
+                  projects={projects}
+                  value={form.project_id}
+                  onChange={(value) => setForm({ ...form, project_id: value })}
+                  allowEmpty
+                  emptyLabel={UI_DASH}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('contractType')}</label>
