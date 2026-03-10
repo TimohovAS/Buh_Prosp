@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -265,6 +265,8 @@ async def update_contract(
             contract.amount = amount
 
     if "project_id" in data_dict:
+        for income in contract.incomes or []:
+            income.project_id = contract.project_id
         for expense in contract.expenses or []:
             expense.project_id = contract.project_id
 

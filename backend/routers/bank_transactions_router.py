@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import match_transaction, suggest_matches, unmatch_transaction
 from backend.database import get_db
-from backend.models import BankTransaction, Contract, Expense, Project, TransactionCategory, User
+from backend.models import BankTransaction, Contract, Expense, Income, Project, TransactionCategory, User
 from backend.schemas import (
     BankTransactionBulkAssignProject,
     BankTransactionCreate,
@@ -77,6 +77,23 @@ async def _sync_expense_project(db: AsyncSession, expense: Expense, project_id: 
     contract = await _get_contract_or_404(db, expense.contract_id)
     if contract.project_id != project_id:
         expense.contract_id = None
+
+
+async def _sync_income_project(db: AsyncSession, income: Income, project_id: int | None) -> None:
+    income.project_id = project_id
+    if income.contract_id is None or project_id is None:
+        return
+
+    contract = await _get_contract_or_404(db, income.contract_id)
+    if contract.project_id is None:
+        await _get_project_or_404(db, project_id)
+        contract.project_id = project_id
+        await db.flush()
+        return
+
+    if contract.project_id != project_id:
+        income.contract_id = None
+        income.contract_payment_type = None
 
 
 @router.get("", response_model=list[BankTransactionResponse])
@@ -166,11 +183,17 @@ async def update_bank_transaction(
     for key, value in payload.items():
         setattr(transaction, key, value)
 
-    if "project_id" in payload and transaction.matched_type == "expense" and transaction.matched_id:
-        expense_result = await db.execute(select(Expense).where(Expense.id == transaction.matched_id))
-        expense = expense_result.scalar_one_or_none()
-        if expense:
-            await _sync_expense_project(db, expense, payload["project_id"])
+    if "project_id" in payload and transaction.matched_id:
+        if transaction.matched_type == "expense":
+            expense_result = await db.execute(select(Expense).where(Expense.id == transaction.matched_id))
+            expense = expense_result.scalar_one_or_none()
+            if expense:
+                await _sync_expense_project(db, expense, payload["project_id"])
+        elif transaction.matched_type == "income":
+            income_result = await db.execute(select(Income).where(Income.id == transaction.matched_id))
+            income = income_result.scalar_one_or_none()
+            if income:
+                await _sync_income_project(db, income, payload["project_id"])
 
     await db.commit()
     await db.refresh(transaction)
@@ -314,6 +337,11 @@ async def bulk_assign_project(
             expense = expense_result.scalar_one_or_none()
             if expense:
                 await _sync_expense_project(db, expense, project_id)
+        elif item.matched_type == "income" and item.matched_id:
+            income_result = await db.execute(select(Income).where(Income.id == item.matched_id))
+            income = income_result.scalar_one_or_none()
+            if income:
+                await _sync_income_project(db, income, project_id)
 
     await db.commit()
     return {"message": f"Project assigned to {len(items)} transactions"}

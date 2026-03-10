@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_db
-from backend.models import Income, Client, User, Project, BankTransaction
+from backend.models import Income, Client, User, Project, BankTransaction, Contract
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
@@ -27,6 +27,57 @@ async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
     r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
     p = r.scalar_one_or_none()
     return p.id if p else None
+
+
+async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if project.status == "archived":
+        raise HTTPException(400, "Cannot use archived project")
+    return project
+
+
+async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(404, "Contract not found")
+    return contract
+
+
+async def _resolve_income_links(
+    db: AsyncSession,
+    project_id: int | None,
+    contract_id: int | None,
+) -> tuple[int | None, int | None]:
+    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_contract_id = contract_id
+
+    if resolved_contract_id is not None:
+        contract = await _get_contract_or_404(db, resolved_contract_id)
+        if contract.project_id is None:
+            if resolved_project_id is None:
+                raise HTTPException(400, "Select a project before linking this contract")
+            await _get_project_or_404(db, resolved_project_id)
+            contract.project_id = resolved_project_id
+            await db.flush()
+        resolved_project_id = contract.project_id
+
+    if resolved_project_id is not None:
+        await _get_project_or_404(db, resolved_project_id)
+
+    return resolved_project_id, resolved_contract_id
+
+
+async def _clear_contract_if_project_mismatch(db: AsyncSession, income: Income, project_id: int | None) -> None:
+    if not income.contract_id or project_id is None:
+        return
+    contract = await _get_contract_or_404(db, income.contract_id)
+    if contract.project_id != project_id:
+        income.contract_id = None
+        income.contract_payment_type = None
 
 
 async def _get_income_linked_transactions(db: AsyncSession, income_id: int) -> list[BankTransaction]:
@@ -196,18 +247,15 @@ async def create_income(
             raise HTTPException(409, INVOICE_DUPLICATE_DETAIL)
 
     status_val = data.status or ("paid" if data.paid_date else "issued")
-    # Auto-assign project
-    project_id = data.project_id
-    if not project_id:
-        project_id = await _get_unassigned_project_id(db)
+    project_id, contract_id = await _resolve_income_links(db, data.project_id, data.contract_id)
     income = Income(
         issued_date=data.issued_date,
         invoice_number=invoice_number,
         invoice_year=invoice_year_val,
         client_id=data.client_id,
         client_name=client_name,
-        contract_id=data.contract_id,
-        contract_payment_type=data.contract_payment_type or None,
+        contract_id=contract_id,
+        contract_payment_type=(data.contract_payment_type or None) if contract_id is not None else None,
         description=data.description,
         amount_rsd=data.amount_rsd,
         currency=data.currency,
@@ -294,6 +342,7 @@ async def bulk_assign_project_income(
     items = r.scalars().all()
     for item in items:
         item.project_id = pid
+        await _clear_contract_if_project_mismatch(db, item, pid)
     await db.commit()
     return {"updated": len(items)}
 
@@ -320,6 +369,7 @@ async def import_efaktura(
         if name_key and name_key not in clients_by_name:
             clients_by_name[name_key] = client
 
+    unassigned_project_id = await _get_unassigned_project_id(db)
     created = []
     skipped = []
     errors = []
@@ -369,6 +419,7 @@ async def import_efaktura(
                     exchange_rate=1.0,
                     due_date=parsed["due_date"],
                     status="issued",
+                    project_id=unassigned_project_id,
                     is_paid=False,
                     note=f"РРјРїРѕСЂС‚ eFaktura: {file_name}",
                     created_by=current_user.id,
@@ -465,8 +516,22 @@ async def update_income(
     if income.status == "cancelled":
         raise HTTPException(400, "Cancelled income cannot be updated")
     dump = data.model_dump(exclude_unset=True)
-    if "project_id" in dump and not dump["project_id"]:
-        dump["project_id"] = await _get_unassigned_project_id(db)
+    desired_project_id = dump.get("project_id", income.project_id)
+    desired_contract_id = dump.get("contract_id", income.contract_id)
+
+    if not desired_project_id:
+        desired_project_id = await _get_unassigned_project_id(db)
+
+    if desired_contract_id is None and income.contract_id and "project_id" in dump:
+        contract = await _get_contract_or_404(db, income.contract_id)
+        if contract.project_id != desired_project_id:
+            desired_contract_id = None
+
+    desired_project_id, desired_contract_id = await _resolve_income_links(db, desired_project_id, desired_contract_id)
+    dump["project_id"] = desired_project_id
+    dump["contract_id"] = desired_contract_id
+    if desired_contract_id is None:
+        dump["contract_payment_type"] = None
     paid_date_new = dump.get("paid_date")
     for k, v in dump.items():
         setattr(income, k, v)

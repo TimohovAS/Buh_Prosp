@@ -11,6 +11,15 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+
+function buildContractLabel(contract) {
+  if (!contract) return ''
+  const parts = []
+  if (contract.number) parts.push(contract.number)
+  if (contract.subject) parts.push(contract.subject)
+  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
+}
+
 export default function Income() {
   const efakturaInputRef = useRef(null)
   const [items, setItems] = useState([])
@@ -388,6 +397,48 @@ export default function Income() {
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const getContractsForProject = (projectId) => contracts
+    .filter((contract) => contract.project_id === projectId || contract.project_id == null)
+    .sort((left, right) => {
+      const leftRank = left.project_id === projectId ? 0 : 1
+      const rightRank = right.project_id === projectId ? 0 : 1
+      if (leftRank !== rightRank) return leftRank - rightRank
+      return buildContractLabel(left).localeCompare(buildContractLabel(right), 'sr')
+    })
+
+  const updateProject = (projectId) => {
+    setForm((previous) => {
+      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      return {
+        ...previous,
+        project_id: projectId,
+        contract_id: keepContract ? previous.contract_id : '',
+        contract_payment_type: keepContract ? previous.contract_payment_type : '',
+      }
+    })
+  }
+
+  const updateContract = (contractId) => {
+    setForm((previous) => {
+      if (!contractId) {
+        return { ...previous, contract_id: '', contract_payment_type: '' }
+      }
+      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
+      const keepPaymentType = String(previous.contract_id) === String(contractId)
+      return {
+        ...previous,
+        contract_id: contractId,
+        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
+        contract_payment_type: keepPaymentType ? previous.contract_payment_type : '',
+      }
+    })
+  }
+
+  const filteredContracts = useMemo(() => {
+    const selectedProjectId = form.project_id ? parseInt(form.project_id, 10) : null
+    return selectedProjectId ? getContractsForProject(selectedProjectId) : []
+  }, [contracts, form.project_id])
 
   const filtered = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -718,7 +769,7 @@ export default function Income() {
                   onChange={(event) => {
                     const id = event.target.value ? parseInt(event.target.value, 10) : ''
                     const client = clients.find((item) => item.id === id)
-                    setForm({ ...form, client_id: id, client_name: client ? client.name : '', contract_id: '' })
+                    setForm({ ...form, client_id: id, client_name: client ? client.name : '', contract_id: '', contract_payment_type: '' })
                   }}
                 >
                   <option value="">{`${UI_DASH} ${tr('incomeManual')} ${UI_DASH}`}</option>
@@ -733,11 +784,11 @@ export default function Income() {
                   <select
                     className="form-input"
                     value={form.contract_id}
-                    onChange={(event) => setForm({ ...form, contract_id: event.target.value, contract_payment_type: '' })}
+                    onChange={(event) => updateContract(event.target.value)}
                   >
                     <option value="">{`${UI_DASH} ${tr('incomeNoContract')} ${UI_DASH}`}</option>
-                    {contracts.map((contract) => (
-                      <option key={contract.id} value={contract.id}>{contract.number} {UI_DASH} {contract.client_name} ({contract.amount?.toLocaleString?.('sr-RS')} RSD)</option>
+                    {filteredContracts.map((contract) => (
+                      <option key={contract.id} value={contract.id}>{buildContractLabel(contract)} {UI_DASH} {contract.client_name} ({contract.amount?.toLocaleString?.('sr-RS')} RSD)</option>
                     ))}
                   </select>
                 </div>
@@ -747,7 +798,7 @@ export default function Income() {
                 <ProjectSelect
                   projects={projects}
                   value={form.project_id}
-                  onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
+                  onChange={updateProject}
                   required
                 />
               </div>

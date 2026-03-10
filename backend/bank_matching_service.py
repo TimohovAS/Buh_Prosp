@@ -4,12 +4,36 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models import BankTransaction, Contract, Expense, Income, MonthlyObligation
+from backend.models import BankTransaction, Contract, Expense, Income, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 
 
 def _safe_paid_amount(income: Income) -> float:
     return float(getattr(income, "paid_amount", None) or 0)
+
+
+async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
+    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
+    project = result.scalar_one_or_none()
+    return project.id if project else None
+
+
+async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise ValueError("Project not found")
+    if project.status == "archived":
+        raise ValueError("Cannot use archived project")
+    return project
+
+
+async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise ValueError("Contract not found")
+    return contract
 
 
 def _matches_counterparty_name(tx: BankTransaction, income: Income) -> bool:
@@ -39,6 +63,23 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense
     contract = result.scalar_one_or_none()
     if contract and contract.project_id != project_id:
         expense.contract_id = None
+
+
+async def _sync_income_project(db: AsyncSession, income: Income, project_id: int | None) -> None:
+    income.project_id = project_id
+    if income.contract_id is None or project_id is None:
+        return
+
+    contract = await _get_contract_or_404(db, income.contract_id)
+    if contract.project_id is None:
+        await _get_project_or_404(db, project_id)
+        contract.project_id = project_id
+        await db.flush()
+        return
+
+    if contract.project_id != project_id:
+        income.contract_id = None
+        income.contract_payment_type = None
 
 
 async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
@@ -152,7 +193,10 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
 
         if tx.bank_reference and not income.bank_reference:
             income.bank_reference = tx.bank_reference
-        tx.project_id = getattr(income, "project_id", None) or tx.project_id
+        project_id = tx.project_id or getattr(income, "project_id", None) or await _get_unassigned_project_id(db)
+        if project_id is not None:
+            await _sync_income_project(db, income, project_id)
+            tx.project_id = project_id
 
     elif match_type == "expense":
         expense_response = await db.execute(select(Expense).where(Expense.id == match_id))
