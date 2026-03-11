@@ -98,6 +98,8 @@ def _is_active_duplicate_candidate(expense: Expense) -> bool:
         return False
     if getattr(expense, "reversed_expense_id", None):
         return False
+    if getattr(expense, "status", None) == "planned":
+        return False
     return float(expense.amount or 0) > 0
 
 

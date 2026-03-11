@@ -96,6 +96,29 @@ async def _sync_income_project(db: AsyncSession, income: Income, project_id: int
         income.contract_payment_type = None
 
 
+async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: BankTransaction) -> Expense | None:
+    if not transaction.bank_reference:
+        return None
+
+    result = await db.execute(
+        select(Expense)
+        .where(
+            Expense.source == "bank_import",
+            Expense.status == "planned",
+            Expense.bank_reference == transaction.bank_reference,
+            Expense.reversal_of_id.is_(None),
+        )
+        .order_by(Expense.id.desc())
+    )
+    for expense in result.scalars().all():
+        if getattr(expense, "reversed_expense_id", None):
+            continue
+        if float(expense.amount or 0) != float(transaction.amount or 0):
+            continue
+        return expense
+    return None
+
+
 @router.get("", response_model=list[BankTransactionResponse])
 async def list_bank_transactions(
     status: Optional[str] = Query(None),
@@ -269,23 +292,38 @@ async def create_expense_from_transaction(
     if not description:
         description = f"Bank transaction #{transaction.id}"
 
-    expense = Expense(
-        date=data.date or transaction.date,
-        description=description[:500],
-        amount=float(transaction.amount or 0),
-        currency=transaction.currency or "RSD",
-        category=category_name,
-        category_id=data.category_id,
-        contract_id=contract_id,
-        bank_reference=transaction.bank_reference,
-        paid_date=transaction.date,
-        status="paid",
-        source="bank_import",
-        note=data.note,
-        project_id=project_id,
-        created_by=current_user.id,
-    )
-    db.add(expense)
+    expense = await _find_reusable_bank_import_expense(db, transaction)
+    if expense:
+        expense.date = data.date or transaction.date
+        expense.description = description[:500]
+        expense.amount = float(transaction.amount or 0)
+        expense.currency = transaction.currency or "RSD"
+        expense.category = category_name
+        expense.category_id = data.category_id
+        expense.contract_id = contract_id
+        expense.bank_reference = transaction.bank_reference
+        expense.paid_date = transaction.date
+        expense.status = "paid"
+        expense.note = data.note
+        expense.project_id = project_id
+    else:
+        expense = Expense(
+            date=data.date or transaction.date,
+            description=description[:500],
+            amount=float(transaction.amount or 0),
+            currency=transaction.currency or "RSD",
+            category=category_name,
+            category_id=data.category_id,
+            contract_id=contract_id,
+            bank_reference=transaction.bank_reference,
+            paid_date=transaction.date,
+            status="paid",
+            source="bank_import",
+            note=data.note,
+            project_id=project_id,
+            created_by=current_user.id,
+        )
+        db.add(expense)
     await db.flush()
 
     transaction.status = "matched"
