@@ -116,16 +116,6 @@ async def revert_cash_transfer(
         if entry is None and expense is not None:
             entry = await get_cash_entry_by_expense(db, expense.id)
 
-    amount = float(
-        (entry.amount if entry is not None else None)
-        or (expense.amount if expense is not None else None)
-        or transaction.amount
-        or 0
-    )
-    current_balance = await get_cash_balance(db)
-    if amount > current_balance:
-        raise ValueError("Cannot unmatch cash withdrawal because cash from it is already used")
-
     if entry is not None:
         await db.delete(entry)
     if expense is not None:

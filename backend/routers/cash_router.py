@@ -251,11 +251,6 @@ async def update_cash_entry(
         if direction not in {"in", "out"}:
             raise HTTPException(400, "Direction must be in or out")
         amount = float(payload.get("amount", entry.amount) or 0)
-        current_balance, _, _ = await _get_cash_totals(db)
-        base_balance = current_balance - _signed_entry_amount(entry.direction, entry.amount)
-        if base_balance + _signed_entry_amount(direction, amount) < 0:
-            raise HTTPException(400, "Insufficient cash balance")
-
         description = payload.get("description", entry.description)
         if not (description or "").strip():
             raise HTTPException(400, "Description is required")
@@ -273,11 +268,6 @@ async def update_cash_entry(
             raise HTTPException(404, "Expense not found for this cash entry")
 
         amount = float(payload.get("amount", expense.amount) or 0)
-        current_balance, _, _ = await _get_cash_totals(db)
-        base_balance = current_balance + float(entry.amount or 0)
-        if amount > base_balance:
-            raise HTTPException(400, "Insufficient cash balance")
-
         description = payload.get("description", expense.description)
         if not (description or "").strip():
             raise HTTPException(400, "Description is required")
@@ -395,10 +385,6 @@ async def create_cash_adjustment(
     if data.direction not in {"in", "out"}:
         raise HTTPException(400, "Direction must be in or out")
 
-    current_balance, _, _ = await _get_cash_totals(db)
-    if data.direction == "out" and float(data.amount or 0) > current_balance:
-        raise HTTPException(400, "Insufficient cash balance")
-
     entry = CashEntry(
         date=data.date,
         direction=data.direction,
@@ -423,10 +409,6 @@ async def create_cash_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    current_balance, _, _ = await _get_cash_totals(db)
-    if float(data.amount or 0) > current_balance:
-        raise HTTPException(400, "Insufficient cash balance")
-
     project_id, contract_id = await _resolve_expense_links(db, data.project_id, data.contract_id)
 
     category_name = (data.category or "").strip() or None

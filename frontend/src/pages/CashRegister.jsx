@@ -24,6 +24,12 @@ function buildBankLabel(item) {
   return parts.join(` ${UI_DASH} `) || UI_DASH
 }
 
+function isSalaryCategory(category) {
+  const sr = String(category?.name_sr || '').trim().toLowerCase()
+  const ru = String(category?.name_ru || '').trim().toLowerCase()
+  return sr === 'zarade' || sr.includes('zarad') || ru.includes('зарп')
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -65,6 +71,7 @@ export default function CashRegister() {
 
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const salaryProject = projects.find((project) => project.code === 'INT-SALARY') || null
 
   const loadData = () => {
     setLoading(true)
@@ -110,6 +117,23 @@ export default function CashRegister() {
     const selectedProjectId = expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : null
     return selectedProjectId ? getContractsForProject(selectedProjectId) : []
   }, [contracts, expenseForm.project_id])
+
+  const selectedExpenseCategory = useMemo(
+    () => categories.find((item) => String(item.id) === String(expenseForm.category_id)) || null,
+    [categories, expenseForm.category_id]
+  )
+  const expenseUsesSalaryProject = isSalaryCategory(selectedExpenseCategory) && !!salaryProject
+
+  useEffect(() => {
+    if (!expenseUsesSalaryProject) return
+    const salaryProjectId = String(salaryProject.id)
+    if (String(expenseForm.project_id || '') === salaryProjectId && !expenseForm.contract_id) return
+    setExpenseForm((previous) => ({
+      ...previous,
+      project_id: salaryProjectId,
+      contract_id: '',
+    }))
+  }, [expenseUsesSalaryProject, salaryProject, expenseForm.project_id, expenseForm.contract_id])
 
   const withdrawalContracts = useMemo(() => {
     const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
@@ -194,6 +218,24 @@ export default function CashRegister() {
         ...previous,
         contract_id: contractId,
         project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
+      }
+    })
+  }
+
+  const updateExpenseCategory = (categoryId) => {
+    setExpenseForm((previous) => {
+      const selectedCategory = categories.find((item) => String(item.id) === String(categoryId)) || null
+      if (isSalaryCategory(selectedCategory) && salaryProject) {
+        return {
+          ...previous,
+          category_id: categoryId,
+          project_id: String(salaryProject.id),
+          contract_id: '',
+        }
+      }
+      return {
+        ...previous,
+        category_id: categoryId,
       }
     })
   }
@@ -490,26 +532,30 @@ export default function CashRegister() {
           </div>
           <div className="form-group">
             <label className="form-label">{tr('category')}</label>
-            <select className="form-input" value={expenseForm.category_id} onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}>
+            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
               <option value="">{tr('allCategories')}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>{getCategoryLabel(category.id)}</option>
               ))}
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label">{tr('project')}</label>
-            <ProjectSelect projects={projects} value={expenseForm.project_id} onChange={updateExpenseProject} allowEmpty emptyLabel={UI_DASH} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('contracts')}</label>
-            <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)} disabled={!expenseForm.project_id}>
-              <option value="">{UI_DASH}</option>
-              {expenseContracts.map((contract) => (
-                <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
-              ))}
-            </select>
-          </div>
+          {!expenseUsesSalaryProject ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect projects={projects} value={expenseForm.project_id} onChange={updateExpenseProject} allowEmpty emptyLabel={UI_DASH} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('contracts')}</label>
+                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)} disabled={!expenseForm.project_id}>
+                  <option value="">{UI_DASH}</option>
+                  {expenseContracts.map((contract) => (
+                    <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
             <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />

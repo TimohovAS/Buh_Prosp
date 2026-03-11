@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
-from backend.cash_service import CASH_TRANSFER_SOURCE, get_cash_balance, is_cash_transfer_expense
+from backend.cash_service import CASH_TRANSFER_SOURCE, is_cash_transfer_expense
 from backend.database import get_db
 from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
 from backend.schemas import (
@@ -87,10 +87,6 @@ async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> N
     cash_entry = result.scalar_one_or_none()
     if not cash_entry:
         return
-
-    available_balance = await _get_cash_balance(db) + float(cash_entry.amount or 0)
-    if float(expense.amount or 0) > available_balance:
-        raise HTTPException(400, "Insufficient cash balance")
 
     cash_entry.date = expense.paid_date or expense.date
     cash_entry.amount = float(expense.amount or 0)
