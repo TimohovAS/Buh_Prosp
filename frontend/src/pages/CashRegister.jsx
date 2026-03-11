@@ -6,6 +6,9 @@ import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 
 const UI_DASH = '\u2014'
+const UI_SORT_BOTH = '\u2195'
+const UI_SORT_ASC = '\u2191'
+const UI_SORT_DESC = '\u2193'
 
 function fmtAmount(value) {
   return Number(value || 0).toLocaleString('sr-RS')
@@ -38,6 +41,9 @@ export default function CashRegister() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState('')
+  const [search, setSearch] = useState('')
+  const [sortCol, setSortCol] = useState('date')
+  const [sortAsc, setSortAsc] = useState(false)
   const [summary, setSummary] = useState({ current_balance: 0, total_in: 0, total_out: 0, entries: [], available_withdrawals: [] })
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -72,6 +78,7 @@ export default function CashRegister() {
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
   const salaryProject = projects.find((project) => project.code === 'INT-SALARY') || null
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
 
   const loadData = () => {
     setLoading(true)
@@ -102,6 +109,22 @@ export default function CashRegister() {
     const selectedCategory = categories.find((item) => item.id === categoryId)
     if (!selectedCategory) return UI_DASH
     return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
+  }
+
+  const getEntryTypeLabel = (entry) => {
+    if (entry.entry_type === 'withdrawal') return tr('cashEntryTypeWithdrawal')
+    if (entry.entry_type === 'expense') return tr('cashEntryTypeExpense')
+    return tr('cashEntryTypeAdjustment')
+  }
+
+  const getEntrySourceLabel = (entry) => {
+    if (entry.bank_transaction_id) {
+      return `${tr('cashSourceBank')}: ${entry.bank_reference || entry.counterparty_name || `#${entry.bank_transaction_id}`}`
+    }
+    if (entry.expense_id) {
+      return `${tr('cashSourceExpense')}: #${entry.expense_id}`
+    }
+    return UI_DASH
   }
 
   const getContractsForProject = (projectId) => contracts
@@ -139,6 +162,89 @@ export default function CashRegister() {
     const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
     return selectedProjectId ? getContractsForProject(selectedProjectId) : []
   }, [contracts, withdrawalForm.project_id])
+
+  const filteredEntries = useMemo(() => {
+    const normalizedSearch = (search || '').trim().toLowerCase()
+    let rows = summary.entries || []
+
+    if (normalizedSearch) {
+      rows = rows.filter((entry) => {
+        const haystack = [
+          entry.date,
+          entry.description,
+          entry.note,
+          entry.bank_reference,
+          entry.counterparty_name,
+          entry.purpose,
+          getEntryTypeLabel(entry),
+          getEntrySourceLabel(entry),
+          getProjectName(entry.project_id),
+          entry.expense_id ? String(entry.expense_id) : '',
+          entry.bank_transaction_id ? String(entry.bank_transaction_id) : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return haystack.includes(normalizedSearch)
+      })
+    }
+
+    return [...rows].sort((left, right) => {
+      const leftIn = left.direction === 'in' ? Number(left.amount || 0) : 0
+      const rightIn = right.direction === 'in' ? Number(right.amount || 0) : 0
+      const leftOut = left.direction === 'out' ? Number(left.amount || 0) : 0
+      const rightOut = right.direction === 'out' ? Number(right.amount || 0) : 0
+
+      const leftValue = sortCol === 'entry_type'
+        ? getEntryTypeLabel(left)
+        : sortCol === 'source'
+          ? getEntrySourceLabel(left)
+          : sortCol === 'inflow'
+            ? leftIn
+            : sortCol === 'outflow'
+              ? leftOut
+              : sortCol === 'balance_after'
+                ? Number(left.balance_after || 0)
+                : sortCol === 'amount'
+                  ? Number(left.amount || 0)
+                  : sortCol === 'description'
+                    ? `${left.description || ''} ${left.note || ''}`
+                    : left[sortCol] ?? ''
+
+      const rightValue = sortCol === 'entry_type'
+        ? getEntryTypeLabel(right)
+        : sortCol === 'source'
+          ? getEntrySourceLabel(right)
+          : sortCol === 'inflow'
+            ? rightIn
+            : sortCol === 'outflow'
+              ? rightOut
+              : sortCol === 'balance_after'
+                ? Number(right.balance_after || 0)
+                : sortCol === 'amount'
+                  ? Number(right.amount || 0)
+                  : sortCol === 'description'
+                    ? `${right.description || ''} ${right.note || ''}`
+                    : right[sortCol] ?? ''
+
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [summary.entries, search, sortCol, sortAsc, projects, lang])
+
+  const toggleSort = (column) => {
+    if (sortCol === column) setSortAsc((value) => !value)
+    else {
+      setSortCol(column)
+      setSortAsc(true)
+    }
+  }
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
+    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
+  }
 
   const openExpenseCreate = () => {
     setExpenseForm({
@@ -408,37 +514,39 @@ export default function CashRegister() {
             </div>
 
             <div className="card">
-              <div className="card-title">{tr('cashEntries')}</div>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                <div className="card-title" style={{ margin: 0 }}>{tr('cashEntries')}</div>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder={tr('search')}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  style={{ width: 220 }}
+                />
+              </div>
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>{tr('date')}</th>
-                      <th>{tr('cashEntryType')}</th>
-                      <th>{tr('description')}</th>
-                      <th>{tr('cashSource')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('cashflowInflow')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('cashflowOutflow')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('cashBalanceAfter')}</th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIcon col="entry_type" /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIcon col="description" /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIcon col="source" /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIcon col="inflow" /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIcon col="outflow" /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIcon col="balance_after" /></th>
                       <th style={{ textAlign: 'right' }}>{tr('cashActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.entries.length === 0 ? (
+                    {filteredEntries.length === 0 ? (
                       <tr>
                         <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
                       </tr>
-                    ) : summary.entries.map((entry) => {
-                      const typeLabel = entry.entry_type === 'withdrawal'
-                        ? tr('cashEntryTypeWithdrawal')
-                        : entry.entry_type === 'expense'
-                          ? tr('cashEntryTypeExpense')
-                          : tr('cashEntryTypeAdjustment')
-                      const sourceLabel = entry.bank_transaction_id
-                        ? `${tr('cashSourceBank')}: ${entry.bank_reference || entry.counterparty_name || `#${entry.bank_transaction_id}`}`
-                        : entry.expense_id
-                          ? `${tr('cashSourceExpense')}: #${entry.expense_id}`
-                          : UI_DASH
+                    ) : filteredEntries.map((entry) => {
+                      const typeLabel = getEntryTypeLabel(entry)
+                      const sourceLabel = getEntrySourceLabel(entry)
                       return (
                         <tr key={entry.id}>
                           <td>{entry.date}</td>

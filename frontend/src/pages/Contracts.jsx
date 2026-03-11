@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
+import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
@@ -338,7 +339,7 @@ export default function Contracts() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
-                <input type="date" className="form-input" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
+                <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('client')}</label>
@@ -383,11 +384,11 @@ export default function Contracts() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('validFrom')}</label>
-                <input type="date" className="form-input" value={form.validity_start} onChange={(event) => setForm({ ...form, validity_start: event.target.value })} />
+                <DatePicker value={form.validity_start} onChange={(value) => setForm({ ...form, validity_start: value })} />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('validTo')}</label>
-                <input type="date" className="form-input" value={form.validity_end} onChange={(event) => setForm({ ...form, validity_end: event.target.value })} />
+                <DatePicker value={form.validity_end} onChange={(value) => setForm({ ...form, validity_end: value })} />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('status')}</label>

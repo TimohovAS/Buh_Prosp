@@ -20,6 +20,7 @@ export default function DatePicker({ value, onChange, required, className = '', 
       selected={date}
       onChange={handleChange}
       dateFormat="dd.MM.yyyy"
+      calendarStartDay={1}
       showMonthDropdown
       showYearDropdown
       dropdownMode="select"
