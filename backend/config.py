@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     app_name: str = "ProspEl"
     debug: bool = False
     database_url: str = "sqlite+aiosqlite:///./prospel.db"
+    backup_dir: str = "./backups"
+    backup_auto_enabled: bool = True
+    backup_auto_interval_hours: int = 6
+    backup_auto_retention_count: int = 60
+    backup_manual_retention_count: int = 30
+    backup_pre_restore_retention_count: int = 20
+    backup_scheduler_check_minutes: int = 5
     # Если SECRET_KEY не задан в .env, используем случайный ключ на текущий запуск.
     # Это безопаснее фиксированного дефолта, но для продакшена нужен постоянный ключ в .env.
     secret_key: str = secrets.token_urlsafe(64)

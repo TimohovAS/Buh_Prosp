@@ -64,6 +64,10 @@ export default function Settings() {
     is_active: true,
     sort_order: 0,
   })
+  const [serviceData, setServiceData] = useState(null)
+  const [serviceLoading, setServiceLoading] = useState(false)
+  const [serviceBusy, setServiceBusy] = useState('')
+  const [serviceMessage, setServiceMessage] = useState('')
 
   const loadUsers = () => {
     if (!isAdmin) return
@@ -80,12 +84,44 @@ export default function Settings() {
       .catch((err) => console.error(err))
   }
 
+  const loadService = () => {
+    if (!isAdmin) return
+    setServiceLoading(true)
+    api.service.backups()
+      .then(setServiceData)
+      .catch((err) => console.error(err))
+      .finally(() => setServiceLoading(false))
+  }
+
   useEffect(() => {
     loadUsers()
   }, [showInactive, isAdmin])
   useEffect(() => {
     loadCategories()
   }, [])
+  useEffect(() => {
+    loadService()
+  }, [isAdmin])
+
+  const formatBytes = (value) => {
+    const size = Number(value) || 0
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  }
+
+  const formatDateTime = (value) => {
+    if (!value) return UI_DASH
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+  }
+
+  const backupTypeLabel = (kind) => {
+    if (kind === 'auto') return tr('serviceBackupsTypeAuto')
+    if (kind === 'pre-restore') return tr('serviceBackupsTypePreRestore')
+    return tr('serviceBackupsTypeManual')
+  }
 
   const openAddUser = () => {
     setUserForm({ username: '', password: '', full_name: '', role: 'accountant', default_language: 'sr' })
@@ -210,6 +246,45 @@ export default function Settings() {
       setModal(false)
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const handleCreateBackup = async () => {
+    setServiceBusy('create')
+    try {
+      await api.service.createBackup()
+      setServiceMessage(tr('serviceBackupsCreateSuccess'))
+      loadService()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setServiceBusy('')
+    }
+  }
+
+  const handleDownloadBackup = async (name) => {
+    setServiceBusy(`download:${name}`)
+    try {
+      await api.service.downloadBackup(name)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setServiceBusy('')
+    }
+  }
+
+  const handleRestoreBackup = async (name) => {
+    if (!confirm(tr('serviceBackupsRestoreConfirm'))) return
+    setServiceBusy(`restore:${name}`)
+    try {
+      await api.service.restoreBackup(name)
+      setServiceMessage(tr('serviceBackupsRestoreSuccess'))
+      loadService()
+      setTimeout(() => window.location.reload(), 1200)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setServiceBusy('')
     }
   }
 
@@ -382,6 +457,115 @@ export default function Settings() {
             </table>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <div>
+                <div className="card-title">{tr('serviceBackupsTitle')}</div>
+                <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsHint')}</p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
+                  {tr('serviceBackupsRefresh')}
+                </button>
+                <button className="btn btn-primary" onClick={handleCreateBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
+                  {tr('serviceBackupsCreate')}
+                </button>
+              </div>
+            </div>
+
+            {serviceMessage ? (
+              <div style={{ marginBottom: '1rem', color: 'var(--color-success)' }}>{serviceMessage}</div>
+            ) : null}
+
+            {serviceLoading && !serviceData ? (
+              <div>{tr('loading')}</div>
+            ) : !serviceData?.settings?.supported ? (
+              <div style={{ color: 'var(--color-text-muted)' }}>{tr('serviceBackupsUnsupported')}</div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div>
+                    <strong>{tr('serviceBackupsLocation')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)', wordBreak: 'break-word' }}>{serviceData?.settings?.backup_dir || UI_DASH}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsDbPath')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)', wordBreak: 'break-word' }}>{serviceData?.settings?.database_path || UI_DASH}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsDbSize')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{formatBytes(serviceData?.settings?.current_db_size_bytes)}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsInterval')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.auto_interval_hours} {tr('serviceBackupsHours')}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsAutoRetention')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.auto_retention_count}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsManualRetention')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.manual_retention_count}</div>
+                  </div>
+                  <div>
+                    <strong>{tr('serviceBackupsPreRestoreRetention')}:</strong>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.pre_restore_retention_count}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsReloadHint')}</div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('serviceBackupsName')}</th>
+                        <th>{tr('serviceBackupsType')}</th>
+                        <th>{tr('serviceBackupsCreatedAt')}</th>
+                        <th>{tr('serviceBackupsSize')}</th>
+                        <th>{tr('cashActions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(serviceData?.backups || []).length === 0 ? (
+                        <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('serviceBackupsNoItems')}</td></tr>
+                      ) : (
+                        (serviceData?.backups || []).map((backup) => (
+                          <tr key={backup.name}>
+                            <td>{backup.name}</td>
+                            <td>{backupTypeLabel(backup.kind)}</td>
+                            <td>{formatDateTime(backup.created_at)}</td>
+                            <td>{formatBytes(backup.archive_size_bytes)}</td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleDownloadBackup(backup.name)}
+                                disabled={!!serviceBusy}
+                              >
+                                {tr('download')}
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                style={{ marginLeft: '0.5rem' }}
+                                onClick={() => handleRestoreBackup(backup.name)}
+                                disabled={!!serviceBusy}
+                              >
+                                {tr('restore')}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {modal && (

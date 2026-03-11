@@ -1002,3 +1002,39 @@ class TransactionCategoryResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class ServiceBackupInfo(BaseModel):
+    name: str
+    kind: str
+    created_at: datetime
+    db_size_bytes: int
+    archive_size_bytes: int
+
+
+class ServiceBackupSettings(BaseModel):
+    supported: bool
+    backup_dir: str
+    database_path: Optional[str] = None
+    current_db_size_bytes: int = 0
+    auto_enabled: bool
+    auto_interval_hours: int
+    auto_retention_count: int
+    manual_retention_count: int
+    pre_restore_retention_count: int
+
+
+class ServiceBackupStatusResponse(BaseModel):
+    settings: ServiceBackupSettings
+    backups: list[ServiceBackupInfo] = Field(default_factory=list)
+
+
+class ServiceBackupOperationResponse(BaseModel):
+    backup: ServiceBackupInfo
+    message: str
+
+
+class ServiceRestoreResponse(BaseModel):
+    restored_backup: ServiceBackupInfo
+    pre_restore_backup: Optional[ServiceBackupInfo] = None
+    message: str
+

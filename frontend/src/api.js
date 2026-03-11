@@ -322,6 +322,28 @@ export const api = {
     update: (data) => request('/enterprise', { method: 'PUT', body: JSON.stringify(data) }),
   },
 
+  service: {
+    backups: () => request('/service/backups'),
+    createBackup: () => request('/service/backups', { method: 'POST' }),
+    restoreBackup: (name) => request(`/service/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
+    async downloadBackup(name) {
+      const res = await fetch(`${API_BASE}/service/backups/${encodeURIComponent(name)}/download`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
+        throw new Error('Ошибка загрузки');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+  },
+
   reports: {
     kpoCsvUrl: (year, month) => {
       let url = `${API_BASE}/reports/kpo/csv?year=${year}`;

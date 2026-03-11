@@ -1,9 +1,12 @@
 """Главный модуль приложения ProspEl."""
+import asyncio
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db
+from backend.backup_service import backup_scheduler_loop
 from backend.models import User
 from backend.auth import get_password_hash
 from backend.routers.auth_router import router as auth_router
@@ -24,12 +27,14 @@ from backend.routers.bank_transactions_router import router as bank_transactions
 from backend.routers.projects_router import router as projects_router
 from backend.routers.categories_router import router as categories_router
 from backend.routers.cash_router import router as cash_router
+from backend.routers.service_router import router as service_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Инициализация при запуске."""
     await init_db()
+    backup_task = None
     # Создаём начального админа если нет пользователей
     from backend.database import AsyncSessionLocal
     from sqlalchemy import select
@@ -49,8 +54,14 @@ async def lifespan(app: FastAPI):
         from backend.payments_service import ensure_payment_types
         await ensure_payment_types(db)
         await db.commit()
-    yield
-    # cleanup if needed
+    backup_task = asyncio.create_task(backup_scheduler_loop())
+    try:
+        yield
+    finally:
+        if backup_task is not None:
+            backup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await backup_task
 
 
 app = FastAPI(
@@ -81,6 +92,7 @@ app.include_router(bank_transactions_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(categories_router, prefix="/api")
 app.include_router(cash_router, prefix="/api")
+app.include_router(service_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(obligations_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
