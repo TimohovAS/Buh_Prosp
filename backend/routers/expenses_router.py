@@ -95,6 +95,14 @@ async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> N
     cash_entry.note = expense.note
 
 
+async def _sync_bank_transactions_from_expense(db: AsyncSession, expense: Expense) -> None:
+    await db.execute(
+        update(BankTransaction)
+        .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == expense.id)
+        .values(project_id=expense.project_id)
+    )
+
+
 def _normalize_duplicate_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
 
@@ -410,6 +418,7 @@ async def bulk_assign_project_expenses(
     for item in items:
         item.project_id = project_id
         await _clear_contract_if_project_mismatch(db, item, project_id)
+        await _sync_bank_transactions_from_expense(db, item)
 
     await db.commit()
     return {"updated": len(items)}
@@ -532,6 +541,7 @@ async def update_expense(
 
     if getattr(expense, "source", None) == "cash":
         await _sync_cash_entry_from_expense(db, expense)
+    await _sync_bank_transactions_from_expense(db, expense)
 
     await db.flush()
     await db.commit()

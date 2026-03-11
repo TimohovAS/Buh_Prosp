@@ -26,6 +26,7 @@ from backend.schemas import (
 )
 
 router = APIRouter(prefix="/bank-transactions", tags=["bank-transactions"])
+_PROJECT_OVERRIDE_UNSET = object()
 
 
 async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
@@ -125,6 +126,67 @@ async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: Bank
     return None
 
 
+def _serialize_bank_transaction(
+    transaction: BankTransaction,
+    project_id: object = _PROJECT_OVERRIDE_UNSET,
+) -> BankTransactionResponse:
+    payload = BankTransactionResponse.model_validate(transaction).model_dump()
+    if project_id is not _PROJECT_OVERRIDE_UNSET:
+        payload["project_id"] = project_id
+    return BankTransactionResponse.model_validate(payload)
+
+
+async def _resolve_effective_project_ids(
+    db: AsyncSession,
+    transactions: list[BankTransaction],
+) -> dict[int, int | None]:
+    expense_ids = [tx.matched_id for tx in transactions if tx.matched_type == "expense" and tx.matched_id]
+    income_ids = [tx.matched_id for tx in transactions if tx.matched_type == "income" and tx.matched_id]
+
+    expense_projects: dict[int, int | None] = {}
+    income_projects: dict[int, int | None] = {}
+
+    if expense_ids:
+        result = await db.execute(select(Expense.id, Expense.project_id).where(Expense.id.in_(expense_ids)))
+        expense_projects = {int(expense_id): project_id for expense_id, project_id in result.fetchall()}
+
+    if income_ids:
+        result = await db.execute(select(Income.id, Income.project_id).where(Income.id.in_(income_ids)))
+        income_projects = {int(income_id): project_id for income_id, project_id in result.fetchall()}
+
+    resolved: dict[int, int | None] = {}
+    for tx in transactions:
+        project_id = tx.project_id
+        if tx.matched_type == "expense" and tx.matched_id:
+            project_id = expense_projects.get(int(tx.matched_id), project_id)
+        elif tx.matched_type == "income" and tx.matched_id:
+            project_id = income_projects.get(int(tx.matched_id), project_id)
+        resolved[int(tx.id)] = project_id
+    return resolved
+
+
+async def _serialize_bank_transactions(
+    db: AsyncSession,
+    transactions: list[BankTransaction],
+) -> list[BankTransactionResponse]:
+    resolved_projects = await _resolve_effective_project_ids(db, transactions)
+    return [
+        _serialize_bank_transaction(transaction, resolved_projects.get(int(transaction.id), transaction.project_id))
+        for transaction in transactions
+    ]
+
+
+async def _serialize_single_bank_transaction(
+    db: AsyncSession,
+    transaction: BankTransaction,
+) -> BankTransactionResponse:
+    resolved_projects = await _resolve_effective_project_ids(db, [transaction])
+    return _serialize_bank_transaction(
+        transaction,
+        resolved_projects.get(int(transaction.id), transaction.project_id),
+    )
+
+
 @router.get("", response_model=list[BankTransactionResponse])
 async def list_bank_transactions(
     status: Optional[str] = Query(None),
@@ -150,7 +212,8 @@ async def list_bank_transactions(
         query = query.where(BankTransaction.date >= date(year, month, 1), BankTransaction.date <= date(year, month, last_day))
     query = query.order_by(desc(BankTransaction.date), desc(BankTransaction.id))
     result = await db.execute(query)
-    return [BankTransactionResponse.model_validate(item) for item in result.scalars().all()]
+    items = list(result.scalars().all())
+    return await _serialize_bank_transactions(db, items)
 
 
 @router.get("/years", response_model=list[int])
@@ -188,7 +251,7 @@ async def get_bank_transaction(
     transaction = result.scalar_one_or_none()
     if not transaction:
         raise HTTPException(404, "Transaction not found")
-    return BankTransactionResponse.model_validate(transaction)
+    return await _serialize_single_bank_transaction(db, transaction)
 
 
 @router.patch("/{tx_id}", response_model=BankTransactionResponse)
@@ -233,7 +296,7 @@ async def update_bank_transaction(
 
     await db.commit()
     await db.refresh(transaction)
-    return BankTransactionResponse.model_validate(transaction)
+    return await _serialize_single_bank_transaction(db, transaction)
 
 
 @router.get("/{tx_id}/suggest", response_model=list[MatchCandidate])
@@ -260,7 +323,7 @@ async def apply_match(
         transaction = await match_transaction(db, tx_id, body.type, body.id)
         await db.commit()
         await db.refresh(transaction)
-        return BankTransactionResponse.model_validate(transaction)
+        return await _serialize_single_bank_transaction(db, transaction)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -324,7 +387,7 @@ async def create_expense_from_transaction(
             await db.refresh(transaction)
             return {
                 "expense_id": expense.id,
-                "transaction": BankTransactionResponse.model_validate(transaction).model_dump(),
+                "transaction": (await _serialize_single_bank_transaction(db, transaction)).model_dump(),
             }
         except ValueError as exc:
             raise HTTPException(400, str(exc))
@@ -372,7 +435,7 @@ async def create_expense_from_transaction(
     await db.refresh(transaction)
     return {
         "expense_id": expense.id,
-        "transaction": BankTransactionResponse.model_validate(transaction).model_dump(),
+        "transaction": (await _serialize_single_bank_transaction(db, transaction)).model_dump(),
     }
 
 
@@ -386,7 +449,7 @@ async def revert_match(
         transaction = await unmatch_transaction(db, tx_id)
         await db.commit()
         await db.refresh(transaction)
-        return BankTransactionResponse.model_validate(transaction)
+        return await _serialize_single_bank_transaction(db, transaction)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
