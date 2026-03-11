@@ -35,6 +35,14 @@ function loadDismissedDuplicateGroups() {
   }
 }
 
+function csvEscape(value) {
+  const text = value == null ? '' : String(value)
+  if (text.includes('"') || text.includes(';') || text.includes('\n') || text.includes('\r')) {
+    return `"${text.replace(/"/g, '""')}"`
+  }
+  return text
+}
+
 export default function Expenses() {
   const currentYear = new Date().getFullYear()
   const [items, setItems] = useState([])
@@ -351,6 +359,44 @@ export default function Expenses() {
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0)
 
+  const handleExportCsv = () => {
+    const rows = [
+      [
+        tr('date'),
+        tr('description'),
+        tr('project'),
+        tr('contract'),
+        tr('category'),
+        tr('amount'),
+        tr('paymentRef'),
+        tr('note'),
+        tr('status'),
+      ],
+      ...filtered.map((item) => [
+        item.date || '',
+        item.description || '',
+        getProjectName(item.project_id) || '',
+        getContractLabel(item.contract_id) || '',
+        getCategoryLabel(item) || '',
+        Number(item.amount || 0).toFixed(2),
+        item.bank_reference || '',
+        item.note || '',
+        item.status || '',
+      ]),
+      ['', '', '', '', tr('total'), total.toFixed(2), '', '', ''],
+    ]
+
+    const content = `\ufeff${rows.map((row) => row.map(csvEscape).join(';')).join('\n')}`
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const filename = `expenses${year ? `_${year}` : ''}${month ? `_${String(month).padStart(2, '0')}` : ''}.csv`
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <div className="page-header">
@@ -401,6 +447,9 @@ export default function Expenses() {
             }}
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
+          </button>
+          <button className="btn btn-secondary" onClick={handleExportCsv} disabled={loading || filtered.length === 0}>
+            {tr('download')} CSV
           </button>
           <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
         </div>
