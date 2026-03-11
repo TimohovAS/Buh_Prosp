@@ -614,7 +614,7 @@ class ExpenseBase(BaseModel):
     project_id: Optional[int] = None
     contract_id: Optional[int] = None
     category_id: Optional[int] = None
-    source: Optional[str] = None  # manual | planned | obligation | bank_import
+    source: Optional[str] = None  # manual | planned | obligation | bank_import | cash | cash_transfer
     reversal_of_id: Optional[int] = None
     bank_reference: Optional[str] = None  # Р СњР С•Р СР ВµРЎР‚ Р С—Р В»Р В°РЎвЂљРЎвЂР В¶Р С”Р С‘ / ID transakcije
     note: Optional[str] = None
@@ -912,6 +912,7 @@ class CashExpenseCreate(BaseModel):
 class BankTransactionCreateExpenseRequest(BaseModel):
     date: Optional[DateType] = None
     description: Optional[str] = None
+    category: Optional[str] = None
     category_id: Optional[int] = None
     project_id: Optional[int] = None
     contract_id: Optional[int] = None

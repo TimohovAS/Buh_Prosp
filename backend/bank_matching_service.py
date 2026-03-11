@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 
@@ -280,6 +281,10 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
         expense_response = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
         expense = expense_response.scalar_one_or_none()
         if expense:
+            if is_cash_transfer_expense(expense):
+                await revert_cash_transfer(db, tx, expense=expense)
+                await db.flush()
+                return tx
             expense.status = "planned"
             expense.paid_date = None
 
@@ -295,7 +300,9 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
         cash_entry_response = await db.execute(select(CashEntry).where(CashEntry.id == tx.matched_id))
         cash_entry = cash_entry_response.scalar_one_or_none()
         if cash_entry:
-            raise ValueError("Cash withdrawals must be managed from the cash screen")
+            await revert_cash_transfer(db, tx, cash_entry=cash_entry)
+            await db.flush()
+            return tx
 
     tx.status = "unmatched"
     tx.matched_type = None

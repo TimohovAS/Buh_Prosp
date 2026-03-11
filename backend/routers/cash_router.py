@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
+from backend.cash_service import create_cash_transfer_from_transaction
 from backend.database import get_db
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Project, TransactionCategory, User
 from backend.schemas import (
@@ -217,42 +218,22 @@ async def create_cash_withdrawal(
     transaction = result.scalar_one_or_none()
     if not transaction:
         raise HTTPException(404, "Transaction not found")
-    if transaction.direction != "out":
-        raise HTTPException(400, "Only outgoing bank transactions can be transferred to cash")
-    if transaction.status not in {"unmatched", "ignored"}:
-        raise HTTPException(400, "Transaction is already matched")
-
-    existing_result = await db.execute(
-        select(CashEntry)
-        .options(selectinload(CashEntry.bank_transaction), selectinload(CashEntry.expense))
-        .where(CashEntry.bank_transaction_id == transaction.id)
-    )
-    existing_entry = existing_result.scalar_one_or_none()
-    if existing_entry:
-        raise HTTPException(400, "This bank transaction is already added to cash")
-
-    entry = CashEntry(
-        date=transaction.date,
-        direction="in",
-        amount=float(transaction.amount or 0),
-        currency=transaction.currency or "RSD",
-        description=_build_withdrawal_description(transaction),
-        entry_type="withdrawal",
-        note=data.note,
-        bank_transaction_id=transaction.id,
-        created_by=current_user.id,
-    )
-    db.add(entry)
-    await db.flush()
-
-    transaction.status = "matched"
-    transaction.matched_type = "cash"
-    transaction.matched_id = entry.id
-
-    await db.commit()
-    entry = await _get_entry_with_links(db, entry.id)
-    current_balance, _, _ = await _get_cash_totals(db)
-    return _serialize_cash_entry(entry, current_balance)
+    try:
+        _, entry = await create_cash_transfer_from_transaction(
+            db,
+            transaction,
+            project_id=transaction.project_id,
+            contract_id=None,
+            description=_build_withdrawal_description(transaction),
+            note=data.note,
+            created_by=current_user.id,
+        )
+        await db.commit()
+        entry = await _get_entry_with_links(db, entry.id)
+        current_balance, _, _ = await _get_cash_totals(db)
+        return _serialize_cash_entry(entry, current_balance)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.post("/adjustments", response_model=CashEntryResponse)

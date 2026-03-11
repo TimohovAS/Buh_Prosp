@@ -10,6 +10,8 @@ const UI_DASH = '\u2014'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
+const CASH_CATEGORY_VALUE = '__cash__'
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -314,7 +316,8 @@ export default function BankTransactions() {
       await api.bankTransactions.createExpense(matchTx.id, {
         date: expenseForm.date,
         description: expenseForm.description.trim(),
-        category_id: expenseForm.category_id ? parseInt(expenseForm.category_id, 10) : null,
+        category: expenseForm.category_id === CASH_CATEGORY_VALUE ? 'cash' : null,
+        category_id: expenseForm.category_id && expenseForm.category_id !== CASH_CATEGORY_VALUE ? parseInt(expenseForm.category_id, 10) : null,
         project_id: expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null,
         note: expenseForm.note?.trim() || null,
@@ -450,6 +453,7 @@ export default function BankTransactions() {
           <label className="form-label">{tr('category')}</label>
           <select className="form-input" value={expenseForm.category_id} onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}>
             <option value="">{UI_DASH}</option>
+            <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
             ))}

@@ -5,6 +5,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction
 
 
@@ -91,6 +92,7 @@ async def get_finance_summary(
     # но исключаем planned.
     expense_accrual_base = and_(
         expense_status != "planned",
+        Expense.source != CASH_TRANSFER_SOURCE,
         expense_date_col >= date_from,
         expense_date_col <= date_to,
     )
@@ -118,6 +120,7 @@ async def get_finance_summary(
 
     expense_cash_base = and_(
         expense_status.in_(["paid", "reversed"]),
+        Expense.source != CASH_TRANSFER_SOURCE,
         expense_paid_col.isnot(None),
         expense_paid_col >= date_from,
         expense_paid_col <= date_to,
@@ -132,6 +135,7 @@ async def get_finance_summary(
 
     expense_tax_base = and_(
         expense_status.in_(["paid", "reversed"]),
+        Expense.source != CASH_TRANSFER_SOURCE,
         expense_is_tax == True,
         expense_paid_col.isnot(None),
         expense_paid_col >= date_from,
@@ -266,7 +270,8 @@ async def get_finance_summary(
         if category is not None or is_tax_related is not None:
             # Для фильтров нужно подтянуть Expense
             q_ec = q_ec.join(Expense, BankTransaction.matched_id == Expense.id).where(
-                BankTransaction.matched_type == "expense"
+                BankTransaction.matched_type == "expense",
+                Expense.source != CASH_TRANSFER_SOURCE,
             )
             if category is not None:
                 q_ec = q_ec.where(Expense.category == category)
@@ -311,6 +316,7 @@ async def get_finance_summary(
                 bt_direction == "out",
                 bt_status != "ignored",
                 BankTransaction.matched_type == "expense",
+                Expense.source != CASH_TRANSFER_SOURCE,
                 Expense.is_tax_related == True,
                 bt_date >= date_from,
                 bt_date <= date_to,
@@ -511,6 +517,7 @@ async def get_finance_by_project(
         # Расходы: date в периоде, включая сторно (reversed), но без planned
         expense_base = and_(
             expense_status != "planned",
+            Expense.source != CASH_TRANSFER_SOURCE,
             expense_date_col >= date_from,
             expense_date_col <= date_to,
         )
@@ -525,6 +532,7 @@ async def get_finance_by_project(
         # cash: расходы — paid и reversed, по paid_date (если нет paid_date — не считаем)
         expense_base = and_(
             expense_status.in_(["paid", "reversed"]),
+            Expense.source != CASH_TRANSFER_SOURCE,
             expense_paid_col.isnot(None),
             expense_paid_col >= date_from,
             expense_paid_col <= date_to,
@@ -583,6 +591,7 @@ async def get_finance_by_project(
                         BankTransaction.direction == "out",
                         BankTransaction.status != "ignored",
                         BankTransaction.matched_type == "expense",
+                        Expense.source != CASH_TRANSFER_SOURCE,
                         BankTransaction.date >= date_from,
                         BankTransaction.date <= date_to,
                         Expense.project_id == pid,

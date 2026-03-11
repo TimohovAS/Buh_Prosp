@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required
+from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.config import get_settings
 from backend.database import get_db
 from backend.models import BankTransaction, Expense, Income, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
@@ -38,6 +39,7 @@ async def get_dashboard(
 
     year_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -47,6 +49,7 @@ async def get_dashboard(
     last_day = calendar.monthrange(selected_year, today.month)[1]
     month_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date(selected_year, today.month, 1),
             Expense.date <= date(selected_year, today.month, last_day),
         )
@@ -54,7 +57,7 @@ async def get_dashboard(
     month_expenses = float(month_expenses_result.scalar() or 0)
 
     all_time_expenses_result = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0))
+        select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.source != CASH_TRANSFER_SOURCE)
     )
     all_time_expenses = float(all_time_expenses_result.scalar() or 0)
 

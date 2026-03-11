@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import match_transaction, suggest_matches, unmatch_transaction
+from backend.cash_service import CASH_CATEGORY, create_cash_transfer_from_transaction
 from backend.database import get_db
 from backend.models import BankTransaction, Contract, Expense, Income, Project, TransactionCategory, User
 from backend.schemas import (
@@ -275,6 +276,7 @@ async def create_expense_from_transaction(
     )
 
     category_name = None
+    is_cash_transfer = data.category == CASH_CATEGORY
     if data.category_id is not None:
         category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == data.category_id))
         category = category_result.scalar_one_or_none()
@@ -291,6 +293,26 @@ async def create_expense_from_transaction(
     ).strip()
     if not description:
         description = f"Bank transaction #{transaction.id}"
+
+    if is_cash_transfer:
+        try:
+            expense, _ = await create_cash_transfer_from_transaction(
+                db,
+                transaction,
+                project_id=project_id,
+                contract_id=contract_id,
+                description=description,
+                note=data.note,
+                created_by=current_user.id,
+            )
+            await db.commit()
+            await db.refresh(transaction)
+            return {
+                "expense_id": expense.id,
+                "transaction": BankTransactionResponse.model_validate(transaction).model_dump(),
+            }
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
 
     expense = await _find_reusable_bank_import_expense(db, transaction)
     if expense:

@@ -8,6 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
+from backend.cash_service import CASH_TRANSFER_SOURCE, get_cash_balance, is_cash_transfer_expense
 from backend.database import get_db
 from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
 from backend.schemas import (
@@ -81,12 +82,6 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense
         expense.contract_id = None
 
 
-async def _get_cash_balance(db: AsyncSession) -> float:
-    total_in = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in"))
-    total_out = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out"))
-    return float(total_in or 0) - float(total_out or 0)
-
-
 async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> None:
     result = await db.execute(select(CashEntry).where(CashEntry.expense_id == expense.id))
     cash_entry = result.scalar_one_or_none()
@@ -131,7 +126,7 @@ async def _load_expenses_for_period(
     year: Optional[int],
     month: Optional[int],
 ) -> list[Expense]:
-    query = select(Expense).order_by(Expense.date.desc(), Expense.id.desc())
+    query = select(Expense).where(Expense.source != CASH_TRANSFER_SOURCE).order_by(Expense.date.desc(), Expense.id.desc())
     if year:
         query = query.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
     if month and year:
@@ -247,7 +242,7 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    query = select(Expense).order_by(Expense.date.desc(), Expense.id.desc())
+    query = select(Expense).where(Expense.source != CASH_TRANSFER_SOURCE).order_by(Expense.date.desc(), Expense.id.desc())
     if year:
         query = query.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
     if month and year:
@@ -270,7 +265,7 @@ async def list_expense_years(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    result = await db.execute(select(Expense.date))
+    result = await db.execute(select(Expense.date).where(Expense.source != CASH_TRANSFER_SOURCE))
     years = {value.year for (value,) in result.fetchall() if value is not None}
     if not years:
         years.add(date.today().year)
@@ -418,6 +413,7 @@ async def get_expense_totals(
 
     result_year = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -429,6 +425,7 @@ async def get_expense_totals(
     last_day = calendar.monthrange(selected_year, selected_month)[1]
     result_month = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date(selected_year, selected_month, 1),
             Expense.date <= date(selected_year, selected_month, last_day),
         )
@@ -466,6 +463,8 @@ async def reverse_expense(
         raise HTTPException(400, "Expense is already a reversal entry")
     if getattr(expense, "reversed_expense_id", None):
         raise HTTPException(400, "Expense is already reversed")
+    if is_cash_transfer_expense(expense):
+        raise HTTPException(400, "Cash transfer operations must be managed from bank or cash")
     if getattr(expense, "source", None) == "cash":
         raise HTTPException(400, "Cash expenses must be managed from the cash screen")
 
@@ -492,6 +491,8 @@ async def update_expense(
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
+    if is_cash_transfer_expense(expense):
+        raise HTTPException(400, "Cash transfer operations must be managed from bank or cash")
 
     dump = data.model_dump(exclude_unset=True)
     desired_project_id = dump.get("project_id", expense.project_id)
@@ -531,6 +532,8 @@ async def delete_expense(
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
+    if is_cash_transfer_expense(expense):
+        raise HTTPException(400, "Cash transfer operations must be managed from bank or cash")
     if getattr(expense, "source", None) == "cash":
         raise HTTPException(400, "Cash expenses must be managed from the cash screen")
 
