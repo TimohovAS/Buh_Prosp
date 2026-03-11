@@ -408,6 +408,10 @@ const t = {
     bankTxCreateExpense: 'Креирај расход',
     bankTxExistingExpenses: 'Постојећи расходи',
     bankTxCreateExpenseHint: 'Из ове трансакције ће бити креиран плаћени расход који ће се појавити на страници расхода.',
+    bankTxOpenObligations: 'Отворене обавезе',
+    bankTxSearchObligations: 'Претрага по називу, року или износу...',
+    bankTxNoOpenObligations: 'Нема отворених обавеза за повезивање.',
+    bankTxCreateExpenseFallbackHint: 'Ако ово није порез или допринос, можете испод креирати обичан расход.',
     bankTxCreateAndMatch: 'Креирај и повежи',
 
     // ERP: internal projects, categories
@@ -865,6 +869,10 @@ const t = {
     bankTxCreateExpense: 'Создать расход',
     bankTxExistingExpenses: 'Существующие расходы',
     bankTxCreateExpenseHint: 'Из этой транзакции будет создан оплаченный расход, который появится на странице расходов.',
+    bankTxOpenObligations: 'Открытые обязательства',
+    bankTxSearchObligations: 'Поиск по названию, сроку или сумме...',
+    bankTxNoOpenObligations: 'Нет открытых обязательств для связывания.',
+    bankTxCreateExpenseFallbackHint: 'Если это не налог или взнос, ниже можно создать обычный расход.',
     bankTxCreateAndMatch: 'Создать и связать',
 
     // ERP: internal projects, categories

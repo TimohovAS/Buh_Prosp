@@ -238,11 +238,6 @@ export default function BankTransactions() {
     setSuggestions([])
     setExpenseForm(buildExpenseForm(transaction))
 
-    if (transaction.direction === 'out') {
-      setSuggestLoading(false)
-      return
-    }
-
     setSuggestLoading(true)
     try {
       const response = await api.bankTransactions.suggest(transaction.id)
@@ -457,70 +452,122 @@ export default function BankTransactions() {
     const isCashCategorySelected = expenseForm.category_id === CASH_CATEGORY_VALUE
     const selectedProjectId = expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : null
     const filteredContracts = selectedProjectId ? getContractsForProject(selectedProjectId) : []
+    const suggested = suggestions.filter((item) => item.section === 'suggested')
+    const allObligations = suggestions.filter((item) => item.type === 'obligation' && (item.section === 'all' || !item.section))
+    const query = allInvoiceSearch.trim().toLowerCase()
+    const filteredObligations = allObligations.filter((item) =>
+      !query ||
+      String(item.description || '').toLowerCase().includes(query) ||
+      String(item.client_name || '').toLowerCase().includes(query) ||
+      String(item.date || '').toLowerCase().includes(query) ||
+      String(item.amount || '').includes(query)
+    )
 
     return (
-      <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
-        <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-          {tr('bankTxCreateExpenseHint')}
-        </div>
-        <div className="form-group">
-          <label className="form-label">{tr('date')}</label>
-          <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
-        </div>
-        <div className="form-group">
-          <label className="form-label">{tr('description')}</label>
-          <input
-            className="form-input"
-            value={expenseForm.description}
-            onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">{tr('category')}</label>
-          <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
-            <option value="">{UI_DASH}</option>
-            <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
-            ))}
-          </select>
-        </div>
-        {!isCashCategorySelected ? (
-          <>
-            <div className="form-group">
-              <label className="form-label">{tr('project')}</label>
-              <ProjectSelect
-                projects={projects}
-                value={expenseForm.project_id}
-                onChange={updateExpenseProject}
-                required
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {(suggested.length > 0 || allObligations.length > 0) && (
+          <div className="card" style={{ padding: '1rem' }}>
+            {suggested.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                  {tr('bankTxAutoFound')}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {suggested.map(renderSuggestionCard)}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                {tr('bankTxOpenObligations')}
+              </div>
+              <input
+                className="form-input"
+                placeholder={tr('bankTxSearchObligations')}
+                value={allInvoiceSearch}
+                onChange={(event) => setAllInvoiceSearch(event.target.value)}
+                style={{ width: '100%', marginBottom: '0.5rem' }}
               />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 240, overflowY: 'auto' }}>
+                {allObligations.length === 0 && (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenObligations')}</p>
+                )}
+                {filteredObligations.length === 0 && allObligations.length > 0 && (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+                )}
+                {filteredObligations.map(renderSuggestionCard)}
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">{tr('contract')}</label>
-              <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
-                <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
-                {filteredContracts.map((contract) => (
-                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
-                ))}
-              </select>
-            </div>
-          </>
-        ) : null}
-        <div className="form-group">
-          <label className="form-label">{tr('amount')}</label>
-          <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />
-        </div>
-        <div className="form-group">
-          <label className="form-label">{tr('note')}</label>
-          <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
-          <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
-        </div>
-      </form>
+          </div>
+        )}
+
+        <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+            {tr('bankTxCreateExpenseHint')}
+          </div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+            {tr('bankTxCreateExpenseFallbackHint')}
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('date')}</label>
+            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('description')}</label>
+            <input
+              className="form-input"
+              value={expenseForm.description}
+              onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('category')}</label>
+            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
+              <option value="">{UI_DASH}</option>
+              <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
+              ))}
+            </select>
+          </div>
+          {!isCashCategorySelected ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect
+                  projects={projects}
+                  value={expenseForm.project_id}
+                  onChange={updateExpenseProject}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('contract')}</label>
+                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+                  <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                  {filteredContracts.map((contract) => (
+                    <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
+          <div className="form-group">
+            <label className="form-label">{tr('amount')}</label>
+            <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('note')}</label>
+            <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
+          </div>
+        </form>
+      </div>
     )
   }
 

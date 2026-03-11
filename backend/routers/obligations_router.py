@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
-from backend.services import create_expense_reversal
-from backend.models import PaymentType, YearDecision, MonthlyObligation, Enterprise, User, Expense
+from backend.obligation_payment_service import mark_obligation_paid as apply_obligation_payment, reset_obligation_payment
+from backend.models import PaymentType, YearDecision, MonthlyObligation, Enterprise, User
 from backend.schemas import (
     PaymentTypeResponse,
     YearDecisionCreate,
@@ -272,28 +272,17 @@ async def mark_obligation_paid(
     ob = await db.get(MonthlyObligation, ob_id)
     if not ob:
         raise HTTPException(404, "Обязательство не найдено")
-    pt = await db.get(PaymentType, ob.payment_type_id) if ob.payment_type_id else None
-    pt_name = pt.name_sr if pt else "Плаћање"
-    desc = f"{pt_name} {ob.month:02d}/{ob.year}"
-    expense = Expense(
-        date=data.paid_date,
-        description=desc,
-        amount=ob.amount,
-        currency="RSD",
-        category="tax",
-        note=data.payment_reference,
-        paid_date=data.paid_date,
-        source="obligation",
-        is_tax_related=True,
+    await apply_obligation_payment(
+        db,
+        ob,
+        data.paid_date,
+        payment_reference=data.payment_reference,
         created_by=current_user.id,
+        payment_method="manual",
     )
-    db.add(expense)
-    await db.flush()
-    ob.status = "paid"
-    ob.paid_date = data.paid_date
-    ob.payment_reference = data.payment_reference
-    ob.expense_id = expense.id
-    await db.flush()
+    await db.commit()
+    await db.refresh(ob)
+    pt = await db.get(PaymentType, ob.payment_type_id) if ob.payment_type_id else None
     return MonthlyObligationResponse(
         id=ob.id, year=ob.year, month=ob.month, payment_type_id=ob.payment_type_id,
         payment_type_code=pt.code if pt else None,
@@ -313,20 +302,8 @@ async def mark_obligation_unpaid(
     ob = await db.get(MonthlyObligation, ob_id)
     if not ob:
         raise HTTPException(404, "Обязательство не найдено")
-    if ob.expense_id:
-        exp = await db.get(Expense, ob.expense_id)
-        if exp and getattr(exp, "status", "paid") != "reversed" and not getattr(exp, "reversed_expense_id", None):
-            await create_expense_reversal(
-                db, exp,
-                reverse_date=ob.paid_date,
-                source="obligation",
-                created_by=current_user.id,
-            )
-        ob.expense_id = None
-    today = date.today()
-    ob.status = "overdue" if ob.deadline < today else "unpaid"
-    ob.paid_date = None
-    ob.payment_reference = None
+    await reset_obligation_payment(db, ob, created_by=current_user.id)
+    await db.commit()
     return {"ok": True}
 
 

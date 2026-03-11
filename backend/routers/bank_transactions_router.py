@@ -446,7 +446,7 @@ async def revert_match(
     current_user: User = Depends(require_edit_access),
 ):
     try:
-        transaction = await unmatch_transaction(db, tx_id)
+        transaction = await unmatch_transaction(db, tx_id, current_user.id)
         await db.commit()
         await db.refresh(transaction)
         return await _serialize_single_bank_transaction(db, transaction)
