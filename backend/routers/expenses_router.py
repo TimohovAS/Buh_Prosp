@@ -148,7 +148,7 @@ async def _find_duplicate_groups(
 ) -> list[ExpenseDuplicateGroup]:
     items = [item for item in await _load_expenses_for_period(db, year, month) if _is_active_duplicate_candidate(item)]
     by_reference: dict[tuple[str, str], list[Expense]] = defaultdict(list)
-    by_description: dict[tuple[str, str], list[Expense]] = defaultdict(list)
+    by_description: dict[tuple[str, str, date | None], list[Expense]] = defaultdict(list)
 
     for item in items:
         amount_key = _amount_key(item.amount)
@@ -157,7 +157,7 @@ async def _find_duplicate_groups(
         if normalized_reference:
             by_reference[(normalized_reference, amount_key)].append(item)
         elif normalized_description:
-            by_description[(normalized_description, amount_key)].append(item)
+            by_description[(normalized_description, amount_key, item.date)].append(item)
 
     groups: list[ExpenseDuplicateGroup] = []
     seen_ids: set[tuple[int, ...]] = set()
@@ -183,7 +183,7 @@ async def _find_duplicate_groups(
         if len(expenses) > 1:
             add_group("payment_reference", expenses, payment_reference=expenses[0].bank_reference)
 
-    for (_, _), expenses in sorted(by_description.items(), key=lambda item: item[0]):
+    for (_, _, _), expenses in sorted(by_description.items(), key=lambda item: item[0]):
         if len(expenses) > 1:
             add_group("description_amount", expenses, description=expenses[0].description)
 
