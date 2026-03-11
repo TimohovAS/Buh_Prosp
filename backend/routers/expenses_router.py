@@ -126,7 +126,14 @@ async def _load_expenses_for_period(
     year: Optional[int],
     month: Optional[int],
 ) -> list[Expense]:
-    query = select(Expense).where(Expense.source != CASH_TRANSFER_SOURCE).order_by(Expense.date.desc(), Expense.id.desc())
+    query = (
+        select(Expense)
+        .where(
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
+        )
+        .order_by(Expense.date.desc(), Expense.id.desc())
+    )
     if year:
         query = query.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
     if month and year:
@@ -242,7 +249,14 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    query = select(Expense).where(Expense.source != CASH_TRANSFER_SOURCE).order_by(Expense.date.desc(), Expense.id.desc())
+    query = (
+        select(Expense)
+        .where(
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
+        )
+        .order_by(Expense.date.desc(), Expense.id.desc())
+    )
     if year:
         query = query.where(Expense.date >= date(year, 1, 1), Expense.date <= date(year, 12, 31))
     if month and year:
@@ -265,7 +279,12 @@ async def list_expense_years(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    result = await db.execute(select(Expense.date).where(Expense.source != CASH_TRANSFER_SOURCE))
+    result = await db.execute(
+        select(Expense.date).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
+        )
+    )
     years = {value.year for (value,) in result.fetchall() if value is not None}
     if not years:
         years.add(date.today().year)
@@ -414,6 +433,7 @@ async def get_expense_totals(
     result_year = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -426,6 +446,7 @@ async def get_expense_totals(
     result_month = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
             Expense.date >= date(selected_year, selected_month, 1),
             Expense.date <= date(selected_year, selected_month, last_day),
         )

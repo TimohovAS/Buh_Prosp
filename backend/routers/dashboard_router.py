@@ -40,6 +40,7 @@ async def get_dashboard(
     year_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -50,6 +51,7 @@ async def get_dashboard(
     month_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
             Expense.date >= date(selected_year, today.month, 1),
             Expense.date <= date(selected_year, today.month, last_day),
         )
@@ -57,7 +59,10 @@ async def get_dashboard(
     month_expenses = float(month_expenses_result.scalar() or 0)
 
     all_time_expenses_result = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.source != CASH_TRANSFER_SOURCE)
+        select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.status != "planned",
+        )
     )
     all_time_expenses = float(all_time_expenses_result.scalar() or 0)
 
