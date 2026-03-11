@@ -67,6 +67,7 @@ export default function BankTransactions() {
 
 
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const cashProject = projects.find((project) => project.code === 'INT-CASH') || null
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
 
@@ -307,19 +308,44 @@ export default function BankTransactions() {
     })
   }
 
+  const updateExpenseCategory = (categoryId) => {
+    setExpenseForm((previous) => {
+      const isCashCategory = categoryId === CASH_CATEGORY_VALUE
+      if (isCashCategory) {
+        return {
+          ...previous,
+          category_id: categoryId,
+          project_id: cashProject ? String(cashProject.id) : previous.project_id,
+          contract_id: '',
+        }
+      }
+
+      const wasCashCategory = previous.category_id === CASH_CATEGORY_VALUE
+      const fallbackProjectId = matchTx?.project_id ? String(matchTx.project_id) : (unassignedProject ? String(unassignedProject.id) : '')
+      return {
+        ...previous,
+        category_id: categoryId,
+        project_id: wasCashCategory ? fallbackProjectId : previous.project_id,
+      }
+    })
+  }
+
   const handleCreateExpense = async (event) => {
     event.preventDefault()
     if (!matchTx) return
 
     setExpenseSaving(true)
     try {
+      const isCashCategorySelected = expenseForm.category_id === CASH_CATEGORY_VALUE
       await api.bankTransactions.createExpense(matchTx.id, {
         date: expenseForm.date,
         description: expenseForm.description.trim(),
-        category: expenseForm.category_id === CASH_CATEGORY_VALUE ? 'cash' : null,
-        category_id: expenseForm.category_id && expenseForm.category_id !== CASH_CATEGORY_VALUE ? parseInt(expenseForm.category_id, 10) : null,
-        project_id: expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
-        contract_id: expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null,
+        category: isCashCategorySelected ? 'cash' : null,
+        category_id: expenseForm.category_id && !isCashCategorySelected ? parseInt(expenseForm.category_id, 10) : null,
+        project_id: isCashCategorySelected
+          ? (cashProject ? cashProject.id : null)
+          : (expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+        contract_id: isCashCategorySelected ? null : (expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null),
         note: expenseForm.note?.trim() || null,
       })
       closeMatchModal()
@@ -428,6 +454,7 @@ export default function BankTransactions() {
   }
 
   const renderOutgoingModalContent = () => {
+    const isCashCategorySelected = expenseForm.category_id === CASH_CATEGORY_VALUE
     const selectedProjectId = expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : null
     const filteredContracts = selectedProjectId ? getContractsForProject(selectedProjectId) : []
 
@@ -451,7 +478,7 @@ export default function BankTransactions() {
         </div>
         <div className="form-group">
           <label className="form-label">{tr('category')}</label>
-          <select className="form-input" value={expenseForm.category_id} onChange={(event) => setExpenseForm((previous) => ({ ...previous, category_id: event.target.value }))}>
+          <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
             <option value="">{UI_DASH}</option>
             <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
             {categories.map((category) => (
@@ -459,24 +486,28 @@ export default function BankTransactions() {
             ))}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">{tr('project')}</label>
-          <ProjectSelect
-            projects={projects}
-            value={expenseForm.project_id}
-            onChange={updateExpenseProject}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">{tr('contract')}</label>
-          <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
-            <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
-            {filteredContracts.map((contract) => (
-              <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
-            ))}
-          </select>
-        </div>
+        {!isCashCategorySelected ? (
+          <>
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <ProjectSelect
+                projects={projects}
+                value={expenseForm.project_id}
+                onChange={updateExpenseProject}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('contract')}</label>
+              <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+                <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                {filteredContracts.map((contract) => (
+                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : null}
         <div className="form-group">
           <label className="form-label">{tr('amount')}</label>
           <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />

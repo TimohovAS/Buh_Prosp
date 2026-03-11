@@ -1,10 +1,12 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import BankTransaction, CashEntry, Expense
+from backend.models import BankTransaction, CashEntry, Expense, Project
 
 CASH_CATEGORY = "cash"
 CASH_TRANSFER_SOURCE = "cash_transfer"
+CASH_PROJECT_CODE = "INT-CASH"
+CASH_PROJECT_NAME = "Наличка / Касса"
 
 
 def is_cash_transfer_expense(expense: Expense | None) -> bool:
@@ -17,6 +19,30 @@ async def get_cash_balance(db: AsyncSession) -> float:
     total_in = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in"))
     total_out = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out"))
     return float(total_in or 0) - float(total_out or 0)
+
+
+async def get_or_create_cash_project_id(db: AsyncSession) -> int:
+    result = await db.execute(select(Project).where(Project.code == CASH_PROJECT_CODE))
+    project = result.scalar_one_or_none()
+    if project:
+        if not project.is_internal:
+            project.is_internal = True
+        if project.status == "archived":
+            project.status = "active"
+        if not project.name:
+            project.name = CASH_PROJECT_NAME
+        await db.flush()
+        return int(project.id)
+
+    project = Project(
+        code=CASH_PROJECT_CODE,
+        name=CASH_PROJECT_NAME,
+        is_internal=True,
+        status="active",
+    )
+    db.add(project)
+    await db.flush()
+    return int(project.id)
 
 
 def build_cash_transfer_description(
@@ -61,6 +87,7 @@ async def create_cash_transfer_from_transaction(
     if existing_entry:
         raise ValueError("This bank transaction is already added to cash")
 
+    cash_project_id = await get_or_create_cash_project_id(db)
     expense = Expense(
         date=transaction.date,
         description=build_cash_transfer_description(transaction, description),
@@ -68,13 +95,13 @@ async def create_cash_transfer_from_transaction(
         currency=transaction.currency or "RSD",
         category=CASH_CATEGORY,
         category_id=None,
-        contract_id=contract_id,
+        contract_id=None,
         bank_reference=transaction.bank_reference,
         paid_date=transaction.date,
         status="paid",
         source=CASH_TRANSFER_SOURCE,
         note=note,
-        project_id=project_id,
+        project_id=cash_project_id,
         created_by=created_by,
     )
     db.add(expense)
@@ -98,7 +125,7 @@ async def create_cash_transfer_from_transaction(
     transaction.status = "matched"
     transaction.matched_type = "expense"
     transaction.matched_id = expense.id
-    transaction.project_id = project_id
+    transaction.project_id = cash_project_id
 
     return expense, entry
 

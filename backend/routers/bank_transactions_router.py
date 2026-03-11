@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import match_transaction, suggest_matches, unmatch_transaction
-from backend.cash_service import CASH_CATEGORY, create_cash_transfer_from_transaction
+from backend.cash_service import (
+    CASH_CATEGORY,
+    create_cash_transfer_from_transaction,
+    get_or_create_cash_project_id,
+    is_cash_transfer_expense,
+)
 from backend.database import get_db
 from backend.models import BankTransaction, Contract, Expense, Income, Project, TransactionCategory, User
 from backend.schemas import (
@@ -212,7 +217,14 @@ async def update_bank_transaction(
             expense_result = await db.execute(select(Expense).where(Expense.id == transaction.matched_id))
             expense = expense_result.scalar_one_or_none()
             if expense:
-                await _sync_expense_project(db, expense, payload["project_id"])
+                if is_cash_transfer_expense(expense):
+                    cash_project_id = await get_or_create_cash_project_id(db)
+                    payload["project_id"] = cash_project_id
+                    transaction.project_id = cash_project_id
+                    expense.contract_id = None
+                    await _sync_expense_project(db, expense, cash_project_id)
+                else:
+                    await _sync_expense_project(db, expense, payload["project_id"])
         elif transaction.matched_type == "income":
             income_result = await db.execute(select(Income).where(Income.id == transaction.matched_id))
             income = income_result.scalar_one_or_none()
@@ -269,20 +281,23 @@ async def create_expense_from_transaction(
     if transaction.status not in {"unmatched", "ignored"}:
         raise HTTPException(400, "Transaction is already matched")
 
-    project_id, contract_id = await _resolve_expense_links(
-        db,
-        data.project_id or transaction.project_id,
-        data.contract_id,
-    )
-
     category_name = None
     is_cash_transfer = data.category == CASH_CATEGORY
+    project_id: int | None = None
+    contract_id: int | None = None
     if data.category_id is not None:
         category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == data.category_id))
         category = category_result.scalar_one_or_none()
         if not category:
             raise HTTPException(404, "Category not found")
         category_name = category.name_ru
+
+    if not is_cash_transfer:
+        project_id, contract_id = await _resolve_expense_links(
+            db,
+            data.project_id or transaction.project_id,
+            data.contract_id,
+        )
 
     description = (
         data.description
@@ -299,8 +314,8 @@ async def create_expense_from_transaction(
             expense, _ = await create_cash_transfer_from_transaction(
                 db,
                 transaction,
-                project_id=project_id,
-                contract_id=contract_id,
+                project_id=None,
+                contract_id=None,
                 description=description,
                 note=data.note,
                 created_by=current_user.id,
@@ -391,17 +406,26 @@ async def bulk_assign_project(
     result = await db.execute(select(BankTransaction).where(BankTransaction.id.in_(data.ids)))
     items = result.scalars().all()
     for item in items:
-        item.project_id = project_id
         if item.matched_type == "expense" and item.matched_id:
             expense_result = await db.execute(select(Expense).where(Expense.id == item.matched_id))
             expense = expense_result.scalar_one_or_none()
             if expense:
-                await _sync_expense_project(db, expense, project_id)
+                if is_cash_transfer_expense(expense):
+                    cash_project_id = await get_or_create_cash_project_id(db)
+                    item.project_id = cash_project_id
+                    expense.contract_id = None
+                    await _sync_expense_project(db, expense, cash_project_id)
+                else:
+                    item.project_id = project_id
+                    await _sync_expense_project(db, expense, project_id)
         elif item.matched_type == "income" and item.matched_id:
+            item.project_id = project_id
             income_result = await db.execute(select(Income).where(Income.id == item.matched_id))
             income = income_result.scalar_one_or_none()
             if income:
                 await _sync_income_project(db, income, project_id)
+        else:
+            item.project_id = project_id
 
     await db.commit()
     return {"message": f"Project assigned to {len(items)} transactions"}
