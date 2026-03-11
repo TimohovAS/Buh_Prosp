@@ -220,6 +220,14 @@ export default function BankTransactions() {
     }
   }
 
+  const getMatchedTypeLabel = (type) => {
+    if (type === 'cash') return tr('bankTxMatchedCash')
+    if (type === 'income') return tr('income')
+    if (type === 'expense') return tr('expenses')
+    if (type === 'obligation') return tr('payments')
+    return type || ''
+  }
+
   const openMatchModal = async (transaction) => {
     setMatchTx(transaction)
     setMatchError('')
@@ -560,7 +568,7 @@ export default function BankTransactions() {
                       </td>
                       <td>
                         {transaction.status === 'matched'
-                          ? <span className="badge badge-success">{tr('bankTxMatched')} ({transaction.matched_type})</span>
+                          ? <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
                           : <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
                       </td>
                       <td style={{ textAlign: 'right' }}>

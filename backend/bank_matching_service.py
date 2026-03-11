@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models import BankTransaction, Contract, Expense, Income, MonthlyObligation, Project
+from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 
 
@@ -291,6 +291,11 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int):
             obligation.paid_date = None
             if obligation.deadline < date.today():
                 obligation.status = "overdue"
+    elif tx.matched_type == "cash":
+        cash_entry_response = await db.execute(select(CashEntry).where(CashEntry.id == tx.matched_id))
+        cash_entry = cash_entry_response.scalar_one_or_none()
+        if cash_entry:
+            raise ValueError("Cash withdrawals must be managed from the cash screen")
 
     tx.status = "unmatched"
     tx.matched_type = None

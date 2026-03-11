@@ -17,6 +17,7 @@ import BankTransactions from './pages/BankTransactions'
 import FinanceOverview from './pages/FinanceOverview'
 import AccountsReceivable from './pages/AccountsReceivable'
 import CashFlow from './pages/CashFlow'
+import CashRegister from './pages/CashRegister'
 import Projects from './pages/Projects'
 import Obligations from './pages/Obligations'
 
@@ -80,6 +81,7 @@ function App() {
           <Route path="finance" element={<FinanceOverview />} />
           <Route path="finance/ar" element={<AccountsReceivable />} />
           <Route path="finance/cashflow" element={<CashFlow />} />
+          <Route path="cash" element={<CashRegister />} />
           <Route path="projects" element={<Projects />} />
           <Route path="payments" element={<Obligations />} />
           <Route path="contracts" element={<Contracts />} />

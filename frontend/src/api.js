@@ -306,6 +306,15 @@ export const api = {
     suggest: (id) => request(`/bank-transactions/${id}/suggest`),
     bulkAssignProject: (payload) => request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),
   },
+  cash: {
+    summary: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/cash${q ? `?${q}` : ''}`)
+    },
+    createWithdrawal: (data) => request('/cash/withdrawals', { method: 'POST', body: JSON.stringify(data) }),
+    createExpense: (data) => request('/cash/expenses', { method: 'POST', body: JSON.stringify(data) }),
+    createAdjustment: (data) => request('/cash/adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  },
   enterprise: {
     get: () => request('/enterprise'),
     branding: () => request('/enterprise/branding'),

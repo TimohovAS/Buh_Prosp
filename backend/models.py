@@ -211,7 +211,7 @@ class BankTransaction(Base):
     purpose = Column(Text)
     bank_reference = Column(String(100), unique=True, nullable=True)
     status = Column(String(20), default="unmatched", index=True)  # unmatched | matched | ignored
-    matched_type = Column(String(50))  # income | expense | obligation
+    matched_type = Column(String(50))  # income | expense | obligation | cash
     matched_id = Column(Integer)
     project_id = Column(Integer, ForeignKey("projects.id"))
     raw_json = Column(Text)
@@ -234,6 +234,27 @@ class BankImportFile(Base):
     errors_count = Column(Integer, default=0)
     imported_by = Column(Integer, ForeignKey("users.id"))
     imported_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class CashEntry(Base):
+    """Реестр налички: пополнение из банка, наличные расходы и корректировки."""
+    __tablename__ = "cash_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, nullable=False, index=True)
+    direction = Column(String(10), nullable=False, index=True)  # in | out
+    amount = Column(Float, nullable=False)
+    currency = Column(String(5), default="RSD")
+    description = Column(String(500), nullable=False)
+    entry_type = Column(String(20), nullable=False, index=True)  # withdrawal | expense | adjustment
+    note = Column(Text)
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), unique=True, nullable=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), unique=True, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"))
+
+    bank_transaction = relationship("BankTransaction", foreign_keys=[bank_transaction_id])
+    expense = relationship("Expense", foreign_keys=[expense_id])
 
 
 class Income(Base):

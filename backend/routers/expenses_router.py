@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
-from backend.models import BankTransaction, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
+from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
 from backend.schemas import (
     BulkAssignProject,
     ExpenseCreate,
@@ -79,6 +79,29 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense
     contract = await _get_contract_or_404(db, expense.contract_id)
     if contract.project_id != project_id:
         expense.contract_id = None
+
+
+async def _get_cash_balance(db: AsyncSession) -> float:
+    total_in = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in"))
+    total_out = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out"))
+    return float(total_in or 0) - float(total_out or 0)
+
+
+async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> None:
+    result = await db.execute(select(CashEntry).where(CashEntry.expense_id == expense.id))
+    cash_entry = result.scalar_one_or_none()
+    if not cash_entry:
+        return
+
+    available_balance = await _get_cash_balance(db) + float(cash_entry.amount or 0)
+    if float(expense.amount or 0) > available_balance:
+        raise HTTPException(400, "Insufficient cash balance")
+
+    cash_entry.date = expense.paid_date or expense.date
+    cash_entry.amount = float(expense.amount or 0)
+    cash_entry.currency = expense.currency or "RSD"
+    cash_entry.description = (expense.description or "")[:500]
+    cash_entry.note = expense.note
 
 
 def _normalize_duplicate_text(value: str | None) -> str:
@@ -443,6 +466,8 @@ async def reverse_expense(
         raise HTTPException(400, "Expense is already a reversal entry")
     if getattr(expense, "reversed_expense_id", None):
         raise HTTPException(400, "Expense is already reversed")
+    if getattr(expense, "source", None) == "cash":
+        raise HTTPException(400, "Cash expenses must be managed from the cash screen")
 
     reversal = await create_expense_reversal(
         db,
@@ -487,6 +512,9 @@ async def update_expense(
     for key, value in dump.items():
         setattr(expense, key, value)
 
+    if getattr(expense, "source", None) == "cash":
+        await _sync_cash_entry_from_expense(db, expense)
+
     await db.flush()
     await db.commit()
     await db.refresh(expense)
@@ -503,6 +531,8 @@ async def delete_expense(
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
+    if getattr(expense, "source", None) == "cash":
+        raise HTTPException(400, "Cash expenses must be managed from the cash screen")
 
     if _is_reversal_row(expense):
         original_expense = None

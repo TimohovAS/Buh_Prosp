@@ -23,6 +23,7 @@ from backend.routers.bank_import_router import router as bank_import_router
 from backend.routers.bank_transactions_router import router as bank_transactions_router
 from backend.routers.projects_router import router as projects_router
 from backend.routers.categories_router import router as categories_router
+from backend.routers.cash_router import router as cash_router
 
 
 @asynccontextmanager
@@ -79,6 +80,7 @@ app.include_router(bank_import_router, prefix="/api")
 app.include_router(bank_transactions_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(categories_router, prefix="/api")
+app.include_router(cash_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(obligations_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")

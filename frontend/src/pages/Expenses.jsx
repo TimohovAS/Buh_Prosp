@@ -254,6 +254,10 @@ export default function Expenses() {
   }
 
   const handleDelete = async (item) => {
+    if (item.source === 'cash') {
+      setPageError(tr('cashManagedInRegister'))
+      return
+    }
     const isReversal = item.status === 'reversed' || !!item.reversal_of_id
     const confirmKey = isReversal ? 'confirmDeleteReversalExpense' : 'confirmReverseExpense'
     if (!confirm(tr(confirmKey))) return
@@ -505,14 +509,20 @@ export default function Expenses() {
                       <td>{getCategoryLabel(item)}</td>
                       <td>{item.amount.toLocaleString('sr-RS')}</td>
                       <td
-                        title={(item.bank_reference || item.note) || ''}
+                        title={(item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : '')) || ''}
                         style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
-                        {item.bank_reference || item.note || UI_DASH}
+                        {item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : UI_DASH)}
                       </td>
                       <td>
                         <button className="btn btn-sm btn-secondary" disabled={item.status === 'reversed' || !!item.reversal_of_id} onClick={() => openEdit(item)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item)}>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          style={{ marginLeft: '0.5rem' }}
+                          onClick={() => handleDelete(item)}
+                          disabled={item.source === 'cash'}
+                          title={item.source === 'cash' ? tr('cashManagedInRegister') : ''}
+                        >
                           {tr('delete')}
                         </button>
                       </td>

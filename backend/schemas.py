@@ -801,7 +801,7 @@ class BankTransactionBase(BaseModel):
     purpose: Optional[str] = None
     bank_reference: Optional[str] = None
     status: str = "unmatched"  # unmatched | matched | ignored
-    matched_type: Optional[str] = None   # income | expense | obligation
+    matched_type: Optional[str] = None   # income | expense | obligation | cash
     matched_id: Optional[int] = None
     project_id: Optional[int] = None
     raw_json: Optional[str] = None
@@ -829,6 +829,84 @@ class BankTransactionResponse(BankTransactionBase):
 class BankTransactionBulkAssignProject(BaseModel):
     ids: list[int]
     project_id: Optional[int] = None
+
+
+class CashEntryResponse(BaseModel):
+    id: int
+    date: DateType
+    direction: str
+    amount: float
+    currency: str = "RSD"
+    description: str
+    entry_type: str
+    note: Optional[str] = None
+    bank_transaction_id: Optional[int] = None
+    expense_id: Optional[int] = None
+    bank_reference: Optional[str] = None
+    counterparty_name: Optional[str] = None
+    purpose: Optional[str] = None
+    expense_status: Optional[str] = None
+    project_id: Optional[int] = None
+    balance_after: float
+    created_at: datetime
+
+
+class CashBankWithdrawalCandidate(BaseModel):
+    id: int
+    date: DateType
+    amount: float
+    currency: str = "RSD"
+    counterparty_name: Optional[str] = None
+    purpose: Optional[str] = None
+    bank_reference: Optional[str] = None
+    project_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CashSummaryResponse(BaseModel):
+    current_balance: float
+    total_in: float
+    total_out: float
+    entries: list[CashEntryResponse] = Field(default_factory=list)
+    available_withdrawals: list[CashBankWithdrawalCandidate] = Field(default_factory=list)
+
+
+class CashWithdrawalCreate(BaseModel):
+    bank_transaction_id: int
+    note: Optional[str] = None
+
+
+class CashAdjustmentCreate(BaseModel):
+    date: DateType
+    direction: str
+    amount: float = Field(gt=0)
+    description: str
+    note: Optional[str] = None
+
+
+class CashExpenseCreate(BaseModel):
+    date: DateType
+    description: str
+    amount: float = Field(gt=0)
+    currency: str = "RSD"
+    category: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    note: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("project_id", "contract_id", "category_id"):
+            if key in result and (result[key] == "" or result[key] is None):
+                result[key] = None
+        return result
 
 
 class BankTransactionCreateExpenseRequest(BaseModel):
