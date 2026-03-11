@@ -15,6 +15,7 @@ from backend.schemas import (
     CashBankWithdrawalCandidate,
     CashEntryResponse,
     CashExpenseCreate,
+    CashEntryUpdate,
     CashSummaryResponse,
     CashWithdrawalCreate,
 )
@@ -113,6 +114,8 @@ def _serialize_cash_entry(entry: CashEntry, balance_after: float) -> CashEntryRe
         counterparty_name=getattr(bank_transaction, "counterparty_name", None),
         purpose=getattr(bank_transaction, "purpose", None),
         expense_status=getattr(expense, "status", None),
+        category_id=getattr(expense, "category_id", None),
+        contract_id=getattr(expense, "contract_id", None),
         project_id=getattr(expense, "project_id", None) or getattr(bank_transaction, "project_id", None),
         balance_after=balance_after,
         created_at=entry.created_at,
@@ -132,6 +135,29 @@ async def _get_entry_with_links(db: AsyncSession, entry_id: int) -> CashEntry:
     if not entry:
         raise HTTPException(404, "Cash entry not found")
     return entry
+
+
+def _signed_entry_amount(direction: str, amount: float | int | None) -> float:
+    value = float(amount or 0)
+    return value if direction == "in" else -value
+
+
+async def _get_balance_after_entry(db: AsyncSession, entry_id: int) -> float:
+    result = await db.execute(
+        select(CashEntry.id, CashEntry.direction, CashEntry.amount)
+        .order_by(CashEntry.date.asc(), CashEntry.id.asc())
+    )
+    balance = 0.0
+    for current_id, direction, amount in result.fetchall():
+        balance += _signed_entry_amount(str(direction), amount)
+        if int(current_id) == int(entry_id):
+            return balance
+    return balance
+
+
+async def _serialize_refreshed_entry(db: AsyncSession, entry_id: int) -> CashEntryResponse:
+    entry = await _get_entry_with_links(db, entry_id)
+    return _serialize_cash_entry(entry, await _get_balance_after_entry(db, entry_id))
 
 
 async def _build_cash_summary(
@@ -208,6 +234,132 @@ async def get_cash_summary(
     return await _build_cash_summary(db, year=year, month=month, limit=limit)
 
 
+@router.patch("/{entry_id}", response_model=CashEntryResponse)
+async def update_cash_entry(
+    entry_id: int,
+    data: CashEntryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    entry = await _get_entry_with_links(db, entry_id)
+    payload = data.model_dump(exclude_unset=True)
+    if not payload:
+        return await _serialize_refreshed_entry(db, entry_id)
+
+    if entry.entry_type == "adjustment":
+        direction = payload.get("direction", entry.direction)
+        if direction not in {"in", "out"}:
+            raise HTTPException(400, "Direction must be in or out")
+        amount = float(payload.get("amount", entry.amount) or 0)
+        current_balance, _, _ = await _get_cash_totals(db)
+        base_balance = current_balance - _signed_entry_amount(entry.direction, entry.amount)
+        if base_balance + _signed_entry_amount(direction, amount) < 0:
+            raise HTTPException(400, "Insufficient cash balance")
+
+        description = payload.get("description", entry.description)
+        if not (description or "").strip():
+            raise HTTPException(400, "Description is required")
+
+        entry.date = payload.get("date", entry.date)
+        entry.direction = direction
+        entry.amount = amount
+        entry.currency = payload.get("currency", entry.currency) or "RSD"
+        entry.description = description.strip()[:500]
+        entry.note = payload.get("note", entry.note)
+
+    elif entry.entry_type == "expense":
+        expense = entry.expense
+        if not expense:
+            raise HTTPException(404, "Expense not found for this cash entry")
+
+        amount = float(payload.get("amount", expense.amount) or 0)
+        current_balance, _, _ = await _get_cash_totals(db)
+        base_balance = current_balance + float(entry.amount or 0)
+        if amount > base_balance:
+            raise HTTPException(400, "Insufficient cash balance")
+
+        description = payload.get("description", expense.description)
+        if not (description or "").strip():
+            raise HTTPException(400, "Description is required")
+
+        desired_project_id = payload.get("project_id", expense.project_id)
+        desired_contract_id = payload.get("contract_id", expense.contract_id)
+        if not desired_project_id:
+            desired_project_id = await _get_unassigned_project_id(db)
+        if desired_contract_id is None and expense.contract_id and "project_id" in payload:
+            current_contract = await _get_contract_or_404(db, expense.contract_id)
+            if current_contract.project_id != desired_project_id:
+                desired_contract_id = None
+        desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
+
+        category_id = payload.get("category_id", expense.category_id)
+        category_name = expense.category
+        if "category_id" in payload:
+            category_name = None
+            if category_id is not None:
+                category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+                category = category_result.scalar_one_or_none()
+                if not category:
+                    raise HTTPException(404, "Category not found")
+                category_name = category.name_ru
+
+        date_value = payload.get("date", expense.date)
+        currency = payload.get("currency", expense.currency) or "RSD"
+        note = payload.get("note", expense.note)
+
+        expense.date = date_value
+        expense.paid_date = date_value
+        expense.description = description.strip()[:500]
+        expense.amount = amount
+        expense.currency = currency
+        expense.category_id = category_id
+        expense.category = category_name
+        expense.project_id = desired_project_id
+        expense.contract_id = desired_contract_id
+        expense.note = note
+
+        entry.date = date_value
+        entry.amount = amount
+        entry.currency = currency
+        entry.description = expense.description
+        entry.note = note
+
+    elif entry.entry_type == "withdrawal":
+        forbidden_fields = {"date", "direction", "amount", "currency", "category_id"}
+        invalid = sorted(field for field in forbidden_fields if field in payload)
+        if invalid:
+            raise HTTPException(400, "Withdrawal date, amount and category come from the bank transaction")
+
+        description = payload.get("description", entry.description)
+        if not (description or "").strip():
+            raise HTTPException(400, "Description is required")
+
+        expense = entry.expense
+        desired_project_id = payload.get("project_id", getattr(expense, "project_id", None))
+        desired_contract_id = payload.get("contract_id", getattr(expense, "contract_id", None))
+        if not desired_project_id:
+            desired_project_id = await _get_unassigned_project_id(db)
+        desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
+
+        note = payload.get("note", getattr(expense, "note", entry.note))
+        if expense:
+            expense.description = description.strip()[:500]
+            expense.project_id = desired_project_id
+            expense.contract_id = desired_contract_id
+            expense.note = note
+        if entry.bank_transaction:
+            entry.bank_transaction.project_id = desired_project_id
+
+        entry.description = description.strip()[:500]
+        entry.note = note
+
+    else:
+        raise HTTPException(400, "Unsupported cash entry type")
+
+    await db.commit()
+    return await _serialize_refreshed_entry(db, entry_id)
+
+
 @router.post("/withdrawals", response_model=CashEntryResponse)
 async def create_cash_withdrawal(
     data: CashWithdrawalCreate,
@@ -229,9 +381,7 @@ async def create_cash_withdrawal(
             created_by=current_user.id,
         )
         await db.commit()
-        entry = await _get_entry_with_links(db, entry.id)
-        current_balance, _, _ = await _get_cash_totals(db)
-        return _serialize_cash_entry(entry, current_balance)
+        return await _serialize_refreshed_entry(db, entry.id)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -264,9 +414,7 @@ async def create_cash_adjustment(
 
     db.add(entry)
     await db.commit()
-    entry = await _get_entry_with_links(db, entry.id)
-    current_balance, _, _ = await _get_cash_totals(db)
-    return _serialize_cash_entry(entry, current_balance)
+    return await _serialize_refreshed_entry(db, entry.id)
 
 
 @router.post("/expenses", response_model=CashEntryResponse)
@@ -324,6 +472,4 @@ async def create_cash_expense(
     )
     db.add(entry)
     await db.commit()
-    entry = await _get_entry_with_links(db, entry.id)
-    current_balance, _, _ = await _get_cash_totals(db)
-    return _serialize_cash_entry(entry, current_balance)
+    return await _serialize_refreshed_entry(db, entry.id)

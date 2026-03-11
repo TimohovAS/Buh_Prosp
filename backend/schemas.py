@@ -846,6 +846,8 @@ class CashEntryResponse(BaseModel):
     counterparty_name: Optional[str] = None
     purpose: Optional[str] = None
     expense_status: Optional[str] = None
+    category_id: Optional[int] = None
+    contract_id: Optional[int] = None
     project_id: Optional[int] = None
     balance_after: float
     created_at: datetime
@@ -892,6 +894,29 @@ class CashExpenseCreate(BaseModel):
     amount: float = Field(gt=0)
     currency: str = "RSD"
     category: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    note: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("project_id", "contract_id", "category_id"):
+            if key in result and (result[key] == "" or result[key] is None):
+                result[key] = None
+        return result
+
+
+class CashEntryUpdate(BaseModel):
+    date: Optional[DateType] = None
+    direction: Optional[str] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    currency: Optional[str] = None
+    description: Optional[str] = None
     category_id: Optional[int] = None
     project_id: Optional[int] = None
     contract_id: Optional[int] = None

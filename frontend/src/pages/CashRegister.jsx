@@ -24,6 +24,10 @@ function buildBankLabel(item) {
   return parts.join(` ${UI_DASH} `) || UI_DASH
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export default function CashRegister() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -32,10 +36,12 @@ export default function CashRegister() {
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
-  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
-  const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false)
+  const [bankModalOpen, setBankModalOpen] = useState(false)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [adjustmentModal, setAdjustmentModal] = useState(null)
+  const [withdrawalModal, setWithdrawalModal] = useState(null)
   const [expenseForm, setExpenseForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
     description: '',
     amount: '',
     category_id: '',
@@ -44,10 +50,16 @@ export default function CashRegister() {
     note: '',
   })
   const [adjustmentForm, setAdjustmentForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
     direction: 'out',
     amount: '',
     description: '',
+    note: '',
+  })
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    description: '',
+    project_id: '',
+    contract_id: '',
     note: '',
   })
 
@@ -94,14 +106,19 @@ export default function CashRegister() {
       return buildContractLabel(left).localeCompare(buildContractLabel(right), 'sr')
     })
 
-  const filteredContracts = useMemo(() => {
+  const expenseContracts = useMemo(() => {
     const selectedProjectId = expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : null
     return selectedProjectId ? getContractsForProject(selectedProjectId) : []
   }, [contracts, expenseForm.project_id])
 
-  const openExpenseModal = () => {
+  const withdrawalContracts = useMemo(() => {
+    const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
+    return selectedProjectId ? getContractsForProject(selectedProjectId) : []
+  }, [contracts, withdrawalForm.project_id])
+
+  const openExpenseCreate = () => {
     setExpenseForm({
-      date: new Date().toISOString().slice(0, 10),
+      date: todayIso(),
       description: '',
       amount: '',
       category_id: '',
@@ -109,21 +126,55 @@ export default function CashRegister() {
       contract_id: '',
       note: '',
     })
-    setExpenseModalOpen(true)
+    setExpenseModal({ entryId: null })
   }
 
-  const openAdjustmentModal = () => {
+  const openExpenseEdit = (entry) => {
+    setExpenseForm({
+      date: entry.date,
+      description: entry.description || '',
+      amount: entry.amount || '',
+      category_id: entry.category_id ?? '',
+      project_id: entry.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
+      contract_id: entry.contract_id ?? '',
+      note: entry.note || '',
+    })
+    setExpenseModal({ entryId: entry.id })
+  }
+
+  const openAdjustmentCreate = () => {
     setAdjustmentForm({
-      date: new Date().toISOString().slice(0, 10),
+      date: todayIso(),
       direction: summary.current_balance > 0 ? 'out' : 'in',
       amount: '',
       description: '',
       note: '',
     })
-    setAdjustmentModalOpen(true)
+    setAdjustmentModal({ entryId: null })
   }
 
-  const updateProject = (projectId) => {
+  const openAdjustmentEdit = (entry) => {
+    setAdjustmentForm({
+      date: entry.date,
+      direction: entry.direction || 'out',
+      amount: entry.amount || '',
+      description: entry.description || '',
+      note: entry.note || '',
+    })
+    setAdjustmentModal({ entryId: entry.id })
+  }
+
+  const openWithdrawalEdit = (entry) => {
+    setWithdrawalForm({
+      description: entry.description || '',
+      project_id: entry.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
+      contract_id: entry.contract_id ?? '',
+      note: entry.note || '',
+    })
+    setWithdrawalModal({ entryId: entry.id })
+  }
+
+  const updateExpenseProject = (projectId) => {
     setExpenseForm((previous) => {
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
       const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
@@ -135,11 +186,33 @@ export default function CashRegister() {
     })
   }
 
-  const updateContract = (contractId) => {
+  const updateExpenseContract = (contractId) => {
     setExpenseForm((previous) => {
-      if (!contractId) {
-        return { ...previous, contract_id: '' }
+      if (!contractId) return { ...previous, contract_id: '' }
+      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
+      return {
+        ...previous,
+        contract_id: contractId,
+        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
       }
+    })
+  }
+
+  const updateWithdrawalProject = (projectId) => {
+    setWithdrawalForm((previous) => {
+      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      return {
+        ...previous,
+        project_id: projectId,
+        contract_id: keepContract ? previous.contract_id : '',
+      }
+    })
+  }
+
+  const updateWithdrawalContract = (contractId) => {
+    setWithdrawalForm((previous) => {
+      if (!contractId) return { ...previous, contract_id: '' }
       const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
       return {
         ...previous,
@@ -154,6 +227,7 @@ export default function CashRegister() {
     setPageError('')
     try {
       await api.cash.createWithdrawal({ bank_transaction_id: transaction.id })
+      setBankModalOpen(false)
       await loadData()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
@@ -162,12 +236,12 @@ export default function CashRegister() {
     }
   }
 
-  const handleCreateExpense = async (event) => {
+  const handleSaveExpense = async (event) => {
     event.preventDefault()
     setSaving(true)
     setPageError('')
     try {
-      await api.cash.createExpense({
+      const payload = {
         date: expenseForm.date,
         description: expenseForm.description.trim(),
         amount: parseFloat(expenseForm.amount) || 0,
@@ -175,8 +249,13 @@ export default function CashRegister() {
         project_id: expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null,
         note: expenseForm.note?.trim() || null,
-      })
-      setExpenseModalOpen(false)
+      }
+      if (expenseModal?.entryId) {
+        await api.cash.updateEntry(expenseModal.entryId, payload)
+      } else {
+        await api.cash.createExpense(payload)
+      }
+      setExpenseModal(null)
       await loadData()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
@@ -185,25 +264,63 @@ export default function CashRegister() {
     }
   }
 
-  const handleCreateAdjustment = async (event) => {
+  const handleSaveAdjustment = async (event) => {
     event.preventDefault()
     setSaving(true)
     setPageError('')
     try {
-      await api.cash.createAdjustment({
+      const payload = {
         date: adjustmentForm.date,
         direction: adjustmentForm.direction,
         amount: parseFloat(adjustmentForm.amount) || 0,
         description: adjustmentForm.description.trim(),
         note: adjustmentForm.note?.trim() || null,
-      })
-      setAdjustmentModalOpen(false)
+      }
+      if (adjustmentModal?.entryId) {
+        await api.cash.updateEntry(adjustmentModal.entryId, payload)
+      } else {
+        await api.cash.createAdjustment(payload)
+      }
+      setAdjustmentModal(null)
       await loadData()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSaveWithdrawal = async (event) => {
+    event.preventDefault()
+    if (!withdrawalModal?.entryId) return
+    setSaving(true)
+    setPageError('')
+    try {
+      await api.cash.updateEntry(withdrawalModal.entryId, {
+        description: withdrawalForm.description.trim(),
+        project_id: withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
+        contract_id: withdrawalForm.contract_id ? parseInt(withdrawalForm.contract_id, 10) : null,
+        note: withdrawalForm.note?.trim() || null,
+      })
+      setWithdrawalModal(null)
+      await loadData()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openEditEntry = (entry) => {
+    if (entry.entry_type === 'expense') {
+      openExpenseEdit(entry)
+      return
+    }
+    if (entry.entry_type === 'adjustment') {
+      openAdjustmentEdit(entry)
+      return
+    }
+    openWithdrawalEdit(entry)
   }
 
   return (
@@ -216,8 +333,9 @@ export default function CashRegister() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" onClick={openAdjustmentModal}>{tr('cashAddAdjustment')}</button>
-          <button className="btn btn-primary" onClick={openExpenseModal}>{tr('cashAddExpense')}</button>
+          <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
+          <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
+          <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
         </div>
       </div>
 
@@ -247,47 +365,6 @@ export default function CashRegister() {
               </div>
             </div>
 
-            <div className="card" style={{ marginBottom: '1rem' }}>
-              <div className="card-title">{tr('cashAvailableWithdrawals')}</div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr('date')}</th>
-                      <th>{tr('description')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.available_withdrawals.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoAvailableWithdrawals')}</td>
-                      </tr>
-                    ) : summary.available_withdrawals.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td>{transaction.date}</td>
-                        <td>
-                          <div>{buildBankLabel(transaction)}</div>
-                          {transaction.project_id ? (
-                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                              {projects.find((project) => project.id === transaction.project_id)?.name || UI_DASH}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleTransferToCash(transaction)}>
-                            {tr('cashTransferToCash')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
             <div className="card">
               <div className="card-title">{tr('cashEntries')}</div>
               <div className="table-wrap">
@@ -301,12 +378,13 @@ export default function CashRegister() {
                       <th style={{ textAlign: 'right' }}>{tr('cashflowInflow')}</th>
                       <th style={{ textAlign: 'right' }}>{tr('cashflowOutflow')}</th>
                       <th style={{ textAlign: 'right' }}>{tr('cashBalanceAfter')}</th>
+                      <th style={{ textAlign: 'right' }}>{tr('cashActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {summary.entries.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
+                        <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
                       </tr>
                     ) : summary.entries.map((entry) => {
                       const typeLabel = entry.entry_type === 'withdrawal'
@@ -337,6 +415,9 @@ export default function CashRegister() {
                             {entry.direction === 'out' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(entry.balance_after)} RSD</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="btn btn-sm btn-secondary" disabled={saving} onClick={() => openEditEntry(entry)}>{tr('edit')}</button>
+                          </td>
                         </tr>
                       )
                     })}
@@ -348,8 +429,50 @@ export default function CashRegister() {
         )}
       </div>
 
-      <Modal isOpen={expenseModalOpen} onClose={() => setExpenseModalOpen(false)} title={tr('cashAddExpense')}>
-        <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
+      <Modal isOpen={bankModalOpen} onClose={() => setBankModalOpen(false)} title={tr('cashAddFromBank')}>
+        <div className="card" style={{ padding: '1rem' }}>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tr('date')}</th>
+                  <th>{tr('description')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.available_withdrawals.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoAvailableWithdrawals')}</td>
+                  </tr>
+                ) : summary.available_withdrawals.map((transaction) => (
+                  <tr key={transaction.id}>
+                    <td>{transaction.date}</td>
+                    <td>
+                      <div>{buildBankLabel(transaction)}</div>
+                      {transaction.project_id ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                          {projects.find((project) => project.id === transaction.project_id)?.name || UI_DASH}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleTransferToCash(transaction)}>
+                        {tr('cashTransferToCash')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!expenseModal} onClose={() => setExpenseModal(null)} title={expenseModal?.entryId ? tr('cashEditOperation') : tr('cashAddExpense')}>
+        <form onSubmit={handleSaveExpense} className="card" style={{ padding: '1rem' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             {tr('cashCreateExpenseHint')}
           </div>
@@ -376,19 +499,13 @@ export default function CashRegister() {
           </div>
           <div className="form-group">
             <label className="form-label">{tr('project')}</label>
-            <ProjectSelect
-              projects={projects}
-              value={expenseForm.project_id}
-              onChange={updateProject}
-              allowEmpty
-              emptyLabel={UI_DASH}
-            />
+            <ProjectSelect projects={projects} value={expenseForm.project_id} onChange={updateExpenseProject} allowEmpty emptyLabel={UI_DASH} />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('contracts')}</label>
-            <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateContract(event.target.value)} disabled={!expenseForm.project_id}>
+            <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)} disabled={!expenseForm.project_id}>
               <option value="">{UI_DASH}</option>
-              {filteredContracts.map((contract) => (
+              {expenseContracts.map((contract) => (
                 <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
               ))}
             </select>
@@ -398,14 +515,14 @@ export default function CashRegister() {
             <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setExpenseModalOpen(false)}>{tr('cancel')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setExpenseModal(null)}>{tr('cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
           </div>
         </form>
       </Modal>
 
-      <Modal isOpen={adjustmentModalOpen} onClose={() => setAdjustmentModalOpen(false)} title={tr('cashAddAdjustment')}>
-        <form onSubmit={handleCreateAdjustment} className="card" style={{ padding: '1rem' }}>
+      <Modal isOpen={!!adjustmentModal} onClose={() => setAdjustmentModal(null)} title={adjustmentModal?.entryId ? tr('cashEditOperation') : tr('cashAddAdjustment')}>
+        <form onSubmit={handleSaveAdjustment} className="card" style={{ padding: '1rem' }}>
           <div className="form-group">
             <label className="form-label">{tr('date')}</label>
             <DatePicker value={adjustmentForm.date} onChange={(value) => setAdjustmentForm((previous) => ({ ...previous, date: value }))} required />
@@ -430,7 +547,40 @@ export default function CashRegister() {
             <input className="form-input" value={adjustmentForm.note} onChange={(event) => setAdjustmentForm((previous) => ({ ...previous, note: event.target.value }))} />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setAdjustmentModalOpen(false)}>{tr('cancel')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAdjustmentModal(null)}>{tr('cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!withdrawalModal} onClose={() => setWithdrawalModal(null)} title={tr('cashEditOperation')}>
+        <form onSubmit={handleSaveWithdrawal} className="card" style={{ padding: '1rem' }}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+            {tr('cashEditWithdrawalHint')}
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('description')}</label>
+            <input className="form-input" value={withdrawalForm.description} onChange={(event) => setWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('project')}</label>
+            <ProjectSelect projects={projects} value={withdrawalForm.project_id} onChange={updateWithdrawalProject} allowEmpty emptyLabel={UI_DASH} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('contracts')}</label>
+            <select className="form-input" value={withdrawalForm.contract_id} onChange={(event) => updateWithdrawalContract(event.target.value)} disabled={!withdrawalForm.project_id}>
+              <option value="">{UI_DASH}</option>
+              {withdrawalContracts.map((contract) => (
+                <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('note')}</label>
+            <input className="form-input" value={withdrawalForm.note} onChange={(event) => setWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setWithdrawalModal(null)}>{tr('cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
           </div>
         </form>
