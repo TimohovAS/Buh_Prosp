@@ -545,7 +545,7 @@ export default function Expenses() {
                       <td>
                         <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
                       </td>
-                      <td>{item.date}</td>
+                      <td className="date-cell">{item.date}</td>
                       <td>{(item.description || '').slice(0, 50)}</td>
                       <td title={getProjectName(item.project_id) || ''}>
                         {item.project_id ? (

@@ -532,6 +532,10 @@ th, td {
   border-bottom: 1px solid var(--color-border);
 }
 
+.date-cell {
+  white-space: nowrap;
+}
+
 th {
   font-weight: 600;
   color: var(--color-text-muted);

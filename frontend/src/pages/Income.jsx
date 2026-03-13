@@ -597,8 +597,8 @@ export default function Income() {
                           onChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td>{item.date}</td>
-                      <td>{item.due_date || UI_DASH}</td>
+                      <td className="date-cell">{item.date}</td>
+                      <td className="date-cell">{item.due_date || UI_DASH}</td>
                       <td>{item.invoice_number}</td>
                       <td>{item.client_name || '-'}</td>
                       <td>{item.contract_number || '-'}</td>
