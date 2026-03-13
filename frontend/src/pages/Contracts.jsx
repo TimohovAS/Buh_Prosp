@@ -3,6 +3,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
@@ -248,12 +249,10 @@ export default function Contracts() {
               <option key={client.id} value={client.id}>{client.name}</option>
             ))}
           </select>
-          <input
-            type="text"
-            className="form-input"
+          <SearchInput
             placeholder={tr('search')}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             style={{ width: 180 }}
           />
           <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>

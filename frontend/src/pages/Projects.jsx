@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import SearchInput from '../components/SearchInput'
 
 function fmt(n) {
   return (n ?? 0).toLocaleString('sr-RS')
@@ -219,12 +220,10 @@ export default function Projects() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <h1>{tr('projects')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            className="form-input"
+          <SearchInput
             placeholder={tr('search')}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             style={{ width: 180 }}
           />
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>

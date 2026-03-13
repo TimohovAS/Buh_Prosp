@@ -3,6 +3,7 @@ import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const PERIODS = [
   { value: 'weekly', label: '\u2014' },
@@ -285,14 +286,12 @@ export default function PlannedExpenses() {
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            className="form-input"
-            placeholder={tr('search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 180 }}
-          />
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>

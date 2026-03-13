@@ -4,6 +4,7 @@ import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
@@ -464,14 +465,12 @@ export default function Expenses() {
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-          <input
-            type="text"
-            className="form-input"
-            placeholder={tr('search')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            style={{ width: 180 }}
-          />
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}

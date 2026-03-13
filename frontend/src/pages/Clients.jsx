@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
+import SearchInput from '../components/SearchInput'
 
 export default function Clients() {
   const [items, setItems] = useState([])
@@ -97,12 +98,10 @@ export default function Clients() {
       <div className="page-header">
         <h1 className="page-title">{tr('clients')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <input
-            type="text"
-            className="form-input"
+          <SearchInput
             placeholder={tr('search')}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             style={{ width: 200 }}
           />
           <button className="btn btn-primary" onClick={openAdd}>

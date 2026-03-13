@@ -4,6 +4,7 @@ import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const UI_DASH = '\u2014'
 const UI_SORT_BOTH = '\u2195'
@@ -521,14 +522,12 @@ export default function CashRegister() {
             <div className="card">
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                 <div className="card-title" style={{ margin: 0 }}>{tr('cashEntries')}</div>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={tr('search')}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  style={{ width: 220 }}
-                />
+                  <SearchInput
+                    placeholder={tr('search')}
+                    value={search}
+                    onChange={setSearch}
+                    style={{ width: 220 }}
+                  />
               </div>
               <div className="table-wrap">
                 <table>

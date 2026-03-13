@@ -91,6 +91,40 @@ input, select, textarea {
   font-family: inherit;
 }
 
+.search-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.search-input-wrap .form-input {
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.search-input-clear {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.2rem;
+  height: 1.2rem;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-input-clear:hover {
+  color: #f87171;
+}
+
 .app {
   display: flex;
   height: 100vh;
@@ -771,6 +805,36 @@ tr:hover td {
 }
 .react-datepicker__input-container input::placeholder {
   color: var(--color-text-muted) !important;
+}
+
+.search-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.search-input-wrap .form-input {
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.search-input-clear {
+  position: absolute;
+  right: 0.625rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.search-input-clear:hover {
+  color: #ff7b7b;
 }
 
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import { api } from '../api'
 import { getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
+import SearchInput from '../components/SearchInput'
 
 function formatDate(value) {
   if (!value) return '\u2014'
@@ -307,13 +308,12 @@ export default function Obligations() {
               <option key={type.id} value={type.code}>{type.name_sr}</option>
             ))}
           </select>
-          <input
-            className="form-input"
-            style={{ width: 220 }}
-            placeholder={tr('search')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 220 }}
+            />
           <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
             {tr('obligationsSettings')}
           </button>

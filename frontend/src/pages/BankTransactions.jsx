@@ -4,6 +4,7 @@ import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
@@ -446,13 +447,12 @@ export default function BankTransactions() {
           <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
             {tr('bankTxAllOpenInvoices')}
           </div>
-          <input
-            className="form-input"
-            placeholder={tr('bankTxSearchInvoices')}
-            value={allInvoiceSearch}
-            onChange={(event) => setAllInvoiceSearch(event.target.value)}
-            style={{ width: '100%', marginBottom: '0.5rem' }}
-          />
+            <SearchInput
+              placeholder={tr('bankTxSearchInvoices')}
+              value={allInvoiceSearch}
+              onChange={setAllInvoiceSearch}
+              style={{ width: '100%', marginBottom: '0.5rem' }}
+            />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 260, overflowY: 'auto' }}>
             {filteredAll.length === 0 && allInvoices.length === 0 && (
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenInvoices')}</p>
@@ -501,13 +501,12 @@ export default function BankTransactions() {
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
                 {tr('bankTxOpenObligations')}
               </div>
-              <input
-                className="form-input"
-                placeholder={tr('bankTxSearchObligations')}
-                value={allInvoiceSearch}
-                onChange={(event) => setAllInvoiceSearch(event.target.value)}
-                style={{ width: '100%', marginBottom: '0.5rem' }}
-              />
+                <SearchInput
+                  placeholder={tr('bankTxSearchObligations')}
+                  value={allInvoiceSearch}
+                  onChange={setAllInvoiceSearch}
+                  style={{ width: '100%', marginBottom: '0.5rem' }}
+                />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 240, overflowY: 'auto' }}>
                 {allObligations.length === 0 && (
                   <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenObligations')}</p>
@@ -617,7 +616,12 @@ export default function BankTransactions() {
             <option value="in">{tr('bankTxDirectionIn')}</option>
             <option value="out">{tr('bankTxDirectionOut')}</option>
           </select>
-          <input className="form-input" placeholder={tr('search')} value={search} onChange={(event) => setSearch(event.target.value)} style={{ minWidth: 180 }} />
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ minWidth: 180 }}
+          />
           {selectedIds.length > 0 && (
             <button className="btn btn-secondary" onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}>
               {tr('assignProject')} ({selectedIds.length})

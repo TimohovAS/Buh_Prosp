@@ -3,6 +3,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
+import SearchInput from '../components/SearchInput'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
@@ -514,14 +515,12 @@ export default function Income() {
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-          <input
-            type="text"
-            className="form-input"
-            placeholder={tr('search')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            style={{ width: 180 }}
-          />
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
           <button className="btn btn-secondary" onClick={exportCsv}>
             {tr('exportKpo')} CSV
           </button>
