@@ -15,6 +15,7 @@ import PlannedExpenses from './pages/PlannedExpenses'
 import BankImport from './pages/BankImport'
 import BankTransactions from './pages/BankTransactions'
 import FinanceOverview from './pages/FinanceOverview'
+import ProfitAndLoss from './pages/ProfitAndLoss'
 import AccountsReceivable from './pages/AccountsReceivable'
 import CashFlow from './pages/CashFlow'
 import CashRegister from './pages/CashRegister'
@@ -79,6 +80,7 @@ function App() {
           <Route path="income" element={<Income />} />
           <Route path="clients" element={<Clients />} />
           <Route path="finance" element={<FinanceOverview />} />
+          <Route path="finance/pnl" element={<ProfitAndLoss />} />
           <Route path="finance/ar" element={<AccountsReceivable />} />
           <Route path="finance/cashflow" element={<CashFlow />} />
           <Route path="cash" element={<CashRegister />} />

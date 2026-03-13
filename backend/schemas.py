@@ -582,6 +582,27 @@ class FinanceLimitsResponse(BaseModel):
     risk: str
 
 
+class FinancePnlMonthItem(BaseModel):
+    month: int
+    revenue: Decimal
+    expenses: Decimal
+    taxes: Decimal
+    profit: Decimal
+
+
+class FinancePnlTotals(BaseModel):
+    revenue: Decimal
+    expenses: Decimal
+    taxes: Decimal
+    profit: Decimal
+
+
+class FinancePnlResponse(BaseModel):
+    year: int
+    items: list[FinancePnlMonthItem] = Field(default_factory=list)
+    totals: FinancePnlTotals
+
+
 class UpcomingObligationItem(BaseModel):
     """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
     id: int

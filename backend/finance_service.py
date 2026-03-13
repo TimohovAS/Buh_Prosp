@@ -1,4 +1,4 @@
-"""Финансовый сервис: метрики accrual vs cash."""
+﻿"""Р¤РёРЅР°РЅСЃРѕРІС‹Р№ СЃРµСЂРІРёСЃ: РјРµС‚СЂРёРєРё accrual vs cash."""
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -12,7 +12,7 @@ from backend.models import Income, Expense, Enterprise, Project, BankTransaction
 
 
 def _period_key(d: date, group_by: Literal["day", "month", "year"]) -> str:
-    """Ключ периода: YYYY-MM-DD | YYYY-MM | YYYY."""
+    """РљР»СЋС‡ РїРµСЂРёРѕРґР°: YYYY-MM-DD | YYYY-MM | YYYY."""
     if group_by == "day":
         return d.strftime("%Y-%m-%d")
     if group_by == "month":
@@ -25,7 +25,7 @@ def _iter_periods(
     date_to: date,
     group_by: Literal["day", "month", "year"],
 ):
-    """Итератор по периодам в диапазоне."""
+    """РС‚РµСЂР°С‚РѕСЂ РїРѕ РїРµСЂРёРѕРґР°Рј РІ РґРёР°РїР°Р·РѕРЅРµ."""
     if group_by == "day":
         current = date_from
         while current <= date_to:
@@ -54,7 +54,7 @@ async def get_finance_summary(
     filters: Optional[dict[str, Any]] = None,
 ) -> dict:
     """
-    Агрегатор метрик для accrual/cash.
+    РђРіСЂРµРіР°С‚РѕСЂ РјРµС‚СЂРёРє РґР»СЏ accrual/cash.
     filters: client_id, contract_id, project_id (income), category, is_tax_related (expenses)
     """
     filters = filters or {}
@@ -64,7 +64,7 @@ async def get_finance_summary(
     category = filters.get("category")
     is_tax_related = filters.get("is_tax_related")
 
-    # SQLite: date column в income называется "date" (issued_date в модели)
+    # SQLite: date column РІ income РЅР°Р·С‹РІР°РµС‚СЃСЏ "date" (issued_date РІ РјРѕРґРµР»Рё)
     income_date_col = Income.issued_date
     income_paid_col = Income.paid_date
     income_amount = Income.amount_rsd
@@ -76,7 +76,7 @@ async def get_finance_summary(
     expense_status = Expense.status
     expense_is_tax = Expense.is_tax_related
 
-    # Базовые условия для income
+    # Р‘Р°Р·РѕРІС‹Рµ СѓСЃР»РѕРІРёСЏ РґР»СЏ income
     income_base = and_(
         income_status != "cancelled",
         income_date_col >= date_from,
@@ -89,9 +89,9 @@ async def get_finance_summary(
     if project_id is not None:
         income_base = and_(income_base, Income.project_id == project_id)
 
-    # Базовые условия для expenses:
-    # accrual: учитываем фактические проводки, включая сторно (status=reversed, amount<0),
-    # но исключаем planned.
+    # Р‘Р°Р·РѕРІС‹Рµ СѓСЃР»РѕРІРёСЏ РґР»СЏ expenses:
+    # accrual: СѓС‡РёС‚С‹РІР°РµРј С„Р°РєС‚РёС‡РµСЃРєРёРµ РїСЂРѕРІРѕРґРєРё, РІРєР»СЋС‡Р°СЏ СЃС‚РѕСЂРЅРѕ (status=reversed, amount<0),
+    # РЅРѕ РёСЃРєР»СЋС‡Р°РµРј planned.
     expense_accrual_base = and_(
         expense_status != "planned",
         Expense.source != CASH_TRANSFER_SOURCE,
@@ -106,7 +106,7 @@ async def get_finance_summary(
             expense_is_tax == (1 if is_tax_related else 0),
         )
 
-    # Cash: paid_date in period, учитываем paid и reversed (сторно влияет на cash-flow).
+    # Cash: paid_date in period, СѓС‡РёС‚С‹РІР°РµРј paid Рё reversed (СЃС‚РѕСЂРЅРѕ РІР»РёСЏРµС‚ РЅР° cash-flow).
     income_cash_base = and_(
         income_status == "paid",
         income_paid_col.isnot(None),
@@ -146,7 +146,7 @@ async def get_finance_summary(
     if category is not None:
         expense_tax_base = and_(expense_tax_base, Expense.category == category)
 
-    # Формат для GROUP BY в SQLite
+    # Р¤РѕСЂРјР°С‚ РґР»СЏ GROUP BY РІ SQLite
     if group_by == "day":
         fmt = "%Y-%m-%d"
     elif group_by == "month":
@@ -166,8 +166,8 @@ async def get_finance_summary(
             "net_profit_cash": ZERO_DECIMAL,
         }
 
-    # Для группировки нужны подзапросы по каждому периоду или использование strftime
-    # SQLite: strftime('%Y-%m', date) для группировки по месяцу
+    # Р”Р»СЏ РіСЂСѓРїРїРёСЂРѕРІРєРё РЅСѓР¶РЅС‹ РїРѕРґР·Р°РїСЂРѕСЃС‹ РїРѕ РєР°Р¶РґРѕРјСѓ РїРµСЂРёРѕРґСѓ РёР»Рё РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ strftime
+    # SQLite: strftime('%Y-%m', date) РґР»СЏ РіСЂСѓРїРїРёСЂРѕРІРєРё РїРѕ РјРµСЃСЏС†Сѓ
     if group_by == "day":
         grp = func.strftime("%Y-%m-%d", income_date_col)
         grp_paid_i = func.strftime("%Y-%m-%d", income_paid_col)
@@ -188,7 +188,7 @@ async def get_finance_summary(
     need_cash = mode in ("cash", "both")
 
     if need_accrual:
-        # revenue_accrual по issued_date
+        # revenue_accrual РїРѕ issued_date
         q_ra = (
             select(grp.label("period"), func.coalesce(func.sum(income_amount), 0).label("s"))
             .where(income_base)
@@ -200,7 +200,7 @@ async def get_finance_summary(
             if p in periods_data:
                 periods_data[p]["revenue_accrual"] = to_decimal(row.s)
 
-        # expense_accrual по date
+        # expense_accrual РїРѕ date
         q_ea = (
             select(grp_exp.label("period"), func.coalesce(func.sum(expense_amount), 0).label("s"))
             .where(expense_accrual_base)
@@ -219,7 +219,7 @@ async def get_finance_summary(
         bt_status = BankTransaction.status
         bt_type = BankTransaction.matched_type
 
-        # Группировка
+        # Р“СЂСѓРїРїРёСЂРѕРІРєР°
         if group_by == "day":
             grp_bt = func.strftime("%Y-%m-%d", bt_date)
         elif group_by == "month":
@@ -227,7 +227,7 @@ async def get_finance_summary(
         else:
             grp_bt = func.strftime("%Y", bt_date)
 
-        # Inflow - все поступления (direction="in", status != "ignored")
+        # Inflow - РІСЃРµ РїРѕСЃС‚СѓРїР»РµРЅРёСЏ (direction="in", status != "ignored")
         q_rc = (
             select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .where(
@@ -237,8 +237,8 @@ async def get_finance_summary(
                 bt_date <= date_to,
             )
         )
-        # Если есть фильтры по клиенту, контракту, проекту, нужно заджоинить Income
-        # Так как BankTransaction должен матчиться с Income для этих данных
+        # Р•СЃР»Рё РµСЃС‚СЊ С„РёР»СЊС‚СЂС‹ РїРѕ РєР»РёРµРЅС‚Сѓ, РєРѕРЅС‚СЂР°РєС‚Сѓ, РїСЂРѕРµРєС‚Сѓ, РЅСѓР¶РЅРѕ Р·Р°РґР¶РѕРёРЅРёС‚СЊ Income
+        # РўР°Рє РєР°Рє BankTransaction РґРѕР»Р¶РµРЅ РјР°С‚С‡РёС‚СЊСЃСЏ СЃ Income РґР»СЏ СЌС‚РёС… РґР°РЅРЅС‹С…
         if client_id is not None or contract_id is not None or project_id is not None:
             q_rc = q_rc.join(Income, BankTransaction.matched_id == Income.id).where(
                 BankTransaction.matched_type == "income"
@@ -258,7 +258,7 @@ async def get_finance_summary(
                 periods_data[p]["revenue_cash"] = to_decimal(row.s)
 
         # Outflow (expenses + obligations)
-        # Если нет фильтров tax / category, просто берем все out != ignored
+        # Р•СЃР»Рё РЅРµС‚ С„РёР»СЊС‚СЂРѕРІ tax / category, РїСЂРѕСЃС‚Рѕ Р±РµСЂРµРј РІСЃРµ out != ignored
         q_ec = (
             select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .where(
@@ -270,7 +270,7 @@ async def get_finance_summary(
         )
 
         if category is not None or is_tax_related is not None:
-            # Для фильтров нужно подтянуть Expense
+            # Р”Р»СЏ С„РёР»СЊС‚СЂРѕРІ РЅСѓР¶РЅРѕ РїРѕРґС‚СЏРЅСѓС‚СЊ Expense
             q_ec = q_ec.join(Expense, BankTransaction.matched_id == Expense.id).where(
                 BankTransaction.matched_type == "expense",
                 Expense.source != CASH_TRANSFER_SOURCE,
@@ -287,11 +287,11 @@ async def get_finance_summary(
             if p in periods_data:
                 periods_data[p]["expense_cash"] += to_decimal(row.s)
                 
-        # Если не было фильтров, добавим и obligation outflow
+        # Р•СЃР»Рё РЅРµ Р±С‹Р»Рѕ С„РёР»СЊС‚СЂРѕРІ, РґРѕР±Р°РІРёРј Рё obligation outflow
         if category is None and is_tax_related is None:
-            pass # obligations уже посчитаны в общем bt_direction=="out"
+            pass # obligations СѓР¶Рµ РїРѕСЃС‡РёС‚Р°РЅС‹ РІ РѕР±С‰РµРј bt_direction=="out"
         elif is_tax_related:
-             # Если искали налоги, obligation (зарплатные налоги) туда тоже плюсуем
+             # Р•СЃР»Рё РёСЃРєР°Р»Рё РЅР°Р»РѕРіРё, obligation (Р·Р°СЂРїР»Р°С‚РЅС‹Рµ РЅР°Р»РѕРіРё) С‚СѓРґР° С‚РѕР¶Рµ РїР»СЋСЃСѓРµРј
              q_ob = (
                 select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
                 .where(
@@ -309,8 +309,8 @@ async def get_finance_summary(
                 if p in periods_data:
                     periods_data[p]["expense_cash"] += to_decimal(row.s)
 
-        # taxes_cash (is_tax_related == True или obligations)
-        # Суммируем Expense is_tax=True и все MonthlyObligation
+        # taxes_cash (is_tax_related == True РёР»Рё obligations)
+        # РЎСѓРјРјРёСЂСѓРµРј Expense is_tax=True Рё РІСЃРµ MonthlyObligation
         q_tc1 = (
             select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
             .join(Expense, BankTransaction.matched_id == Expense.id)
@@ -353,7 +353,7 @@ async def get_finance_summary(
         data["net_profit_accrual"] = data["revenue_accrual"] - data["expense_accrual"]
         data["net_profit_cash"] = data["revenue_cash"] - data["expense_cash"]
 
-    # Итоги за весь период
+    # РС‚РѕРіРё Р·Р° РІРµСЃСЊ РїРµСЂРёРѕРґ
     totals = {
         "revenue_accrual": sum(d["revenue_accrual"] for d in periods_data.values()),
         "revenue_cash": sum(d["revenue_cash"] for d in periods_data.values()),
@@ -375,8 +375,8 @@ async def get_finance_summary(
 
 async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None) -> dict:
     """
-    Дебиторская задолженность: unpaid и partial incomes.
-    Для partial показывает остаток (amount_rsd - paid_amount).
+    Р”РµР±РёС‚РѕСЂСЃРєР°СЏ Р·Р°РґРѕР»Р¶РµРЅРЅРѕСЃС‚СЊ: unpaid Рё partial incomes.
+    Р”Р»СЏ partial РїРѕРєР°Р·С‹РІР°РµС‚ РѕСЃС‚Р°С‚РѕРє (amount_rsd - paid_amount).
     """
     today = as_of or date.today()
     q = select(Income).options(selectinload(Income.client)).where(
@@ -389,7 +389,7 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
     ar_total = 0.0
     ar_overdue = 0.0
     for i in incomes:
-        # Для частичной оплаты показываем остаток
+        # Р”Р»СЏ С‡Р°СЃС‚РёС‡РЅРѕР№ РѕРїР»Р°С‚С‹ РїРѕРєР°Р·С‹РІР°РµРј РѕСЃС‚Р°С‚РѕРє
         remaining = to_decimal(i.amount_rsd) - to_decimal(i.paid_amount or ZERO_DECIMAL)
         if remaining <= 0:
             continue
@@ -402,7 +402,7 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
             "client_name": i.client_name or (i.client.name if i.client else None),
             "issued_date": i.issued_date.isoformat(),
             "due_date": due_dt.isoformat(),
-            "amount": remaining,          # остаток к оплате
+            "amount": remaining,          # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
             "amount_full": to_decimal(i.amount_rsd),
             "amount_paid": to_decimal(i.paid_amount or ZERO_DECIMAL),
             "status": i.status,
@@ -493,11 +493,11 @@ async def get_finance_by_project(
     mode: Literal["accrual", "cash"] = "accrual",
 ) -> dict:
     """
-    Аналитика по проектам: revenue, expenses, profit, margin_percent.
-    Формат: by_project[], unassigned.
+    РђРЅР°Р»РёС‚РёРєР° РїРѕ РїСЂРѕРµРєС‚Р°Рј: revenue, expenses, profit, margin_percent.
+    Р¤РѕСЂРјР°С‚: by_project[], unassigned.
 
-    mode=accrual: доходы по Income.issued_date, расходы по Expense.date.
-    mode=cash: доходы по Income.paid_date (только paid), расходы по Expense.paid_date (только paid).
+    mode=accrual: РґРѕС…РѕРґС‹ РїРѕ Income.issued_date, СЂР°СЃС…РѕРґС‹ РїРѕ Expense.date.
+    mode=cash: РґРѕС…РѕРґС‹ РїРѕ Income.paid_date (С‚РѕР»СЊРєРѕ paid), СЂР°СЃС…РѕРґС‹ РїРѕ Expense.paid_date (С‚РѕР»СЊРєРѕ paid).
     """
     income_date_col = Income.issued_date
     income_paid_col = Income.paid_date
@@ -510,13 +510,13 @@ async def get_finance_by_project(
     expense_status = Expense.status
 
     if mode == "accrual":
-        # Доходы: issued_date в периоде, status != cancelled
+        # Р”РѕС…РѕРґС‹: issued_date РІ РїРµСЂРёРѕРґРµ, status != cancelled
         income_base = and_(
             income_status != "cancelled",
             income_date_col >= date_from,
             income_date_col <= date_to,
         )
-        # Расходы: date в периоде, включая сторно (reversed), но без planned
+        # Р Р°СЃС…РѕРґС‹: date РІ РїРµСЂРёРѕРґРµ, РІРєР»СЋС‡Р°СЏ СЃС‚РѕСЂРЅРѕ (reversed), РЅРѕ Р±РµР· planned
         expense_base = and_(
             expense_status != "planned",
             Expense.source != CASH_TRANSFER_SOURCE,
@@ -524,14 +524,14 @@ async def get_finance_by_project(
             expense_date_col <= date_to,
         )
     else:
-        # cash: доходы — только paid, по paid_date
+        # cash: РґРѕС…РѕРґС‹ вЂ” С‚РѕР»СЊРєРѕ paid, РїРѕ paid_date
         income_base = and_(
             income_status == "paid",
             income_paid_col.isnot(None),
             income_paid_col >= date_from,
             income_paid_col <= date_to,
         )
-        # cash: расходы — paid и reversed, по paid_date (если нет paid_date — не считаем)
+        # cash: СЂР°СЃС…РѕРґС‹ вЂ” paid Рё reversed, РїРѕ paid_date (РµСЃР»Рё РЅРµС‚ paid_date вЂ” РЅРµ СЃС‡РёС‚Р°РµРј)
         expense_base = and_(
             expense_status.in_(["paid", "reversed"]),
             Expense.source != CASH_TRANSFER_SOURCE,
@@ -540,19 +540,19 @@ async def get_finance_by_project(
             expense_paid_col <= date_to,
         )
 
-    # Все проекты (для соответствия списку на фронте при show_archived)
+    # Р’СЃРµ РїСЂРѕРµРєС‚С‹ (РґР»СЏ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёСЏ СЃРїРёСЃРєСѓ РЅР° С„СЂРѕРЅС‚Рµ РїСЂРё show_archived)
     r = await db.execute(select(Project).order_by(Project.name))
     projects = list(r.scalars().all())
     project_ids = [p.id for p in projects]
-    all_ids = project_ids + [None]  # None = без проекта
+    all_ids = project_ids + [None]  # None = Р±РµР· РїСЂРѕРµРєС‚Р°
 
     by_project = []
     unassigned = {"revenue": 0.0, "expenses": 0.0, "profit": 0.0}
 
     for pid in all_ids:
-        name = "— Без проекта —" if pid is None else next((p.name for p in projects if p.id == pid), f"Project {pid}")
+        name = "вЂ” Р‘РµР· РїСЂРѕРµРєС‚Р° вЂ”" if pid is None else next((p.name for p in projects if p.id == pid), f"Project {pid}")
 
-        # Revenue по проекту
+        # Revenue РїРѕ РїСЂРѕРµРєС‚Сѓ
         if mode == "accrual":
             inc_cond = and_(income_base, Income.project_id == pid)
             q_rev = select(func.coalesce(func.sum(income_amount), 0)).where(inc_cond)
@@ -628,3 +628,91 @@ async def get_finance_by_project(
 
 
 
+
+async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
+    """Monthly accrual-based P&L by Income.issued_date and Expense.date."""
+    date_from = date(year, 1, 1)
+    date_to = date(year, 12, 31)
+
+    months: dict[int, dict[str, Decimal]] = {
+        month: {
+            "revenue": ZERO_DECIMAL,
+            "expenses": ZERO_DECIMAL,
+            "taxes": ZERO_DECIMAL,
+            "profit": ZERO_DECIMAL,
+        }
+        for month in range(1, 13)
+    }
+
+    revenue_rows = await db.execute(
+        select(
+            func.strftime("%m", Income.issued_date).label("month"),
+            func.coalesce(func.sum(Income.amount_rsd), 0).label("amount"),
+        ).where(
+            Income.status != "cancelled",
+            Income.issued_date >= date_from,
+            Income.issued_date <= date_to,
+        ).group_by(func.strftime("%m", Income.issued_date))
+    )
+    for row in revenue_rows.fetchall():
+        months[int(row.month)]["revenue"] = to_decimal(row.amount)
+
+    operating_rows = await db.execute(
+        select(
+            func.strftime("%m", Expense.date).label("month"),
+            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
+        ).where(
+            Expense.status.notin_(["planned", "reversed"]),
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.date >= date_from,
+            Expense.date <= date_to,
+            func.coalesce(Expense.is_tax_related, False) == False,
+        ).group_by(func.strftime("%m", Expense.date))
+    )
+    for row in operating_rows.fetchall():
+        months[int(row.month)]["expenses"] = to_decimal(row.amount)
+
+    tax_rows = await db.execute(
+        select(
+            func.strftime("%m", Expense.date).label("month"),
+            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
+        ).where(
+            Expense.status.notin_(["planned", "reversed"]),
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.date >= date_from,
+            Expense.date <= date_to,
+            Expense.is_tax_related == True,
+        ).group_by(func.strftime("%m", Expense.date))
+    )
+    for row in tax_rows.fetchall():
+        months[int(row.month)]["taxes"] = to_decimal(row.amount)
+
+    items = []
+    totals = {
+        "revenue": ZERO_DECIMAL,
+        "expenses": ZERO_DECIMAL,
+        "taxes": ZERO_DECIMAL,
+        "profit": ZERO_DECIMAL,
+    }
+    for month in range(1, 13):
+        revenue = months[month]["revenue"]
+        expenses = months[month]["expenses"]
+        taxes = months[month]["taxes"]
+        profit = revenue - expenses - taxes
+        items.append({
+            "month": month,
+            "revenue": revenue,
+            "expenses": expenses,
+            "taxes": taxes,
+            "profit": profit,
+        })
+        totals["revenue"] += revenue
+        totals["expenses"] += expenses
+        totals["taxes"] += taxes
+        totals["profit"] += profit
+
+    return {
+        "year": year,
+        "items": items,
+        "totals": totals,
+    }
