@@ -42,6 +42,7 @@ export default function BankTransactions() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [queryInitialized, setQueryInitialized] = useState(false)
 
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
@@ -131,8 +132,25 @@ export default function BankTransactions() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const nextYear = params.get('year')
+    const nextMonth = params.get('month')
+    const nextStatus = params.get('status')
+    const nextDirection = params.get('direction')
+    const nextSearch = params.get('search')
+
+    if (nextYear) setYear(Number(nextYear))
+    if (nextMonth) setMonth(nextMonth)
+    if (nextStatus) setStatusFilter(nextStatus)
+    if (nextDirection) setDirectionFilter(nextDirection)
+    if (nextSearch) setSearch(nextSearch)
+    setQueryInitialized(true)
+  }, [])
+
+  useEffect(() => {
+    if (!queryInitialized) return
     loadData()
-  }, [statusFilter, directionFilter, year, month])
+  }, [statusFilter, directionFilter, year, month, queryInitialized])
 
   useEffect(() => {
     if (availableYears.length === 0) return

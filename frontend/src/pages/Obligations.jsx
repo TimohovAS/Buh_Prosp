@@ -36,6 +36,7 @@ export default function Obligations() {
   const [availableYears, setAvailableYears] = useState([currentYear])
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [items, setItems] = useState([])
   const [types, setTypes] = useState([])
   const [decisions, setDecisions] = useState([])
@@ -90,6 +91,14 @@ export default function Obligations() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const nextYear = params.get('year')
+    const nextSearch = params.get('search')
+    if (nextYear) setYear(parseInt(nextYear, 10))
+    if (nextSearch) setSearch(nextSearch)
+  }, [])
+
+  useEffect(() => {
     load()
   }, [year, paymentTypeFilter])
 
@@ -100,9 +109,28 @@ export default function Obligations() {
     }
   }, [availableYears, year])
 
+  const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
+
   const filteredItems = items.filter((obligation) => {
-    if (statusFilter === 'all') return true
-    return obligation.status === statusFilter
+    if (statusFilter !== 'all' && obligation.status !== statusFilter) return false
+    const normalizedSearch = search.trim().toLowerCase()
+    if (!normalizedSearch) return true
+
+    const typeName = getTypeName(obligation.payment_type_code || '').toLowerCase()
+    const haystack = [
+      obligation.year,
+      obligation.month,
+      obligation.amount,
+      obligation.deadline,
+      obligation.paid_date,
+      obligation.payment_reference,
+      obligation.note,
+      typeName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(normalizedSearch)
   })
 
   const handleGenerate = async () => {
@@ -236,7 +264,6 @@ export default function Obligations() {
     }
   }
 
-  const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
   const monthNamesFull = getMonthNamesFull()
   const monthNamesShort = getMonthNamesShort()
   const empty = emptyValue()
@@ -280,6 +307,13 @@ export default function Obligations() {
               <option key={type.id} value={type.code}>{type.name_sr}</option>
             ))}
           </select>
+          <input
+            className="form-input"
+            style={{ width: 220 }}
+            placeholder={tr('search')}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
             {tr('obligationsSettings')}
           </button>

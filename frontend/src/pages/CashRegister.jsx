@@ -102,6 +102,11 @@ export default function CashRegister() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const nextSearch = params.get('search')
+    if (nextSearch) {
+      setSearch(nextSearch)
+    }
     loadData()
   }, [])
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -44,6 +45,7 @@ function csvEscape(value) {
 }
 
 export default function Expenses() {
+  const navigate = useNavigate()
   const currentYear = new Date().getFullYear()
   const [items, setItems] = useState([])
   const [duplicateGroups, setDuplicateGroups] = useState([])
@@ -149,6 +151,38 @@ export default function Expenses() {
       return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
     }
     return item.category || UI_DASH
+  }
+
+  const openExpenseSource = (item) => {
+    const expenseDate = item?.date ? new Date(`${item.date}T12:00:00`) : null
+    const expenseYear = expenseDate && !Number.isNaN(expenseDate.getTime()) ? expenseDate.getFullYear() : ''
+    const expenseMonth = expenseDate && !Number.isNaN(expenseDate.getTime()) ? String(expenseDate.getMonth() + 1).padStart(2, '0') : ''
+    const reference = item?.bank_reference || ''
+    const description = item?.description || ''
+
+    if (item?.source === 'obligation') {
+      const params = new URLSearchParams()
+      if (expenseYear) params.set('year', String(expenseYear))
+      if (reference || description) params.set('search', reference || description)
+      navigate(`/payments?${params.toString()}`)
+      return
+    }
+
+    if (item?.source === 'cash') {
+      const params = new URLSearchParams()
+      if (reference || description) params.set('search', reference || description)
+      navigate(`/cash?${params.toString()}`)
+      return
+    }
+
+    if (reference) {
+      const params = new URLSearchParams()
+      if (expenseYear) params.set('year', String(expenseYear))
+      if (expenseMonth) params.set('month', expenseMonth)
+      params.set('direction', 'out')
+      params.set('search', reference)
+      navigate(`/bank?${params.toString()}`)
+    }
   }
 
   const toggleSelect = (id) => {
@@ -541,7 +575,12 @@ export default function Expenses() {
                   <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
-                    <tr key={item.id} className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}>
+                    <tr
+                      key={item.id}
+                      className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}
+                      onDoubleClick={() => openExpenseSource(item)}
+                      style={{ cursor: item.bank_reference || item.source === 'cash' || item.source === 'obligation' ? 'pointer' : 'default' }}
+                    >
                       <td>
                         <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
                       </td>
