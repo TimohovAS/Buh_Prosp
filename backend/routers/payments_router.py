@@ -1,4 +1,4 @@
-"""Роутер платежей (налоги и взносы)."""
+"""Legacy-роутер платежей (изолирован, не подключён в active runtime)."""
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,9 +9,46 @@ from backend.database import get_db
 from backend.models import Payment, ContributionRates, User
 from backend.schemas import PaymentResponse, PaymentUpdate, ContributionRatesCreate, ContributionRatesResponse
 from backend.auth import get_current_user_required, require_edit_access
-from backend.services import get_or_create_payment
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+
+
+async def _legacy_get_or_create_payment(
+    db: AsyncSession,
+    year: int,
+    month: int,
+) -> Optional[Payment]:
+    """Legacy helper для старого /payments API."""
+    result = await db.execute(
+        select(Payment).where(Payment.year == year, Payment.month == month)
+    )
+    payment = result.scalar_one_or_none()
+    if payment:
+        return payment
+
+    rates_result = await db.execute(
+        select(ContributionRates).where(
+            ContributionRates.year == year,
+            ContributionRates.is_active == True
+        )
+    )
+    rates = rates_result.scalar_one_or_none()
+    if not rates:
+        return None
+
+    payment = Payment(
+        year=year,
+        month=month,
+        rates_id=rates.id,
+        tax_amount=rates.tax_amount,
+        pio_amount=rates.pio_amount,
+        health_amount=rates.health_amount,
+        unemployment_amount=rates.unemployment_amount,
+        total_amount=rates.tax_amount + rates.pio_amount + rates.health_amount + rates.unemployment_amount,
+    )
+    db.add(payment)
+    await db.flush()
+    return payment
 
 
 @router.get("", response_model=list[PaymentResponse])
@@ -23,7 +60,7 @@ async def list_payments(
     """Список платежей за год."""
     # Создаём записи для всех месяцев если их нет
     for m in range(1, 13):
-        await get_or_create_payment(db, year, m)
+        await _legacy_get_or_create_payment(db, year, m)
     await db.commit()
     r = await db.execute(
         select(Payment).where(Payment.year == year).order_by(Payment.month)

@@ -24,6 +24,7 @@ from backend.schemas import (
     MatchCandidate,
     MatchRequest,
 )
+from backend.state_machine import InvalidStatusTransition, initialize_expense_status, mark_expense_paid
 
 router = APIRouter(prefix="/bank-transactions", tags=["bank-transactions"])
 _PROJECT_OVERRIDE_UNSET = object()
@@ -402,8 +403,10 @@ async def create_expense_from_transaction(
         expense.category_id = data.category_id
         expense.contract_id = contract_id
         expense.bank_reference = transaction.bank_reference
-        expense.paid_date = transaction.date
-        expense.status = "paid"
+        try:
+            mark_expense_paid(expense, paid_date=transaction.date, allow_same=True)
+        except InvalidStatusTransition as exc:
+            raise HTTPException(400, str(exc)) from exc
         expense.note = data.note
         expense.project_id = project_id
     else:
@@ -416,13 +419,15 @@ async def create_expense_from_transaction(
             category_id=data.category_id,
             contract_id=contract_id,
             bank_reference=transaction.bank_reference,
-            paid_date=transaction.date,
-            status="paid",
             source="bank_import",
             note=data.note,
             project_id=project_id,
             created_by=current_user.id,
         )
+        try:
+            initialize_expense_status(expense, "paid", paid_date=transaction.date)
+        except InvalidStatusTransition as exc:
+            raise HTTPException(400, str(exc)) from exc
         db.add(expense)
     await db.flush()
 

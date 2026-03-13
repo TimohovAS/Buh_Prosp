@@ -10,6 +10,7 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.cash_service import create_cash_transfer_from_transaction
 from backend.database import get_db
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Project, TransactionCategory, User
+from backend.state_machine import initialize_expense_status
 from backend.schemas import (
     CashAdjustmentCreate,
     CashBankWithdrawalCandidate,
@@ -431,13 +432,12 @@ async def create_cash_expense(
         category=category_name,
         category_id=data.category_id,
         contract_id=contract_id,
-        paid_date=data.date,
-        status="paid",
         source="cash",
         note=data.note,
         project_id=project_id,
         created_by=current_user.id,
     )
+    initialize_expense_status(expense, "paid", paid_date=data.date)
     db.add(expense)
     await db.flush()
 

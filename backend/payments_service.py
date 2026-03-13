@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import PaymentType, YearDecision, MonthlyObligation
+from backend.state_machine import initialize_obligation_status, refresh_obligation_due_status
 
 
 def deadline_for_month(year: int, month: int) -> date:
@@ -85,14 +86,13 @@ async def get_or_create_obligations(
                     decision_id=dec.id,
                     amount=dec.monthly_amount,
                     deadline=dl,
-                    status="unpaid" if dl >= today else "overdue",
                 )
+                initialize_obligation_status(ob, "unpaid" if dl >= today else "overdue")
                 db.add(ob)
                 await db.flush()
             elif ob.status != "paid":
                 # Обновляем только неоплаченные: overdue и amount
-                if ob.deadline < today:
-                    ob.status = "overdue"
+                refresh_obligation_due_status(ob, today=today)
                 ob.amount = dec.monthly_amount
             result.append(ob)
     result.sort(key=lambda x: (x.month, x.payment_type_id))

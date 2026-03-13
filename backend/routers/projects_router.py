@@ -9,6 +9,7 @@ from backend.models import Project, User
 from backend.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import allocate_next_project_code
+from backend.state_machine import InvalidStatusTransition, initialize_project_status, transition_project_status
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -50,9 +51,14 @@ async def create_project(
     """Добавить проект. code генерируется автоматически (PR-YYYY-NNNN), если не передан."""
     payload = data.model_dump()
     code_val = payload.get("code")
+    status_val = payload.pop("status", "active")
     if code_val is None or (isinstance(code_val, str) and not code_val.strip()):
         payload["code"] = await allocate_next_project_code(db)
     project = Project(**payload)
+    try:
+        initialize_project_status(project, status_val)
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.add(project)
     await db.commit()
     await db.refresh(project)
@@ -86,8 +92,15 @@ async def update_project(
     project = r.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Проект не найден")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    dump = data.model_dump(exclude_unset=True)
+    next_status = dump.pop("status", None)
+    for k, v in dump.items():
         setattr(project, k, v)
+    if next_status is not None:
+        try:
+            transition_project_status(project, next_status, allow_same=True)
+        except InvalidStatusTransition as exc:
+            raise HTTPException(400, str(exc)) from exc
     await db.commit()
     await db.refresh(project)
     return ProjectResponse.model_validate(project)
@@ -104,6 +117,9 @@ async def delete_project(
     project = r.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Проект не найден")
-    project.status = "archived"
+    try:
+        transition_project_status(project, "archived", allow_same=False)
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     await db.commit()
     return {"ok": True}

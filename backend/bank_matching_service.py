@@ -9,6 +9,7 @@ from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
+from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reopen_expense_for_unmatch
 
 
 def _safe_paid_amount(income: Income) -> float:
@@ -282,14 +283,12 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
             raise ValueError("Income not found")
 
         new_paid = float(income.paid_amount or 0) + float(tx.amount)
-        income.paid_amount = new_paid
-        if new_paid >= float(income.amount_rsd):
-            income.status = "paid"
-            income.is_paid = True
-            income.paid_date = tx.date
-        else:
-            income.status = "partial"
-            income.is_paid = False
+        reconcile_income_payment_state(
+            income,
+            total_amount=float(income.amount_rsd or 0),
+            paid_amount=new_paid,
+            paid_date=tx.date,
+        )
 
         if tx.bank_reference and not income.bank_reference:
             income.bank_reference = tx.bank_reference
@@ -304,8 +303,7 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         if not expense:
             raise ValueError("Expense not found")
 
-        expense.status = "paid"
-        expense.paid_date = tx.date
+        mark_expense_paid(expense, paid_date=tx.date, allow_same=True)
         if tx.bank_reference and not expense.bank_reference:
             expense.bank_reference = tx.bank_reference
 
@@ -366,19 +364,12 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
             remaining_transactions = list(remaining_response.scalars().all())
             remaining_paid = sum(float(item.amount or 0) for item in remaining_transactions)
             amount_total = float(income.amount_rsd or 0)
-            income.paid_amount = remaining_paid
-            if remaining_paid >= amount_total and remaining_paid > 0:
-                income.status = "paid"
-                income.is_paid = True
-                income.paid_date = remaining_transactions[0].date
-            elif remaining_paid > 0:
-                income.status = "partial"
-                income.is_paid = False
-                income.paid_date = None
-            else:
-                income.status = "issued"
-                income.is_paid = False
-                income.paid_date = None
+            reconcile_income_payment_state(
+                income,
+                total_amount=amount_total,
+                paid_amount=remaining_paid,
+                paid_date=remaining_transactions[0].date if remaining_transactions else None,
+            )
 
             income.bank_reference = next((item.bank_reference for item in remaining_transactions if item.bank_reference), None)
 
@@ -390,8 +381,7 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
                 await revert_cash_transfer(db, tx, expense=expense)
                 await db.flush()
                 return tx
-            expense.status = "planned"
-            expense.paid_date = None
+            reopen_expense_for_unmatch(expense)
 
     elif tx.matched_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))

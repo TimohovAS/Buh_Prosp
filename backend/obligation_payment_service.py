@@ -8,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import BankTransaction, Expense, MonthlyObligation, PaymentType
 from backend.services import create_expense_reversal
+from backend.state_machine import (
+    initialize_expense_status,
+    mark_expense_paid,
+    mark_obligation_paid_status,
+    restore_obligation_after_payment_reset,
+)
 
 
 async def _get_payment_type_name(db: AsyncSession, obligation: MonthlyObligation) -> str:
@@ -55,6 +61,7 @@ async def mark_obligation_paid(
             bank_reference=getattr(bank_transaction, "bank_reference", None),
             created_by=created_by,
         )
+        initialize_expense_status(expense, "paid", paid_date=paid_date)
         db.add(expense)
         await db.flush()
     else:
@@ -64,15 +71,13 @@ async def mark_obligation_paid(
         expense.currency = "RSD"
         expense.category = "tax"
         expense.note = resolved_reference
-        expense.paid_date = paid_date
-        expense.status = "paid"
+        mark_expense_paid(expense, paid_date=paid_date, allow_same=True)
         expense.source = "obligation"
         expense.is_tax_related = True
         if bank_transaction and bank_transaction.bank_reference:
             expense.bank_reference = bank_transaction.bank_reference
 
-    obligation.status = "paid"
-    obligation.paid_date = paid_date
+    mark_obligation_paid_status(obligation, paid_date=paid_date)
     obligation.payment_reference = resolved_reference
     obligation.payment_method = payment_method
     obligation.expense_id = expense.id
@@ -105,8 +110,7 @@ async def reset_obligation_payment(
             )
         obligation.expense_id = None
 
-    obligation.status = "overdue" if obligation.deadline < date.today() else "unpaid"
-    obligation.paid_date = None
+    restore_obligation_after_payment_reset(obligation, today=date.today())
     obligation.payment_reference = None
     obligation.payment_method = "manual"
     await db.flush()

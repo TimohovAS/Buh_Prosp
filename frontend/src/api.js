@@ -235,13 +235,6 @@ export const api = {
     delete: (id) => request(`/planned-expenses/${id}`, { method: 'DELETE' }),
   },
 
-  payments: {
-    list: (year) => request(`/payments?year=${year}`),
-    update: (id, data) => request(`/payments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    rates: () => request('/payments/rates'),
-    createRates: (data) => request('/payments/rates', { method: 'POST', body: JSON.stringify(data) }),
-  },
-
   obligations: {
     types: () => request('/obligations/types'),
     years: () => request('/obligations/years'),

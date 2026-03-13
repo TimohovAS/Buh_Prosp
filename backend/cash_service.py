@@ -2,6 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import BankTransaction, CashEntry, Expense, Project
+from backend.state_machine import initialize_expense_status, initialize_project_status, transition_project_status
 
 CASH_CATEGORY = "cash"
 CASH_TRANSFER_SOURCE = "cash_transfer"
@@ -28,7 +29,7 @@ async def get_or_create_cash_project_id(db: AsyncSession) -> int:
         if not project.is_internal:
             project.is_internal = True
         if project.status == "archived":
-            project.status = "active"
+            transition_project_status(project, "active", allow_same=False, allow_system_reactivate=True)
         if not project.name:
             project.name = CASH_PROJECT_NAME
         await db.flush()
@@ -38,8 +39,8 @@ async def get_or_create_cash_project_id(db: AsyncSession) -> int:
         code=CASH_PROJECT_CODE,
         name=CASH_PROJECT_NAME,
         is_internal=True,
-        status="active",
     )
+    initialize_project_status(project, "active")
     db.add(project)
     await db.flush()
     return int(project.id)
@@ -97,13 +98,12 @@ async def create_cash_transfer_from_transaction(
         category_id=None,
         contract_id=None,
         bank_reference=transaction.bank_reference,
-        paid_date=transaction.date,
-        status="paid",
         source=CASH_TRANSFER_SOURCE,
         note=note,
         project_id=cash_project_id,
         created_by=created_by,
     )
+    initialize_expense_status(expense, "paid", paid_date=transaction.date)
     db.add(expense)
     await db.flush()
 

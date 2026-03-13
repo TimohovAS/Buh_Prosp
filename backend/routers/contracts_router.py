@@ -10,6 +10,7 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
 from backend.models import Client, Contract, ContractItem, Project, User
 from backend.schemas import ContractCreate, ContractItemCreate, ContractItemResponse, ContractResponse, ContractUpdate
+from backend.state_machine import initialize_project_status
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
@@ -99,8 +100,8 @@ async def create_contract(
             name=project_name[:200],
             client_id=data.client_id,
             is_internal=False,
-            status="active",
         )
+        initialize_project_status(new_project, "active")
         db.add(new_project)
         await db.flush()
         project_id = new_project.id

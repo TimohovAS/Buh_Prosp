@@ -16,6 +16,13 @@ from backend.models import Income, Client, User, Project, BankTransaction, Contr
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
+from backend.state_machine import (
+    InvalidStatusTransition,
+    cancel_income,
+    initialize_income_status,
+    reconcile_income_payment_state,
+    transition_income_status,
+)
 
 router = APIRouter(prefix="/income", tags=["income"])
 
@@ -122,19 +129,12 @@ async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> Inco
     amount_total = float(income.amount_rsd or 0)
     latest_linked_date = max((tx.date for tx in linked_transactions), default=None)
 
-    income.paid_amount = linked_total
-    if linked_total >= amount_total and linked_total > 0:
-        income.status = "paid"
-        income.is_paid = True
-        income.paid_date = latest_linked_date
-    elif linked_total > 0:
-        income.status = "partial"
-        income.is_paid = False
-        income.paid_date = None
-    else:
-        income.status = "issued"
-        income.is_paid = False
-        income.paid_date = None
+    reconcile_income_payment_state(
+        income,
+        total_amount=amount_total,
+        paid_amount=linked_total,
+        paid_date=latest_linked_date,
+    )
 
     if linked_transactions:
         income.bank_reference = next((tx.bank_reference for tx in linked_transactions if tx.bank_reference), None)
@@ -260,16 +260,21 @@ async def create_income(
         amount_rsd=data.amount_rsd,
         currency=data.currency,
         exchange_rate=data.exchange_rate,
-        paid_date=data.paid_date,
         due_date=data.due_date,
-        status=status_val,
         project_id=project_id,
         income_type=data.income_type or {"advance":"advance","intermediate":"intermediate","closing":"final"}.get(data.contract_payment_type or "", None),
         note=data.note,
-        paid_amount=(float(data.amount_rsd or 0) if status_val == "paid" else 0.0),
-        is_paid=(status_val == "paid"),
         created_by=current_user.id,
     )
+    try:
+        initialize_income_status(
+            income,
+            status_val,
+            paid_date=data.paid_date,
+            paid_amount=float(data.amount_rsd or 0) if status_val == "paid" else 0.0,
+        )
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.add(income)
     try:
         await db.flush()
@@ -418,12 +423,11 @@ async def import_efaktura(
                     currency=parsed["currency"],
                     exchange_rate=1.0,
                     due_date=parsed["due_date"],
-                    status="issued",
                     project_id=unassigned_project_id,
-                    is_paid=False,
                     note=f"РРјРїРѕСЂС‚ eFaktura: {file_name}",
                     created_by=current_user.id,
                 )
+                initialize_income_status(income, "issued", paid_amount=0.0)
                 db.add(income)
                 await db.flush() # Keep flush here to allow rollback on IntegrityError within the loop
                 created.append(
@@ -516,6 +520,9 @@ async def update_income(
     if income.status == "cancelled":
         raise HTTPException(400, "Cancelled income cannot be updated")
     dump = data.model_dump(exclude_unset=True)
+    payment_fields_requested = "paid_date" in dump or "is_paid" in dump
+    requested_paid_date = dump.pop("paid_date", income.paid_date) if "paid_date" in dump else income.paid_date
+    requested_is_paid = dump.pop("is_paid", None) if "is_paid" in dump else None
     desired_project_id = dump.get("project_id", income.project_id)
     desired_contract_id = dump.get("contract_id", income.contract_id)
 
@@ -532,11 +539,29 @@ async def update_income(
     dump["contract_id"] = desired_contract_id
     if desired_contract_id is None:
         dump["contract_payment_type"] = None
-    paid_date_new = dump.get("paid_date")
     for k, v in dump.items():
         setattr(income, k, v)
-    if "paid_date" in dump or "status" in dump:
-        income.is_paid = income.status == "paid"
+    if payment_fields_requested:
+        should_mark_paid = requested_paid_date is not None
+        if requested_is_paid is not None:
+            should_mark_paid = bool(requested_is_paid)
+        try:
+            if should_mark_paid:
+                transition_income_status(
+                    income,
+                    "paid",
+                    paid_date=requested_paid_date,
+                    paid_amount=float(income.amount_rsd or 0),
+                )
+            else:
+                reconcile_income_payment_state(
+                    income,
+                    total_amount=float(income.amount_rsd or 0),
+                    paid_amount=float(income.paid_amount or 0),
+                    paid_date=None,
+                )
+        except InvalidStatusTransition as exc:
+            raise HTTPException(400, str(exc)) from exc
     # РџСЂРѕРІРµСЂРєР° СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚Рё (invoice_year, invoice_number) РґРѕ flush
     if "invoice_number" in dump:
         year_val = income.invoice_year
@@ -585,9 +610,10 @@ async def delete_income(
         return {"ok": True, "deleted": True}
 
     await _detach_income_transactions(db, income.id)
-    income.status = "cancelled"
-    income.is_paid = False
-    income.paid_amount = 0.0
+    try:
+        cancel_income(income)
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     income.paid_date = None
     income.bank_reference = None
     await db.commit()

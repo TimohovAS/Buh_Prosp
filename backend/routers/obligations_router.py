@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.obligation_payment_service import mark_obligation_paid as apply_obligation_payment, reset_obligation_payment
 from backend.models import PaymentType, YearDecision, MonthlyObligation, Enterprise, User
+from backend.state_machine import InvalidStatusTransition
 from backend.schemas import (
     PaymentTypeResponse,
     YearDecisionCreate,
@@ -272,14 +273,17 @@ async def mark_obligation_paid(
     ob = await db.get(MonthlyObligation, ob_id)
     if not ob:
         raise HTTPException(404, "Обязательство не найдено")
-    await apply_obligation_payment(
-        db,
-        ob,
-        data.paid_date,
-        payment_reference=data.payment_reference,
-        created_by=current_user.id,
-        payment_method="manual",
-    )
+    try:
+        await apply_obligation_payment(
+            db,
+            ob,
+            data.paid_date,
+            payment_reference=data.payment_reference,
+            created_by=current_user.id,
+            payment_method="manual",
+        )
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     await db.commit()
     await db.refresh(ob)
     pt = await db.get(PaymentType, ob.payment_type_id) if ob.payment_type_id else None
@@ -302,7 +306,10 @@ async def mark_obligation_unpaid(
     ob = await db.get(MonthlyObligation, ob_id)
     if not ob:
         raise HTTPException(404, "Обязательство не найдено")
-    await reset_obligation_payment(db, ob, created_by=current_user.id)
+    try:
+        await reset_obligation_payment(db, ob, created_by=current_user.id)
+    except InvalidStatusTransition as exc:
+        raise HTTPException(400, str(exc)) from exc
     await db.commit()
     return {"ok": True}
 

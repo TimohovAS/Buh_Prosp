@@ -21,6 +21,7 @@ from backend.schemas import (
     ExpenseReverseRequest,
     ExpenseUpdate,
 )
+from backend.state_machine import InvalidStatusTransition, mark_expense_paid
 from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -353,7 +354,10 @@ async def merge_expense_duplicates(
         if keep.paid_date is None and duplicate.paid_date is not None:
             keep.paid_date = duplicate.paid_date
         if keep.status != "paid" and duplicate.status == "paid":
-            keep.status = "paid"
+            try:
+                mark_expense_paid(keep, paid_date=keep.paid_date, allow_same=True)
+            except InvalidStatusTransition as exc:
+                raise HTTPException(400, str(exc)) from exc
         keep.note = _merge_notes(keep.note, duplicate.note)
 
         await db.delete(duplicate)

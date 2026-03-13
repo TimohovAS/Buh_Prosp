@@ -5,8 +5,9 @@ from typing import Optional
 from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import Income, Client, Payment, ContributionRates, Enterprise
+from backend.models import Income, Client, Enterprise
 from backend.config import get_settings
+from backend.state_machine import ensure_expense_can_reverse, initialize_expense_status
 
 settings = get_settings()
 
@@ -192,6 +193,7 @@ async def create_expense_reversal(
     Сторно: amount=-original.amount, status=reversed, reversal_of_id=original.id.
     """
     from backend.models import Expense
+    ensure_expense_can_reverse(expense)
     rev_date = reverse_date or getattr(expense, "paid_date", None) or date.today()
     desc = f"Сторно: {(expense.description or '')[:450]}"
     if comment:
@@ -206,7 +208,6 @@ async def create_expense_reversal(
         category=expense.category,
         category_id=getattr(expense, "category_id", None),
         paid_date=rev_date,
-        status="reversed",
         source=source,
         is_tax_related=getattr(expense, "is_tax_related", False) or False,
         reversal_of_id=expense.id,
@@ -216,6 +217,7 @@ async def create_expense_reversal(
         note=comment,
         created_by=created_by,
     )
+    initialize_expense_status(reversal, "reversed", paid_date=rev_date)
     db.add(reversal)
     await db.flush()
     expense.reversed_expense_id = reversal.id
@@ -246,41 +248,3 @@ async def get_income_limit_status(db: AsyncSession, year: int) -> dict:
         "exceeded_6m": year_income > limit_6m,
         "exceeded_8m": income_12m > limit_8m,
     }
-
-
-async def get_or_create_payment(
-    db: AsyncSession,
-    year: int,
-    month: int
-) -> Optional[Payment]:
-    """Получить или создать платёж за месяц."""
-    result = await db.execute(
-        select(Payment).where(Payment.year == year, Payment.month == month)
-    )
-    payment = result.scalar_one_or_none()
-    if payment:
-        return payment
-
-    rates_result = await db.execute(
-        select(ContributionRates).where(
-            ContributionRates.year == year,
-            ContributionRates.is_active == True
-        )
-    )
-    rates = rates_result.scalar_one_or_none()
-    if not rates:
-        return None
-
-    payment = Payment(
-        year=year,
-        month=month,
-        rates_id=rates.id,
-        tax_amount=rates.tax_amount,
-        pio_amount=rates.pio_amount,
-        health_amount=rates.health_amount,
-        unemployment_amount=rates.unemployment_amount,
-        total_amount=rates.tax_amount + rates.pio_amount + rates.health_amount + rates.unemployment_amount,
-    )
-    db.add(payment)
-    await db.flush()
-    return payment
