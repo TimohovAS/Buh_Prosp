@@ -480,13 +480,17 @@ export default function CashRegister() {
   return (
     <>
       <div className="page-header">
-        <div>
+        <div className="page-header-main">
           <h1 className="page-title">{tr('cashRegisterTitle')}</h1>
-          <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-            {tr('cashRegisterHint')}
-          </div>
+          <p className="page-subtitle">{tr('cashRegisterHint')}</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="page-header-actions">
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 220 }}
+          />
           <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
           <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
           <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
@@ -522,12 +526,6 @@ export default function CashRegister() {
             <div className="card">
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                 <div className="card-title" style={{ margin: 0 }}>{tr('cashEntries')}</div>
-                  <SearchInput
-                    placeholder={tr('search')}
-                    value={search}
-                    onChange={setSearch}
-                    style={{ width: 220 }}
-                  />
               </div>
               <div className="table-wrap">
                 <table>

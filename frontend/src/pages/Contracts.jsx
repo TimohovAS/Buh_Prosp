@@ -235,8 +235,10 @@ export default function Contracts() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('contracts')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('contracts')}</h1>
+        </div>
+        <div className="page-header-actions">
           <select className="form-input" style={{ width: 'auto' }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="">{tr('statusFilterAll')}</option>
             <option value="active">{tr('active')}</option>

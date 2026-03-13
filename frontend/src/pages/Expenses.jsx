@@ -435,8 +435,10 @@ export default function Expenses() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('expenses')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('expenses')}</h1>
+        </div>
+        <div className="page-header-actions">
           <div
             style={{
               alignSelf: 'center',

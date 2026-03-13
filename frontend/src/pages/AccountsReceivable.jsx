@@ -80,9 +80,11 @@ export default function AccountsReceivable() {
 
   return (
     <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-        <h1>{tr('financeAR')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="page-header">
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('financeAR')}</h1>
+        </div>
+        <div className="page-header-actions">
           <SearchInput
             placeholder={tr('search')}
             value={search}

@@ -272,8 +272,10 @@ export default function Obligations() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">{tr('payments')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('payments')}</h1>
+        </div>
+        <div className="page-header-actions">
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -308,12 +310,12 @@ export default function Obligations() {
               <option key={type.id} value={type.code}>{type.name_sr}</option>
             ))}
           </select>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 220 }}
-            />
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 220 }}
+          />
           <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
             {tr('obligationsSettings')}
           </button>

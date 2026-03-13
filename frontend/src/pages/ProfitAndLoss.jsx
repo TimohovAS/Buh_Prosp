@@ -44,9 +44,11 @@ export default function ProfitAndLoss() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('pnlTitle')}</h1>
-        <div className="header-actions">
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('pnlTitle')}</h1>
+        </div>
+        <div className="page-header-actions">
+          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
             {years.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}

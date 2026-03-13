@@ -261,8 +261,10 @@ export default function PlannedExpenses() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('plannedExpenses')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('plannedExpenses')}</h1>
+        </div>
+        <div className="page-header-actions">
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -286,12 +288,12 @@ export default function PlannedExpenses() {
               </option>
             ))}
           </select>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 180 }}
-            />
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 180 }}
+          />
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>

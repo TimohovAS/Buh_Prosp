@@ -293,10 +293,14 @@ export default function Settings() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('settings')}</h1>
-        <button className="btn btn-primary" onClick={() => setModal(true)}>
-          {tr('enterprise')}
-        </button>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('settings')}</h1>
+        </div>
+        <div className="page-header-actions">
+          <button className="btn btn-primary" onClick={() => setModal(true)}>
+            {tr('enterprise')}
+          </button>
+        </div>
       </div>
 
       <div className="page-body">

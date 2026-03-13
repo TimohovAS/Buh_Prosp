@@ -96,8 +96,10 @@ export default function Clients() {
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">{tr('clients')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('clients')}</h1>
+        </div>
+        <div className="page-header-actions">
           <SearchInput
             placeholder={tr('search')}
             value={search}
