@@ -9,6 +9,7 @@ from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Income
+from backend.decimal_utils import to_decimal
 
 EF_NS = {
     "env": "urn:eFaktura:MinFinrs:envelop:schema",
@@ -143,7 +144,7 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         raise ValueError(f"{file_name}: отсутствует сумма к оплате (cbc:PayableAmount)")
     normalized_amount = amount_raw.replace("\u00A0", "").replace(" ", "").replace(",", ".")
     try:
-        amount_rsd = float(Decimal(normalized_amount))
+        amount_rsd = to_decimal(Decimal(normalized_amount))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"{file_name}: некорректная сумма ({amount_raw})") from exc
 
@@ -192,3 +193,5 @@ def invoice_year_from_number(invoice_number: str) -> Optional[int]:
     """Год из номера YYYY-NNNN или NNNN-YYYY."""
     y, _ = parse_invoice_number_parts(invoice_number)
     return y
+
+
