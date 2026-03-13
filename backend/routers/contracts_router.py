@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
+from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.models import Client, Contract, ContractItem, Project, User
 from backend.schemas import ContractCreate, ContractItemCreate, ContractItemResponse, ContractResponse, ContractUpdate
 from backend.state_machine import initialize_project_status
@@ -81,11 +83,11 @@ async def create_contract(
     if not client:
         raise HTTPException(404, "Client not found")
 
-    amount = 0.0
+    amount = ZERO_DECIMAL
     items_data: list[tuple[ContractItemCreate, float, int]] = []
     if data.items:
         for index, item in enumerate(data.items):
-            item_amount = item.quantity * item.price
+            item_amount = to_decimal(item.quantity) * to_decimal(item.price)
             amount += item_amount
             items_data.append((item, item_amount, index))
     else:
@@ -146,11 +148,11 @@ async def create_contract(
 def _contract_to_response(contract: Contract) -> ContractResponse:
     items = [ContractItemResponse.model_validate(item) for item in contract.items] if contract.items else []
 
-    advance_sum = 0.0
-    intermediate_sum = 0.0
-    closing_sum = 0.0
+    advance_sum = ZERO_DECIMAL
+    intermediate_sum = ZERO_DECIMAL
+    closing_sum = ZERO_DECIMAL
     for income in contract.__dict__.get("incomes") or []:
-        amount = income.amount_rsd * (income.exchange_rate or 1)
+        amount = to_decimal(income.amount_rsd) * Decimal(str(income.exchange_rate or 1))
         if income.contract_payment_type == "advance":
             advance_sum += amount
         elif income.contract_payment_type == "intermediate":
@@ -159,7 +161,7 @@ def _contract_to_response(contract: Contract) -> ContractResponse:
             closing_sum += amount
 
     total_received = advance_sum + intermediate_sum + closing_sum
-    total_expenses = float(sum(float(expense.amount or 0) for expense in (contract.__dict__.get("expenses") or [])))
+    total_expenses = decimal_sum([expense.amount or ZERO_DECIMAL for expense in (contract.__dict__.get("expenses") or [])])
     profit = total_received - total_expenses
 
     return ContractResponse(
@@ -244,11 +246,11 @@ async def update_contract(
             await db.delete(item)
         await db.flush()
 
-        amount = 0.0
+        amount = ZERO_DECIMAL
         has_items = False
         for index, item in enumerate(items_data):
             item_obj = ContractItemCreate(**item)
-            item_amount = item_obj.quantity * item_obj.price
+            item_amount = to_decimal(item_obj.quantity) * to_decimal(item_obj.price)
             amount += item_amount
             has_items = True
             db.add(
@@ -290,3 +292,5 @@ async def delete_contract(
     await db.delete(contract)
     await db.commit()
     return {"ok": True}
+
+

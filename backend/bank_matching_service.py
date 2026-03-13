@@ -6,14 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
+from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, to_decimal
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reopen_expense_for_unmatch
 
 
-def _safe_paid_amount(income: Income) -> float:
-    return float(getattr(income, "paid_amount", None) or 0)
+def _safe_paid_amount(income: Income):
+    return to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL)
 
 
 async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
@@ -127,7 +128,7 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
 
     for obligation in obligations:
         decision = getattr(obligation, "decision", None)
-        amount_diff = abs(float(obligation.amount or 0) - float(tx.amount or 0))
+        amount_diff = money_abs(to_decimal(obligation.amount or ZERO_DECIMAL) - to_decimal(tx.amount or ZERO_DECIMAL))
         deadline_diff = abs((tx.date - obligation.deadline).days)
         reference_match = False
         for candidate in (
@@ -169,7 +170,7 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
                 "invoice_number": None,
                 "client_name": getattr(decision, "recipient_account", None),
                 "description": _build_obligation_description(obligation),
-                "amount": float(obligation.amount or 0),
+                "amount": to_decimal(obligation.amount or ZERO_DECIMAL),
                 "amount_full": None,
                 "amount_paid": None,
                 "date": str(obligation.deadline),
@@ -209,14 +210,14 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             if income_invoice in normalized_extracted:
                 invoice_score = 0
 
-        remaining = float(income.amount_rsd) - _safe_paid_amount(income)
-        amount_diff = abs(remaining - float(tx.amount))
+        remaining = to_decimal(income.amount_rsd) - _safe_paid_amount(income)
+        amount_diff = money_abs(remaining - to_decimal(tx.amount))
         date_diff = abs((tx.date - income.issued_date).days)
         return (invoice_score, amount_diff, date_diff)
 
     def make_income_item(income: Income, score_value: int | None, section: str) -> dict:
         paid = _safe_paid_amount(income)
-        remaining = float(income.amount_rsd) - paid
+        remaining = to_decimal(income.amount_rsd) - paid
         client_label = income.client_name or (income.client.name if income.client else "")
         return {
             "id": income.id,
@@ -225,7 +226,7 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             "client_name": client_label,
             "description": (income.description or "")[:80],
             "amount": remaining,
-            "amount_full": float(income.amount_rsd),
+            "amount_full": to_decimal(income.amount_rsd),
             "amount_paid": paid,
             "date": str(income.issued_date),
             "status": income.status,
@@ -282,10 +283,10 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         if not income:
             raise ValueError("Income not found")
 
-        new_paid = float(income.paid_amount or 0) + float(tx.amount)
+        new_paid = to_decimal(income.paid_amount or ZERO_DECIMAL) + to_decimal(tx.amount)
         reconcile_income_payment_state(
             income,
-            total_amount=float(income.amount_rsd or 0),
+            total_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL),
             paid_amount=new_paid,
             paid_date=tx.date,
         )
@@ -362,8 +363,8 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
                 .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
             )
             remaining_transactions = list(remaining_response.scalars().all())
-            remaining_paid = sum(float(item.amount or 0) for item in remaining_transactions)
-            amount_total = float(income.amount_rsd or 0)
+            remaining_paid = decimal_sum([item.amount or ZERO_DECIMAL for item in remaining_transactions])
+            amount_total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
             reconcile_income_payment_state(
                 income,
                 total_amount=amount_total,
@@ -402,3 +403,5 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
 
     await db.flush()
     return tx
+
+

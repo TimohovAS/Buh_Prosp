@@ -1,7 +1,9 @@
 """Сервис планируемых расходов — расчёт дат и сумм."""
 from datetime import date, timedelta
 import calendar
+from decimal import Decimal
 
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import PlannedExpense
 
 
@@ -178,17 +180,17 @@ def planned_expenses_sum_until(
     from_date: date,
     to_date: date,
     paid_pairs: set[tuple[int, date]] | None = None,
-) -> float:
+) -> Decimal:
     """Сумма планируемых расходов с датами в [from_date, to_date], исключая оплаченные (planned_expense_id, due_date)."""
     paid_pairs = paid_pairs or set()
-    total = 0.0
+    total = ZERO_DECIMAL
     for pe in items:
         if not pe.is_active:
             continue
         dates = next_payment_dates(pe, from_date, limit=12)
         for d in dates:
             if from_date <= d <= to_date and (pe.id, d) not in paid_pairs:
-                total += pe.amount
+                total += to_decimal(pe.amount or ZERO_DECIMAL)
     return total
 
 
@@ -197,15 +199,18 @@ def planned_expenses_sum_until_including_overdue(
     range_start: date,
     to_date: date,
     paid_pairs: set[tuple[int, date]] | None = None,
-) -> float:
+) -> Decimal:
     """Сумма периодических расходов в [range_start, to_date], включая просроченные (неоплаченные)."""
     paid_pairs = paid_pairs or set()
-    total = 0.0
+    total = ZERO_DECIMAL
     for pe in items:
         if not pe.is_active:
             continue
         dates = payment_dates_in_range(pe, range_start, to_date, limit=24)
         for d in dates:
             if (pe.id, d) not in paid_pairs:
-                total += pe.amount
+                total += to_decimal(pe.amount or ZERO_DECIMAL)
     return total
+
+
+

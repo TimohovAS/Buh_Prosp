@@ -1,12 +1,19 @@
 """Pydantic РЎРѓРЎвЂ¦Р ВµР СРЎвЂ№ Р Т‘Р В»РЎРЏ API."""
 from datetime import date, datetime
+from decimal import Decimal
 
 # Р С’Р В»Р С‘Р В°РЎРѓ Р Т‘Р В»РЎРЏ Р С‘Р В·Р В±Р ВµР В¶Р В°Р Р…Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂћР В»Р С‘Р С”РЎвЂљР В° Р С‘Р СР ВµР Р…Р С‘ Р С—Р С•Р В»РЎРЏ date РЎРѓ РЎвЂљР С‘Р С—Р С•Р С date
 DateType = date
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_EMBLEM_DATA_URL_LENGTH = 350000
+
+
+class BaseModel(PydanticBaseModel):
+    model_config = ConfigDict(
+        json_encoders={Decimal: lambda value: float(value)},
+    )
 
 
 # --- User ---
@@ -96,8 +103,8 @@ class ProjectBase(BaseModel):
     status: str = "active"  # lead | active | completed | archived
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
-    planned_income: Optional[float] = None
-    planned_expense: Optional[float] = None
+    planned_income: Optional[Decimal] = None
+    planned_expense: Optional[Decimal] = None
     notes: Optional[str] = None
 
 
@@ -113,8 +120,8 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
-    planned_income: Optional[float] = None
-    planned_expense: Optional[float] = None
+    planned_income: Optional[Decimal] = None
+    planned_expense: Optional[Decimal] = None
     notes: Optional[str] = None
 
 
@@ -149,7 +156,7 @@ class IncomeBase(BaseModel):
     contract_id: Optional[int] = None
     contract_payment_type: Optional[str] = None  # advance, intermediate, closing
     description: Optional[str] = None
-    amount_rsd: float
+    amount_rsd: Decimal
     currency: str = "RSD"
     exchange_rate: float = 1.0
     status: Optional[str] = None  # issued | partial | paid | cancelled
@@ -194,7 +201,7 @@ class IncomeUpdate(BaseModel):
     contract_id: Optional[int] = None
     contract_payment_type: Optional[str] = None
     description: Optional[str] = None
-    amount_rsd: Optional[float] = None
+    amount_rsd: Optional[Decimal] = None
     is_paid: Optional[bool] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
@@ -233,7 +240,7 @@ class BulkAssignProject(BaseModel):
 class IncomeResponse(IncomeBase):
     id: int
     is_paid: bool
-    paid_amount: float = 0.0
+    paid_amount: Decimal = Decimal("0.00")
     created_at: datetime
     contract_number: Optional[str] = None
 
@@ -244,7 +251,7 @@ class IncomeResponse(IncomeBase):
 class IncomePaymentTransactionResponse(BaseModel):
     id: int
     date: DateType
-    amount: float
+    amount: Decimal
     currency: str = "RSD"
     counterparty_name: Optional[str] = None
     purpose: Optional[str] = None
@@ -258,11 +265,11 @@ class IncomePaymentTransactionResponse(BaseModel):
 class IncomePaymentDetailsResponse(BaseModel):
     income_id: int
     status: str
-    amount_rsd: float
-    paid_amount: float = 0.0
+    amount_rsd: Decimal
+    paid_amount: Decimal = Decimal("0.00")
     paid_date: Optional[DateType] = None
-    linked_total: float = 0.0
-    manual_paid_amount: float = 0.0
+    linked_total: Decimal = Decimal("0.00")
+    manual_paid_amount: Decimal = Decimal("0.00")
     manual_paid_date: Optional[DateType] = None
     has_manual_payment: bool = False
     linked_transactions: list[IncomePaymentTransactionResponse] = Field(default_factory=list)
@@ -273,7 +280,7 @@ class DashboardIncomeResponse(BaseModel):
     issued_date: DateType = Field(serialization_alias="date")
     invoice_number: str
     client_name: Optional[str] = None
-    amount_rsd: float
+    amount_rsd: Decimal
 
     class Config:
         from_attributes = True
@@ -284,7 +291,7 @@ class ContractItemBase(BaseModel):
     description: str
     quantity: float = 1
     unit: str = "РЎв‚¬РЎвЂљ"
-    price: float = 0
+    price: Decimal = Decimal("0.00")
 
 
 class ContractItemCreate(ContractItemBase):
@@ -294,7 +301,7 @@ class ContractItemCreate(ContractItemBase):
 class ContractItemResponse(ContractItemBase):
     id: int
     contract_id: int
-    amount: float
+    amount: Decimal
     sort_order: int
 
     class Config:
@@ -308,7 +315,7 @@ class ContractBase(BaseModel):
     project_id: Optional[int] = None
     contract_type: str = "service"
     subject: Optional[str] = None
-    amount: float = 0
+    amount: Decimal = Decimal("0.00")
     currency: str = "RSD"
     validity_start: Optional[DateType] = None
     validity_end: Optional[DateType] = None
@@ -327,7 +334,7 @@ class ContractUpdate(BaseModel):
     project_id: Optional[int] = None
     contract_type: Optional[str] = None
     subject: Optional[str] = None
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = None
     validity_start: Optional[DateType] = None
     validity_end: Optional[DateType] = None
     status: Optional[str] = None
@@ -341,12 +348,12 @@ class ContractResponse(ContractBase):
     client_name: Optional[str] = None
     items: Optional[list[ContractItemResponse]] = None
     # Р РЋРЎС“Р СР СРЎвЂ№ Р С—Р С• РЎвЂљР С‘Р С—Р В°Р С Р С—Р В»Р В°РЎвЂљР ВµР В¶Р ВµР в„– (Р В°Р Р†Р В°Р Р…РЎРѓ, Р С—РЎР‚Р С•Р СР ВµР В¶РЎС“РЎвЂљР С•РЎвЂЎР Р…РЎвЂ№Р Вµ, Р В·Р В°Р С”РЎР‚РЎвЂ№Р Р†Р В°РЎР‹РЎвЂ°Р С‘Р в„–)
-    advance_sum: float = 0
-    intermediate_sum: float = 0
-    closing_sum: float = 0
-    total_received: float = 0
-    total_expenses: float = 0
-    profit: float = 0
+    advance_sum: Decimal = Decimal("0.00")
+    intermediate_sum: Decimal = Decimal("0.00")
+    closing_sum: Decimal = Decimal("0.00")
+    total_received: Decimal = Decimal("0.00")
+    total_expenses: Decimal = Decimal("0.00")
+    profit: Decimal = Decimal("0.00")
 
     class Config:
         from_attributes = True
@@ -362,7 +369,7 @@ class EnterpriseBase(BaseModel):
     bank_account: Optional[str] = None
     bank_swift: Optional[str] = None
     main_activity_code: Optional[str] = None
-    opening_cash_balance: Optional[float] = 0
+    opening_cash_balance: Optional[Decimal] = Decimal("0.00")
     opening_cash_date: Optional[DateType] = None
     emblem_data_url: Optional[str] = None
 
@@ -417,8 +424,8 @@ class YearDecisionBase(BaseModel):
     payment_type_id: int
     period_start: DateType
     period_end: DateType
-    monthly_amount: float
-    base_amount: Optional[float] = None
+    monthly_amount: Decimal
+    base_amount: Optional[Decimal] = None
     rate_percent: Optional[float] = None
     recipient_name: str = "Р СџР С•РЎР‚Р ВµРЎРѓР С”Р В° РЎС“Р С—РЎР‚Р В°Р Р†Р В° Р В Р ВµР С—РЎС“Р В±Р В»Р С‘Р С”Р Вµ Р РЋРЎР‚Р В±Р С‘РЎВР Вµ"
     recipient_account: str
@@ -438,8 +445,8 @@ class YearDecisionCreate(YearDecisionBase):
 class YearDecisionUpdate(BaseModel):
     period_start: Optional[DateType] = None
     period_end: Optional[DateType] = None
-    monthly_amount: Optional[float] = None
-    base_amount: Optional[float] = None
+    monthly_amount: Optional[Decimal] = None
+    base_amount: Optional[Decimal] = None
     rate_percent: Optional[float] = None
     recipient_name: Optional[str] = None
     recipient_account: Optional[str] = None
@@ -469,7 +476,7 @@ class MonthlyObligationResponse(BaseModel):
     payment_type_id: int
     payment_type_code: Optional[str] = None
     payment_type_name: Optional[str] = None
-    amount: float
+    amount: Decimal
     deadline: str
     status: str
     paid_date: Optional[DateType] = None
@@ -489,7 +496,7 @@ class IPSQRData(BaseModel):
     payer: str
     recipient: str
     account: str
-    amount: float
+    amount: Decimal
     currency: str
     purpose: str
     model: str
@@ -499,10 +506,10 @@ class IPSQRData(BaseModel):
 # --- ContributionRates ---
 class ContributionRatesBase(BaseModel):
     year: int
-    tax_amount: float = 0
-    pio_amount: float = 0
-    health_amount: float = 0
-    unemployment_amount: float = 0
+    tax_amount: Decimal = Decimal("0.00")
+    pio_amount: Decimal = Decimal("0.00")
+    health_amount: Decimal = Decimal("0.00")
+    unemployment_amount: Decimal = Decimal("0.00")
     pay_order_number: Optional[str] = None
 
 
@@ -521,10 +528,10 @@ class ContributionRatesResponse(ContributionRatesBase):
 class PaymentBase(BaseModel):
     year: int
     month: int
-    tax_amount: float = 0
-    pio_amount: float = 0
-    health_amount: float = 0
-    unemployment_amount: float = 0
+    tax_amount: Decimal = Decimal("0.00")
+    pio_amount: Decimal = Decimal("0.00")
+    health_amount: Decimal = Decimal("0.00")
+    unemployment_amount: Decimal = Decimal("0.00")
 
 
 class PaymentCreate(PaymentBase):
@@ -539,7 +546,7 @@ class PaymentUpdate(BaseModel):
 
 class PaymentResponse(PaymentBase):
     id: int
-    total_amount: float
+    total_amount: Decimal
     is_paid: bool
     paid_date: Optional[DateType] = None
     payment_reference: Optional[str] = None
@@ -550,8 +557,8 @@ class PaymentResponse(PaymentBase):
 
 # --- Dashboard / Stats ---
 class IncomeLimitStatus(BaseModel):
-    year_income: float
-    income_12m: float
+    year_income: Decimal
+    income_12m: Decimal
     limit_6m: int
     limit_8m: int
     percent_6m: float
@@ -566,7 +573,7 @@ class UpcomingObligationItem(BaseModel):
     """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
     id: int
     payment_type_name: str
-    amount: float
+    amount: Decimal
     deadline: str  # YYYY-MM-DD
     status: str  # overdue | upcoming
     days_until: int  # Р С•РЎвЂљРЎР‚Р С‘РЎвЂ Р В°РЎвЂљР ВµР В»РЎРЉР Р…Р С•Р Вµ Р ВµРЎРѓР В»Р С‘ Р С—РЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р С•
@@ -576,7 +583,7 @@ class UpcomingPlannedItem(BaseModel):
     """Р СџРЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р Р…РЎвЂ№Р в„– Р С‘Р В»Р С‘ Р С—РЎР‚Р С‘Р В±Р В»Р С‘Р В¶Р В°РЎР‹РЎвЂ°Р С‘Р в„–РЎРѓРЎРЏ Р С—Р ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘."""
     planned_expense_id: int
     name: str
-    amount: float
+    amount: Decimal
     currency: str
     due_date: str
     status: str  # overdue | upcoming
@@ -584,15 +591,15 @@ class UpcomingPlannedItem(BaseModel):
 
 
 class DashboardStats(BaseModel):
-    year_income: float
-    month_income: float
-    year_expenses: float
-    month_expenses: float
-    balance_month: float  # month_income - month_expenses
-    balance_year: float   # year_income - year_expenses
-    balance_all_time: float
-    financial_result_all_time: float
-    planned_expenses_until_month_end: float  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
+    year_income: Decimal
+    month_income: Decimal
+    year_expenses: Decimal
+    month_expenses: Decimal
+    balance_month: Decimal  # month_income - month_expenses
+    balance_year: Decimal   # year_income - year_expenses
+    balance_all_time: Decimal
+    financial_result_all_time: Decimal
+    planned_expenses_until_month_end: Decimal  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None
@@ -605,7 +612,7 @@ class DashboardStats(BaseModel):
 class ExpenseBase(BaseModel):
     date: DateType
     description: str
-    amount: float
+    amount: Decimal
     currency: str = "RSD"
     category: Optional[str] = None
     paid_date: Optional[DateType] = None
@@ -639,7 +646,7 @@ class ExpenseReverseRequest(BaseModel):
 class ExpenseUpdate(BaseModel):
     date: Optional[DateType] = None
     description: Optional[str] = None
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = None
     currency: Optional[str] = None
     category: Optional[str] = None
     paid_date: Optional[DateType] = None
@@ -676,7 +683,7 @@ class ExpenseDuplicateItem(BaseModel):
     id: int
     date: DateType
     description: str
-    amount: float
+    amount: Decimal
     bank_reference: Optional[str] = None
     project_id: Optional[int] = None
     contract_id: Optional[int] = None
@@ -689,7 +696,7 @@ class ExpenseDuplicateItem(BaseModel):
 
 class ExpenseDuplicateGroup(BaseModel):
     reason: str
-    amount: float
+    amount: Decimal
     payment_reference: Optional[str] = None
     description: Optional[str] = None
     item_count: int
@@ -703,7 +710,7 @@ class ExpenseMergeRequest(BaseModel):
 class PlannedExpenseBase(BaseModel):
     name: str
     description: Optional[str] = None
-    amount: float
+    amount: Decimal
     currency: str = "RSD"
     category: Optional[str] = None
     category_id: Optional[int] = None
@@ -732,7 +739,7 @@ class PlannedExpenseCreate(PlannedExpenseBase):
 class PlannedExpenseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = None
     currency: Optional[str] = None
     category: Optional[str] = None
     category_id: Optional[int] = None
@@ -772,7 +779,7 @@ class PlannedExpenseResponse(PlannedExpenseBase):
 class UpcomingPaymentItem(BaseModel):
     planned_expense_id: int
     name: str
-    amount: float
+    amount: Decimal
     currency: str
     due_date: str  # YYYY-MM-DD
     reminder_days: int
@@ -794,7 +801,7 @@ class PlannedExpenseUnmarkPaid(BaseModel):
 # --- BankTransaction ---
 class BankTransactionBase(BaseModel):
     date: DateType
-    amount: float
+    amount: Decimal
     direction: str  # in | out
     currency: str = "RSD"
     counterparty_name: Optional[str] = None
@@ -835,7 +842,7 @@ class CashEntryResponse(BaseModel):
     id: int
     date: DateType
     direction: str
-    amount: float
+    amount: Decimal
     currency: str = "RSD"
     description: str
     entry_type: str
@@ -849,14 +856,14 @@ class CashEntryResponse(BaseModel):
     category_id: Optional[int] = None
     contract_id: Optional[int] = None
     project_id: Optional[int] = None
-    balance_after: float
+    balance_after: Decimal
     created_at: datetime
 
 
 class CashBankWithdrawalCandidate(BaseModel):
     id: int
     date: DateType
-    amount: float
+    amount: Decimal
     currency: str = "RSD"
     counterparty_name: Optional[str] = None
     purpose: Optional[str] = None
@@ -868,9 +875,9 @@ class CashBankWithdrawalCandidate(BaseModel):
 
 
 class CashSummaryResponse(BaseModel):
-    current_balance: float
-    total_in: float
-    total_out: float
+    current_balance: Decimal
+    total_in: Decimal
+    total_out: Decimal
     entries: list[CashEntryResponse] = Field(default_factory=list)
     available_withdrawals: list[CashBankWithdrawalCandidate] = Field(default_factory=list)
 
@@ -883,7 +890,7 @@ class CashWithdrawalCreate(BaseModel):
 class CashAdjustmentCreate(BaseModel):
     date: DateType
     direction: str
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     description: str
     note: Optional[str] = None
 
@@ -891,7 +898,7 @@ class CashAdjustmentCreate(BaseModel):
 class CashExpenseCreate(BaseModel):
     date: DateType
     description: str
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     currency: str = "RSD"
     category: Optional[str] = None
     category_id: Optional[int] = None
@@ -914,7 +921,7 @@ class CashExpenseCreate(BaseModel):
 class CashEntryUpdate(BaseModel):
     date: Optional[DateType] = None
     direction: Optional[str] = None
-    amount: Optional[float] = Field(default=None, gt=0)
+    amount: Optional[Decimal] = Field(default=None, gt=0)
     currency: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
@@ -957,9 +964,9 @@ class MatchCandidate(BaseModel):
     invoice_number: Optional[str] = None
     client_name: Optional[str] = None
     description: Optional[str] = None
-    amount: float
-    amount_full: Optional[float] = None
-    amount_paid: Optional[float] = None
+    amount: Decimal
+    amount_full: Optional[Decimal] = None
+    amount_paid: Optional[Decimal] = None
     date: Optional[DateType] = None
     status: Optional[str] = None
     score: Optional[int] = None
@@ -1037,4 +1044,5 @@ class ServiceRestoreResponse(BaseModel):
     restored_backup: ServiceBackupInfo
     pre_restore_backup: Optional[ServiceBackupInfo] = None
     message: str
+
 

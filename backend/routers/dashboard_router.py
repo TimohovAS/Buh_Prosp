@@ -13,6 +13,7 @@ from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.config import get_settings
 from backend.database import get_db
 from backend.models import BankTransaction, Expense, Income, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
+from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
 from backend.schemas import DashboardIncomeResponse, DashboardStats, IncomeLimitStatus, UpcomingObligationItem, UpcomingPlannedItem
@@ -45,7 +46,7 @@ async def get_dashboard(
             Expense.date <= date(selected_year, 12, 31),
         )
     )
-    year_expenses = float(year_expenses_result.scalar() or 0)
+    year_expenses = to_decimal(year_expenses_result.scalar() or ZERO_DECIMAL)
 
     last_day = calendar.monthrange(selected_year, today.month)[1]
     month_expenses_result = await db.execute(
@@ -56,7 +57,7 @@ async def get_dashboard(
             Expense.date <= date(selected_year, today.month, last_day),
         )
     )
-    month_expenses = float(month_expenses_result.scalar() or 0)
+    month_expenses = to_decimal(month_expenses_result.scalar() or ZERO_DECIMAL)
 
     all_time_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
@@ -64,21 +65,21 @@ async def get_dashboard(
             Expense.status != "planned",
         )
     )
-    all_time_expenses = float(all_time_expenses_result.scalar() or 0)
+    all_time_expenses = to_decimal(all_time_expenses_result.scalar() or ZERO_DECIMAL)
 
     cash_in_all_time_result = await db.execute(
         select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
             BankTransaction.direction == "in",
         )
     )
-    cash_in_all_time = float(cash_in_all_time_result.scalar() or 0)
+    cash_in_all_time = to_decimal(cash_in_all_time_result.scalar() or ZERO_DECIMAL)
 
     cash_out_all_time_result = await db.execute(
         select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
             BankTransaction.direction == "out",
         )
     )
-    cash_out_all_time = float(cash_out_all_time_result.scalar() or 0)
+    cash_out_all_time = to_decimal(cash_out_all_time_result.scalar() or ZERO_DECIMAL)
 
     balance_month = month_income - month_expenses
     balance_year = year_income - year_expenses
@@ -122,7 +123,7 @@ async def get_dashboard(
         for payment_type in payment_types_result.scalars().all():
             payment_type_map[payment_type.id] = payment_type
 
-    obligations_sum_until_month_end = sum(
+    obligations_sum_until_month_end = decimal_sum(
         item.amount for item in unpaid_obligations if item.deadline <= month_end
     )
     planned_expenses_until_month_end += obligations_sum_until_month_end
@@ -227,3 +228,5 @@ async def get_income_limits(
     selected_year = year or date.today().year
     status = await get_income_limit_status(db, selected_year)
     return IncomeLimitStatus(**status)
+
+

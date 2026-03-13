@@ -5,6 +5,7 @@ from datetime import date
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
 from backend.models import BankTransaction, Expense, MonthlyObligation, PaymentType
 from backend.services import create_expense_reversal
@@ -51,7 +52,7 @@ async def mark_obligation_paid(
         expense = Expense(
             date=paid_date,
             description=description,
-            amount=obligation.amount,
+            amount=to_decimal(obligation.amount or ZERO_DECIMAL),
             currency="RSD",
             category="tax",
             note=resolved_reference,
@@ -67,7 +68,7 @@ async def mark_obligation_paid(
     else:
         expense.date = paid_date
         expense.description = description
-        expense.amount = obligation.amount
+        expense.amount = to_decimal(obligation.amount or ZERO_DECIMAL)
         expense.currency = "RSD"
         expense.category = "tax"
         expense.note = resolved_reference
@@ -114,3 +115,5 @@ async def reset_obligation_payment(
     obligation.payment_reference = None
     obligation.payment_method = "manual"
     await db.flush()
+
+

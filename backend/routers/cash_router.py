@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from backend.auth import get_current_user_required, require_edit_access
 from backend.cash_service import create_cash_transfer_from_transaction
 from backend.database import get_db
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Project, TransactionCategory, User
 from backend.state_machine import initialize_expense_status
 from backend.schemas import (
@@ -72,14 +73,14 @@ async def _resolve_expense_links(
     return resolved_project_id, resolved_contract_id
 
 
-async def _get_cash_totals(db: AsyncSession) -> tuple[float, float, float]:
-    total_in = float(
+async def _get_cash_totals(db: AsyncSession):
+    total_in = to_decimal(
         await db.scalar(
             select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in")
         )
         or 0
     )
-    total_out = float(
+    total_out = to_decimal(
         await db.scalar(
             select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")
         )
@@ -104,7 +105,7 @@ def _serialize_cash_entry(entry: CashEntry, balance_after: float) -> CashEntryRe
         id=entry.id,
         date=entry.date,
         direction=entry.direction,
-        amount=float(entry.amount or 0),
+        amount=to_decimal(entry.amount or ZERO_DECIMAL),
         currency=entry.currency or "RSD",
         description=entry.description,
         entry_type=entry.entry_type,
@@ -138,17 +139,17 @@ async def _get_entry_with_links(db: AsyncSession, entry_id: int) -> CashEntry:
     return entry
 
 
-def _signed_entry_amount(direction: str, amount: float | int | None) -> float:
-    value = float(amount or 0)
+def _signed_entry_amount(direction: str, amount):
+    value = to_decimal(amount or ZERO_DECIMAL)
     return value if direction == "in" else -value
 
 
-async def _get_balance_after_entry(db: AsyncSession, entry_id: int) -> float:
+async def _get_balance_after_entry(db: AsyncSession, entry_id: int):
     result = await db.execute(
         select(CashEntry.id, CashEntry.direction, CashEntry.amount)
         .order_by(CashEntry.date.asc(), CashEntry.id.asc())
     )
-    balance = 0.0
+    balance = ZERO_DECIMAL
     for current_id, direction, amount in result.fetchall():
         balance += _signed_entry_amount(str(direction), amount)
         if int(current_id) == int(entry_id):
@@ -190,13 +191,13 @@ async def _build_cash_summary(
     if limit:
         entries = entries[-limit:]
 
-    running_balance = 0.0
+    running_balance = ZERO_DECIMAL
     entry_items: list[CashEntryResponse] = []
     for entry in entries:
         if entry.direction == "in":
-            running_balance += float(entry.amount or 0)
+            running_balance += to_decimal(entry.amount or ZERO_DECIMAL)
         else:
-            running_balance -= float(entry.amount or 0)
+            running_balance -= to_decimal(entry.amount or ZERO_DECIMAL)
         entry_items.append(_serialize_cash_entry(entry, running_balance))
     entry_items.reverse()
 
@@ -251,7 +252,7 @@ async def update_cash_entry(
         direction = payload.get("direction", entry.direction)
         if direction not in {"in", "out"}:
             raise HTTPException(400, "Direction must be in or out")
-        amount = float(payload.get("amount", entry.amount) or 0)
+        amount = to_decimal(payload.get("amount", entry.amount) or ZERO_DECIMAL)
         description = payload.get("description", entry.description)
         if not (description or "").strip():
             raise HTTPException(400, "Description is required")
@@ -268,7 +269,7 @@ async def update_cash_entry(
         if not expense:
             raise HTTPException(404, "Expense not found for this cash entry")
 
-        amount = float(payload.get("amount", expense.amount) or 0)
+        amount = to_decimal(payload.get("amount", expense.amount) or ZERO_DECIMAL)
         description = payload.get("description", expense.description)
         if not (description or "").strip():
             raise HTTPException(400, "Description is required")
@@ -389,7 +390,7 @@ async def create_cash_adjustment(
     entry = CashEntry(
         date=data.date,
         direction=data.direction,
-        amount=float(data.amount or 0),
+        amount=to_decimal(data.amount or ZERO_DECIMAL),
         currency="RSD",
         description=(data.description or "").strip()[:500],
         entry_type="adjustment",
@@ -427,7 +428,7 @@ async def create_cash_expense(
     expense = Expense(
         date=data.date,
         description=description[:500],
-        amount=float(data.amount or 0),
+        amount=to_decimal(data.amount or ZERO_DECIMAL),
         currency=data.currency or "RSD",
         category=category_name,
         category_id=data.category_id,
@@ -444,7 +445,7 @@ async def create_cash_expense(
     entry = CashEntry(
         date=data.date,
         direction="out",
-        amount=float(data.amount or 0),
+        amount=to_decimal(data.amount or ZERO_DECIMAL),
         currency=data.currency or "RSD",
         description=description[:500],
         entry_type="expense",
@@ -455,3 +456,5 @@ async def create_cash_expense(
     db.add(entry)
     await db.commit()
     return await _serialize_refreshed_entry(db, entry.id)
+
+

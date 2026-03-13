@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
+
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
 
 class InvalidStatusTransition(ValueError):
@@ -83,11 +86,11 @@ def _require_date(entity_name: str, target_status: str, paid_date: date | None) 
         raise InvalidStatusTransition(f"{entity_name}: status '{target_status}' requires paid_date.")
 
 
-def _set_income_fields(income: Any, target_status: str, *, paid_date: date | None, paid_amount: float) -> None:
+def _set_income_fields(income: Any, target_status: str, *, paid_date: date | None, paid_amount: Decimal) -> None:
     if target_status == "paid":
         _require_date("Income", target_status, paid_date)
     income.status = target_status
-    income.paid_amount = float(paid_amount or 0)
+    income.paid_amount = to_decimal(paid_amount)
     if target_status == "paid":
         income.is_paid = True
         income.paid_date = paid_date
@@ -101,14 +104,16 @@ def initialize_income_status(
     target_status: str,
     *,
     paid_date: date | None = None,
-    paid_amount: float | None = None,
+    paid_amount: Decimal | None = None,
 ) -> None:
     target = _ensure_known_status("Income", target_status, INCOME_STATUSES)
     if target == "paid":
         _require_date("Income", target, paid_date)
-        resolved_paid_amount = float(paid_amount if paid_amount is not None else getattr(income, "amount_rsd", 0) or 0)
+        resolved_paid_amount = to_decimal(
+            paid_amount if paid_amount is not None else getattr(income, "amount_rsd", ZERO_DECIMAL)
+        )
     else:
-        resolved_paid_amount = float(paid_amount or 0)
+        resolved_paid_amount = to_decimal(paid_amount or ZERO_DECIMAL)
     _set_income_fields(income, target, paid_date=paid_date, paid_amount=resolved_paid_amount)
 
 
@@ -117,7 +122,7 @@ def transition_income_status(
     target_status: str,
     *,
     paid_date: date | None = None,
-    paid_amount: float | None = None,
+    paid_amount: Decimal | None = None,
     allow_same: bool = True,
 ) -> None:
     _ensure_transition(
@@ -128,34 +133,36 @@ def transition_income_status(
         transitions=INCOME_TRANSITIONS,
         allow_same=allow_same,
     )
-    resolved_paid_amount = float(paid_amount if paid_amount is not None else getattr(income, "paid_amount", 0) or 0)
+    resolved_paid_amount = to_decimal(
+        paid_amount if paid_amount is not None else getattr(income, "paid_amount", ZERO_DECIMAL)
+    )
     _set_income_fields(income, target_status, paid_date=paid_date, paid_amount=resolved_paid_amount)
 
 
 def reconcile_income_payment_state(
     income: Any,
     *,
-    total_amount: float,
-    paid_amount: float,
+    total_amount: Decimal,
+    paid_amount: Decimal,
     paid_date: date | None = None,
 ) -> None:
     current = _ensure_known_status("Income", getattr(income, "status", None), INCOME_STATUSES)
     if current == "cancelled":
         raise InvalidStatusTransition("Income: cancelled status is terminal and cannot be reconciled.")
 
-    resolved_paid_amount = float(paid_amount or 0)
-    resolved_total_amount = float(total_amount or 0)
+    resolved_paid_amount = to_decimal(paid_amount or ZERO_DECIMAL)
+    resolved_total_amount = to_decimal(total_amount or ZERO_DECIMAL)
     if resolved_paid_amount >= resolved_total_amount and resolved_paid_amount > 0:
         _require_date("Income", "paid", paid_date)
         _set_income_fields(income, "paid", paid_date=paid_date, paid_amount=resolved_paid_amount)
     elif resolved_paid_amount > 0:
         _set_income_fields(income, "partial", paid_date=None, paid_amount=resolved_paid_amount)
     else:
-        _set_income_fields(income, "issued", paid_date=None, paid_amount=0.0)
+        _set_income_fields(income, "issued", paid_date=None, paid_amount=ZERO_DECIMAL)
 
 
 def cancel_income(income: Any) -> None:
-    transition_income_status(income, "cancelled", paid_amount=0.0, allow_same=False)
+    transition_income_status(income, "cancelled", paid_amount=ZERO_DECIMAL, allow_same=False)
 
 
 def initialize_expense_status(expense: Any, target_status: str, *, paid_date: date | None = None) -> None:

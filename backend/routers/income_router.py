@@ -16,6 +16,7 @@ from backend.models import Income, Client, User, Project, BankTransaction, Contr
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
+from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.state_machine import (
     InvalidStatusTransition,
     cancel_income,
@@ -97,26 +98,26 @@ async def _get_income_linked_transactions(db: AsyncSession, income_id: int) -> l
 
 
 def _build_income_payment_details(income: Income, linked_transactions: list[BankTransaction]) -> IncomePaymentDetailsResponse:
-    linked_total = sum(float(tx.amount or 0) for tx in linked_transactions)
-    recorded_paid = float(income.paid_amount or 0)
-    manual_paid_amount = max(0.0, recorded_paid - linked_total)
-    has_manual_payment = manual_paid_amount > 0 or (
+    linked_total = decimal_sum([tx.amount or ZERO_DECIMAL for tx in linked_transactions])
+    recorded_paid = to_decimal(income.paid_amount or ZERO_DECIMAL)
+    manual_paid_amount = max(ZERO_DECIMAL, recorded_paid - linked_total)
+    has_manual_payment = manual_paid_amount > ZERO_DECIMAL or (
         linked_total == 0 and (income.status in ("paid", "partial") or bool(income.is_paid) or income.paid_date is not None or recorded_paid > 0)
     )
     if has_manual_payment and manual_paid_amount <= 0:
-        if recorded_paid > 0:
+        if recorded_paid > ZERO_DECIMAL:
             manual_paid_amount = recorded_paid
         elif income.status == "paid":
-            manual_paid_amount = float(income.amount_rsd or 0)
+            manual_paid_amount = to_decimal(income.amount_rsd or ZERO_DECIMAL)
     manual_paid_date = income.paid_date if has_manual_payment else None
     return IncomePaymentDetailsResponse(
         income_id=income.id,
         status=income.status,
-        amount_rsd=float(income.amount_rsd or 0),
-        paid_amount=recorded_paid,
+        amount_rsd=to_decimal(income.amount_rsd or ZERO_DECIMAL),
+        paid_amount=to_decimal(recorded_paid),
         paid_date=income.paid_date,
-        linked_total=linked_total,
-        manual_paid_amount=manual_paid_amount,
+        linked_total=to_decimal(linked_total),
+        manual_paid_amount=to_decimal(manual_paid_amount),
         manual_paid_date=manual_paid_date,
         has_manual_payment=has_manual_payment,
         linked_transactions=[IncomePaymentTransactionResponse.model_validate(tx) for tx in linked_transactions],
@@ -125,8 +126,8 @@ def _build_income_payment_details(income: Income, linked_transactions: list[Bank
 
 async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> IncomePaymentDetailsResponse:
     linked_transactions = await _get_income_linked_transactions(db, income.id)
-    linked_total = sum(float(tx.amount or 0) for tx in linked_transactions)
-    amount_total = float(income.amount_rsd or 0)
+    linked_total = decimal_sum([tx.amount or ZERO_DECIMAL for tx in linked_transactions])
+    amount_total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
     latest_linked_date = max((tx.date for tx in linked_transactions), default=None)
 
     reconcile_income_payment_state(
@@ -271,7 +272,7 @@ async def create_income(
             income,
             status_val,
             paid_date=data.paid_date,
-            paid_amount=float(data.amount_rsd or 0) if status_val == "paid" else 0.0,
+            paid_amount=to_decimal(data.amount_rsd or ZERO_DECIMAL) if status_val == "paid" else ZERO_DECIMAL,
         )
     except InvalidStatusTransition as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -427,7 +428,7 @@ async def import_efaktura(
                     note=f"РРјРїРѕСЂС‚ eFaktura: {file_name}",
                     created_by=current_user.id,
                 )
-                initialize_income_status(income, "issued", paid_amount=0.0)
+                initialize_income_status(income, "issued", paid_amount=ZERO_DECIMAL)
                 db.add(income)
                 await db.flush() # Keep flush here to allow rollback on IntegrityError within the loop
                 created.append(
@@ -551,13 +552,13 @@ async def update_income(
                     income,
                     "paid",
                     paid_date=requested_paid_date,
-                    paid_amount=float(income.amount_rsd or 0),
+                    paid_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL),
                 )
             else:
                 reconcile_income_payment_state(
                     income,
-                    total_amount=float(income.amount_rsd or 0),
-                    paid_amount=float(income.paid_amount or 0),
+                    total_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL),
+                    paid_amount=to_decimal(income.paid_amount or ZERO_DECIMAL),
                     paid_date=None,
                 )
         except InvalidStatusTransition as exc:
@@ -618,3 +619,5 @@ async def delete_income(
     income.bank_reference = None
     await db.commit()
     return {"ok": True, "cancelled": True}
+
+

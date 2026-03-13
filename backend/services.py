@@ -1,5 +1,6 @@
 """Бизнес-логика ProspEl."""
 from datetime import date, datetime
+from decimal import Decimal
 import re
 from typing import Optional
 from sqlalchemy import select, func, and_, text
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Income, Client, Enterprise
 from backend.config import get_settings
+from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.state_machine import ensure_expense_can_reverse, initialize_expense_status
 
 settings = get_settings()
@@ -18,7 +20,7 @@ async def get_income_total(
     month: Optional[int] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None
-) -> float:
+) -> Decimal:
     """Сумма доходов за период."""
     from datetime import date as date_type
     import calendar
@@ -44,10 +46,10 @@ async def get_income_total(
     if end_date:
         q = q.where(Income.issued_date <= end_date)
     result = await db.execute(q)
-    return float(result.scalar() or 0)
+    return to_decimal(result.scalar() or ZERO_DECIMAL)
 
 
-async def get_income_total_12_months(db: AsyncSession, as_of: date) -> float:
+async def get_income_total_12_months(db: AsyncSession, as_of: date) -> Decimal:
     """Доход за последние 12 месяцев (для лимита 8 млн)."""
     from dateutil.relativedelta import relativedelta
     start = as_of - relativedelta(months=12)
@@ -236,15 +238,23 @@ async def get_income_limit_status(db: AsyncSession, year: int) -> dict:
     limit_8m = settings.income_limit_vat
     warn = settings.limit_warning_percent
 
+    year_income_decimal = to_decimal(year_income)
+    income_12m_decimal = to_decimal(income_12m)
+    limit_6m_decimal = Decimal(str(limit_6m))
+    limit_8m_decimal = Decimal(str(limit_8m))
+    warning_ratio = Decimal(str(warn))
+
     return {
-        "year_income": year_income,
-        "income_12m": income_12m,
+        "year_income": year_income_decimal,
+        "income_12m": income_12m_decimal,
         "limit_6m": limit_6m,
         "limit_8m": limit_8m,
-        "percent_6m": round(year_income / limit_6m * 100, 2) if limit_6m else 0,
-        "percent_8m": round(income_12m / limit_8m * 100, 2) if limit_8m else 0,
-        "warning_6m": year_income >= limit_6m * warn,
-        "warning_8m": income_12m >= limit_8m * warn,
-        "exceeded_6m": year_income > limit_6m,
-        "exceeded_8m": income_12m > limit_8m,
+        "percent_6m": float(((year_income_decimal / limit_6m_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if limit_6m else 0,
+        "percent_8m": float(((income_12m_decimal / limit_8m_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if limit_8m else 0,
+        "warning_6m": year_income_decimal >= (limit_6m_decimal * warning_ratio),
+        "warning_8m": income_12m_decimal >= (limit_8m_decimal * warning_ratio),
+        "exceeded_6m": year_income_decimal > limit_6m_decimal,
+        "exceeded_8m": income_12m_decimal > limit_8m_decimal,
     }
+
+

@@ -14,6 +14,7 @@ from backend.cash_service import (
     is_cash_transfer_expense,
 )
 from backend.database import get_db
+from backend.decimal_utils import ZERO_DECIMAL, money_eq, to_decimal
 from backend.models import BankTransaction, Contract, Expense, Income, Project, TransactionCategory, User
 from backend.schemas import (
     BankTransactionBulkAssignProject,
@@ -121,7 +122,7 @@ async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: Bank
     for expense in result.scalars().all():
         if getattr(expense, "reversed_expense_id", None):
             continue
-        if float(expense.amount or 0) != float(transaction.amount or 0):
+        if not money_eq(expense.amount or ZERO_DECIMAL, transaction.amount or ZERO_DECIMAL):
             continue
         return expense
     return None
@@ -397,7 +398,7 @@ async def create_expense_from_transaction(
     if expense:
         expense.date = data.date or transaction.date
         expense.description = description[:500]
-        expense.amount = float(transaction.amount or 0)
+        expense.amount = to_decimal(transaction.amount or ZERO_DECIMAL)
         expense.currency = transaction.currency or "RSD"
         expense.category = category_name
         expense.category_id = data.category_id
@@ -413,7 +414,7 @@ async def create_expense_from_transaction(
         expense = Expense(
             date=data.date or transaction.date,
             description=description[:500],
-            amount=float(transaction.amount or 0),
+            amount=to_decimal(transaction.amount or ZERO_DECIMAL),
             currency=transaction.currency or "RSD",
             category=category_name,
             category_id=data.category_id,
@@ -497,3 +498,5 @@ async def bulk_assign_project(
 
     await db.commit()
     return {"message": f"Project assigned to {len(items)} transactions"}
+
+

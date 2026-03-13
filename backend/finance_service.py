@@ -1,11 +1,13 @@
 """Финансовый сервис: метрики accrual vs cash."""
 from datetime import date, timedelta
-from typing import Literal, Optional, Any
+from decimal import Decimal
+from typing import Any, Literal, Optional
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
+from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction
 
 
@@ -155,13 +157,13 @@ async def get_finance_summary(
     periods_data: dict[str, dict[str, float]] = {}
     for pk in _iter_periods(date_from, date_to, group_by):
         periods_data[pk] = {
-            "revenue_accrual": 0.0,
-            "revenue_cash": 0.0,
-            "expense_accrual": 0.0,
-            "expense_cash": 0.0,
-            "taxes_cash": 0.0,
-            "net_profit_accrual": 0.0,
-            "net_profit_cash": 0.0,
+            "revenue_accrual": ZERO_DECIMAL,
+            "revenue_cash": ZERO_DECIMAL,
+            "expense_accrual": ZERO_DECIMAL,
+            "expense_cash": ZERO_DECIMAL,
+            "taxes_cash": ZERO_DECIMAL,
+            "net_profit_accrual": ZERO_DECIMAL,
+            "net_profit_cash": ZERO_DECIMAL,
         }
 
     # Для группировки нужны подзапросы по каждому периоду или использование strftime
@@ -196,7 +198,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["revenue_accrual"] = float(row.s)
+                periods_data[p]["revenue_accrual"] = to_decimal(row.s)
 
         # expense_accrual по date
         q_ea = (
@@ -208,7 +210,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["expense_accrual"] = float(row.s)
+                periods_data[p]["expense_accrual"] = to_decimal(row.s)
 
     if need_cash:
         bt_date = BankTransaction.date
@@ -253,7 +255,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["revenue_cash"] = float(row.s)
+                periods_data[p]["revenue_cash"] = to_decimal(row.s)
 
         # Outflow (expenses + obligations)
         # Если нет фильтров tax / category, просто берем все out != ignored
@@ -283,7 +285,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["expense_cash"] += float(row.s)
+                periods_data[p]["expense_cash"] += to_decimal(row.s)
                 
         # Если не было фильтров, добавим и obligation outflow
         if category is None and is_tax_related is None:
@@ -305,7 +307,7 @@ async def get_finance_summary(
              for row in r.fetchall():
                 p = str(row.period)
                 if p in periods_data:
-                    periods_data[p]["expense_cash"] += float(row.s)
+                    periods_data[p]["expense_cash"] += to_decimal(row.s)
 
         # taxes_cash (is_tax_related == True или obligations)
         # Суммируем Expense is_tax=True и все MonthlyObligation
@@ -327,7 +329,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["taxes_cash"] += float(row.s)
+                periods_data[p]["taxes_cash"] += to_decimal(row.s)
 
         q_tc2 = (
             select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
@@ -344,7 +346,7 @@ async def get_finance_summary(
         for row in r.fetchall():
             p = str(row.period)
             if p in periods_data:
-                periods_data[p]["taxes_cash"] += float(row.s)
+                periods_data[p]["taxes_cash"] += to_decimal(row.s)
 
     # net profit
     for p, data in periods_data.items():
@@ -388,7 +390,7 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
     ar_overdue = 0.0
     for i in incomes:
         # Для частичной оплаты показываем остаток
-        remaining = float(i.amount_rsd) - float(i.paid_amount or 0)
+        remaining = to_decimal(i.amount_rsd) - to_decimal(i.paid_amount or ZERO_DECIMAL)
         if remaining <= 0:
             continue
         days_out = (today - i.issued_date).days
@@ -401,8 +403,8 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
             "issued_date": i.issued_date.isoformat(),
             "due_date": due_dt.isoformat(),
             "amount": remaining,          # остаток к оплате
-            "amount_full": float(i.amount_rsd),
-            "amount_paid": float(i.paid_amount or 0),
+            "amount_full": to_decimal(i.amount_rsd),
+            "amount_paid": to_decimal(i.paid_amount or ZERO_DECIMAL),
             "status": i.status,
             "days_outstanding": days_out,
             "days_overdue": days_overdue,
@@ -429,7 +431,7 @@ async def get_cashflow(
     """
     r = await db.execute(select(Enterprise).limit(1))
     ent = r.scalar_one_or_none()
-    opening_cash_balance = float(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else 0.0
+    opening_cash_balance = to_decimal(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else ZERO_DECIMAL
     opening_cash_date = ent.opening_cash_date if ent and ent.opening_cash_date is not None else None
 
     bt_date = BankTransaction.date
@@ -445,7 +447,7 @@ async def get_cashflow(
             conditions.append(bt_date < end)
         q = select(func.coalesce(func.sum(bt_amount), 0)).where(*conditions)
         value = await db.scalar(q)
-        return float(value or 0)
+        return to_decimal(value or ZERO_DECIMAL)
 
     opening_balance_at_range_start = opening_cash_balance
     if opening_cash_date is None or opening_cash_date < date_from:
@@ -463,8 +465,8 @@ async def get_cashflow(
     result_series = []
     prev_closing = opening_balance_at_range_start
     for s in series:
-        inflow = float(s.get("revenue_cash", 0) or 0)
-        outflow = float(s.get("expense_cash", 0) or 0)
+        inflow = to_decimal(s.get("revenue_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
+        outflow = to_decimal(s.get("expense_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
         opening = prev_closing
         closing = opening + inflow - outflow
         prev_closing = closing
@@ -555,12 +557,12 @@ async def get_finance_by_project(
             inc_cond = and_(income_base, Income.project_id == pid)
             q_rev = select(func.coalesce(func.sum(income_amount), 0)).where(inc_cond)
             r = await db.execute(q_rev)
-            revenue = float(r.scalar() or 0)
+            revenue = to_decimal(r.scalar() or ZERO_DECIMAL)
             
             exp_cond = and_(expense_base, Expense.project_id == pid)
             q_exp = select(func.coalesce(func.sum(expense_amount), 0)).where(exp_cond)
             r = await db.execute(q_exp)
-            expenses = float(r.scalar() or 0)
+            expenses = to_decimal(r.scalar() or ZERO_DECIMAL)
         else:
             # cash: Revenue - sum of BankTransaction in, matched to income with this project_id 
             q_rev = (
@@ -579,7 +581,7 @@ async def get_finance_by_project(
                 )
             )
             r = await db.execute(q_rev)
-            revenue = float(r.scalar() or 0)
+            revenue = to_decimal(r.scalar() or ZERO_DECIMAL)
 
             # cash: Expenses - sum of BankTransaction out, matched to expense with this project_id
             q_exp = (
@@ -599,10 +601,10 @@ async def get_finance_by_project(
                 )
             )
             r = await db.execute(q_exp)
-            expenses = float(r.scalar() or 0)
+            expenses = to_decimal(r.scalar() or ZERO_DECIMAL)
 
         profit = revenue - expenses
-        margin_percent = round((profit / revenue * 100), 1) if revenue and revenue > 0 else 0.0
+        margin_percent = float(((profit / revenue) * Decimal("100")).quantize(Decimal("0.1"))) if revenue and revenue > ZERO_DECIMAL else 0.0
 
         row = {
             "project_id": pid,
@@ -623,3 +625,6 @@ async def get_finance_by_project(
         "by_project": by_project,
         "unassigned": unassigned,
     }
+
+
+

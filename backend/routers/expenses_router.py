@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth import get_current_user_required, require_edit_access
 from backend.cash_service import CASH_TRANSFER_SOURCE, is_cash_transfer_expense
 from backend.database import get_db
+from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
 from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
 from backend.schemas import (
     BulkAssignProject,
@@ -90,7 +91,7 @@ async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> N
         return
 
     cash_entry.date = expense.paid_date or expense.date
-    cash_entry.amount = float(expense.amount or 0)
+    cash_entry.amount = to_decimal(expense.amount or ZERO_DECIMAL)
     cash_entry.currency = expense.currency or "RSD"
     cash_entry.description = (expense.description or "")[:500]
     cash_entry.note = expense.note
@@ -109,11 +110,11 @@ def _normalize_duplicate_text(value: str | None) -> str:
 
 
 def _amount_key(value: float | int | None) -> str:
-    return f"{abs(float(value or 0)):.2f}"
+    return f"{abs(to_decimal(value or ZERO_DECIMAL)):.2f}"
 
 
 def _is_reversal_row(expense: Expense) -> bool:
-    return bool(expense.reversal_of_id) or getattr(expense, "status", None) == "reversed" or float(expense.amount or 0) < 0
+    return bool(expense.reversal_of_id) or getattr(expense, "status", None) == "reversed" or to_decimal(expense.amount or ZERO_DECIMAL) < ZERO_DECIMAL
 
 
 def _is_active_duplicate_candidate(expense: Expense) -> bool:
@@ -123,7 +124,7 @@ def _is_active_duplicate_candidate(expense: Expense) -> bool:
         return False
     if getattr(expense, "status", None) == "planned":
         return False
-    return float(expense.amount or 0) > 0
+    return money_gt(expense.amount or ZERO_DECIMAL)
 
 
 async def _load_expenses_for_period(
@@ -180,7 +181,7 @@ async def _find_duplicate_groups(
         groups.append(
             ExpenseDuplicateGroup(
                 reason=reason,
-                amount=float(sorted_items[0].amount or 0),
+                amount=to_decimal(sorted_items[0].amount or ZERO_DECIMAL),
                 payment_reference=payment_reference,
                 description=description,
                 item_count=len(sorted_items),
@@ -447,7 +448,7 @@ async def get_expense_totals(
             Expense.date <= date(selected_year, 12, 31),
         )
     )
-    year_total = float(result_year.scalar() or 0)
+    year_total = to_decimal(result_year.scalar() or ZERO_DECIMAL)
 
     import calendar
 
@@ -460,7 +461,7 @@ async def get_expense_totals(
             Expense.date <= date(selected_year, selected_month, last_day),
         )
     )
-    month_total = float(result_month.scalar() or 0)
+    month_total = to_decimal(result_month.scalar() or ZERO_DECIMAL)
 
     return {"year_expenses": year_total, "month_expenses": month_total}
 
@@ -598,3 +599,5 @@ async def delete_expense(
     )
     await db.commit()
     return {"ok": True, "reversal_id": reversal.id}
+
+

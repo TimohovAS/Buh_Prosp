@@ -1,5 +1,6 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
 from backend.models import BankTransaction, CashEntry, Expense, Project
 from backend.state_machine import initialize_expense_status, initialize_project_status, transition_project_status
@@ -16,10 +17,10 @@ def is_cash_transfer_expense(expense: Expense | None) -> bool:
     return getattr(expense, "source", None) == CASH_TRANSFER_SOURCE
 
 
-async def get_cash_balance(db: AsyncSession) -> float:
+async def get_cash_balance(db: AsyncSession):
     total_in = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in"))
     total_out = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out"))
-    return float(total_in or 0) - float(total_out or 0)
+    return to_decimal(total_in or ZERO_DECIMAL) - to_decimal(total_out or ZERO_DECIMAL)
 
 
 async def get_or_create_cash_project_id(db: AsyncSession) -> int:
@@ -92,7 +93,7 @@ async def create_cash_transfer_from_transaction(
     expense = Expense(
         date=transaction.date,
         description=build_cash_transfer_description(transaction, description),
-        amount=float(transaction.amount or 0),
+        amount=to_decimal(transaction.amount or ZERO_DECIMAL),
         currency=transaction.currency or "RSD",
         category=CASH_CATEGORY,
         category_id=None,
@@ -110,7 +111,7 @@ async def create_cash_transfer_from_transaction(
     entry = CashEntry(
         date=transaction.date,
         direction="in",
-        amount=float(transaction.amount or 0),
+        amount=to_decimal(transaction.amount or ZERO_DECIMAL),
         currency=transaction.currency or "RSD",
         description=expense.description,
         entry_type="withdrawal",
@@ -151,3 +152,5 @@ async def revert_cash_transfer(
     transaction.status = "unmatched"
     transaction.matched_type = None
     transaction.matched_id = None
+
+

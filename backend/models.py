@@ -1,7 +1,7 @@
 """Модели базы данных ProspEl."""
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, Float, Boolean, Date, DateTime, ForeignKey, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Float, Numeric, Boolean, Date, DateTime, ForeignKey, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import enum
@@ -62,7 +62,7 @@ class Enterprise(Base):
     bank_account = Column(String(50))
     bank_swift = Column(String(20))
     main_activity_code = Column(String(20))  # Шифра деятельности
-    opening_cash_balance = Column(Float, default=0)  # Начальный остаток денежных средств
+    opening_cash_balance = Column(Numeric(14, 2), default=0)  # Начальный остаток денежных средств
     opening_cash_date = Column(Date)  # Дата, на которую указан начальный остаток (default 1 Jan текущего года)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -75,10 +75,10 @@ class ContributionRates(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     year = Column(Integer, nullable=False)
-    tax_amount = Column(Float, default=0)
-    pio_amount = Column(Float, default=0)
-    health_amount = Column(Float, default=0)
-    unemployment_amount = Column(Float, default=0)
+    tax_amount = Column(Numeric(14, 2), default=0)
+    pio_amount = Column(Numeric(14, 2), default=0)
+    health_amount = Column(Numeric(14, 2), default=0)
+    unemployment_amount = Column(Numeric(14, 2), default=0)
     pay_order_number = Column(String(50))
     start_date = Column(Date)
     is_active = Column(Boolean, default=True)
@@ -111,8 +111,8 @@ class YearDecision(Base):
     payment_type_id = Column(Integer, ForeignKey("payment_types.id"), nullable=False)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
-    monthly_amount = Column(Float, nullable=False)  # Месячная аконтация
-    base_amount = Column(Float)  # Основница (опционально)
+    monthly_amount = Column(Numeric(14, 2), nullable=False)  # Месячная аконтация
+    base_amount = Column(Numeric(14, 2))  # Основница (опционально)
     rate_percent = Column(Float)  # Ставка % (опционально)
     recipient_name = Column(String(200), default="Пореска управа Републике Србије")
     recipient_account = Column(String(30), nullable=False)  # NNN-NNNNNNNNN-NN
@@ -140,7 +140,7 @@ class MonthlyObligation(Base):
     month = Column(Integer, nullable=False)
     payment_type_id = Column(Integer, ForeignKey("payment_types.id"), nullable=False)
     decision_id = Column(Integer, ForeignKey("year_decisions.id"))
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
     deadline = Column(Date, nullable=False)  # 15-е число месяца, следующего за отчётным
     status = Column(String(20), default="unpaid")  # unpaid, paid, overdue
     paid_date = Column(Date)
@@ -183,8 +183,8 @@ class Project(Base):
     status = Column(String(20), nullable=False, default="active")  # lead | active | completed | archived
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
-    planned_income = Column(Float, nullable=True)
-    planned_expense = Column(Float, nullable=True)
+    planned_income = Column(Numeric(14, 2), nullable=True)
+    planned_expense = Column(Numeric(14, 2), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -204,7 +204,7 @@ class BankTransaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False, index=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
     direction = Column(String(10), nullable=False, index=True)  # in | out
     currency = Column(String(5), default="RSD")
     counterparty_name = Column(String(200))
@@ -243,7 +243,7 @@ class CashEntry(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False, index=True)
     direction = Column(String(10), nullable=False, index=True)  # in | out
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")
     description = Column(String(500), nullable=False)
     entry_type = Column(String(20), nullable=False, index=True)  # withdrawal | expense | adjustment
@@ -269,13 +269,13 @@ class Income(Base):
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     client_name = Column(String(200))  # На случай если клиент не в справочнике
     description = Column(String(500))   # Основание платежа / описание услуги
-    amount_rsd = Column(Float, nullable=False)
+    amount_rsd = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")
     exchange_rate = Column(Float, default=1.0)
     is_paid = Column(Boolean, default=False)
     paid_date = Column(Date)
     due_date = Column(Date)  # Valuta / срок оплаты
-    paid_amount = Column(Float, default=0.0)  # Сумма уже полученных платежей (для частичной оплаты)
+    paid_amount = Column(Numeric(14, 2), default=0.0)  # Сумма уже полученных платежей (для частичной оплаты)
     status = Column(String(20), nullable=False, default="issued")  # issued | partial | paid | cancelled
 
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
@@ -308,7 +308,7 @@ class Contract(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     contract_type = Column(String(50), default="service")  # service, supply, rent, commission
     subject = Column(String(500))  # Предмет договора
-    amount = Column(Float, default=0)
+    amount = Column(Numeric(14, 2), default=0)
     currency = Column(String(5), default="RSD")
     validity_start = Column(Date)
     validity_end = Column(Date)
@@ -334,8 +334,8 @@ class ContractItem(Base):
     description = Column(String(500), nullable=False)
     quantity = Column(Float, default=1)
     unit = Column(String(20), default="шт")
-    price = Column(Float, default=0)
-    amount = Column(Float, default=0)  # quantity * price
+    price = Column(Numeric(14, 2), default=0)
+    amount = Column(Numeric(14, 2), default=0)  # quantity * price
     sort_order = Column(Integer, default=0)
 
     contract = relationship("Contract", back_populates="items")
@@ -349,11 +349,11 @@ class Payment(Base):
     year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
     rates_id = Column(Integer, ForeignKey("contribution_rates.id"))
-    tax_amount = Column(Float, default=0)
-    pio_amount = Column(Float, default=0)
-    health_amount = Column(Float, default=0)
-    unemployment_amount = Column(Float, default=0)
-    total_amount = Column(Float, default=0)
+    tax_amount = Column(Numeric(14, 2), default=0)
+    pio_amount = Column(Numeric(14, 2), default=0)
+    health_amount = Column(Numeric(14, 2), default=0)
+    unemployment_amount = Column(Numeric(14, 2), default=0)
+    total_amount = Column(Numeric(14, 2), default=0)
     is_paid = Column(Boolean, default=False)
     paid_date = Column(Date)
     payment_reference = Column(String(100))
@@ -382,7 +382,7 @@ class Expense(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False)
     description = Column(String(500), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")
     category = Column(String(50))  # legacy: materials, services, other, tax, etc.
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
@@ -424,7 +424,7 @@ class PlannedExpense(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)  # Название: Аренда, Интернет, Телефон
     description = Column(String(500))  # Доп. описание
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")
     category = Column(String(50))  # legacy: rent, internet, phone, utilities, insurance, other
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
@@ -464,7 +464,7 @@ class EcoTax(Base):
     id = Column(Integer, primary_key=True, index=True)
     year = Column(Integer, nullable=False)
     category = Column(String(50), default="micro")  # micro, small, etc.
-    amount = Column(Float, default=0)
+    amount = Column(Numeric(14, 2), default=0)
     is_paid = Column(Boolean, default=False)
     paid_date = Column(Date)
     reminder_sent = Column(Boolean, default=False)
@@ -483,3 +483,4 @@ class AuditLog(Base):
     description = Column(Text)
     ip_address = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
+

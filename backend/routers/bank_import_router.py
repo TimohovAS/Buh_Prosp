@@ -12,6 +12,7 @@ from backend.database import get_db
 from backend.models import User, BankImportFile, BankTransaction
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_parser import parse_izvod_xls
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
 router = APIRouter(prefix="/bank-import", tags=["bank-import"])
 
@@ -198,13 +199,13 @@ async def apply_import(
         
         ref = tx.get("reference") or ""
         date_str = tx.get("date")
-        amount = tx.get("amount") or 0
+        amount = to_decimal(tx.get("amount") or ZERO_DECIMAL)
         direction = "in" if tx.get("type") == "income" else "out"
         description = (tx.get("description") or "")[:500]
         payer = (tx.get("payer_beneficiary") or "")[:200]
         raw_json = tx.get("raw_json")
 
-        if not date_str or float(amount) <= 0:
+        if not date_str or amount <= ZERO_DECIMAL:
             errors.append(f"Строка {i + 1}: неверные дата или сумма")
             if item.file_hash and item.file_hash in file_stats:
                 file_stats[item.file_hash]["errors_count"] += 1
@@ -227,7 +228,7 @@ async def apply_import(
             # Дедупликация по дате, сумме, направлению и назначению
             r = await db.execute(select(BankTransaction).where(
                 BankTransaction.date == d,
-                BankTransaction.amount == float(amount),
+                BankTransaction.amount == amount,
                 BankTransaction.direction == direction,
                 BankTransaction.purpose == description
             ))
@@ -240,7 +241,7 @@ async def apply_import(
 
         transaction = BankTransaction(
             date=d,
-            amount=float(amount),
+            amount=amount,
             direction=direction,
             counterparty_name=payer or None,
             purpose=description or None,
@@ -295,3 +296,5 @@ async def apply_import(
         "errors": errors,
         "recent_files": await _recent_files(db, 10),
     }
+
+
