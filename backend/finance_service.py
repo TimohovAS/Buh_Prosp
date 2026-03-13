@@ -386,8 +386,8 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
     r = await db.execute(q)
     incomes = r.scalars().all()
     items = []
-    ar_total = 0.0
-    ar_overdue = 0.0
+    ar_total = ZERO_DECIMAL
+    ar_overdue = ZERO_DECIMAL
     for i in incomes:
         # Р”Р»СЏ С‡Р°СЃС‚РёС‡РЅРѕР№ РѕРїР»Р°С‚С‹ РїРѕРєР°Р·С‹РІР°РµРј РѕСЃС‚Р°С‚РѕРє
         remaining = to_decimal(i.amount_rsd) - to_decimal(i.paid_amount or ZERO_DECIMAL)
@@ -402,9 +402,9 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
             "client_name": i.client_name or (i.client.name if i.client else None),
             "issued_date": i.issued_date.isoformat(),
             "due_date": due_dt.isoformat(),
-            "amount": remaining,          # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
-            "amount_full": to_decimal(i.amount_rsd),
-            "amount_paid": to_decimal(i.paid_amount or ZERO_DECIMAL),
+            "amount": float(remaining),          # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
+            "amount_full": float(to_decimal(i.amount_rsd)),
+            "amount_paid": float(to_decimal(i.paid_amount or ZERO_DECIMAL)),
             "status": i.status,
             "days_outstanding": days_out,
             "days_overdue": days_overdue,
@@ -414,7 +414,7 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
             ar_overdue += remaining
     return {
         "items": items,
-        "totals": {"ar_total": ar_total, "ar_overdue": ar_overdue},
+        "totals": {"ar_total": float(ar_total), "ar_overdue": float(ar_overdue)},
     }
 
 
