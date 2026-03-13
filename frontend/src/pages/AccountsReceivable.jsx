@@ -85,12 +85,6 @@ export default function AccountsReceivable() {
           <h1 className="page-title">{tr('financeAR')}</h1>
         </div>
         <div className="page-header-actions">
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 200 }}
-          />
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -99,6 +93,12 @@ export default function AccountsReceivable() {
             />
             <span>{tr('arFilterOverdue')}</span>
           </label>
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 200 }}
+          />
         </div>
       </div>
 

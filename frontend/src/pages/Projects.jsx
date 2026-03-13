@@ -222,12 +222,6 @@ export default function Projects() {
           <h1 className="page-title">{tr('projects')}</h1>
         </div>
         <div className="page-header-actions">
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 180 }}
-          />
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
             <span>{tr('showInactive')}</span>
@@ -243,6 +237,12 @@ export default function Projects() {
               </button>
             ))}
           </div>
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 180 }}
+          />
           <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
         </div>
       </div>
