@@ -168,6 +168,7 @@ export default function BankTransactions() {
         (transaction.date || '').toLowerCase().includes(query) ||
         (transaction.counterparty_name || '').toLowerCase().includes(query) ||
         (transaction.purpose || '').toLowerCase().includes(query) ||
+        (transaction.bank_reference || '').toLowerCase().includes(query) ||
         String(transaction.amount || '').includes(query) ||
         (transaction.status || '').toLowerCase().includes(query) ||
         getProjectName(transaction.project_id).toLowerCase().includes(query)
