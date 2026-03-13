@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
@@ -99,16 +100,35 @@ async def reset_obligation_payment(
     created_by: Optional[int] = None,
 ) -> None:
     """Снять оплату с обязательства и сторнировать связанный расход."""
+    bank_tx_result = await db.execute(
+        select(BankTransaction).where(
+            BankTransaction.matched_type == "obligation",
+            BankTransaction.matched_id == obligation.id,
+        )
+    )
+    for bank_tx in bank_tx_result.scalars().all():
+        bank_tx.status = "unmatched"
+        bank_tx.matched_type = None
+        bank_tx.matched_id = None
+
     if obligation.expense_id:
         expense = await db.get(Expense, obligation.expense_id)
-        if expense and getattr(expense, "status", "paid") != "reversed" and not getattr(expense, "reversed_expense_id", None):
-            await create_expense_reversal(
-                db,
-                expense,
-                reverse_date=obligation.paid_date,
-                source="obligation",
-                created_by=created_by,
-            )
+        if expense:
+            expense_status = getattr(expense, "status", None)
+            if (
+                expense_status == "paid"
+                and not getattr(expense, "reversed_expense_id", None)
+                and not getattr(expense, "reversal_of_id", None)
+            ):
+                await create_expense_reversal(
+                    db,
+                    expense,
+                    reverse_date=obligation.paid_date,
+                    source="obligation",
+                    created_by=created_by,
+                )
+            elif expense_status == "planned" and getattr(expense, "source", None) == "obligation":
+                await db.delete(expense)
         obligation.expense_id = None
 
     restore_obligation_after_payment_reset(obligation, today=date.today())
