@@ -104,6 +104,30 @@ async def _sync_bank_transactions_from_expense(db: AsyncSession, expense: Expens
         .values(project_id=expense.project_id)
     )
 
+    if not expense.bank_reference or _is_reversal_row(expense):
+        return
+
+    amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
+    result = await db.execute(
+        select(BankTransaction).where(
+            BankTransaction.bank_reference == expense.bank_reference,
+            BankTransaction.direction == "out",
+        )
+    )
+    candidates = [
+        tx
+        for tx in result.scalars().all()
+        if abs(to_decimal(tx.amount or ZERO_DECIMAL)) == amount
+    ]
+    if len(candidates) != 1:
+        return
+
+    tx = candidates[0]
+    tx.status = "matched"
+    tx.matched_type = "expense"
+    tx.matched_id = expense.id
+    tx.project_id = expense.project_id
+
 
 def _normalize_duplicate_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
@@ -398,6 +422,8 @@ async def create_expense(
         created_by=current_user.id,
     )
     db.add(expense)
+    await db.flush()
+    await _sync_bank_transactions_from_expense(db, expense)
     await db.commit()
     await db.refresh(expense)
     return ExpenseResponse.model_validate(expense)
