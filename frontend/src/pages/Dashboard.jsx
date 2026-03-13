@@ -44,6 +44,44 @@ function SummaryCard({ title, value, subtitle, tone = 'accent', valueColor }) {
   )
 }
 
+function getRiskTone(risk) {
+  if (risk === 'high') return 'danger'
+  if (risk === 'medium') return 'warning'
+  return ''
+}
+
+function LimitForecastCard({ title, current, limit, percent, risk, note, forecast, estimate }) {
+  const fillClass = getRiskTone(risk)
+  const percentClass = fillClass ? `dashboard-limit-percent ${fillClass}` : 'dashboard-limit-percent'
+
+  return (
+    <div className="card dashboard-limit-card">
+      <div className="card-title">{title}</div>
+      <div className="dashboard-limit-head">
+        <div className="dashboard-limit-current">{fmt(current)} / {fmt(limit)} RSD</div>
+        <div className={percentClass}>{percent.toFixed(1)}%</div>
+      </div>
+      <div className="progress-bar">
+        <div
+          className={`progress-bar-fill ${fillClass}`.trim()}
+          style={{ width: `${Math.min(percent, 100)}%` }}
+        />
+      </div>
+      <div className="dashboard-summary-note" style={{ marginTop: '0.75rem' }}>
+        {note}
+      </div>
+      <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
+        {tr('forecastYearEnd')}: {fmtCurrency(forecast)}
+      </div>
+      {estimate ? (
+        <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
+          {tr('estimatedLimitDate')}: {estimate}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
   const data = [
     { name: tr('income'), value: income ?? 0, color: 'var(--color-success)' },
@@ -88,38 +126,17 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
   )
 }
 
-function LimitCard({ title, current, limit, percent, warning, exceeded }) {
-  const fillClass = exceeded ? 'danger' : warning ? 'warning' : ''
-  const percentClass = exceeded ? 'dashboard-limit-percent danger' : warning ? 'dashboard-limit-percent warning' : 'dashboard-limit-percent'
-
-  return (
-    <div className="card dashboard-limit-card">
-      <div className="card-title">{title}</div>
-      <div className="dashboard-limit-head">
-        <div className="dashboard-limit-current">{fmt(current)} / {fmt(limit)} RSD</div>
-        <div className={percentClass}>
-          {percent.toFixed(1)}% {exceeded ? tr('exceeded') : ''}
-        </div>
-      </div>
-      <div className="progress-bar">
-        <div
-          className={`progress-bar-fill ${fillClass}`.trim()}
-          style={{ width: `${Math.min(percent, 100)}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
 export default function Dashboard() {
   const [data, setData] = useState(null)
+  const [limits, setLimits] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    api.dashboard()
-      .then((response) => {
-        setData(response)
+    Promise.all([api.dashboard(), api.finance.limits()])
+      .then(([dashboardResponse, limitsResponse]) => {
+        setData(dashboardResponse)
+        setLimits(limitsResponse)
         setError(null)
       })
       .catch((err) => {
@@ -133,6 +150,17 @@ export default function Dashboard() {
   if (!data) return <div style={{ padding: '2rem', color: 'var(--color-danger)' }}>{tr('loadError')}{error ? `: ${error}` : ''}</div>
 
   const lim = data.income_limit_status
+  const limitsData = limits || {
+    annual_total: lim.year_income,
+    annual_limit: lim.limit_6m,
+    annual_percent: lim.percent_6m,
+    rolling_12_total: lim.income_12m,
+    vat_limit: lim.limit_8m,
+    vat_percent: lim.percent_8m,
+    forecast_year_end: lim.year_income,
+    estimated_limit_date: null,
+    risk: lim.exceeded_6m || lim.exceeded_8m ? 'high' : lim.warning_6m || lim.warning_8m ? 'medium' : 'low',
+  }
 
   return (
     <>
@@ -198,40 +226,44 @@ export default function Dashboard() {
           </div>
 
           <div className="dashboard-limit-stack">
-            <LimitCard
+            <LimitForecastCard
               title={`${tr('limit6m')} (6M RSD)`}
-              current={lim.year_income}
-              limit={lim.limit_6m}
-              percent={lim.percent_6m}
-              warning={lim.warning_6m}
-              exceeded={lim.exceeded_6m}
+              current={limitsData.annual_total}
+              limit={limitsData.annual_limit}
+              percent={limitsData.annual_percent}
+              risk={limitsData.risk}
+              note={tr('limitsAccrualNote')}
+              forecast={limitsData.forecast_year_end}
+              estimate={limitsData.estimated_limit_date}
             />
-            <LimitCard
+            <LimitForecastCard
               title={`${tr('limit8m')} (${tr('limitMonths12')})`}
-              current={lim.income_12m}
-              limit={lim.limit_8m}
-              percent={lim.percent_8m}
-              warning={lim.warning_8m}
-              exceeded={lim.exceeded_8m}
+              current={limitsData.rolling_12_total}
+              limit={limitsData.vat_limit}
+              percent={limitsData.vat_percent}
+              risk={limitsData.risk}
+              note={tr('limitsAccrualNote')}
+              forecast={limitsData.forecast_year_end}
+              estimate={limitsData.estimated_limit_date}
             />
           </div>
         </div>
 
-        {(lim.warning_6m || lim.warning_8m || lim.exceeded_6m || lim.exceeded_8m) && (
+        {limitsData.risk !== 'low' && (
           <div
             className="card"
             style={{
-              borderColor: lim.exceeded_6m || lim.exceeded_8m ? 'var(--color-danger)' : 'var(--color-warning)',
+              borderColor: limitsData.risk === 'high' ? 'var(--color-danger)' : 'var(--color-warning)',
               marginBottom: '2rem',
             }}
           >
-            {(lim.exceeded_6m || lim.exceeded_8m) ? (
+            {(limitsData.risk === 'high') ? (
               <p style={{ margin: 0, color: 'var(--color-danger)' }}>
-                {tr('limitExceeded')}
+                {tr('limitRiskHigh')}
               </p>
             ) : (
               <p style={{ margin: 0, color: 'var(--color-warning)' }}>
-                {tr('limitWarning')}
+                {tr('limitRiskMedium')}
               </p>
             )}
           </div>

@@ -47,6 +47,7 @@ export default function FinanceOverview() {
   const [mode, setMode] = useState('both')
   const [summary, setSummary] = useState(null)
   const [ar, setAr] = useState(null)
+  const [limits, setLimits] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -58,10 +59,12 @@ export default function FinanceOverview() {
     Promise.all([
       api.finance.summary({ from, to, group_by: 'month', mode: modeVal }),
       api.finance.ar({ as_of: to }),
+      api.finance.limits({ as_of: to }),
     ])
-      .then(([s, a]) => {
+      .then(([s, a, l]) => {
         setSummary(s)
         setAr(a)
+        setLimits(l)
         setError(null)
       })
       .catch((e) => {
@@ -74,6 +77,7 @@ export default function FinanceOverview() {
   const series = summary?.series || []
   const arItems = ar?.items || []
   const arTotals = ar?.totals || {}
+  const limitsData = limits
 
   const overdueItems = arItems
     .filter((i) => (i.days_overdue ?? 0) > 0)
@@ -177,6 +181,24 @@ export default function FinanceOverview() {
           gap: '1rem',
           marginBottom: '2rem',
         }}>
+          {limitsData && (
+            <>
+              <div className="card" style={{ borderLeft: `4px solid ${limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)'}` }}>
+                <div className="card-title">{tr('limit6m')}</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(limitsData.annual_total)} / {fmt(limitsData.annual_limit)} RSD</div>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+                  {limitsData.annual_percent.toFixed(1)}% | {tr('forecastYearEnd')}: {fmt(limitsData.forecast_year_end)} RSD
+                </div>
+              </div>
+              <div className="card" style={{ borderLeft: `4px solid ${limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)'}` }}>
+                <div className="card-title">{tr('limit8m')}</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(limitsData.rolling_12_total)} / {fmt(limitsData.vat_limit)} RSD</div>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+                  {limitsData.vat_percent.toFixed(1)}% | {tr(`risk${limitsData.risk.charAt(0).toUpperCase() + limitsData.risk.slice(1)}`)}
+                </div>
+              </div>
+            </>
+          )}
           {(mode === 'accrual' || mode === 'both') && (
             <>
               <div className="card" style={{ borderLeft: '4px solid var(--color-success)' }}>
@@ -232,6 +254,31 @@ export default function FinanceOverview() {
             </div>
           )}
         </div>
+
+        {limitsData && (
+          <div className="card" style={{ marginBottom: '2rem', borderColor: limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-border)' }}>
+            <div className="card-title">{tr('financeLimits')}</div>
+            <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>{tr('limitsAccrualNote')}</div>
+            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
+              <div
+                className={`progress-bar-fill ${limitsData.risk === 'high' ? 'danger' : limitsData.risk === 'medium' ? 'warning' : ''}`.trim()}
+                style={{ width: `${Math.min(limitsData.annual_percent, 100)}%` }}
+              />
+            </div>
+            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
+              <div
+                className={`progress-bar-fill ${limitsData.vat_percent >= 90 ? 'danger' : limitsData.vat_percent >= 75 ? 'warning' : ''}`.trim()}
+                style={{ width: `${Math.min(limitsData.vat_percent, 100)}%` }}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              <div>{tr('averageMonthlyIncome')}: <strong style={{ color: 'var(--color-text)' }}>{fmt(limitsData.average_monthly_income)} RSD</strong></div>
+              <div>{tr('forecastYearEnd')}: <strong style={{ color: 'var(--color-text)' }}>{fmt(limitsData.forecast_year_end)} RSD</strong></div>
+              <div>{tr('estimatedLimitDate')}: <strong style={{ color: 'var(--color-text)' }}>{limitsData.estimated_limit_date || tr('notAvailable')}</strong></div>
+              <div>{tr('risk')}: <strong style={{ color: limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)' }}>{tr(`risk${limitsData.risk.charAt(0).toUpperCase() + limitsData.risk.slice(1)}`)}</strong></div>
+            </div>
+          </div>
+        )}
 
         {/* График */}
         <div className="card" style={{ marginBottom: '2rem', minHeight: 300 }}>

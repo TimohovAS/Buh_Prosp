@@ -164,6 +164,18 @@ const t = {
     loadError: 'Грешка учитавања',
     exceeded: '(прекорачено!)',
     limitMonths12: '12 мес.',
+    financeLimits: 'Лимиты паушала',
+    limitsAccrualNote: 'Расчёт по начислению (Income.issued_date), а не по банку.',
+    averageMonthlyIncome: 'Средний месячный доход',
+    forecastYearEnd: 'Прогноз на конец года',
+    estimatedLimitDate: 'Оценка даты превышения 6 млн',
+    risk: 'Риск',
+    riskLow: 'Низкий',
+    riskMedium: 'Средний',
+    riskHigh: 'Высокий',
+    limitRiskMedium: 'Лимиты приближаются к порогу. Нужно контролировать accrual-доход.',
+    limitRiskHigh: 'Высокий риск превышения лимитов паушала.',
+    notAvailable: 'Недоступно',
     noRecords: 'Нема уноса',
     limitWarning: 'Приближавање лимиту (80%). Препоручује се контрола прихода.',
     limitExceeded: 'Внимање! Прекорачен је лимит прихода. При прекорачењу 6 мил. RSD годишње — прелазак на општи режим. При прекорачењу 8 мил. за 12 мес. — обавезна регистрација ПДВ.',
@@ -625,6 +637,18 @@ const t = {
     loadError: 'Ошибка загрузки',
     exceeded: '(превышен!)',
     limitMonths12: '12 мес.',
+    financeLimits: 'Лимиты паушала',
+    limitsAccrualNote: 'Расчёт по начислению (Income.issued_date), а не по банку.',
+    averageMonthlyIncome: 'Средний месячный доход',
+    forecastYearEnd: 'Прогноз на конец года',
+    estimatedLimitDate: 'Оценка даты превышения 6 млн',
+    risk: 'Риск',
+    riskLow: 'Низкий',
+    riskMedium: 'Средний',
+    riskHigh: 'Высокий',
+    limitRiskMedium: 'Лимиты приближаются к порогу. Нужно контролировать accrual-доход.',
+    limitRiskHigh: 'Высокий риск превышения лимитов паушала.',
+    notAvailable: 'Недоступно',
     noRecords: 'Нет записей',
     limitWarning: 'Приближение к лимиту (80%). Рекомендуется контролировать доход.',
     limitExceeded: 'Внимание! Превышен лимит дохода. При превышении 6 млн RSD в год — переход на общий режим. При превышении 8 млн за 12 мес. — обязательная регистрация НДС.',
@@ -950,4 +974,6 @@ export function getMonthNamesShort() {
 export function getMonthNamesFull() {
   return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR;
 }
+
+
 

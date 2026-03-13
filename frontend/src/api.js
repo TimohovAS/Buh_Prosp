@@ -145,6 +145,10 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return request(`/finance/summary?${q}`);
     },
+    limits: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/finance/limits${q ? `?${q}` : ''}`);
+    },
     ar: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return request(`/finance/ar${q ? `?${q}` : ''}`);

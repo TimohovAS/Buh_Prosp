@@ -569,6 +569,19 @@ class IncomeLimitStatus(BaseModel):
     exceeded_8m: bool
 
 
+class FinanceLimitsResponse(BaseModel):
+    annual_total: Decimal
+    annual_limit: int
+    annual_percent: float
+    rolling_12_total: Decimal
+    vat_limit: int
+    vat_percent: float
+    average_monthly_income: Decimal
+    forecast_year_end: Decimal
+    estimated_limit_date: Optional[str] = None
+    risk: str
+
+
 class UpcomingObligationItem(BaseModel):
     """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
     id: int

@@ -7,9 +7,21 @@ from backend.database import get_db
 from backend.models import User
 from backend.auth import get_current_user_required
 from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project
+from backend.schemas import FinanceLimitsResponse
+from backend.services import get_finance_limits_overview
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+@router.get("/limits", response_model=FinanceLimitsResponse)
+async def finance_limits(
+    as_of: Optional[date] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Лимиты паушала по начислению (Income.issued_date), без bank cashflow."""
+    return FinanceLimitsResponse(**(await get_finance_limits_overview(db, as_of)))
 
 
 @router.get("/summary")
