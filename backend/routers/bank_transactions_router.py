@@ -47,12 +47,28 @@ async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
     return project
 
 
+async def _get_tax_project_id(db: AsyncSession) -> int:
+    result = await db.execute(select(Project).where(Project.code == "INT-TAX"))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(500, "Tax project INT-TAX not found")
+    return project.id
+
+
 async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
     result = await db.execute(select(Contract).where(Contract.id == contract_id))
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(404, "Contract not found")
     return contract
+
+
+async def _get_category_or_404(db: AsyncSession, category_id: int) -> TransactionCategory:
+    category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+    category = category_result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(404, "Category not found")
+    return category
 
 
 async def _resolve_expense_links(
@@ -350,19 +366,21 @@ async def create_expense_from_transaction(
     is_cash_transfer = data.category == CASH_CATEGORY
     project_id: int | None = None
     contract_id: int | None = None
+    selected_category: TransactionCategory | None = None
     if data.category_id is not None:
-        category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == data.category_id))
-        category = category_result.scalar_one_or_none()
-        if not category:
-            raise HTTPException(404, "Category not found")
-        category_name = category.name_ru
+        selected_category = await _get_category_or_404(db, data.category_id)
+        category_name = selected_category.name_ru
 
     if not is_cash_transfer:
-        project_id, contract_id = await _resolve_expense_links(
-            db,
-            data.project_id or transaction.project_id,
-            data.contract_id,
-        )
+        if selected_category and selected_category.category_group == "tax":
+            project_id = await _get_tax_project_id(db)
+            contract_id = None
+        else:
+            project_id, contract_id = await _resolve_expense_links(
+                db,
+                data.project_id or transaction.project_id,
+                data.contract_id,
+            )
 
     description = (
         data.description

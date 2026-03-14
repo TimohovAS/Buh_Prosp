@@ -134,6 +134,7 @@ export default function Expenses() {
 
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const taxProject = projects.find((project) => project.code === 'INT-TAX') || null
 
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
@@ -152,6 +153,12 @@ export default function Expenses() {
       return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
     }
     return item.category || UI_DASH
+  }
+
+  const isTaxCategoryId = (categoryId) => {
+    if (!categoryId) return false
+    const selectedCategory = categories.find((category) => String(category.id) === String(categoryId))
+    return selectedCategory?.category_group === 'tax'
   }
 
   const openExpenseSource = (item) => {
@@ -268,19 +275,35 @@ export default function Expenses() {
     })
   }
 
+  const updateCategory = (categoryId) => {
+    const category = categories.find((item) => String(item.id) === String(categoryId))
+    setForm((previous) => ({
+      ...previous,
+      category_id: categoryId,
+      category: category ? category.name_ru : '',
+      project_id: category?.category_group === 'tax'
+        ? (taxProject ? String(taxProject.id) : previous.project_id)
+        : previous.project_id,
+      contract_id: category?.category_group === 'tax' ? '' : previous.contract_id,
+    }))
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setPageError('')
     try {
       const categoryValue = form.category?.trim() || null
+      const isTaxCategorySelected = isTaxCategoryId(form.category_id)
       const payload = {
         date: form.date,
         description: form.description.trim(),
         amount: parseFloat(form.amount) || 0,
         category: categoryValue,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
-        contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
+        project_id: isTaxCategorySelected
+          ? (taxProject ? taxProject.id : null)
+          : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+        contract_id: isTaxCategorySelected ? null : (form.contract_id ? parseInt(form.contract_id, 10) : null),
         note: form.note || null,
       }
       if (modal === 'add') {
@@ -344,6 +367,7 @@ export default function Expenses() {
     const selectedProjectId = form.project_id ? parseInt(form.project_id, 10) : null
     return selectedProjectId ? getContractsForProject(selectedProjectId) : []
   }, [contracts, form.project_id])
+  const isTaxCategorySelected = useMemo(() => isTaxCategoryId(form.category_id), [categories, form.category_id])
 
   const filtered = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -652,11 +676,7 @@ export default function Expenses() {
                 <select
                   className="form-input"
                   value={form.category_id}
-                  onChange={(event) => {
-                    const categoryId = event.target.value
-                    const category = categories.find((item) => String(item.id) === categoryId)
-                    setForm({ ...form, category_id: categoryId, category: category ? category.name_ru : '' })
-                  }}
+                  onChange={(event) => updateCategory(event.target.value)}
                 >
                   <option value="">{`${UI_DASH} ${tr('allCategories')} ${UI_DASH}`}</option>
                   {categories.map((category) => (
@@ -664,24 +684,28 @@ export default function Expenses() {
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={form.project_id}
-                  onChange={updateProject}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('contract')}</label>
-                <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
-                  <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
-                  {filteredContracts.map((contract) => (
-                    <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
-                  ))}
-                </select>
-              </div>
+              {!isTaxCategorySelected ? (
+                <div className="form-group">
+                  <label className="form-label">{tr('project')}</label>
+                  <ProjectSelect
+                    projects={projects}
+                    value={form.project_id}
+                    onChange={updateProject}
+                    required
+                  />
+                </div>
+              ) : null}
+              {!isTaxCategorySelected ? (
+                <div className="form-group">
+                  <label className="form-label">{tr('contract')}</label>
+                  <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
+                    <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                    {filteredContracts.map((contract) => (
+                      <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <div className="form-group">
                 <label className="form-label">{tr('amount')}</label>
                 <input

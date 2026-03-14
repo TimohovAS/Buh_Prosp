@@ -11,7 +11,7 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.cash_service import CASH_TRANSFER_SOURCE, is_cash_transfer_expense
 from backend.database import get_db
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
-from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, User
+from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, TransactionCategory, User
 from backend.schemas import (
     BulkAssignProject,
     ExpenseCreate,
@@ -44,12 +44,39 @@ async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
     return project
 
 
+async def _get_tax_project_id(db: AsyncSession) -> int:
+    result = await db.execute(select(Project).where(Project.code == "INT-TAX"))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(500, "Tax project INT-TAX not found")
+    return project.id
+
+
 async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
     result = await db.execute(select(Contract).where(Contract.id == contract_id))
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(404, "Contract not found")
     return contract
+
+
+async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
+    if category_id is None:
+        return None
+    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+    return result.scalar_one_or_none()
+
+
+async def _resolve_tax_expense_links(
+    db: AsyncSession,
+    category_id: int | None,
+    project_id: int | None,
+    contract_id: int | None,
+) -> tuple[int | None, int | None]:
+    category = await _get_category_or_none(db, category_id)
+    if category and category.category_group == "tax":
+        return await _get_tax_project_id(db), None
+    return project_id, contract_id
 
 
 async def _resolve_expense_links(
@@ -406,7 +433,8 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    project_id, contract_id = await _resolve_expense_links(db, data.project_id, data.contract_id)
+    project_id, contract_id = await _resolve_tax_expense_links(db, data.category_id, data.project_id, data.contract_id)
+    project_id, contract_id = await _resolve_expense_links(db, project_id, contract_id)
     expense = Expense(
         date=data.date,
         description=data.description,
@@ -554,6 +582,12 @@ async def update_expense(
     dump = data.model_dump(exclude_unset=True)
     desired_project_id = dump.get("project_id", expense.project_id)
     desired_contract_id = dump.get("contract_id", expense.contract_id)
+    desired_project_id, desired_contract_id = await _resolve_tax_expense_links(
+        db,
+        dump.get("category_id", expense.category_id),
+        desired_project_id,
+        desired_contract_id,
+    )
 
     if not desired_project_id:
         desired_project_id = await _get_unassigned_project_id(db)
