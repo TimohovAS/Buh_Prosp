@@ -86,13 +86,7 @@ export default function Settings() {
   const [serviceLoading, setServiceLoading] = useState(false)
   const [serviceBusy, setServiceBusy] = useState('')
   const [serviceMessage, setServiceMessage] = useState('')
-  const [openSections, setOpenSections] = useState({
-    enterprise: true,
-    users: false,
-    limits: false,
-    categories: true,
-    backups: false,
-  })
+  const [activeSection, setActiveSection] = useState('enterprise')
 
   const loadUsers = () => {
     if (!isAdmin) return
@@ -146,10 +140,6 @@ export default function Settings() {
     if (kind === 'auto') return tr('serviceBackupsTypeAuto')
     if (kind === 'pre-restore') return tr('serviceBackupsTypePreRestore')
     return tr('serviceBackupsTypeManual')
-  }
-
-  const toggleSection = (section) => {
-    setOpenSections((current) => ({ ...current, [section]: !current[section] }))
   }
 
   const openAddUser = () => {
@@ -330,6 +320,12 @@ export default function Settings() {
   const backupsSummary = !serviceData?.settings?.supported
     ? tr('serviceBackupsUnsupported')
     : (latestBackup ? formatDateTime(latestBackup) : tr('serviceBackupsNoItems'))
+  const sections = [
+    { key: 'enterprise', title: tr('enterpriseData'), summary: [tr('name'), tr('address'), tr('bankName'), tr('cashflowOpening')].join(' • ') },
+    ...(isAdmin ? [{ key: 'users', title: tr('users'), summary: [tr('role'), tr('language'), tr('status')].join(' • ') }] : []),
+    { key: 'categories', title: tr('categoriesTitle'), summary: [tr('categoryNameRu'), tr('categoryGroup'), tr('sortOrder')].join(' • ') },
+    ...(isAdmin ? [{ key: 'backups', title: tr('serviceBackupsTitle'), summary: serviceData?.settings?.supported ? [tr('serviceBackupsCreate'), tr('download'), tr('restore')].join(' • ') : tr('serviceBackupsUnsupported') }] : []),
+  ]
 
   return (
     <>
@@ -340,11 +336,25 @@ export default function Settings() {
       </div>
 
       <div className="page-body settings-page">
+        <div className="settings-nav">
+          {sections.map((section) => (
+            <button
+              key={section.key}
+              type="button"
+              className={`settings-nav-button ${activeSection === section.key ? 'active' : ''}`}
+              onClick={() => setActiveSection(section.key)}
+            >
+              <span className="settings-nav-title">{section.title}</span>
+              <span className="settings-nav-meta">{section.summary}</span>
+            </button>
+          ))}
+        </div>
+
         <SettingsSection
           title={tr('enterpriseData')}
-          summary={enterpriseSummary}
-          open={openSections.enterprise}
-          onToggle={() => toggleSection('enterprise')}
+          summary={[tr('name'), tr('address'), tr('bankName'), tr('cashflowOpening')].join(' • ')}
+          open={activeSection === 'enterprise'}
+          onToggle={() => setActiveSection('enterprise')}
           actions={(
             <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}>
               {tr('edit')}
@@ -398,9 +408,9 @@ export default function Settings() {
         {isAdmin && (
           <SettingsSection
             title={tr('users')}
-            summary={usersSummary}
-            open={openSections.users}
-            onToggle={() => toggleSection('users')}
+            summary={[tr('role'), tr('language'), tr('status')].join(' • ')}
+            open={activeSection === 'users'}
+            onToggle={() => setActiveSection('users')}
             actions={(
               <>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -460,21 +470,10 @@ export default function Settings() {
         )}
 
         <SettingsSection
-          title={tr('limits')}
-          summary={tr('limitsDescription')}
-          open={openSections.limits}
-          onToggle={() => toggleSection('limits')}
-        >
-          <div className="settings-callout">
-            <p>{tr('limitsDescription')}</p>
-          </div>
-        </SettingsSection>
-
-        <SettingsSection
           title={tr('categoriesTitle')}
-          summary={categoriesSummary}
-          open={openSections.categories}
-          onToggle={() => toggleSection('categories')}
+          summary={[tr('categoryNameRu'), tr('categoryGroup'), tr('sortOrder')].join(' • ')}
+          open={activeSection === 'categories'}
+          onToggle={() => setActiveSection('categories')}
           actions={(
             <button className="btn btn-primary" onClick={() => {
               setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
@@ -545,9 +544,9 @@ export default function Settings() {
         {isAdmin && (
           <SettingsSection
             title={tr('serviceBackupsTitle')}
-            summary={backupsSummary}
-            open={openSections.backups}
-            onToggle={() => toggleSection('backups')}
+            summary={serviceData?.settings?.supported ? [tr('serviceBackupsCreate'), tr('download'), tr('restore')].join(' • ') : tr('serviceBackupsUnsupported')}
+            open={activeSection === 'backups'}
+            onToggle={() => setActiveSection('backups')}
             actions={(
               <>
                 <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
