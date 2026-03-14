@@ -517,7 +517,7 @@ export default function BankTransactions() {
     )
 
     const renderLinkPanel = () => (
-      <div className="bank-match-columns">
+      <div className="bank-match-columns bank-match-link-panel">
         {suggested.length > 0 ? (
           <div className="bank-match-panel">
             <div className="bank-match-panel-title">{tr('bankTxAutoFound')}</div>
