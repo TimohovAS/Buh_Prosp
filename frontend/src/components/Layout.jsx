@@ -71,8 +71,8 @@ export default function Layout({ lang, toggleLang }) {
             <div className="sidebar-group-title">Банка</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}</NavLink></li>
-              <li><NavLink to="/bank-import"><ArrowRightLeft size={18} /> {tr('bankImport')}</NavLink></li>
               <li><NavLink to="/cash"><Wallet size={18} /> {tr('cashRegister')}</NavLink></li>
+              <li><NavLink to="/bank-import"><ArrowRightLeft size={18} /> {tr('bankImport')}</NavLink></li>
             </ul>
           </div>
 
