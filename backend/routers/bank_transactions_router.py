@@ -47,14 +47,6 @@ async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
     return project
 
 
-async def _get_tax_project_id(db: AsyncSession) -> int:
-    result = await db.execute(select(Project).where(Project.code == "INT-TAX"))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(500, "Tax project INT-TAX not found")
-    return project.id
-
-
 async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
     result = await db.execute(select(Contract).where(Contract.id == contract_id))
     contract = result.scalar_one_or_none()
@@ -69,6 +61,28 @@ async def _get_category_or_404(db: AsyncSession, category_id: int) -> Transactio
     if not category:
         raise HTTPException(404, "Category not found")
     return category
+
+
+async def _resolve_category_expense_links(
+    db: AsyncSession,
+    category_id: int | None,
+    project_id: int | None,
+    contract_id: int | None,
+) -> tuple[int | None, int | None, bool]:
+    if category_id is None:
+        return project_id, contract_id, False
+
+    category = await _get_category_or_404(db, category_id)
+    resolved_project_id = category.default_project_id or project_id
+    resolved_contract_id = contract_id
+    is_tax_related = category.category_group == "tax"
+
+    if category.default_project_id and resolved_contract_id is not None:
+        contract = await _get_contract_or_404(db, resolved_contract_id)
+        if contract.project_id is not None and contract.project_id != category.default_project_id:
+            resolved_contract_id = None
+
+    return resolved_project_id, resolved_contract_id, is_tax_related
 
 
 async def _resolve_expense_links(
@@ -367,20 +381,23 @@ async def create_expense_from_transaction(
     project_id: int | None = None
     contract_id: int | None = None
     selected_category: TransactionCategory | None = None
+    is_tax_related = False
     if data.category_id is not None:
         selected_category = await _get_category_or_404(db, data.category_id)
         category_name = selected_category.name_ru
 
     if not is_cash_transfer:
-        if selected_category and selected_category.category_group == "tax":
-            project_id = await _get_tax_project_id(db)
-            contract_id = None
-        else:
-            project_id, contract_id = await _resolve_expense_links(
-                db,
-                data.project_id or transaction.project_id,
-                data.contract_id,
-            )
+        project_id, contract_id, is_tax_related = await _resolve_category_expense_links(
+            db,
+            data.category_id,
+            data.project_id or transaction.project_id,
+            data.contract_id,
+        )
+        project_id, contract_id = await _resolve_expense_links(
+            db,
+            project_id,
+            contract_id,
+        )
 
     description = (
         data.description
@@ -421,6 +438,7 @@ async def create_expense_from_transaction(
         expense.category = category_name
         expense.category_id = data.category_id
         expense.contract_id = contract_id
+        expense.is_tax_related = is_tax_related
         expense.bank_reference = transaction.bank_reference
         try:
             mark_expense_paid(expense, paid_date=transaction.date, allow_same=True)
@@ -438,6 +456,7 @@ async def create_expense_from_transaction(
             category_id=data.category_id,
             contract_id=contract_id,
             bank_reference=transaction.bank_reference,
+            is_tax_related=is_tax_related,
             source="bank_import",
             note=data.note,
             project_id=project_id,

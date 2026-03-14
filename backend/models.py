@@ -371,8 +371,11 @@ class TransactionCategory(Base):
     name_sr = Column(String(100), nullable=False)
     category_type = Column(String(20), default="expense")  # expense | income
     category_group = Column(String(20), default="admin")  # commercial | admin | tax
+    default_project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
+
+    default_project = relationship("Project", foreign_keys=[default_project_id])
 
 
 class Expense(Base):

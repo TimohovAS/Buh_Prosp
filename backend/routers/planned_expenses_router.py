@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.services import create_expense_reversal
-from backend.models import PlannedExpense, PlannedExpensePayment, Expense, User, Project
+from backend.models import PlannedExpense, PlannedExpensePayment, Expense, TransactionCategory, User, Project
 from backend.planned_expenses_service import next_payment_dates, payment_dates_in_range
 from backend.schemas import (
     PlannedExpenseCreate,
@@ -25,6 +25,20 @@ async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
     r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
     p = r.scalar_one_or_none()
     return p.id if p else None
+
+
+async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
+    if category_id is None:
+        return None
+    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+    return result.scalar_one_or_none()
+
+
+async def _resolve_category_project_id(db: AsyncSession, category_id: int | None, project_id: int | None) -> int | None:
+    category = await _get_category_or_none(db, category_id)
+    if category and category.default_project_id:
+        return category.default_project_id
+    return project_id
 
 
 @router.get("", response_model=list[PlannedExpenseResponse])
@@ -116,6 +130,14 @@ async def mark_planned_expense_paid(
     desc = f"{pe.name}" + (f" ({pe.description})" if pe.description else "")
     if len(desc) > 500:
         desc = desc[:497] + "..."
+    category = await _get_category_or_none(db, getattr(pe, "category_id", None))
+    resolved_project_id = await _resolve_category_project_id(
+        db,
+        getattr(pe, "category_id", None),
+        getattr(pe, "project_id", None),
+    )
+    if not resolved_project_id:
+        resolved_project_id = await _get_unassigned_project_id(db)
     expense = Expense(
         date=paid_d,
         description=desc,
@@ -123,9 +145,10 @@ async def mark_planned_expense_paid(
         currency=pe.currency or "RSD",
         category=pe.category or "other",
         category_id=getattr(pe, "category_id", None),
+        is_tax_related=bool(category and category.category_group == "tax"),
         note=data.note,
         paid_date=paid_d,
-        project_id=getattr(pe, "project_id", None) or await _get_unassigned_project_id(db),
+        project_id=resolved_project_id,
         source="planned",
         created_by=current_user.id,
     )
@@ -183,7 +206,11 @@ async def create_planned_expense(
     current_user: User = Depends(require_edit_access),
 ):
     """Р”РѕР±Р°РІРёС‚СЊ РїР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ."""
-    project_id = data.project_id if hasattr(data, "project_id") else None
+    project_id = await _resolve_category_project_id(
+        db,
+        data.category_id if hasattr(data, "category_id") else None,
+        data.project_id if hasattr(data, "project_id") else None,
+    )
     if not project_id:
         project_id = await _get_unassigned_project_id(db)
     pe = PlannedExpense(
@@ -236,6 +263,14 @@ async def update_planned_expense(
     if not pe:
         raise HTTPException(404, "РџР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
     dump = data.model_dump(exclude_unset=True)
+    desired_project_id = await _resolve_category_project_id(
+        db,
+        dump.get("category_id", pe.category_id),
+        dump.get("project_id", pe.project_id),
+    )
+    if desired_project_id is None:
+        desired_project_id = await _get_unassigned_project_id(db)
+    dump["project_id"] = desired_project_id
     if "project_id" in dump and not dump["project_id"]:
         dump["project_id"] = await _get_unassigned_project_id(db)
     for k, v in dump.items():

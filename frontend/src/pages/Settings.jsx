@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import ProjectSelect from '../components/ProjectSelect'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 
 const ROLES = [
@@ -73,12 +74,14 @@ export default function Settings() {
   })
 
   const [categories, setCategories] = useState([])
+  const [projects, setProjects] = useState([])
   const [catModal, setCatModal] = useState(null)
   const [catForm, setCatForm] = useState({
     name_ru: '',
     name_sr: '',
     category_type: 'expense',
     category_group: 'admin',
+    default_project_id: '',
     is_active: true,
     sort_order: 0,
   })
@@ -103,6 +106,12 @@ export default function Settings() {
       .catch((err) => console.error(err))
   }
 
+  const loadProjects = () => {
+    api.projects.list({ show_archived: true })
+      .then(setProjects)
+      .catch((err) => console.error(err))
+  }
+
   const loadService = () => {
     if (!isAdmin) return
     setServiceLoading(true)
@@ -117,6 +126,9 @@ export default function Settings() {
   }, [showInactive, isAdmin])
   useEffect(() => {
     loadCategories()
+  }, [])
+  useEffect(() => {
+    loadProjects()
   }, [])
   useEffect(() => {
     loadService()
@@ -206,6 +218,8 @@ export default function Settings() {
     const option = ROLES.find((item) => item.value === role)
     return option ? tr(option.labelKey) : role
   }
+
+  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || UI_DASH
 
   const handleEmblemSelected = (event) => {
     const file = event.target.files?.[0]
@@ -474,12 +488,12 @@ export default function Settings() {
           summary={[tr('categoryNameRu'), tr('categoryGroup'), tr('sortOrder')].join(' • ')}
           open={activeSection === 'categories'}
           onToggle={() => setActiveSection('categories')}
-          actions={(
-            <button className="btn btn-primary" onClick={() => {
-              setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
-              setCatModal('add')
-            }}>{tr('add')}</button>
-          )}
+            actions={(
+              <button className="btn btn-primary" onClick={() => {
+              setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', default_project_id: '', is_active: true, sort_order: 0 })
+                setCatModal('add')
+              }}>{tr('add')}</button>
+            )}
         >
           <div className="table-wrap">
             <table>
@@ -488,6 +502,7 @@ export default function Settings() {
                   <th>{tr('categoryNameRu')}</th>
                   <th>{tr('categoryNameSr')}</th>
                   <th>{tr('categoryGroup')}</th>
+                  <th>{tr('project')}</th>
                   <th>{tr('sortOrder')}</th>
                   <th>{tr('status')}</th>
                   <th></th>
@@ -495,12 +510,13 @@ export default function Settings() {
               </thead>
               <tbody>
                 {categories.length === 0 ? (
-                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
+                  <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noCategories')}</td></tr>
                 ) : categories.map((category) => (
                   <tr key={category.id} style={!category.is_active ? { opacity: 0.5 } : {}}>
                     <td>{category.name_ru}</td>
                     <td>{category.name_sr}</td>
                     <td>{tr(`categoryGroup${category.category_group.charAt(0).toUpperCase() + category.category_group.slice(1)}`)}</td>
+                    <td>{getProjectName(category.default_project_id)}</td>
                     <td>{category.sort_order}</td>
                     <td>
                       <span className="badge" style={{ backgroundColor: category.is_active ? 'var(--color-success)' : 'var(--color-text-muted)', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
@@ -514,6 +530,7 @@ export default function Settings() {
                           name_sr: category.name_sr,
                           category_type: category.category_type,
                           category_group: category.category_group,
+                          default_project_id: category.default_project_id ? String(category.default_project_id) : '',
                           is_active: category.is_active,
                           sort_order: category.sort_order,
                         })
@@ -878,14 +895,18 @@ export default function Settings() {
               <h2 className="modal-title">{catModal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('categoriesTitle')}</h2>
               <button className="modal-close" onClick={() => setCatModal(null)}>{UI_CLOSE}</button>
             </div>
-            <form onSubmit={async (event) => {
-              event.preventDefault()
-              try {
-                if (catModal === 'add') await api.categories.create(catForm)
-                else await api.categories.update(catModal.id, catForm)
-                setCatModal(null)
-                loadCategories()
-              } catch (err) {
+              <form onSubmit={async (event) => {
+                event.preventDefault()
+                try {
+                  const payload = {
+                    ...catForm,
+                    default_project_id: catForm.default_project_id ? parseInt(catForm.default_project_id, 10) : null,
+                  }
+                  if (catModal === 'add') await api.categories.create(payload)
+                  else await api.categories.update(catModal.id, payload)
+                  setCatModal(null)
+                  loadCategories()
+                } catch (err) {
                 console.error(err)
               }
             }}>
@@ -904,6 +925,16 @@ export default function Settings() {
                   <option value="admin">{tr('categoryGroupAdmin')}</option>
                   <option value="tax">{tr('categoryGroupTax')}</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect
+                  projects={projects}
+                  value={catForm.default_project_id}
+                  onChange={(nextValue) => setCatForm({ ...catForm, default_project_id: nextValue })}
+                  allowEmpty
+                  emptyLabel={UI_DASH}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('sortOrder')}</label>

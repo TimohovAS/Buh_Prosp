@@ -1019,8 +1019,16 @@ class TransactionCategoryCreate(BaseModel):
     name_sr: str
     category_type: str = "expense"  # expense | income
     category_group: str = "admin"  # commercial | admin | tax
+    default_project_id: Optional[int] = None
     is_active: bool = True
     sort_order: int = 0
+
+    @field_validator("default_project_id", mode="before")
+    @classmethod
+    def empty_default_project_to_none(cls, value):
+        if value == "" or value is None:
+            return None
+        return value
 
 
 class TransactionCategoryUpdate(BaseModel):
@@ -1028,8 +1036,16 @@ class TransactionCategoryUpdate(BaseModel):
     name_sr: Optional[str] = None
     category_type: Optional[str] = None
     category_group: Optional[str] = None
+    default_project_id: Optional[int] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
+
+    @field_validator("default_project_id", mode="before")
+    @classmethod
+    def empty_default_project_to_none(cls, value):
+        if value == "" or value is None:
+            return None
+        return value
 
 
 class TransactionCategoryResponse(BaseModel):
@@ -1038,6 +1054,7 @@ class TransactionCategoryResponse(BaseModel):
     name_sr: str
     category_type: str
     category_group: str
+    default_project_id: Optional[int] = None
     is_active: bool
     sort_order: int
 

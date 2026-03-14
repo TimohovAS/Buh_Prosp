@@ -151,6 +151,7 @@ export default function PlannedExpenses() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
       const payload = {
         name: form.name.trim(),
         description: form.description?.trim() || null,
@@ -158,7 +159,9 @@ export default function PlannedExpenses() {
         currency: form.currency || 'RSD',
         category: form.category || null,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
+        project_id: categoryDefaultProjectId
+          ? parseInt(categoryDefaultProjectId, 10)
+          : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
         period: form.period || 'monthly',
         payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
@@ -257,6 +260,12 @@ export default function PlannedExpenses() {
     const legacy = CATEGORIES.find((c) => c.value === item.category)
     return legacy ? tr(legacy.label) : (item.category || '\u2014')
   }
+  const getCategoryById = (categoryId) => apiCategories.find((category) => String(category.id) === String(categoryId)) || null
+  const getCategoryDefaultProjectId = (categoryId) => {
+    const category = getCategoryById(categoryId)
+    return category?.default_project_id ? String(category.default_project_id) : ''
+  }
+  const usesCategoryProject = (categoryId) => Boolean(getCategoryDefaultProjectId(categoryId))
 
   return (
     <>
@@ -573,30 +582,38 @@ export default function PlannedExpenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('category')}</label>
-                <select
-                  className="form-input"
-                  value={form.category_id}
-                  onChange={(e) => {
-                    const cid = e.target.value
-                    const cat = apiCategories.find(c => String(c.id) === cid)
-                    setForm({ ...form, category_id: cid, category: cat ? cat.name_ru : '' })
-                  }}
-                >
+                  <select
+                    className="form-input"
+                    value={form.category_id}
+                    onChange={(e) => {
+                      const cid = e.target.value
+                      const cat = apiCategories.find(c => String(c.id) === cid)
+                      const defaultProjectId = cat?.default_project_id ? String(cat.default_project_id) : ''
+                      setForm({
+                        ...form,
+                        category_id: cid,
+                        category: cat ? cat.name_ru : '',
+                        project_id: defaultProjectId || form.project_id,
+                      })
+                    }}
+                  >
                   <option value="">{'\u2014'}</option>
                   {apiCategories.map((c) => (
                     <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={form.project_id}
-                  onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
-                  required
-                />
-              </div>
+                {!usesCategoryProject(form.category_id) ? (
+                  <div className="form-group">
+                    <label className="form-label">{tr('project')}</label>
+                    <ProjectSelect
+                      projects={projects}
+                      value={form.project_id}
+                      onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
+                      required
+                    />
+                  </div>
+                ) : null}
               <div className="form-group">
                 <label className="form-label">{tr('plannedPeriod')}</label>
                 <select

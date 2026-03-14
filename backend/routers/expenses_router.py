@@ -44,14 +44,6 @@ async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
     return project
 
 
-async def _get_tax_project_id(db: AsyncSession) -> int:
-    result = await db.execute(select(Project).where(Project.code == "INT-TAX"))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(500, "Tax project INT-TAX not found")
-    return project.id
-
-
 async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
     result = await db.execute(select(Contract).where(Contract.id == contract_id))
     contract = result.scalar_one_or_none()
@@ -67,16 +59,26 @@ async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> Tr
     return result.scalar_one_or_none()
 
 
-async def _resolve_tax_expense_links(
+async def _resolve_category_expense_links(
     db: AsyncSession,
     category_id: int | None,
     project_id: int | None,
     contract_id: int | None,
-) -> tuple[int | None, int | None]:
+) -> tuple[int | None, int | None, bool]:
     category = await _get_category_or_none(db, category_id)
-    if category and category.category_group == "tax":
-        return await _get_tax_project_id(db), None
-    return project_id, contract_id
+    if not category:
+        return project_id, contract_id, False
+
+    resolved_project_id = category.default_project_id or project_id
+    resolved_contract_id = contract_id
+    is_tax_related = category.category_group == "tax"
+
+    if category.default_project_id and resolved_contract_id is not None:
+        contract = await _get_contract_or_404(db, resolved_contract_id)
+        if contract.project_id is not None and contract.project_id != category.default_project_id:
+            resolved_contract_id = None
+
+    return resolved_project_id, resolved_contract_id, is_tax_related
 
 
 async def _resolve_expense_links(
@@ -433,7 +435,12 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    project_id, contract_id = await _resolve_tax_expense_links(db, data.category_id, data.project_id, data.contract_id)
+    project_id, contract_id, is_tax_related = await _resolve_category_expense_links(
+        db,
+        data.category_id,
+        data.project_id,
+        data.contract_id,
+    )
     project_id, contract_id = await _resolve_expense_links(db, project_id, contract_id)
     expense = Expense(
         date=data.date,
@@ -443,6 +450,7 @@ async def create_expense(
         category=data.category,
         category_id=data.category_id,
         contract_id=contract_id,
+        is_tax_related=is_tax_related,
         note=data.note,
         paid_date=data.paid_date or data.date,
         project_id=project_id,
@@ -582,7 +590,7 @@ async def update_expense(
     dump = data.model_dump(exclude_unset=True)
     desired_project_id = dump.get("project_id", expense.project_id)
     desired_contract_id = dump.get("contract_id", expense.contract_id)
-    desired_project_id, desired_contract_id = await _resolve_tax_expense_links(
+    desired_project_id, desired_contract_id, is_tax_related = await _resolve_category_expense_links(
         db,
         dump.get("category_id", expense.category_id),
         desired_project_id,
@@ -600,6 +608,7 @@ async def update_expense(
     desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
     dump["project_id"] = desired_project_id
     dump["contract_id"] = desired_contract_id
+    dump["is_tax_related"] = is_tax_related
 
     for key, value in dump.items():
         setattr(expense, key, value)

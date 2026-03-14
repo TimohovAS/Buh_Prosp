@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
-from backend.models import TransactionCategory, User
+from backend.models import Project, TransactionCategory, User
 from backend.schemas import (
     TransactionCategoryCreate,
     TransactionCategoryResponse,
@@ -15,6 +15,17 @@ from backend.schemas import (
 )
 
 router = APIRouter(prefix="/categories", tags=["categories"])
+
+
+async def _ensure_default_project_exists(db: AsyncSession, project_id: int | None) -> None:
+    if project_id is None:
+        return
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Проект не найден")
+    if project.status == "archived":
+        raise HTTPException(400, "Нельзя использовать архивный проект")
 
 
 @router.get("", response_model=list[TransactionCategoryResponse])
@@ -44,6 +55,7 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
+    await _ensure_default_project_exists(db, data.default_project_id)
     category = TransactionCategory(**data.model_dump())
     db.add(category)
     await db.commit()
@@ -65,7 +77,11 @@ async def update_category(
     if not category:
         raise HTTPException(404, "Категория не найдена")
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    if "default_project_id" in payload:
+        await _ensure_default_project_exists(db, payload["default_project_id"])
+
+    for key, value in payload.items():
         setattr(category, key, value)
 
     await db.commit()
