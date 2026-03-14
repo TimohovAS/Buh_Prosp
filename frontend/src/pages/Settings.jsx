@@ -20,6 +20,24 @@ const UI_DASH = '\u2014'
 const UI_CLOSE = '\u00D7'
 const MAX_EMBLEM_FILE_SIZE = 256 * 1024
 
+function SettingsSection({ title, summary, actions, open, onToggle, children }) {
+  return (
+    <section className={`settings-section ${open ? 'open' : ''}`}>
+      <div className="settings-section-header">
+        <button type="button" className="settings-section-toggle" onClick={onToggle}>
+          <div className="settings-section-copy">
+            <div className="settings-section-title">{title}</div>
+            {summary ? <div className="settings-section-summary">{summary}</div> : null}
+          </div>
+          <span className={`settings-section-arrow ${open ? 'open' : ''}`}>▾</span>
+        </button>
+        {actions ? <div className="settings-section-actions">{actions}</div> : null}
+      </div>
+      {open ? <div className="settings-section-body">{children}</div> : null}
+    </section>
+  )
+}
+
 export default function Settings() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -68,6 +86,13 @@ export default function Settings() {
   const [serviceLoading, setServiceLoading] = useState(false)
   const [serviceBusy, setServiceBusy] = useState('')
   const [serviceMessage, setServiceMessage] = useState('')
+  const [openSections, setOpenSections] = useState({
+    enterprise: true,
+    users: false,
+    limits: false,
+    categories: true,
+    backups: false,
+  })
 
   const loadUsers = () => {
     if (!isAdmin) return
@@ -121,6 +146,10 @@ export default function Settings() {
     if (kind === 'auto') return tr('serviceBackupsTypeAuto')
     if (kind === 'pre-restore') return tr('serviceBackupsTypePreRestore')
     return tr('serviceBackupsTypeManual')
+  }
+
+  const toggleSection = (section) => {
+    setOpenSections((current) => ({ ...current, [section]: !current[section] }))
   }
 
   const openAddUser = () => {
@@ -290,57 +319,98 @@ export default function Settings() {
 
   if (loading) return <div>{tr('loading')}</div>
 
+  const activeUsers = users.filter((user) => user.is_active).length
+  const activeCategories = categories.filter((category) => category.is_active).length
+  const latestBackup = serviceData?.backups?.[0]?.created_at
+  const enterpriseSummary = data
+    ? [data.name, data.pib ? `PIB ${data.pib}` : null].filter(Boolean).join(' · ')
+    : tr('fillEnterpriseData')
+  const usersSummary = users.length > 0 ? `${activeUsers}/${users.length} ${tr('active').toLowerCase()}` : tr('noUsers')
+  const categoriesSummary = categories.length > 0 ? `${activeCategories}/${categories.length} ${tr('active').toLowerCase()}` : tr('noCategories')
+  const backupsSummary = !serviceData?.settings?.supported
+    ? tr('serviceBackupsUnsupported')
+    : (latestBackup ? formatDateTime(latestBackup) : tr('serviceBackupsNoItems'))
+
   return (
     <>
       <div className="page-header">
         <div className="page-header-main">
           <h1 className="page-title">{tr('settings')}</h1>
         </div>
-        <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={() => setModal(true)}>
-            {tr('enterprise')}
-          </button>
-        </div>
       </div>
 
-      <div className="page-body">
-        <div className="card">
-          <div className="card-title">{tr('enterpriseData')}</div>
+      <div className="page-body settings-page">
+        <SettingsSection
+          title={tr('enterpriseData')}
+          summary={enterpriseSummary}
+          open={openSections.enterprise}
+          onToggle={() => toggleSection('enterprise')}
+          actions={(
+            <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}>
+              {tr('edit')}
+            </button>
+          )}
+        >
           {data ? (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div className="settings-enterprise-grid">
+              <div className="settings-emblem-card">
                 <div className="brand-mark" style={{ width: '4rem', height: '4rem' }} aria-hidden="true">
                   {data.emblem_data_url ? <img src={data.emblem_data_url} alt="" /> : <span>P</span>}
                 </div>
-                <div>
-                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{tr('emblemPreview')}</div>
-                  <div style={{ fontWeight: 600 }}>{data.name}</div>
+                <div className="settings-emblem-copy">
+                  <div className="settings-field-label">{tr('emblemPreview')}</div>
+                  <div className="settings-emblem-name">{data.name}</div>
                 </div>
               </div>
-              <p><strong>{tr('name')}:</strong> {data.name}</p>
-              <p><strong>{tr('address')}:</strong> {data.address || UI_DASH}</p>
-              <p><strong>{tr('pib')}:</strong> {data.pib || UI_DASH}</p>
-              <p><strong>{tr('maticniBroj')}:</strong> {data.maticni_broj || UI_DASH}</p>
-              <p><strong>{tr('bankName')}:</strong> {data.bank_name || UI_DASH}</p>
-              <p><strong>{tr('bankAccount')}:</strong> {data.bank_account || UI_DASH}</p>
+
+              <div className="settings-info-grid">
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('name')}</div>
+                  <div className="settings-field-value">{data.name || UI_DASH}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('address')}</div>
+                  <div className="settings-field-value">{data.address || UI_DASH}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('pib')}</div>
+                  <div className="settings-field-value">{data.pib || UI_DASH}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('maticniBroj')}</div>
+                  <div className="settings-field-value">{data.maticni_broj || UI_DASH}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('bankName')}</div>
+                  <div className="settings-field-value">{data.bank_name || UI_DASH}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('bankAccount')}</div>
+                  <div className="settings-field-value">{data.bank_account || UI_DASH}</div>
+                </div>
+              </div>
             </div>
           ) : (
-            <p style={{ color: 'var(--color-text-muted)' }}>{tr('fillEnterpriseData')}</p>
+            <p className="settings-empty-text">{tr('fillEnterpriseData')}</p>
           )}
-        </div>
+        </SettingsSection>
 
         {isAdmin && (
-          <div className="card">
-            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <span>{tr('users')}</span>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <SettingsSection
+            title={tr('users')}
+            summary={usersSummary}
+            open={openSections.users}
+            onToggle={() => toggleSection('users')}
+            actions={(
+              <>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
                   <span>{tr('showInactive')}</span>
                 </label>
                 <button className="btn btn-primary btn-sm" onClick={openAddUser}>{tr('add')}</button>
-              </div>
-            </div>
+              </>
+            )}
+          >
             <div className="table-wrap">
               <table>
                 <thead>
@@ -386,22 +456,32 @@ export default function Settings() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </SettingsSection>
         )}
 
-        <div className="card">
-          <div className="card-title">{tr('limits')}</div>
-          <p>{tr('limitsDescription')}</p>
-        </div>
+        <SettingsSection
+          title={tr('limits')}
+          summary={tr('limitsDescription')}
+          open={openSections.limits}
+          onToggle={() => toggleSection('limits')}
+        >
+          <div className="settings-callout">
+            <p>{tr('limitsDescription')}</p>
+          </div>
+        </SettingsSection>
 
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2>{tr('categoriesTitle')}</h2>
+        <SettingsSection
+          title={tr('categoriesTitle')}
+          summary={categoriesSummary}
+          open={openSections.categories}
+          onToggle={() => toggleSection('categories')}
+          actions={(
             <button className="btn btn-primary" onClick={() => {
               setCatForm({ name_ru: '', name_sr: '', category_type: 'expense', category_group: 'admin', is_active: true, sort_order: 0 })
               setCatModal('add')
             }}>{tr('add')}</button>
-          </div>
+          )}
+        >
           <div className="table-wrap">
             <table>
               <thead>
@@ -460,24 +540,27 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
-        </div>
+        </SettingsSection>
 
         {isAdmin && (
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-              <div>
-                <div className="card-title">{tr('serviceBackupsTitle')}</div>
-                <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsHint')}</p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <SettingsSection
+            title={tr('serviceBackupsTitle')}
+            summary={backupsSummary}
+            open={openSections.backups}
+            onToggle={() => toggleSection('backups')}
+            actions={(
+              <>
                 <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
                   {tr('serviceBackupsRefresh')}
                 </button>
                 <button className="btn btn-primary" onClick={handleCreateBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
                   {tr('serviceBackupsCreate')}
                 </button>
-              </div>
-            </div>
+              </>
+            )}
+          >
+
+            <p className="settings-section-note">{tr('serviceBackupsHint')}</p>
 
             {serviceMessage ? (
               <div style={{ marginBottom: '1rem', color: 'var(--color-success)' }}>{serviceMessage}</div>
@@ -568,7 +651,7 @@ export default function Settings() {
                 </div>
               </>
             )}
-          </div>
+          </SettingsSection>
         )}
       </div>
 
