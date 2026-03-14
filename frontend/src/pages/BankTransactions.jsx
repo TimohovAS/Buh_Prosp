@@ -56,6 +56,7 @@ export default function BankTransactions() {
   const [suggestions, setSuggestions] = useState([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [matchError, setMatchError] = useState('')
+  const [matchTab, setMatchTab] = useState('link')
   const [allInvoiceSearch, setAllInvoiceSearch] = useState('')
   const [expenseSaving, setExpenseSaving] = useState(false)
   const [expenseForm, setExpenseForm] = useState({
@@ -254,6 +255,7 @@ export default function BankTransactions() {
   const openMatchModal = async (transaction) => {
     setMatchTx(transaction)
     setMatchError('')
+    setMatchTab(transaction.direction === 'out' ? 'link' : 'link')
     setAllInvoiceSearch('')
     setSuggestions([])
     setExpenseForm(buildExpenseForm(transaction))
@@ -262,6 +264,10 @@ export default function BankTransactions() {
     try {
       const response = await api.bankTransactions.suggest(transaction.id)
       setSuggestions(response)
+      if (transaction.direction === 'out') {
+        const hasLinkOptions = response.some((item) => item.type === 'obligation')
+        setMatchTab(hasLinkOptions ? 'link' : 'create')
+      }
     } catch (error) {
       setMatchError(error.message)
     } finally {
@@ -274,6 +280,7 @@ export default function BankTransactions() {
     setSuggestions([])
     setSuggestLoading(false)
     setMatchError('')
+    setMatchTab('link')
     setAllInvoiceSearch('')
     setExpenseSaving(false)
     setExpenseForm({
@@ -379,16 +386,16 @@ export default function BankTransactions() {
     const label = item.invoice_number || item.description || `#${item.id}`
 
     return (
-      <div key={`${item.type}-${item.id}`} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700 }}>{label}</span>
-            {item.date ? <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{item.date}</span> : null}
-            {item.score != null ? <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{item.score}%</span> : null}
+      <div key={`${item.type}-${item.id}`} className="bank-match-item">
+        <div style={{ minWidth: 0 }}>
+          <div className="bank-match-item-title">
+            <span>{label}</span>
+            {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
+            {item.score != null ? <span className="bank-match-item-subtle">{item.score}%</span> : null}
           </div>
           {item.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{item.client_name}</div> : null}
-          {item.description ? <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>{item.description}</div> : null}
-          <div style={{ fontSize: '0.86rem', marginTop: '0.25rem', fontWeight: 600 }}>
+          {item.description ? <div className="bank-match-item-body">{item.description}</div> : null}
+          <div className="bank-match-item-amount">
             {isPartial ? (
               <>
                 <span>{tr('partial')}: {amount.toLocaleString('sr-RS')} RSD</span>
@@ -402,6 +409,33 @@ export default function BankTransactions() {
         <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => performMatch(item.id, item.type)}>
           {tr('bankTxMatchBtn')}
         </button>
+      </div>
+    )
+  }
+
+  const renderMatchSummary = (transaction) => {
+    if (!transaction) return null
+    const amount = Number(transaction.amount || 0)
+    const amountClassName = transaction.direction === 'in' ? 'positive' : 'negative'
+
+    return (
+      <div className="card bank-match-summary">
+        <div>
+          <div className="bank-match-summary-title">{transaction.counterparty_name || UI_DASH}</div>
+          <div className="bank-match-summary-purpose">{transaction.purpose || UI_DASH}</div>
+          <div className="bank-match-summary-meta">
+            <span>{tr('date')}: {transaction.date || UI_DASH}</span>
+            <span>{tr('bankTxReference')}: {transaction.bank_reference || UI_DASH}</span>
+          </div>
+        </div>
+        <div>
+          <div className={`bank-match-summary-amount ${amountClassName}`}>
+            {transaction.direction === 'in' ? '+' : '-'}{amount.toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
+          </div>
+          <div className="bank-match-summary-project">
+            {tr('project')}: {getProjectName(transaction.project_id)}
+          </div>
+        </div>
       </div>
     )
   }
@@ -482,64 +516,56 @@ export default function BankTransactions() {
       String(item.amount || '').includes(query)
     )
 
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {(suggested.length > 0 || allObligations.length > 0) && (
-          <div className="card" style={{ padding: '1rem' }}>
-            {suggested.length > 0 && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
-                  {tr('bankTxAutoFound')}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  {suggested.map(renderSuggestionCard)}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
-                {tr('bankTxOpenObligations')}
-              </div>
-                <SearchInput
-                  placeholder={tr('bankTxSearchObligations')}
-                  value={allInvoiceSearch}
-                  onChange={setAllInvoiceSearch}
-                  style={{ width: '100%', marginBottom: '0.5rem' }}
-                />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 240, overflowY: 'auto' }}>
-                {allObligations.length === 0 && (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenObligations')}</p>
-                )}
-                {filteredObligations.length === 0 && allObligations.length > 0 && (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
-                )}
-                {filteredObligations.map(renderSuggestionCard)}
-              </div>
+    const renderLinkPanel = () => (
+      <div className="bank-match-columns">
+        {suggested.length > 0 ? (
+          <div className="bank-match-panel">
+            <div className="bank-match-panel-title">{tr('bankTxAutoFound')}</div>
+            <div className="bank-match-list">
+              {suggested.map(renderSuggestionCard)}
             </div>
           </div>
-        )}
+        ) : null}
 
-        <form onSubmit={handleCreateExpense} className="card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
-            {tr('bankTxCreateExpenseHint')}
+        <div className="bank-match-panel">
+          <div className="bank-match-panel-title">{tr('bankTxOpenObligations')}</div>
+          <SearchInput
+            placeholder={tr('bankTxSearchObligations')}
+            value={allInvoiceSearch}
+            onChange={setAllInvoiceSearch}
+            style={{ width: '100%', marginBottom: '0.75rem' }}
+          />
+          <div className="bank-match-list">
+            {allObligations.length === 0 && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenObligations')}</p>
+            )}
+            {filteredObligations.length === 0 && allObligations.length > 0 && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+            )}
+            {filteredObligations.map(renderSuggestionCard)}
           </div>
-          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-            {tr('bankTxCreateExpenseFallbackHint')}
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('date')}</label>
-            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('description')}</label>
-            <input
-              className="form-input"
-              value={expenseForm.description}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
-              required
-            />
-          </div>
+        </div>
+      </div>
+    )
+
+    const renderCreatePanel = () => (
+      <form onSubmit={handleCreateExpense} className="bank-match-panel bank-match-form">
+        <p className="bank-match-form-note">{tr('bankTxCreateExpenseHint')}</p>
+        <p className="bank-match-form-note">{tr('bankTxCreateExpenseFallbackHint')}</p>
+
+        <div className="bank-match-form-grid">
+          {!isCashCategorySelected ? (
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <ProjectSelect
+                projects={projects}
+                value={expenseForm.project_id}
+                onChange={updateExpenseProject}
+                required
+              />
+            </div>
+          ) : null}
+
           <div className="form-group">
             <label className="form-label">{tr('category')}</label>
             <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
@@ -550,41 +576,72 @@ export default function BankTransactions() {
               ))}
             </select>
           </div>
+
           {!isCashCategorySelected ? (
-            <>
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={expenseForm.project_id}
-                  onChange={updateExpenseProject}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('contract')}</label>
-                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
-                  <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
-                  {filteredContracts.map((contract) => (
-                    <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
-                  ))}
-                </select>
-              </div>
-            </>
+            <div className="form-group full">
+              <label className="form-label">{tr('contract')}</label>
+              <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+                <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                {filteredContracts.map((contract) => (
+                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                ))}
+              </select>
+            </div>
           ) : null}
+
+          <div className="form-group">
+            <label className="form-label">{tr('date')}</label>
+            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
+          </div>
+
           <div className="form-group">
             <label className="form-label">{tr('amount')}</label>
             <input className="form-input" value={matchTx?.amount?.toLocaleString('sr-RS') || ''} disabled />
           </div>
-          <div className="form-group">
+
+          <div className="form-group full">
+            <label className="form-label">{tr('description')}</label>
+            <input
+              className="form-input"
+              value={expenseForm.description}
+              onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="form-group full">
             <label className="form-label">{tr('note')}</label>
             <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
           </div>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
-          </div>
-        </form>
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
+          <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
+        </div>
+      </form>
+    )
+
+    return (
+      <div className="bank-match-layout">
+        <div className="bank-match-tabs">
+          <button
+            type="button"
+            className={`bank-match-tab ${matchTab === 'link' ? 'active' : ''}`}
+            onClick={() => setMatchTab('link')}
+          >
+            {tr('bankTxMatchBtn')}
+          </button>
+          <button
+            type="button"
+            className={`bank-match-tab ${matchTab === 'create' ? 'active' : ''}`}
+            onClick={() => setMatchTab('create')}
+          >
+            {tr('bankTxCreateExpense')}
+          </button>
+        </div>
+
+        {matchTab === 'link' ? renderLinkPanel() : renderCreatePanel()}
       </div>
     )
   }
@@ -701,19 +758,16 @@ export default function BankTransactions() {
         </div>
       </div>
 
-      <Modal isOpen={!!matchTx} onClose={closeMatchModal} title={matchTx?.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchTitle')}>
+      <Modal
+        isOpen={!!matchTx}
+        onClose={closeMatchModal}
+        title={matchTx?.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchTitle')}
+        className={matchTx?.direction === 'out' ? 'bank-match-modal' : ''}
+        maxWidth={matchTx?.direction === 'out' ? '980px' : '700px'}
+      >
         {matchTx && (
-          <div>
-            <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
-              <div style={{ fontWeight: 700 }}>{matchTx.counterparty_name || UI_DASH}</div>
-              <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{matchTx.purpose || UI_DASH}</div>
-              <div style={{ marginTop: '0.5rem', fontWeight: 700 }}>
-                {matchTx.direction === 'in' ? '+' : '-'}{Number(matchTx.amount || 0).toLocaleString('sr-RS')} {matchTx.currency || 'RSD'}
-              </div>
-              <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                {tr('project')}: {getProjectName(matchTx.project_id)}
-              </div>
-            </div>
+          <div className="bank-match-layout">
+            {renderMatchSummary(matchTx)}
 
             {suggestLoading ? (
               <p>{tr('loading')}</p>
@@ -723,7 +777,7 @@ export default function BankTransactions() {
               renderIncomingModalContent()
             )}
 
-            {matchError ? <div style={{ color: 'var(--color-danger)', marginTop: '1rem' }}>{matchError}</div> : null}
+            {matchError ? <div style={{ color: 'var(--color-danger)' }}>{matchError}</div> : null}
           </div>
         )}
       </Modal>

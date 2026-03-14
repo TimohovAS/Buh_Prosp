@@ -651,18 +651,20 @@ tr:hover td {
   background: var(--color-surface);
   border-radius: 12px;
   border: 1px solid var(--color-border);
-  padding: 1.5rem;
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  padding: 1rem 1rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .modal-title {
@@ -684,11 +686,212 @@ tr:hover td {
   color: var(--color-text);
 }
 
+.modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
 .modal-actions {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+.bank-match-modal {
+  max-width: 980px;
+  width: min(980px, 94vw);
+}
+
+.bank-match-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bank-match-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  margin-bottom: 0;
+}
+
+.bank-match-summary-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.bank-match-summary-purpose {
+  color: var(--color-text-muted);
+  margin-top: 0.35rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.bank-match-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.bank-match-summary-amount {
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bank-match-summary-amount.positive {
+  color: var(--color-success);
+}
+
+.bank-match-summary-amount.negative {
+  color: var(--color-danger);
+}
+
+.bank-match-summary-project {
+  text-align: right;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.35rem;
+}
+
+.bank-match-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bank-match-tab {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font-weight: 600;
+}
+
+.bank-match-tab.active {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-text);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.bank-match-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.bank-match-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.bank-match-panel-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.bank-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.bank-match-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 0.8rem 0.85rem;
+}
+
+.bank-match-item-title {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-weight: 700;
+}
+
+.bank-match-item-subtle {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.bank-match-item-body {
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.bank-match-item-amount {
+  margin-top: 0.35rem;
+  font-weight: 700;
+}
+
+.bank-match-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bank-match-form-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.bank-match-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.bank-match-form-grid .form-group {
+  margin: 0;
+}
+
+.bank-match-form-grid .full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .bank-match-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .bank-match-summary-amount,
+  .bank-match-summary-project {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .bank-match-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .progress-bar {
