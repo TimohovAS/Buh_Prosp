@@ -265,7 +265,7 @@ export default function BankTransactions() {
       const response = await api.bankTransactions.suggest(transaction.id)
       setSuggestions(response)
       if (transaction.direction === 'out') {
-        const hasLinkOptions = response.some((item) => item.type === 'obligation')
+        const hasLinkOptions = response.some((item) => item.type === 'obligation' && item.section === 'suggested')
         setMatchTab(hasLinkOptions ? 'link' : 'create')
       }
     } catch (error) {
@@ -554,6 +554,17 @@ export default function BankTransactions() {
         <p className="bank-match-form-note">{tr('bankTxCreateExpenseFallbackHint')}</p>
 
         <div className="bank-match-form-grid">
+          <div className="form-group">
+            <label className="form-label">{tr('category')}</label>
+            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
+              <option value="">{UI_DASH}</option>
+              <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
+              ))}
+            </select>
+          </div>
+
           {!isCashCategorySelected ? (
             <div className="form-group">
               <label className="form-label">{tr('project')}</label>
@@ -565,17 +576,6 @@ export default function BankTransactions() {
               />
             </div>
           ) : null}
-
-          <div className="form-group">
-            <label className="form-label">{tr('category')}</label>
-            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
-              <option value="">{UI_DASH}</option>
-              <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
-              ))}
-            </select>
-          </div>
 
           {!isCashCategorySelected ? (
             <div className="form-group full">
@@ -641,7 +641,9 @@ export default function BankTransactions() {
           </button>
         </div>
 
-        {matchTab === 'link' ? renderLinkPanel() : renderCreatePanel()}
+        <div className="bank-match-content">
+          {matchTab === 'link' ? renderLinkPanel() : renderCreatePanel()}
+        </div>
       </div>
     )
   }
