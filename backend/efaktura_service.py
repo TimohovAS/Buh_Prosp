@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from urllib.parse import quote, urljoin
@@ -379,6 +379,14 @@ def _format_url(base_url: str | None, template: str | None, **values: Any) -> st
     return urljoin(base.rstrip("/") + "/", formatted.lstrip("/"))
 
 
+def _format_sync_boundary(value: date, *, end_of_day: bool) -> str:
+    moment = datetime.combine(
+        value,
+        time(23, 59, 59) if end_of_day else time(0, 0, 0),
+    )
+    return moment.isoformat()
+
+
 def _http_request(url: str, *, method: str, header_name: str, header_value: str) -> tuple[bytes, str]:
     request = Request(url, method=method, headers={
         "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.8",
@@ -449,6 +457,8 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
     lookback_days = max(1, int(enterprise.efaktura_sync_lookback_days or 30))
     date_to = date.today()
     date_from = date_to - timedelta(days=lookback_days)
+    date_from_value = _format_sync_boundary(date_from, end_of_day=False)
+    date_to_value = _format_sync_boundary(date_to, end_of_day=True)
 
     documents: list[dict[str, Any]] = []
 
@@ -456,9 +466,9 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         list_url = _format_url(
             base_url,
             list_path,
-            from_=date_from.isoformat(),
-            to=date_to.isoformat(),
-            **{"from": date_from.isoformat()},
+            from_=date_from_value,
+            to=date_to_value,
+            **{"from": date_from_value},
         )
         if not list_url:
             return
