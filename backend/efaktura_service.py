@@ -403,12 +403,15 @@ def _extract_ids(payload: Any) -> list[str]:
                         break
         return output
     if isinstance(payload, dict):
-        for key in ("salesInvoiceIds", "purchaseInvoiceIds", "invoiceIds"):
-            if key in payload:
-                return _extract_ids(payload[key])
+        lowered_keys = {str(key).lower(): key for key in payload.keys()}
+        for key in ("salesinvoiceids", "purchaseinvoiceids", "invoiceids"):
+            actual_key = lowered_keys.get(key)
+            if actual_key is not None:
+                return _extract_ids(payload[actual_key])
         for key in ("items", "data", "result", "documents", "invoices"):
-            if key in payload:
-                return _extract_ids(payload[key])
+            actual_key = lowered_keys.get(key)
+            if actual_key is not None:
+                return _extract_ids(payload[actual_key])
     return []
 
 
