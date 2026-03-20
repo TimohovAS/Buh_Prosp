@@ -89,6 +89,23 @@ export default function Settings() {
   const [serviceLoading, setServiceLoading] = useState(false)
   const [serviceBusy, setServiceBusy] = useState('')
   const [serviceMessage, setServiceMessage] = useState('')
+  const [efakturaForm, setEfakturaForm] = useState({
+    efaktura_enabled: false,
+    efaktura_api_base_url: '',
+    efaktura_api_key: '',
+    efaktura_api_key_header: 'ApiKey',
+    efaktura_api_key_prefix: '',
+    efaktura_sync_incoming: true,
+    efaktura_sync_outgoing: true,
+    efaktura_sync_lookback_days: 30,
+    efaktura_incoming_list_path: '',
+    efaktura_incoming_document_path: '',
+    efaktura_outgoing_list_path: '',
+    efaktura_outgoing_document_path: '',
+  })
+  const [efakturaLoading, setEfakturaLoading] = useState(false)
+  const [efakturaSaving, setEfakturaSaving] = useState(false)
+  const [efakturaMessage, setEfakturaMessage] = useState('')
   const [activeSection, setActiveSection] = useState('enterprise')
 
   const loadUsers = () => {
@@ -121,6 +138,30 @@ export default function Settings() {
       .finally(() => setServiceLoading(false))
   }
 
+  const loadEfakturaSettings = () => {
+    if (!isAdmin) return
+    setEfakturaLoading(true)
+    api.efaktura.settings()
+      .then((response) => {
+        setEfakturaForm({
+          efaktura_enabled: !!response?.efaktura_enabled,
+          efaktura_api_base_url: response?.efaktura_api_base_url || '',
+          efaktura_api_key: response?.efaktura_api_key || '',
+          efaktura_api_key_header: response?.efaktura_api_key_header || 'ApiKey',
+          efaktura_api_key_prefix: response?.efaktura_api_key_prefix || '',
+          efaktura_sync_incoming: response?.efaktura_sync_incoming ?? true,
+          efaktura_sync_outgoing: response?.efaktura_sync_outgoing ?? true,
+          efaktura_sync_lookback_days: response?.efaktura_sync_lookback_days ?? 30,
+          efaktura_incoming_list_path: response?.efaktura_incoming_list_path || '',
+          efaktura_incoming_document_path: response?.efaktura_incoming_document_path || '',
+          efaktura_outgoing_list_path: response?.efaktura_outgoing_list_path || '',
+          efaktura_outgoing_document_path: response?.efaktura_outgoing_document_path || '',
+        })
+      })
+      .catch((err) => console.error(err))
+      .finally(() => setEfakturaLoading(false))
+  }
+
   useEffect(() => {
     loadUsers()
   }, [showInactive, isAdmin])
@@ -132,6 +173,9 @@ export default function Settings() {
   }, [])
   useEffect(() => {
     loadService()
+  }, [isAdmin])
+  useEffect(() => {
+    loadEfakturaSettings()
   }, [isAdmin])
 
   const formatBytes = (value) => {
@@ -295,6 +339,32 @@ export default function Settings() {
     }
   }
 
+  const handleEfakturaSave = async () => {
+    setEfakturaSaving(true)
+    setEfakturaMessage('')
+    try {
+      await api.efaktura.updateSettings({
+        ...efakturaForm,
+        efaktura_api_base_url: efakturaForm.efaktura_api_base_url || null,
+        efaktura_api_key: efakturaForm.efaktura_api_key || null,
+        efaktura_api_key_header: efakturaForm.efaktura_api_key_header || 'ApiKey',
+        efaktura_api_key_prefix: efakturaForm.efaktura_api_key_prefix || '',
+        efaktura_sync_lookback_days: Number(efakturaForm.efaktura_sync_lookback_days) || 30,
+        efaktura_incoming_list_path: efakturaForm.efaktura_incoming_list_path || null,
+        efaktura_incoming_document_path: efakturaForm.efaktura_incoming_document_path || null,
+        efaktura_outgoing_list_path: efakturaForm.efaktura_outgoing_list_path || null,
+        efaktura_outgoing_document_path: efakturaForm.efaktura_outgoing_document_path || null,
+      })
+      setEfakturaMessage(tr('efakturaSettingsSaved'))
+      loadEfakturaSettings()
+    } catch (err) {
+      console.error(err)
+      setEfakturaMessage(err.message || tr('efakturaSettingsSaveError'))
+    } finally {
+      setEfakturaSaving(false)
+    }
+  }
+
   const handleDownloadBackup = async (name) => {
     setServiceBusy(`download:${name}`)
     try {
@@ -337,6 +407,7 @@ export default function Settings() {
   const sections = [
     { key: 'enterprise', title: tr('enterpriseData'), summary: [tr('name'), tr('address'), tr('bankName'), tr('cashflowOpening')].join(' • ') },
     ...(isAdmin ? [{ key: 'users', title: tr('users'), summary: [tr('role'), tr('language'), tr('status')].join(' • ') }] : []),
+    ...(isAdmin ? [{ key: 'efaktura', title: tr('efakturaSettingsTitle'), summary: tr('efakturaSettingsSummary') }] : []),
     { key: 'categories', title: tr('categoriesTitle'), summary: [tr('categoryNameRu'), tr('categoryGroup'), tr('sortOrder')].join(' • ') },
     ...(isAdmin ? [{ key: 'backups', title: tr('serviceBackupsTitle'), summary: serviceData?.settings?.supported ? [tr('serviceBackupsCreate'), tr('download'), tr('restore')].join(' • ') : tr('serviceBackupsUnsupported') }] : []),
   ]
@@ -479,6 +550,149 @@ export default function Settings() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </SettingsSection>
+        )}
+
+        {isAdmin && (
+          <SettingsSection
+            title={tr('efakturaSettingsTitle')}
+            summary={tr('efakturaSettingsSummary')}
+            open={activeSection === 'efaktura'}
+            onToggle={() => setActiveSection('efaktura')}
+            actions={(
+              <button className="btn btn-primary btn-sm" onClick={handleEfakturaSave} disabled={efakturaLoading || efakturaSaving}>
+                {efakturaSaving ? tr('efakturaSaving') : tr('save')}
+              </button>
+            )}
+          >
+            <div className="settings-callout" style={{ marginBottom: '1rem' }}>
+              {tr('efakturaSettingsHint')}
+            </div>
+
+            {efakturaMessage ? (
+              <div style={{ marginBottom: '1rem', color: efakturaMessage === tr('efakturaSettingsSaved') ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {efakturaMessage}
+              </div>
+            ) : null}
+
+            <div className="settings-info-grid" style={{ marginBottom: '1rem' }}>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaEnabled')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_enabled}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_enabled: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaSyncIncomingToggle')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_sync_incoming}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_sync_incoming: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaSyncOutgoingToggle')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_sync_outgoing}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_sync_outgoing: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaLookbackDays')}</div>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={efakturaForm.efaktura_sync_lookback_days}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_sync_lookback_days: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="settings-info-grid">
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaBaseUrl')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_api_base_url}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_base_url: event.target.value }))}
+                  placeholder="https://efaktura.mfin.gov.rs/api/publicApi"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaApiKeyHeader')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_api_key_header}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_key_header: event.target.value }))}
+                  placeholder="ApiKey"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaApiKeyPrefix')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_api_key_prefix}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_key_prefix: event.target.value }))}
+                  placeholder="Bearer "
+                />
+              </div>
+              <div className="settings-info-item" style={{ gridColumn: '1 / -1' }}>
+                <div className="settings-field-label">{tr('efakturaApiKey')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_api_key}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_key: event.target.value }))}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaIncomingListPath')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_incoming_list_path}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_list_path: event.target.value }))}
+                  placeholder="/invoice/publicApi/sales-invoice/received?dateFrom={from}&dateTo={to}"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaIncomingDocumentPath')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_incoming_document_path}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_document_path: event.target.value }))}
+                  placeholder="/invoice/publicApi/sales-invoice/received/{id}/xml"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaOutgoingListPath')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_outgoing_list_path}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_list_path: event.target.value }))}
+                  placeholder="/invoice/publicApi/sales-invoice/sent?dateFrom={from}&dateTo={to}"
+                />
+              </div>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaOutgoingDocumentPath')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_outgoing_document_path}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_document_path: event.target.value }))}
+                  placeholder="/invoice/publicApi/sales-invoice/sent/{id}/xml"
+                />
+              </div>
             </div>
           </SettingsSection>
         )}

@@ -67,6 +67,41 @@ class Enterprise(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     emblem_data_url = Column(Text)
+    efaktura_enabled = Column(Boolean, default=False)
+    efaktura_api_base_url = Column(String(500))
+    efaktura_api_key = Column(Text)
+    efaktura_api_key_header = Column(String(100), default="ApiKey")
+    efaktura_api_key_prefix = Column(String(50), default="")
+    efaktura_sync_incoming = Column(Boolean, default=True)
+    efaktura_sync_outgoing = Column(Boolean, default=True)
+    efaktura_sync_lookback_days = Column(Integer, default=30)
+    efaktura_incoming_list_path = Column(String(500))
+    efaktura_incoming_document_path = Column(String(500))
+    efaktura_outgoing_list_path = Column(String(500))
+    efaktura_outgoing_document_path = Column(String(500))
+
+
+class EfakturaImportRecord(Base):
+    """Р–СѓСЂРЅР°Р» РёРјРїРѕСЂС‚РѕРІ eFaktura."""
+    __tablename__ = "efaktura_import_records"
+    __table_args__ = (UniqueConstraint("document_key", name="uq_efaktura_document_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_key = Column(String(500), nullable=False, unique=True, index=True)
+    external_id = Column(String(200), index=True)
+    direction = Column(String(20), nullable=False)
+    invoice_number = Column(String(100), nullable=False)
+    issued_date = Column(Date, nullable=False)
+    amount_rsd = Column(Numeric(14, 2), nullable=False)
+    supplier_name = Column(String(200))
+    supplier_pib = Column(String(20))
+    customer_name = Column(String(200))
+    customer_pib = Column(String(20))
+    imported_as = Column(String(20), nullable=False)
+    imported_record_id = Column(Integer, nullable=False)
+    source = Column(String(20), nullable=False, default="xml")
+    file_name = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ContributionRates(Base):

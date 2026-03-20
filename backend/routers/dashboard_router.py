@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy import or_
 
 from backend.auth import get_current_user_required
 from backend.cash_service import CASH_TRANSFER_SOURCE
@@ -21,6 +22,11 @@ from backend.services import get_income_limit_status, get_income_total
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 settings = get_settings()
+EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+
+
+def _visible_expense_condition():
+    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
 
 
 @router.get("", response_model=DashboardStats)
@@ -41,7 +47,7 @@ async def get_dashboard(
     year_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -52,7 +58,7 @@ async def get_dashboard(
     month_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
             Expense.date >= date(selected_year, today.month, 1),
             Expense.date <= date(selected_year, today.month, last_day),
         )
@@ -62,7 +68,7 @@ async def get_dashboard(
     all_time_expenses_result = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
         )
     )
     all_time_expenses = to_decimal(all_time_expenses_result.scalar() or ZERO_DECIMAL)

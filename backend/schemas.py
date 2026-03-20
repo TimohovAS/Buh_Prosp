@@ -407,6 +407,77 @@ class EnterpriseBrandResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class EfakturaSettingsBase(BaseModel):
+    efaktura_enabled: bool = False
+    efaktura_api_base_url: Optional[str] = None
+    efaktura_api_key: Optional[str] = None
+    efaktura_api_key_header: str = "ApiKey"
+    efaktura_api_key_prefix: Optional[str] = ""
+    efaktura_sync_incoming: bool = True
+    efaktura_sync_outgoing: bool = True
+    efaktura_sync_lookback_days: int = 30
+    efaktura_incoming_list_path: Optional[str] = None
+    efaktura_incoming_document_path: Optional[str] = None
+    efaktura_outgoing_list_path: Optional[str] = None
+    efaktura_outgoing_document_path: Optional[str] = None
+
+
+class EfakturaSettingsUpdate(EfakturaSettingsBase):
+    pass
+
+
+class EfakturaSettingsResponse(EfakturaSettingsBase):
+    pass
+
+
+class EfakturaImportHistoryItem(BaseModel):
+    id: int
+    document_key: str
+    external_id: Optional[str] = None
+    direction: str
+    invoice_number: str
+    issued_date: DateType
+    amount_rsd: Decimal
+    supplier_name: Optional[str] = None
+    supplier_pib: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_pib: Optional[str] = None
+    imported_as: str
+    imported_record_id: int
+    source: str
+    file_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EfakturaImportSummary(BaseModel):
+    file_name: Optional[str] = None
+    document_type: Optional[str] = None
+    income_id: Optional[int] = None
+    expense_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    counterparty_name: Optional[str] = None
+    reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+class EfakturaImportResult(BaseModel):
+    created_count: int = 0
+    created_income_count: int = 0
+    created_expense_count: int = 0
+    skipped_count: int = 0
+    error_count: int = 0
+    created: list[EfakturaImportSummary] = Field(default_factory=list)
+    skipped: list[EfakturaImportSummary] = Field(default_factory=list)
+    errors: list[EfakturaImportSummary] = Field(default_factory=list)
+
+
+class EfakturaSyncResponse(EfakturaImportResult):
+    fetched_count: int = 0
+
 # --- PaymentType, YearDecision, MonthlyObligation (Р СћР вЂ”: Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘) ---
 class PaymentTypeResponse(BaseModel):
     id: int

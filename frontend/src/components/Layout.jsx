@@ -61,6 +61,7 @@ export default function Layout({ lang, toggleLang }) {
             <div className="sidebar-group-title">Операции</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
+              <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
               <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
               <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
               <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>

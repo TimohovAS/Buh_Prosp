@@ -4,7 +4,7 @@ from typing import Optional
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
@@ -26,6 +26,11 @@ from backend.state_machine import InvalidStatusTransition, mark_expense_paid
 from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
+EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+
+
+def _visible_expense_condition():
+    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
 
 
 async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
@@ -189,7 +194,7 @@ async def _load_expenses_for_period(
         select(Expense)
         .where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
         )
         .order_by(Expense.date.desc(), Expense.id.desc())
     )
@@ -312,7 +317,7 @@ async def list_expenses(
         select(Expense)
         .where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
         )
         .order_by(Expense.date.desc(), Expense.id.desc())
     )
@@ -341,7 +346,7 @@ async def list_expense_years(
     result = await db.execute(
         select(Expense.date).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
         )
     )
     years = {value.year for (value,) in result.fetchall() if value is not None}
@@ -505,7 +510,7 @@ async def get_expense_totals(
     result_year = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
             Expense.date >= date(selected_year, 1, 1),
             Expense.date <= date(selected_year, 12, 31),
         )
@@ -518,7 +523,7 @@ async def get_expense_totals(
     result_month = await db.execute(
         select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.status != "planned",
+            _visible_expense_condition(),
             Expense.date >= date(selected_year, selected_month, 1),
             Expense.date <= date(selected_year, selected_month, last_day),
         )

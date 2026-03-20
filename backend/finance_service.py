@@ -2,13 +2,19 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Optional
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction
+
+EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+
+
+def _visible_expense_condition():
+    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
 
 
 def _period_key(d: date, group_by: Literal["day", "month", "year"]) -> str:
@@ -93,7 +99,7 @@ async def get_finance_summary(
     # accrual: СѓС‡РёС‚С‹РІР°РµРј С„Р°РєС‚РёС‡РµСЃРєРёРµ РїСЂРѕРІРѕРґРєРё, РІРєР»СЋС‡Р°СЏ СЃС‚РѕСЂРЅРѕ (status=reversed, amount<0),
     # РЅРѕ РёСЃРєР»СЋС‡Р°РµРј planned.
     expense_accrual_base = and_(
-        expense_status != "planned",
+        _visible_expense_condition(),
         Expense.source != CASH_TRANSFER_SOURCE,
         expense_date_col >= date_from,
         expense_date_col <= date_to,
@@ -518,7 +524,7 @@ async def get_finance_by_project(
         )
         # Р Р°СЃС…РѕРґС‹: date РІ РїРµСЂРёРѕРґРµ, РІРєР»СЋС‡Р°СЏ СЃС‚РѕСЂРЅРѕ (reversed), РЅРѕ Р±РµР· planned
         expense_base = and_(
-            expense_status != "planned",
+            _visible_expense_condition(),
             Expense.source != CASH_TRANSFER_SOURCE,
             expense_date_col >= date_from,
             expense_date_col <= date_to,
@@ -662,7 +668,8 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
             func.strftime("%m", Expense.date).label("month"),
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
         ).where(
-            Expense.status.notin_(["planned", "reversed"]),
+            _visible_expense_condition(),
+            Expense.status != "reversed",
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,
@@ -677,7 +684,8 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
             func.strftime("%m", Expense.date).label("month"),
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
         ).where(
-            Expense.status.notin_(["planned", "reversed"]),
+            _visible_expense_condition(),
+            Expense.status != "reversed",
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,

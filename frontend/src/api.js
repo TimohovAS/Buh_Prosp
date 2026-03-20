@@ -140,6 +140,37 @@ export const api = {
     },
   },
 
+  efaktura: {
+    settings: () => request('/efaktura/settings'),
+    updateSettings: (data) => request('/efaktura/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    history: (limit = 100) => request(`/efaktura/history?limit=${limit}`),
+    sync: () => request('/efaktura/sync', { method: 'POST' }),
+    importXml: async (files) => {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+      const t = getToken();
+      const headers = t ? { Authorization: `Bearer ${t}` } : {};
+      const res = await fetch(API_BASE + '/efaktura/import-xml', {
+        method: 'POST',
+        body: formData,
+        headers,
+      });
+      if (res.status === 401) {
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.detail || `HTTP ${res.status}`;
+        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+  },
+
   finance: {
     summary: (params) => {
       const q = new URLSearchParams(params).toString();

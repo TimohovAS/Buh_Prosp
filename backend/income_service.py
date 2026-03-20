@@ -18,6 +18,28 @@ EF_NS = {
     "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
 }
 
+
+def _extract_party_info(invoice: ET.Element, path: str) -> tuple[Optional[str], Optional[str]]:
+    name = normalize_whitespace(
+        invoice.findtext(f"{path}/cac:Party/cac:PartyName/cbc:Name", default="", namespaces=EF_NS)
+    ) or normalize_whitespace(
+        invoice.findtext(
+            f"{path}/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName",
+            default="",
+            namespaces=EF_NS,
+        )
+    )
+    tax_id = normalize_whitespace(
+        invoice.findtext(
+            f"{path}/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+            default="",
+            namespaces=EF_NS,
+        )
+    ) or normalize_whitespace(
+        invoice.findtext(f"{path}/cac:Party/cbc:EndpointID", default="", namespaces=EF_NS)
+    )
+    return name, normalize_pib(tax_id)
+
 def normalize_whitespace(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -148,24 +170,8 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"{file_name}: некорректная сумма ({amount_raw})") from exc
 
-    customer_name = normalize_whitespace(
-        invoice.findtext("cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name", default="", namespaces=EF_NS)
-    ) or normalize_whitespace(
-        invoice.findtext(
-            "cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName",
-            default="",
-            namespaces=EF_NS,
-        )
-    )
-    customer_tax_id = normalize_whitespace(
-        invoice.findtext(
-            "cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
-            default="",
-            namespaces=EF_NS,
-        )
-    ) or normalize_whitespace(
-        invoice.findtext("cac:AccountingCustomerParty/cac:Party/cbc:EndpointID", default="", namespaces=EF_NS)
-    )
+    customer_name, customer_pib = _extract_party_info(invoice, "cac:AccountingCustomerParty")
+    supplier_name, supplier_pib = _extract_party_info(invoice, "cac:AccountingSupplierParty")
 
     line_titles: list[str] = []
     for node in invoice.findall("cac:InvoiceLine/cac:Item/cbc:Name", EF_NS):
@@ -185,7 +191,10 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         "amount_rsd": amount_rsd,
         "currency": currency,
         "client_name": customer_name,
-        "customer_pib": normalize_pib(customer_tax_id),
+        "customer_name": customer_name,
+        "customer_pib": customer_pib,
+        "supplier_name": supplier_name,
+        "supplier_pib": supplier_pib,
         "description": description,
     }
 

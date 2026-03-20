@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -22,7 +22,6 @@ function buildContractLabel(contract) {
 }
 
 export default function Income() {
-  const efakturaInputRef = useRef(null)
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [contracts, setContracts] = useState([])
@@ -39,8 +38,6 @@ export default function Income() {
   const [modalAssign, setModalAssign] = useState(false)
   const [projects, setProjects] = useState([])
   const [assignProjectId, setAssignProjectId] = useState('')
-  const [efakturaImporting, setEfakturaImporting] = useState(false)
-  const [efakturaLastResult, setEfakturaLastResult] = useState(null)
   const [pageError, setPageError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -259,32 +256,6 @@ export default function Income() {
     }
   }
 
-  const openEfakturaPicker = () => {
-    if (efakturaImporting) return
-    efakturaInputRef.current?.click()
-  }
-
-  const handleEfakturaFiles = async (event) => {
-    const files = Array.from(event.target.files || [])
-    event.target.value = ''
-    if (files.length === 0) return
-    setEfakturaImporting(true)
-    try {
-      const result = await api.income.importEfaktura(files)
-      setEfakturaLastResult(result)
-      load()
-      if ((result.error_count || 0) > 0) {
-        const firstError = result.errors?.[0]?.error || tr('loadError')
-        alert(`${tr('efakturaImportCompleted')}. ${tr('efakturaErrors')}: ${result.error_count}. ${firstError}`)
-      }
-    } catch (err) {
-      setSubmitError(err.message || tr('loadError'))
-      console.error(err)
-    } finally {
-      setEfakturaImporting(false)
-    }
-  }
-
   const loadPaymentDetails = async (incomeId) => {
     setPaymentLoading(true)
     setPaymentError('' )
@@ -482,14 +453,6 @@ export default function Income() {
           <h1 className="page-title">{tr('income')}</h1>
         </div>
         <div className="page-header-actions">
-          <input
-            ref={efakturaInputRef}
-            type="file"
-            accept=".xml,text/xml,application/xml"
-            multiple
-            style={{ display: 'none' }}
-            onChange={handleEfakturaFiles}
-          />
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -539,17 +502,9 @@ export default function Income() {
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
-          <button className="btn btn-secondary" onClick={openEfakturaPicker} disabled={efakturaImporting}>
-            {efakturaImporting ? tr('efakturaImporting') : tr('efakturaImport')}
-          </button>
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>
-          {efakturaLastResult && (
-            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', alignSelf: 'center' }}>
-              {`${tr('efakturaCreated')}: ${efakturaLastResult.created_count || 0}, ${tr('efakturaSkipped')}: ${efakturaLastResult.skipped_count || 0}, ${tr('efakturaErrors')}: ${efakturaLastResult.error_count || 0}`}
-            </div>
-          )}
         </div>
       </div>
 
