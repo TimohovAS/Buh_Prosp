@@ -4,6 +4,13 @@ import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import ProjectSelect from '../components/ProjectSelect'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
+import {
+  DEFAULT_EFAKTURA_API_BASE_URL,
+  DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH,
+  DEFAULT_EFAKTURA_INCOMING_LIST_PATH,
+  DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH,
+  DEFAULT_EFAKTURA_OUTGOING_LIST_PATH,
+} from '../efakturaDefaults'
 
 const ROLES = [
   { value: 'admin', labelKey: 'roleAdmin' },
@@ -264,6 +271,7 @@ export default function Settings() {
   }
 
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || UI_DASH
+  const efakturaDefaultText = (value) => `${tr('efakturaDefaultValue')}: ${value}`
 
   const handleEmblemSelected = (event) => {
     const file = event.target.files?.[0]
@@ -567,7 +575,8 @@ export default function Settings() {
             )}
           >
             <div className="settings-callout" style={{ marginBottom: '1rem' }}>
-              {tr('efakturaSettingsHint')}
+              <div>{tr('efakturaSettingsHint')}</div>
+              <div style={{ marginTop: '0.5rem' }}>{tr('efakturaSettingsDefaultHint')}</div>
             </div>
 
             {efakturaMessage ? (
@@ -627,8 +636,10 @@ export default function Settings() {
                   className="form-input"
                   value={efakturaForm.efaktura_api_base_url}
                   onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_base_url: event.target.value }))}
-                  placeholder="https://efaktura.mfin.gov.rs/api/publicApi"
                 />
+                <small style={{ color: 'var(--color-text-muted)' }}>
+                  {efakturaDefaultText(DEFAULT_EFAKTURA_API_BASE_URL)} {UI_DASH} {tr('efakturaOverrideHint')}
+                </small>
               </div>
               <div className="settings-info-item">
                 <div className="settings-field-label">{tr('efakturaApiKeyHeader')}</div>
@@ -663,8 +674,10 @@ export default function Settings() {
                   className="form-input"
                   value={efakturaForm.efaktura_incoming_list_path}
                   onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_list_path: event.target.value }))}
-                  placeholder="/invoice/publicApi/sales-invoice/received?dateFrom={from}&dateTo={to}"
                 />
+                <small style={{ color: 'var(--color-text-muted)' }}>
+                  {efakturaDefaultText(DEFAULT_EFAKTURA_INCOMING_LIST_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
+                </small>
               </div>
               <div className="settings-info-item">
                 <div className="settings-field-label">{tr('efakturaIncomingDocumentPath')}</div>
@@ -672,8 +685,10 @@ export default function Settings() {
                   className="form-input"
                   value={efakturaForm.efaktura_incoming_document_path}
                   onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_document_path: event.target.value }))}
-                  placeholder="/invoice/publicApi/sales-invoice/received/{id}/xml"
                 />
+                <small style={{ color: 'var(--color-text-muted)' }}>
+                  {efakturaDefaultText(DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
+                </small>
               </div>
               <div className="settings-info-item">
                 <div className="settings-field-label">{tr('efakturaOutgoingListPath')}</div>
@@ -681,8 +696,10 @@ export default function Settings() {
                   className="form-input"
                   value={efakturaForm.efaktura_outgoing_list_path}
                   onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_list_path: event.target.value }))}
-                  placeholder="/invoice/publicApi/sales-invoice/sent?dateFrom={from}&dateTo={to}"
                 />
+                <small style={{ color: 'var(--color-text-muted)' }}>
+                  {efakturaDefaultText(DEFAULT_EFAKTURA_OUTGOING_LIST_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
+                </small>
               </div>
               <div className="settings-info-item">
                 <div className="settings-field-label">{tr('efakturaOutgoingDocumentPath')}</div>
@@ -690,8 +707,10 @@ export default function Settings() {
                   className="form-input"
                   value={efakturaForm.efaktura_outgoing_document_path}
                   onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_document_path: event.target.value }))}
-                  placeholder="/invoice/publicApi/sales-invoice/sent/{id}/xml"
                 />
+                <small style={{ color: 'var(--color-text-muted)' }}>
+                  {efakturaDefaultText(DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
+                </small>
               </div>
             </div>
           </SettingsSection>

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
+import {
+  DEFAULT_EFAKTURA_API_BASE_URL,
+  isEfakturaApiConfigured,
+  usesEfakturaDefaultRoutes,
+} from '../efakturaDefaults'
 
 function formatAmount(value) {
   if (typeof value === 'number') return `${value.toLocaleString('sr-RS')} RSD`
@@ -129,12 +134,9 @@ export default function Efaktura() {
     }
   }
 
-  const apiConfigured = Boolean(
-    settingsInfo?.efaktura_enabled &&
-    settingsInfo?.efaktura_api_base_url &&
-    settingsInfo?.efaktura_api_key &&
-    (settingsInfo?.efaktura_sync_incoming || settingsInfo?.efaktura_sync_outgoing)
-  )
+  const apiConfigured = isEfakturaApiConfigured(settingsInfo)
+  const usingDefaultRoutes = usesEfakturaDefaultRoutes(settingsInfo)
+  const effectiveBaseUrl = settingsInfo?.efaktura_api_base_url || DEFAULT_EFAKTURA_API_BASE_URL
 
   return (
     <>
@@ -182,9 +184,15 @@ export default function Efaktura() {
                 <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
                   {apiConfigured ? tr('efakturaApiConfigured') : tr('efakturaApiNotConfigured')}
                 </div>
+                {apiConfigured && usingDefaultRoutes ? (
+                  <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginTop: '0.35rem' }}>
+                    {tr('efakturaUsingDefaultRoutes')}
+                  </div>
+                ) : null}
               </div>
               {settingsInfo ? (
                 <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
+                  <div>{tr('efakturaBaseUrl')}: {effectiveBaseUrl}</div>
                   <div>{tr('efakturaIncomingLabel')}: {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaOutgoingLabel')}: {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}</div>

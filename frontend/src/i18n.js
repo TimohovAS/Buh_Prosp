@@ -121,6 +121,7 @@ const t = {
     efakturaApiSettingsTitle: 'eFaktura API',
     efakturaApiConfigured: 'API је подешен, синхронизација је доступна.',
     efakturaApiNotConfigured: 'API није подешен. XML увоз је увек доступан.',
+    efakturaUsingDefaultRoutes: 'Користе се стандардне eFaktura адресе.',
     efakturaSyncSettingsHint: 'Прво попуните API подешавања у Настројкама',
     efakturaIncomingLabel: 'Улазне',
     efakturaOutgoingLabel: 'Излазне',
@@ -141,6 +142,9 @@ const t = {
     efakturaSettingsTitle: 'eFaktura API',
     efakturaSettingsSummary: 'API кључ • base URL • шаблони синхронизације',
     efakturaSettingsHint: 'Овај модул је задужен за API синхронизацију са eFaktura. XML увоз на одвојеној страници ради и без ових подешавања.',
+    efakturaSettingsDefaultHint: 'Ако Base URL и путање оставите празне, користе се стандардне eFaktura адресе. Попуњавајте поља само ако желите да их промените.',
+    efakturaDefaultValue: 'Подразумевано',
+    efakturaOverrideHint: 'Оставите празно ако желите подразумевану вредност.',
     efakturaEnabled: 'Модул је укључен',
     efakturaSyncIncomingToggle: 'Увоз улазних',
     efakturaSyncOutgoingToggle: 'Увоз излазних',
@@ -658,6 +662,7 @@ const t = {
     efakturaApiSettingsTitle: 'Настройки API',
     efakturaApiConfigured: 'API настроен, синхронизация доступна.',
     efakturaApiNotConfigured: 'API не настроен. XML-импорт доступен всегда.',
+    efakturaUsingDefaultRoutes: 'Используются стандартные адреса eFaktura.',
     efakturaSyncSettingsHint: 'Сначала заполните настройки API в разделе Настройки',
     efakturaIncomingLabel: 'Входящие',
     efakturaOutgoingLabel: 'Исходящие',
@@ -678,6 +683,9 @@ const t = {
     efakturaSettingsTitle: 'eFaktura API',
     efakturaSettingsSummary: 'API key • base URL • шаблоны синхронизации',
     efakturaSettingsHint: 'Этот модуль отвечает за API-синхронизацию с eFaktura. XML-импорт на отдельной странице работает и без этих настроек.',
+    efakturaSettingsDefaultHint: 'Если Base URL и пути оставить пустыми, используются стандартные адреса eFaktura. Заполняйте поля только если хотите их переопределить.',
+    efakturaDefaultValue: 'По умолчанию',
+    efakturaOverrideHint: 'Оставьте пустым, если хотите использовать значение по умолчанию.',
     efakturaEnabled: 'Модуль включён',
     efakturaSyncIncomingToggle: 'Импорт входящих',
     efakturaSyncOutgoingToggle: 'Импорт исходящих',
@@ -1102,6 +1110,5 @@ export function getMonthNamesShort() {
 export function getMonthNamesFull() {
   return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR;
 }
-
 
 

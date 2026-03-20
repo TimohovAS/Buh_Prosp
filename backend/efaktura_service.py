@@ -23,6 +23,11 @@ from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, In
 from backend.state_machine import initialize_expense_status, initialize_income_status
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+DEFAULT_EFAKTURA_API_BASE_URL = "https://efaktura.mfin.gov.rs"
+DEFAULT_EFAKTURA_INCOMING_LIST_PATH = "/api/publicApi/purchase-invoice/ids?dateFrom={from}&dateTo={to}"
+DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = "/api/publicApi/purchase-invoice/xml?invoiceId={id}"
+DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = "/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}"
+DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invoiceId={id}"
 
 
 async def get_efaktura_enterprise(db: AsyncSession) -> Enterprise | None:
@@ -34,6 +39,11 @@ async def get_unassigned_project_id(db: AsyncSession) -> int | None:
     result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
     project = result.scalar_one_or_none()
     return project.id if project else None
+
+
+def get_effective_efaktura_setting(value: str | None, default: str) -> str:
+    normalized = (value or "").strip()
+    return normalized or default
 
 
 def enterprise_matches_party(enterprise: Enterprise | None, party_name: str | None, party_pib: str | None) -> bool:
@@ -369,8 +379,8 @@ def _format_url(base_url: str | None, template: str | None, **values: Any) -> st
     return urljoin(base.rstrip("/") + "/", formatted.lstrip("/"))
 
 
-def _http_get(url: str, *, header_name: str, header_value: str) -> tuple[bytes, str]:
-    request = Request(url, method="GET", headers={
+def _http_request(url: str, *, method: str, header_name: str, header_value: str) -> tuple[bytes, str]:
+    request = Request(url, method=method, headers={
         "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.8",
         header_name: header_value,
     })
@@ -418,10 +428,14 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
     enterprise = await get_efaktura_enterprise(db)
     if not enterprise or not enterprise.efaktura_enabled:
         raise ValueError("eFaktura sync is disabled in settings")
-    if not enterprise.efaktura_api_base_url:
-        raise ValueError("eFaktura base URL is not configured")
     if not enterprise.efaktura_api_key:
         raise ValueError("eFaktura API key is not configured")
+
+    base_url = get_effective_efaktura_setting(enterprise.efaktura_api_base_url, DEFAULT_EFAKTURA_API_BASE_URL)
+    incoming_list_path = get_effective_efaktura_setting(enterprise.efaktura_incoming_list_path, DEFAULT_EFAKTURA_INCOMING_LIST_PATH)
+    incoming_document_path = get_effective_efaktura_setting(enterprise.efaktura_incoming_document_path, DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH)
+    outgoing_list_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH)
+    outgoing_document_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH)
 
     header_name = (enterprise.efaktura_api_key_header or "ApiKey").strip() or "ApiKey"
     header_prefix = enterprise.efaktura_api_key_prefix or ""
@@ -432,11 +446,9 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
 
     documents: list[dict[str, Any]] = []
 
-    async def fetch_direction(direction: str, list_path: str | None, document_path: str | None) -> None:
-        if not list_path or not document_path:
-            return
+    async def fetch_direction(direction: str, list_path: str, document_path: str) -> None:
         list_url = _format_url(
-            enterprise.efaktura_api_base_url,
+            base_url,
             list_path,
             from_=date_from.isoformat(),
             to=date_to.isoformat(),
@@ -444,7 +456,13 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         )
         if not list_url:
             return
-        raw_ids, _ = await asyncio.to_thread(_http_get, list_url, header_name=header_name, header_value=header_value)
+        raw_ids, _ = await asyncio.to_thread(
+            _http_request,
+            list_url,
+            method="POST",
+            header_name=header_name,
+            header_value=header_value,
+        )
         try:
             ids_payload = json.loads(raw_ids.decode("utf-8"))
         except Exception:
@@ -452,14 +470,20 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         ids = _extract_ids(ids_payload)
         for external_id in ids:
             xml_url = _format_url(
-                enterprise.efaktura_api_base_url,
+                base_url,
                 document_path,
                 id=external_id,
                 external_id=external_id,
             )
             if not xml_url:
                 continue
-            raw_xml, content_type = await asyncio.to_thread(_http_get, xml_url, header_name=header_name, header_value=header_value)
+            raw_xml, content_type = await asyncio.to_thread(
+                _http_request,
+                xml_url,
+                method="GET",
+                header_name=header_name,
+                header_value=header_value,
+            )
             documents.append({
                 "file_name": f"{direction}-{external_id}.xml",
                 "content": _extract_xml_bytes(raw_xml, content_type),
@@ -468,9 +492,9 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
             })
 
     if enterprise.efaktura_sync_incoming:
-        await fetch_direction("incoming", enterprise.efaktura_incoming_list_path, enterprise.efaktura_incoming_document_path)
+        await fetch_direction("incoming", incoming_list_path, incoming_document_path)
     if enterprise.efaktura_sync_outgoing:
-        await fetch_direction("outgoing", enterprise.efaktura_outgoing_list_path, enterprise.efaktura_outgoing_document_path)
+        await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path)
 
     result = await import_efaktura_documents(db, user_id=user_id, documents=documents, source="api")
     result["fetched_count"] = len(documents)
