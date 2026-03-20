@@ -271,7 +271,6 @@ export default function Settings() {
   }
 
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || UI_DASH
-  const efakturaDefaultText = (value) => `${tr('efakturaDefaultValue')}: ${value}`
 
   const handleEmblemSelected = (event) => {
     const file = event.target.files?.[0]
@@ -568,16 +567,15 @@ export default function Settings() {
             summary={tr('efakturaSettingsSummary')}
             open={activeSection === 'efaktura'}
             onToggle={() => setActiveSection('efaktura')}
-            actions={(
-              <button className="btn btn-primary btn-sm" onClick={handleEfakturaSave} disabled={efakturaLoading || efakturaSaving}>
-                {efakturaSaving ? tr('efakturaSaving') : tr('save')}
-              </button>
-            )}
-          >
-            <div className="settings-callout" style={{ marginBottom: '1rem' }}>
-              <div>{tr('efakturaSettingsHint')}</div>
-              <div style={{ marginTop: '0.5rem' }}>{tr('efakturaSettingsDefaultHint')}</div>
-            </div>
+              actions={(
+                <button className="btn btn-primary btn-sm" onClick={handleEfakturaSave} disabled={efakturaLoading || efakturaSaving}>
+                  {efakturaSaving ? tr('efakturaSaving') : tr('save')}
+                </button>
+              )}
+            >
+              <div className="settings-callout" style={{ marginBottom: '1rem' }}>
+                <div>{tr('efakturaSettingsHint')}</div>
+              </div>
 
             {efakturaMessage ? (
               <div style={{ marginBottom: '1rem', color: efakturaMessage === tr('efakturaSettingsSaved') ? 'var(--color-success)' : 'var(--color-danger)' }}>
@@ -630,17 +628,15 @@ export default function Settings() {
             </div>
 
             <div className="settings-info-grid">
-              <div className="settings-info-item">
-                <div className="settings-field-label">{tr('efakturaBaseUrl')}</div>
-                <input
-                  className="form-input"
-                  value={efakturaForm.efaktura_api_base_url}
-                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_base_url: event.target.value }))}
-                />
-                <small style={{ color: 'var(--color-text-muted)' }}>
-                  {efakturaDefaultText(DEFAULT_EFAKTURA_API_BASE_URL)} {UI_DASH} {tr('efakturaOverrideHint')}
-                </small>
-              </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaBaseUrl')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_api_base_url}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_api_base_url: event.target.value }))}
+                    placeholder={DEFAULT_EFAKTURA_API_BASE_URL}
+                  />
+                </div>
               <div className="settings-info-item">
                 <div className="settings-field-label">{tr('efakturaApiKeyHeader')}</div>
                 <input
@@ -668,51 +664,43 @@ export default function Settings() {
                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
               </div>
-              <div className="settings-info-item">
-                <div className="settings-field-label">{tr('efakturaIncomingListPath')}</div>
-                <input
-                  className="form-input"
-                  value={efakturaForm.efaktura_incoming_list_path}
-                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_list_path: event.target.value }))}
-                />
-                <small style={{ color: 'var(--color-text-muted)' }}>
-                  {efakturaDefaultText(DEFAULT_EFAKTURA_INCOMING_LIST_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
-                </small>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaIncomingListPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_incoming_list_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_list_path: event.target.value }))}
+                    placeholder={DEFAULT_EFAKTURA_INCOMING_LIST_PATH}
+                  />
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaIncomingDocumentPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_incoming_document_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_document_path: event.target.value }))}
+                    placeholder={DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH}
+                  />
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaOutgoingListPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_outgoing_list_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_list_path: event.target.value }))}
+                    placeholder={DEFAULT_EFAKTURA_OUTGOING_LIST_PATH}
+                  />
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaOutgoingDocumentPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_outgoing_document_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_document_path: event.target.value }))}
+                    placeholder={DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH}
+                  />
+                </div>
               </div>
-              <div className="settings-info-item">
-                <div className="settings-field-label">{tr('efakturaIncomingDocumentPath')}</div>
-                <input
-                  className="form-input"
-                  value={efakturaForm.efaktura_incoming_document_path}
-                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_document_path: event.target.value }))}
-                />
-                <small style={{ color: 'var(--color-text-muted)' }}>
-                  {efakturaDefaultText(DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
-                </small>
-              </div>
-              <div className="settings-info-item">
-                <div className="settings-field-label">{tr('efakturaOutgoingListPath')}</div>
-                <input
-                  className="form-input"
-                  value={efakturaForm.efaktura_outgoing_list_path}
-                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_list_path: event.target.value }))}
-                />
-                <small style={{ color: 'var(--color-text-muted)' }}>
-                  {efakturaDefaultText(DEFAULT_EFAKTURA_OUTGOING_LIST_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
-                </small>
-              </div>
-              <div className="settings-info-item">
-                <div className="settings-field-label">{tr('efakturaOutgoingDocumentPath')}</div>
-                <input
-                  className="form-input"
-                  value={efakturaForm.efaktura_outgoing_document_path}
-                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_document_path: event.target.value }))}
-                />
-                <small style={{ color: 'var(--color-text-muted)' }}>
-                  {efakturaDefaultText(DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH)} {UI_DASH} {tr('efakturaOverrideHint')}
-                </small>
-              </div>
-            </div>
           </SettingsSection>
         )}
 

@@ -403,6 +403,9 @@ def _extract_ids(payload: Any) -> list[str]:
                         break
         return output
     if isinstance(payload, dict):
+        for key in ("salesInvoiceIds", "purchaseInvoiceIds", "invoiceIds"):
+            if key in payload:
+                return _extract_ids(payload[key])
         for key in ("items", "data", "result", "documents", "invoices"):
             if key in payload:
                 return _extract_ids(payload[key])
