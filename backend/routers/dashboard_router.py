@@ -76,6 +76,7 @@ async def get_dashboard(
     cash_in_all_time_result = await db.execute(
         select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
             BankTransaction.direction == "in",
+            BankTransaction.status != "ignored",
         )
     )
     cash_in_all_time = to_decimal(cash_in_all_time_result.scalar() or ZERO_DECIMAL)
@@ -83,6 +84,7 @@ async def get_dashboard(
     cash_out_all_time_result = await db.execute(
         select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
             BankTransaction.direction == "out",
+            BankTransaction.status != "ignored",
         )
     )
     cash_out_all_time = to_decimal(cash_out_all_time_result.scalar() or ZERO_DECIMAL)
@@ -182,6 +184,7 @@ async def get_dashboard(
 
     recent_result = await db.execute(
         select(Income)
+        .where(Income.status != "cancelled")
         .options(selectinload(Income.client))
         .order_by(Income.issued_date.desc(), Income.id.desc())
         .limit(5)

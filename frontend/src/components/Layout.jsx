@@ -8,6 +8,8 @@ import {
   Wallet,
   AlertCircle,
   FileText,
+  FileInput,
+  Scale,
   CreditCard,
   CalendarDays,
   Landmark,
@@ -54,6 +56,7 @@ export default function Layout({ lang, toggleLang }) {
               <li><NavLink to="/finance/pnl"><LineChart size={18} /> {tr('pnlTitle')}</NavLink></li>
               <li><NavLink to="/finance/cashflow"><Wallet size={18} /> {tr('cashflowTitle')}</NavLink></li>
               <li><NavLink to="/finance/ar"><AlertCircle size={18} /> {tr('financeAR')}</NavLink></li>
+              <li><NavLink to="/counterparty-balance"><Scale size={18} /> {tr('counterpartyBalance')}</NavLink></li>
             </ul>
           </div>
 
@@ -62,6 +65,7 @@ export default function Layout({ lang, toggleLang }) {
             <ul className="sidebar-nav">
               <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
               <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
+              <li><NavLink to="/incoming-invoices"><FileInput size={18} /> {tr('incomingInvoices')}</NavLink></li>
               <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
               <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
               <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>

@@ -19,7 +19,8 @@ from backend.income_service import (
     parse_efaktura_invoice,
     to_number_year_format,
 )
-from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, Project
+from backend.incoming_invoice_service import INCOMING_INVOICE_SOURCE, create_incoming_invoice
+from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomingInvoice, Project
 from backend.state_machine import initialize_expense_status, initialize_income_status
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
@@ -93,16 +94,26 @@ async def has_efaktura_expense_duplicate(
     issued_date: date,
     amount: Decimal,
 ) -> bool:
+    """Дубликат по стабильному префиксу в Expense.note (identity eFaktura).
+
+    Основная защита от повторного импорта того же XML — ``has_import_record(document_key)``
+    (см. вызов до ветки incoming); она авторитетна для сценария «документ уже в журнале импорта».
+
+    Дополнительно проверяем расходы с source ``efaktura_import`` (legacy) и связанные с
+    входящей фактурой расходы ``incoming_invoice``, у которых note начинается с ``[{identity}]``
+    (как при create_incoming_invoice + build_efaktura_expense_note).
+    """
     identity = build_efaktura_expense_identity(invoice_number, invoice_year, supplier_pib, supplier_name)
+    prefix = f"[{identity}]"
     result = await db.execute(
         select(Expense.note).where(
-            Expense.source == EFAKTURA_IMPORT_SOURCE,
             Expense.date == issued_date,
             Expense.amount == amount,
+            Expense.source.in_([EFAKTURA_IMPORT_SOURCE, INCOMING_INVOICE_SOURCE]),
         )
     )
     for (note,) in result.fetchall():
-        if isinstance(note, str) and note.startswith(f"[{identity}]"):
+        if isinstance(note, str) and note.startswith(prefix):
             return True
     return False
 
@@ -136,7 +147,7 @@ async def register_import_record(
     imported_record_id: int,
     source: str,
     file_name: str | None,
-) -> None:
+) -> EfakturaImportRecord:
     record = EfakturaImportRecord(
         document_key=document_key,
         external_id=external_id,
@@ -154,6 +165,8 @@ async def register_import_record(
         file_name=file_name,
     )
     db.add(record)
+    await db.flush()
+    return record
 
 
 async def import_efaktura_documents(
@@ -223,6 +236,7 @@ async def import_efaktura_documents(
             else:
                 direction = "outgoing"
 
+        # Первичная дедупликация: тот же документ (ключ) уже импортирован — не создаём вторую запись.
         document_key = build_document_key(parsed, direction)
         if await has_import_record(db, document_key):
             skipped.append({
@@ -257,16 +271,34 @@ async def import_efaktura_documents(
                         })
                         continue
 
-                    expense = Expense(
-                        date=parsed["issued_date"],
-                        description=parsed["description"],
+                    supplier_client = None
+                    if parsed.get("supplier_pib"):
+                        supplier_client = clients_by_pib.get(parsed["supplier_pib"])
+                    if supplier_client is None and parsed.get("supplier_name"):
+                        supplier_client = clients_by_name.get(normalize_name(parsed["supplier_name"]))
+
+                    efaktura_rec = await register_import_record(
+                        db,
+                        document_key=document_key,
+                        external_id=external_id,
+                        direction=direction,
+                        parsed=parsed,
+                        imported_as="expense",
+                        imported_record_id=0,
+                        source=source,
+                        file_name=file_name,
+                    )
+
+                    invoice = await create_incoming_invoice(
+                        db,
+                        invoice_number=normalized_invoice_number,
+                        invoice_date=parsed["issued_date"],
+                        client_id=supplier_client.id if supplier_client else None,
+                        counterparty_name=parsed.get("supplier_name") or parsed.get("customer_name") or "Unknown",
+                        project_id=unassigned_project_id,
                         amount=parsed["amount_rsd"],
                         currency=parsed["currency"],
-                        category=None,
-                        paid_date=None,
-                        is_tax_related=False,
-                        source=EFAKTURA_IMPORT_SOURCE,
-                        project_id=unassigned_project_id,
+                        description=parsed["description"],
                         note=build_efaktura_expense_note(
                             normalized_invoice_number,
                             invoice_year,
@@ -274,26 +306,19 @@ async def import_efaktura_documents(
                             parsed.get("supplier_pib"),
                             file_name,
                         ),
+                        source="efaktura",
+                        efaktura_record_id=efaktura_rec.id if efaktura_rec else None,
                         created_by=user_id,
                     )
-                    initialize_expense_status(expense, "planned")
-                    db.add(expense)
+
+                    if efaktura_rec:
+                        efaktura_rec.imported_record_id = invoice.expense_id or invoice.id
                     await db.flush()
-                    await register_import_record(
-                        db,
-                        document_key=document_key,
-                        external_id=external_id,
-                        direction=direction,
-                        parsed=parsed,
-                        imported_as="expense",
-                        imported_record_id=expense.id,
-                        source=source,
-                        file_name=file_name,
-                    )
+
                     created.append({
                         "file_name": file_name,
                         "document_type": "expense",
-                        "expense_id": expense.id,
+                        "expense_id": invoice.expense_id,
                         "invoice_number": normalized_invoice_number,
                         "counterparty_name": parsed.get("supplier_name"),
                     })

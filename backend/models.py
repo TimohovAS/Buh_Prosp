@@ -1,5 +1,6 @@
 """Модели базы данных ProspEl."""
 from datetime import datetime, date
+from decimal import Decimal
 from typing import Optional
 from sqlalchemy import Column, Integer, String, Text, Float, Numeric, Boolean, Date, DateTime, ForeignKey, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -102,6 +103,62 @@ class EfakturaImportRecord(Base):
     source = Column(String(20), nullable=False, default="xml")
     file_name = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IncomingInvoice(Base):
+    """Входящая фактура — наш долг перед контрагентом."""
+    __tablename__ = "incoming_invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_number = Column(String(100), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    counterparty_name = Column(String(200), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    amount = Column(Numeric(14, 2), nullable=False)
+    currency = Column(String(10), default="RSD")
+    description = Column(Text)
+    status = Column(String(20), nullable=False, default="unpaid")  # unpaid | partial | paid | cancelled
+    settled_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    source = Column(String(20), nullable=False, default="manual")  # manual | efaktura
+    efaktura_record_id = Column(Integer, ForeignKey("efaktura_import_records.id"), nullable=True, unique=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, unique=True)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    client = relationship("Client")
+    project = relationship("Project")
+    expense = relationship("Expense")
+    efaktura_record = relationship("EfakturaImportRecord")
+    settlements = relationship(
+        "IncomingInvoiceSettlement",
+        back_populates="incoming_invoice",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def remaining_amount(self) -> Decimal:
+        return Decimal(str(self.amount or 0)) - Decimal(str(self.settled_amount or 0))
+
+
+class IncomingInvoiceSettlement(Base):
+    """Журнал закрытия входящей фактуры: банк, наличка, взаимозачёт."""
+    __tablename__ = "incoming_invoice_settlements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incoming_invoice_id = Column(Integer, ForeignKey("incoming_invoices.id"), nullable=False, index=True)
+    settlement_type = Column(String(20), nullable=False)  # bank | cash | offset
+    amount = Column(Numeric(14, 2), nullable=False)
+    date = Column(Date, nullable=False)
+    note = Column(Text)
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=True)
+    cash_entry_id = Column(Integer, ForeignKey("cash_entries.id"), nullable=True)
+    income_id = Column(Integer, ForeignKey("income.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    incoming_invoice = relationship("IncomingInvoice", back_populates="settlements")
 
 
 class ContributionRates(Base):

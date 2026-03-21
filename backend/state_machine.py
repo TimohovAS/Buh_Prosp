@@ -14,7 +14,8 @@ class InvalidStatusTransition(ValueError):
 
 INCOME_STATUSES = {"issued", "partial", "paid", "cancelled"}
 EXPENSE_STATUSES = {"planned", "paid", "reversed"}
-OBLIGATION_STATUSES = {"unpaid", "overdue", "paid", "reversed"}
+OBLIGATION_STATUSES = {"unpaid", "overdue", "paid"}
+INCOMING_INVOICE_STATUSES = {"unpaid", "partial", "paid", "cancelled"}
 PROJECT_STATUSES = {"lead", "active", "completed", "archived"}
 
 INCOME_TRANSITIONS = {
@@ -33,8 +34,14 @@ EXPENSE_TRANSITIONS = {
 OBLIGATION_TRANSITIONS = {
     "unpaid": {"paid", "overdue"},
     "overdue": {"paid"},
-    "paid": {"reversed"},
-    "reversed": set(),
+    "paid": set(),
+}
+
+INCOMING_INVOICE_TRANSITIONS = {
+    "unpaid": {"partial", "paid", "cancelled"},
+    "partial": {"paid", "cancelled"},
+    "paid": set(),
+    "cancelled": set(),
 }
 
 PROJECT_TRANSITIONS = {
@@ -203,6 +210,8 @@ def reopen_expense_for_unmatch(expense: Any) -> None:
 
 def ensure_expense_can_reverse(expense: Any) -> None:
     status = _ensure_known_status("Expense", getattr(expense, "status", None), EXPENSE_STATUSES)
+    if getattr(expense, "source", None) == "cash_transfer":
+        raise InvalidStatusTransition("Expense: cash transfer expenses cannot be reversed directly.")
     if getattr(expense, "reversal_of_id", None):
         raise InvalidStatusTransition("Expense: reversal entry cannot be reversed again.")
     if getattr(expense, "reversed_expense_id", None):
@@ -241,7 +250,7 @@ def mark_obligation_paid_status(obligation: Any, *, paid_date: date) -> None:
 
 def refresh_obligation_due_status(obligation: Any, *, today: date | None = None) -> str:
     current = _ensure_known_status("MonthlyObligation", getattr(obligation, "status", None), OBLIGATION_STATUSES)
-    if current in {"paid", "reversed"}:
+    if current == "paid":
         return current
     resolved_today = today or date.today()
     target = "overdue" if getattr(obligation, "deadline", None) and obligation.deadline < resolved_today else "unpaid"
@@ -259,6 +268,39 @@ def restore_obligation_after_payment_reset(obligation: Any, *, today: date | Non
     obligation.status = target
     obligation.paid_date = None
     return target
+
+
+def initialize_incoming_invoice_status(invoice: Any, target_status: str) -> None:
+    target = _ensure_known_status("IncomingInvoice", target_status, INCOMING_INVOICE_STATUSES)
+    invoice.status = target
+
+
+def reconcile_incoming_invoice_status(invoice: Any) -> None:
+    """Пересчитать статус входящей фактуры по settled_amount vs amount."""
+    current = _ensure_known_status("IncomingInvoice", getattr(invoice, "status", None), INCOMING_INVOICE_STATUSES)
+    if current == "cancelled":
+        raise InvalidStatusTransition("IncomingInvoice: cancelled status is terminal.")
+
+    settled = to_decimal(getattr(invoice, "settled_amount", None) or ZERO_DECIMAL)
+    total = to_decimal(getattr(invoice, "amount", None) or ZERO_DECIMAL)
+    if settled >= total and settled > ZERO_DECIMAL:
+        invoice.status = "paid"
+    elif settled > ZERO_DECIMAL:
+        invoice.status = "partial"
+    else:
+        invoice.status = "unpaid"
+
+
+def cancel_incoming_invoice(invoice: Any) -> None:
+    _ensure_transition(
+        "IncomingInvoice",
+        getattr(invoice, "status", None),
+        "cancelled",
+        known_statuses=INCOMING_INVOICE_STATUSES,
+        transitions=INCOMING_INVOICE_TRANSITIONS,
+        allow_same=False,
+    )
+    invoice.status = "cancelled"
 
 
 def initialize_project_status(project: Any, target_status: str) -> None:

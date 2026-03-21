@@ -373,6 +373,26 @@ export const api = {
     },
   },
 
+  incomingInvoices: {
+    list: (params) => {
+      const q = new URLSearchParams(params || {}).toString();
+      return request(`/incoming-invoices?${q}`);
+    },
+    get: (id) => request(`/incoming-invoices/${id}`),
+    create: (data) => request('/incoming-invoices', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/incoming-invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    cancel: (id) => request(`/incoming-invoices/${id}/cancel`, { method: 'POST' }),
+    settleBank: (id, data) => request(`/incoming-invoices/${id}/settle/bank`, { method: 'POST', body: JSON.stringify(data) }),
+    settleCash: (id, data) => request(`/incoming-invoices/${id}/settle/cash`, { method: 'POST', body: JSON.stringify(data) }),
+    settleOffset: (id, data) => request(`/incoming-invoices/${id}/settle/offset`, { method: 'POST', body: JSON.stringify(data) }),
+    reverseSettlement: (id) => request(`/incoming-invoices/settlements/${id}`, { method: 'DELETE' }),
+    counterpartyBalance: (params) => {
+      const q = new URLSearchParams(params || {}).toString();
+      return request(`/incoming-invoices/counterparty-balance?${q}`);
+    },
+    openIncomes: (clientId) => request(`/incoming-invoices/open-incomes/${clientId}`),
+  },
+
   reports: {
     kpoCsvUrl: (year, month) => {
       let url = `${API_BASE}/reports/kpo/csv?year=${year}`;

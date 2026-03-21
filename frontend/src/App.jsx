@@ -22,6 +22,8 @@ import CashRegister from './pages/CashRegister'
 import Projects from './pages/Projects'
 import Obligations from './pages/Obligations'
 import Efaktura from './pages/Efaktura'
+import IncomingInvoices from './pages/IncomingInvoices'
+import CounterpartyBalance from './pages/CounterpartyBalance'
 
 function ProtectedRoute({ children }) {
   const [checking, setChecking] = useState(true)
@@ -80,6 +82,8 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="income" element={<Income />} />
           <Route path="efaktura" element={<Efaktura />} />
+          <Route path="incoming-invoices" element={<IncomingInvoices />} />
+          <Route path="counterparty-balance" element={<CounterpartyBalance />} />
           <Route path="clients" element={<Clients />} />
           <Route path="finance" element={<FinanceOverview />} />
           <Route path="finance/pnl" element={<ProfitAndLoss />} />

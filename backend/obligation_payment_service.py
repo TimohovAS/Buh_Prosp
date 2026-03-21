@@ -57,7 +57,6 @@ async def mark_obligation_paid(
             currency="RSD",
             category="tax",
             note=resolved_reference,
-            paid_date=paid_date,
             source="obligation",
             is_tax_related=True,
             bank_reference=getattr(bank_transaction, "bank_reference", None),

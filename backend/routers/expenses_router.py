@@ -22,7 +22,7 @@ from backend.schemas import (
     ExpenseReverseRequest,
     ExpenseUpdate,
 )
-from backend.state_machine import InvalidStatusTransition, mark_expense_paid
+from backend.state_machine import InvalidStatusTransition, initialize_expense_status, mark_expense_paid
 from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -457,11 +457,11 @@ async def create_expense(
         contract_id=contract_id,
         is_tax_related=is_tax_related,
         note=data.note,
-        paid_date=data.paid_date or data.date,
         project_id=project_id,
         source="manual",
         created_by=current_user.id,
     )
+    initialize_expense_status(expense, "paid", paid_date=data.paid_date or data.date)
     db.add(expense)
     await db.flush()
     await _sync_bank_transactions_from_expense(db, expense)

@@ -29,6 +29,7 @@ from backend.routers.categories_router import router as categories_router
 from backend.routers.cash_router import router as cash_router
 from backend.routers.service_router import router as service_router
 from backend.routers.efaktura_router import router as efaktura_router
+from backend.routers.incoming_invoices_router import router as incoming_invoices_router
 
 settings = get_settings()
 
@@ -106,6 +107,7 @@ app.include_router(categories_router, prefix="/api")
 app.include_router(cash_router, prefix="/api")
 app.include_router(service_router, prefix="/api")
 app.include_router(efaktura_router, prefix="/api")
+app.include_router(incoming_invoices_router, prefix="/api")
 app.include_router(obligations_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(enterprise_router, prefix="/api")

@@ -1168,3 +1168,113 @@ class ServiceRestoreResponse(BaseModel):
     message: str
 
 
+# --- IncomingInvoice ---
+
+class IncomingInvoiceBase(BaseModel):
+    invoice_number: str
+    date: DateType
+    client_id: Optional[int] = None
+    counterparty_name: str
+    project_id: Optional[int] = None
+    amount: Decimal
+    currency: str = "RSD"
+    description: Optional[str] = None
+    note: Optional[str] = None
+
+    @field_validator("client_id", "project_id", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
+
+
+class IncomingInvoiceCreate(IncomingInvoiceBase):
+    source: str = "manual"
+
+
+class IncomingInvoiceUpdate(BaseModel):
+    invoice_number: Optional[str] = None
+    date: Optional[DateType] = None
+    client_id: Optional[int] = None
+    counterparty_name: Optional[str] = None
+    project_id: Optional[int] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    description: Optional[str] = None
+    note: Optional[str] = None
+
+    @field_validator("client_id", "project_id", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
+
+
+class IncomingInvoiceResponse(IncomingInvoiceBase):
+    id: int
+    status: str
+    settled_amount: Decimal = Decimal("0")
+    remaining_amount: Decimal = Decimal("0")
+    source: str = "manual"
+    expense_id: Optional[int] = None
+    efaktura_record_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    client_name: Optional[str] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncomingInvoiceSettlementCreate(BaseModel):
+    amount: Decimal
+    date: DateType
+    note: Optional[str] = None
+
+
+class BankSettlementCreate(IncomingInvoiceSettlementCreate):
+    bank_transaction_id: int
+
+
+class OffsetSettlementCreate(IncomingInvoiceSettlementCreate):
+    income_id: int
+
+
+class IncomingInvoiceSettlementResponse(BaseModel):
+    id: int
+    incoming_invoice_id: int
+    settlement_type: str
+    amount: Decimal
+    date: DateType
+    note: Optional[str] = None
+    bank_transaction_id: Optional[int] = None
+    cash_entry_id: Optional[int] = None
+    income_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncomingInvoiceDetailResponse(IncomingInvoiceResponse):
+    settlements: list[IncomingInvoiceSettlementResponse] = Field(default_factory=list)
+
+
+class CounterpartyBalanceItem(BaseModel):
+    client_id: Optional[int] = None
+    client_name: str
+    receivables: Decimal = Decimal("0")
+    payables: Decimal = Decimal("0")
+    net_balance: Decimal = Decimal("0")
+
+
+class CounterpartyBalanceResponse(BaseModel):
+    items: list[CounterpartyBalanceItem] = Field(default_factory=list)
+    total_receivables: Decimal = Decimal("0")
+    total_payables: Decimal = Decimal("0")
+    total_net_balance: Decimal = Decimal("0")
+
+

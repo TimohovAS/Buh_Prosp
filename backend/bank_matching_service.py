@@ -8,9 +8,9 @@ from sqlalchemy.orm import selectinload
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, to_decimal
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
-from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, MonthlyObligation, Project
+from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, IncomingInvoice, IncomingInvoiceSettlement, MonthlyObligation, Project
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
-from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reopen_expense_for_unmatch
+from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reconcile_incoming_invoice_status, reopen_expense_for_unmatch
 
 
 def _safe_paid_amount(income: Income):
@@ -268,6 +268,74 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
     return result
 
 
+async def _find_incoming_invoice_by_expense(db: AsyncSession, expense_id: int) -> IncomingInvoice | None:
+    result = await db.execute(
+        select(IncomingInvoice).where(IncomingInvoice.expense_id == expense_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _sync_incoming_invoice_on_match(db: AsyncSession, expense: Expense, tx: BankTransaction) -> None:
+    if getattr(expense, "source", None) != "incoming_invoice":
+        return
+    invoice = await _find_incoming_invoice_by_expense(db, expense.id)
+    if not invoice or invoice.status in {"paid", "cancelled"}:
+        return
+    existing = await db.execute(
+        select(IncomingInvoiceSettlement).where(
+            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id,
+            IncomingInvoiceSettlement.bank_transaction_id == tx.id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return
+    settlement = IncomingInvoiceSettlement(
+        incoming_invoice_id=invoice.id,
+        settlement_type="bank",
+        amount=to_decimal(tx.amount),
+        date=tx.date,
+        bank_transaction_id=tx.id,
+    )
+    db.add(settlement)
+    await db.flush()
+    all_q = await db.execute(
+        select(IncomingInvoiceSettlement).where(
+            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id
+        )
+    )
+    all_settlements = list(all_q.scalars().all())
+    total = sum((to_decimal(s.amount) for s in all_settlements), ZERO_DECIMAL)
+    invoice.settled_amount = total
+    reconcile_incoming_invoice_status(invoice)
+
+
+async def _sync_incoming_invoice_on_unmatch(db: AsyncSession, expense: Expense, tx: BankTransaction) -> None:
+    if getattr(expense, "source", None) != "incoming_invoice":
+        return
+    invoice = await _find_incoming_invoice_by_expense(db, expense.id)
+    if not invoice:
+        return
+    result = await db.execute(
+        select(IncomingInvoiceSettlement).where(
+            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id,
+            IncomingInvoiceSettlement.bank_transaction_id == tx.id,
+        )
+    )
+    settlement = result.scalar_one_or_none()
+    if settlement:
+        await db.delete(settlement)
+        await db.flush()
+    all_q = await db.execute(
+        select(IncomingInvoiceSettlement).where(
+            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id
+        )
+    )
+    all_settlements = list(all_q.scalars().all())
+    total = sum((to_decimal(s.amount) for s in all_settlements), ZERO_DECIMAL)
+    invoice.settled_amount = total
+    reconcile_incoming_invoice_status(invoice)
+
+
 async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match_id: int):
     response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
     tx = response.scalar_one_or_none()
@@ -313,6 +381,8 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
             expense.project_id = project_id
             tx.project_id = project_id
             await _clear_contract_if_project_mismatch(db, expense, project_id)
+
+        await _sync_incoming_invoice_on_match(db, expense, tx)
 
     elif match_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == match_id))
@@ -382,6 +452,7 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
                 await revert_cash_transfer(db, tx, expense=expense)
                 await db.flush()
                 return tx
+            await _sync_incoming_invoice_on_unmatch(db, expense, tx)
             reopen_expense_for_unmatch(expense)
 
     elif tx.matched_type == "obligation":
