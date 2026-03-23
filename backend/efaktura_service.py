@@ -8,10 +8,10 @@ from typing import Any
 from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.decimal_utils import ZERO_DECIMAL
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.income_service import (
     has_invoice_duplicate,
     normalize_name,
@@ -21,7 +21,13 @@ from backend.income_service import (
 )
 from backend.incoming_invoice_service import INCOMING_INVOICE_SOURCE, create_incoming_invoice
 from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomingInvoice, Project
-from backend.state_machine import initialize_expense_status, initialize_income_status
+from backend.state_machine import (
+    cancel_incoming_invoice,
+    initialize_expense_status,
+    initialize_income_status,
+    initialize_incoming_invoice_status,
+    reconcile_incoming_invoice_status,
+)
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
 DEFAULT_EFAKTURA_API_BASE_URL = "https://efaktura.mfin.gov.rs"
@@ -40,6 +46,19 @@ async def get_unassigned_project_id(db: AsyncSession) -> int | None:
     result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
     project = result.scalar_one_or_none()
     return project.id if project else None
+
+
+def build_client_lookup(clients: list[Client]) -> tuple[dict[str, Client], dict[str, Client]]:
+    clients_by_pib: dict[str, Client] = {}
+    clients_by_name: dict[str, Client] = {}
+    for client in clients:
+        pib_key = normalize_pib(client.pib)
+        if pib_key and pib_key not in clients_by_pib:
+            clients_by_pib[pib_key] = client
+        name_key = normalize_name(client.name)
+        if name_key and name_key not in clients_by_name:
+            clients_by_name[name_key] = client
+    return clients_by_pib, clients_by_name
 
 
 def get_effective_efaktura_setting(value: str | None, default: str) -> str:
@@ -169,6 +188,100 @@ async def register_import_record(
     return record
 
 
+async def migrate_legacy_efaktura_incoming_records(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+) -> dict[str, Any]:
+    clients_result = await db.execute(select(Client))
+    clients = clients_result.scalars().all()
+    clients_by_pib, clients_by_name = build_client_lookup(clients)
+    unassigned_project_id = await get_unassigned_project_id(db)
+
+    result = await db.execute(
+        select(EfakturaImportRecord)
+        .where(
+            EfakturaImportRecord.direction == "incoming",
+            EfakturaImportRecord.imported_as == "expense",
+        )
+        .order_by(EfakturaImportRecord.created_at.asc(), EfakturaImportRecord.id.asc())
+    )
+    records = list(result.scalars().all())
+
+    summary = {
+        "found_count": 0,
+        "migrated_count": 0,
+        "skipped_existing_invoice_count": 0,
+        "skipped_missing_expense_count": 0,
+        "skipped_nonlegacy_expense_count": 0,
+    }
+
+    for record in records:
+        summary["found_count"] += 1
+
+        existing_invoice_result = await db.execute(
+            select(IncomingInvoice.id)
+            .where(
+                or_(
+                    IncomingInvoice.efaktura_record_id == record.id,
+                    IncomingInvoice.expense_id == record.imported_record_id,
+                )
+            )
+            .limit(1)
+        )
+        if existing_invoice_result.scalar_one_or_none() is not None:
+            summary["skipped_existing_invoice_count"] += 1
+            continue
+
+        expense = await db.get(Expense, record.imported_record_id)
+        if expense is None:
+            summary["skipped_missing_expense_count"] += 1
+            continue
+        if getattr(expense, "source", None) != EFAKTURA_IMPORT_SOURCE:
+            summary["skipped_nonlegacy_expense_count"] += 1
+            continue
+
+        supplier_client = None
+        supplier_pib = normalize_pib(record.supplier_pib)
+        if supplier_pib:
+            supplier_client = clients_by_pib.get(supplier_pib)
+        if supplier_client is None and record.supplier_name:
+            supplier_client = clients_by_name.get(normalize_name(record.supplier_name))
+
+        resolved_project_id = expense.project_id or unassigned_project_id
+        invoice = IncomingInvoice(
+            invoice_number=record.invoice_number,
+            date=record.issued_date,
+            client_id=supplier_client.id if supplier_client else None,
+            counterparty_name=record.supplier_name or expense.description or "Unknown",
+            project_id=resolved_project_id,
+            amount=expense.amount,
+            currency=expense.currency or "RSD",
+            description=expense.description,
+            note=expense.note,
+            source="efaktura",
+            efaktura_record_id=record.id,
+            expense_id=expense.id,
+            created_by=expense.created_by or user_id,
+        )
+        initialize_incoming_invoice_status(invoice, "unpaid")
+
+        expense.source = INCOMING_INVOICE_SOURCE
+        expense.project_id = resolved_project_id
+
+        if getattr(expense, "status", None) == "paid":
+            invoice.settled_amount = to_decimal(invoice.amount or ZERO_DECIMAL)
+            reconcile_incoming_invoice_status(invoice)
+        elif getattr(expense, "status", None) == "reversed":
+            cancel_incoming_invoice(invoice)
+
+        db.add(invoice)
+        await db.flush()
+        summary["migrated_count"] += 1
+
+    return summary
+
+
 async def import_efaktura_documents(
     db: AsyncSession,
     *,
@@ -178,15 +291,7 @@ async def import_efaktura_documents(
 ) -> dict[str, Any]:
     clients_result = await db.execute(select(Client))
     clients = clients_result.scalars().all()
-    clients_by_pib: dict[str, Client] = {}
-    clients_by_name: dict[str, Client] = {}
-    for client in clients:
-        pib_key = normalize_pib(client.pib)
-        if pib_key and pib_key not in clients_by_pib:
-            clients_by_pib[pib_key] = client
-        name_key = normalize_name(client.name)
-        if name_key and name_key not in clients_by_name:
-            clients_by_name[name_key] = client
+    clients_by_pib, clients_by_name = build_client_lookup(clients)
 
     enterprise = await get_efaktura_enterprise(db)
     has_enterprise_identity = bool(
