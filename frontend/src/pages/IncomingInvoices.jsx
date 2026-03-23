@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -8,8 +8,14 @@ const currentYear = new Date().getFullYear()
 const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
 const STATUS_LABELS = { unpaid: 'statusUnpaid', partial: 'statusPartial', paid: 'statusPaid', cancelled: 'statusCancelled' }
 
-function fmt(n) { return n != null ? Number(n).toLocaleString('sr-RS', { minimumFractionDigits: 2 }) : '—' }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('sr-RS') : '—' }
+function fmt(n) { return n != null ? Number(n).toLocaleString('sr-RS', { minimumFractionDigits: 2 }) : '-' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('sr-RS') : '-' }
+
+function compactText(value, max = 80) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text
+}
 
 function StatusBadge({ status }) {
   const cls = { unpaid: 'badge badge-warning', partial: 'badge badge-info', paid: 'badge badge-success', cancelled: 'badge badge-danger' }
@@ -37,7 +43,8 @@ export default function IncomingInvoices() {
   const defaultForm = { invoice_number: '', date: new Date().toISOString().slice(0, 10), client_id: '', counterparty_name: '', project_id: '', amount: '', currency: 'RSD', description: '', note: '' }
 
   const load = () => {
-    setLoading(true); setPageError('')
+    setLoading(true)
+    setPageError('')
     const params = {}
     if (year) params.year = year
     if (month && year) params.month = month
@@ -54,42 +61,67 @@ export default function IncomingInvoices() {
   const filtered = useMemo(() => {
     const q = (search || '').trim().toLowerCase()
     let rows = items
-    if (q) rows = items.filter(i =>
-      (i.invoice_number || '').toLowerCase().includes(q) ||
-      (i.counterparty_name || '').toLowerCase().includes(q) ||
-      (i.client_name || '').toLowerCase().includes(q) ||
-      (i.description || '').toLowerCase().includes(q)
-    )
+    if (q) {
+      rows = items.filter(i =>
+        (i.invoice_number || '').toLowerCase().includes(q) ||
+        (i.counterparty_name || '').toLowerCase().includes(q) ||
+        (i.client_name || '').toLowerCase().includes(q) ||
+        (i.description || '').toLowerCase().includes(q)
+      )
+    }
     return [...rows].sort((a, b) => {
-      const av = a[sortCol] ?? '', bv = b[sortCol] ?? ''
+      const av = a[sortCol] ?? ''
+      const bv = b[sortCol] ?? ''
       if (av < bv) return sortAsc ? -1 : 1
       if (av > bv) return sortAsc ? 1 : -1
       return 0
     })
   }, [items, search, sortCol, sortAsc])
 
-  const toggleSort = col => { if (sortCol === col) setSortAsc(v => !v); else { setSortCol(col); setSortAsc(true) } }
+  const toggleSort = col => {
+    if (sortCol === col) setSortAsc(v => !v)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
+  }
   const SortIcon = ({ col }) => sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''
 
-  const openAdd = () => { setForm({ ...defaultForm }); setModal('add') }
+  const openAdd = () => {
+    setForm({ ...defaultForm })
+    setModal('add')
+  }
+
   const openEdit = item => {
-    setForm({ invoice_number: item.invoice_number, date: item.date, client_id: item.client_id || '', counterparty_name: item.counterparty_name, project_id: item.project_id || '', amount: item.amount, currency: item.currency || 'RSD', description: item.description || '', note: item.note || '' })
+    setForm({
+      invoice_number: item.invoice_number,
+      date: item.date,
+      client_id: item.client_id || '',
+      counterparty_name: item.counterparty_name,
+      project_id: item.project_id || '',
+      amount: item.amount,
+      currency: item.currency || 'RSD',
+      description: item.description || '',
+      note: item.note || '',
+    })
     setModal({ type: 'edit', id: item.id })
   }
 
   const handleSubmit = async e => {
-    e.preventDefault(); setSubmitting(true)
+    e.preventDefault()
+    setSubmitting(true)
     try {
       const payload = { ...form, amount: Number(form.amount), client_id: form.client_id || null, project_id: form.project_id || null }
       if (modal === 'add') await api.incomingInvoices.create(payload)
       else await api.incomingInvoices.update(modal.id, payload)
-      setModal(null); load()
+      setModal(null)
+      load()
     } catch { }
     setSubmitting(false)
   }
 
   const handleCancel = async id => {
-    if (!confirm(tr('delete') + '?')) return
+    if (!confirm(`${tr('delete')}?`)) return
     await api.incomingInvoices.cancel(id).catch(() => {})
     load()
   }
@@ -101,15 +133,15 @@ export default function IncomingInvoices() {
     } catch { }
   }
 
-  const handleReverseSettlement = async sId => {
+  const handleReverseSettlement = async settlementId => {
     if (!confirm(tr('reverseSettlementConfirm'))) return
-    await api.incomingInvoices.reverseSettlement(sId).catch(() => {})
+    await api.incomingInvoices.reverseSettlement(settlementId).catch(() => {})
     if (detailModal) openDetail(detailModal.id)
     load()
   }
 
-  const totalAmount = useMemo(() => filtered.reduce((s, i) => s + Number(i.amount || 0), 0), [filtered])
-  const totalRemaining = useMemo(() => filtered.reduce((s, i) => s + Number(i.remaining_amount || 0), 0), [filtered])
+  const totalAmount = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0), [filtered])
+  const totalRemaining = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.remaining_amount || 0), 0), [filtered])
 
   return (
     <div className="page">
@@ -120,12 +152,12 @@ export default function IncomingInvoices() {
             {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select className="form-input" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 80 }}>
-            <option value="">—</option>
+            <option value="">-</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 130 }}>
-            <option value="">{tr('all') || 'Все'}</option>
-            {STATUSES.map(s => <option key={s} value={s}>{tr(STATUS_LABELS[s])}</option>)}
+            <option value="">{tr('all') || 'All'}</option>
+            {STATUSES.map(status => <option key={status} value={status}>{tr(STATUS_LABELS[status])}</option>)}
           </select>
           <input className="form-input" placeholder={tr('search')} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 180 }} />
           <button className="btn btn-primary" onClick={openAdd}>{tr('createIncomingInvoice')}</button>
@@ -181,7 +213,7 @@ export default function IncomingInvoices() {
               {filtered.length > 0 && (
                 <tfoot>
                   <tr style={{ fontWeight: 'bold' }}>
-                    <td colSpan={3}>{tr('total') || 'Итого'}: {filtered.length}</td>
+                    <td colSpan={3}>{tr('total') || 'Total'}: {filtered.length}</td>
                     <td style={{ textAlign: 'right' }}>{fmt(totalAmount)}</td>
                     <td></td>
                     <td style={{ textAlign: 'right' }}>{fmt(totalRemaining)}</td>
@@ -194,7 +226,6 @@ export default function IncomingInvoices() {
         </div>
       </div>
 
-      {/* Create / Edit modal */}
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -209,7 +240,7 @@ export default function IncomingInvoices() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
-                <DatePicker value={form.date} onChange={v => setForm({ ...form, date: v })} />
+                <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('counterpartyName')}</label>
@@ -218,15 +249,15 @@ export default function IncomingInvoices() {
               <div className="form-group">
                 <label className="form-label">{tr('client')}</label>
                 <select className="form-input" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-                  <option value="">—</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">-</option>
+                  {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
                 <select className="form-input" value={form.project_id} onChange={e => setForm({ ...form, project_id: e.target.value })}>
-                  <option value="">—</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                  <option value="">-</option>
+                  {projects.map(project => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
@@ -250,10 +281,8 @@ export default function IncomingInvoices() {
         </div>
       )}
 
-      {/* Settle modal */}
       {settleModal && <SettleModal data={settleModal} clients={clients} onClose={() => setSettleModal(null)} onDone={() => { setSettleModal(null); load() }} />}
 
-      {/* Detail modal */}
       {detailModal && (
         <div className="modal-overlay" onClick={() => setDetailModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
@@ -272,15 +301,23 @@ export default function IncomingInvoices() {
               <h3 style={{ marginTop: '1rem' }}>{tr('settlementHistory')}</h3>
               {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
                 <table>
-                  <thead><tr><th>{tr('date')}</th><th>{tr('type')}</th><th style={{ textAlign: 'right' }}>{tr('amount')}</th><th>{tr('note')}</th><th></th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>{tr('date')}</th>
+                      <th>{tr('type')}</th>
+                      <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                      <th>{tr('note')}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {detailModal.settlements.map(s => (
-                      <tr key={s.id}>
-                        <td>{fmtDate(s.date)}</td>
-                        <td>{tr(s.settlement_type) || s.settlement_type}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(s.amount)}</td>
-                        <td>{s.note || ''}</td>
-                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(s.id)}>{tr('reverseSettlement')}</button></td>
+                    {detailModal.settlements.map(settlement => (
+                      <tr key={settlement.id}>
+                        <td>{fmtDate(settlement.date)}</td>
+                        <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
+                        <td>{settlement.note || ''}</td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -300,6 +337,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
   const [bankTxs, setBankTxs] = useState([])
   const [openIncomes, setOpenIncomes] = useState([])
   const [submitting, setSubmitting] = useState(false)
+  const selectedIncome = openIncomes.find(i => i.id === Number(form.income_id)) || null
 
   useEffect(() => {
     if (type === 'bank') {
@@ -311,7 +349,8 @@ function SettleModal({ data, clients, onClose, onDone }) {
   }, [type, invoice.client_id])
 
   const handleSubmit = async e => {
-    e.preventDefault(); setSubmitting(true)
+    e.preventDefault()
+    setSubmitting(true)
     try {
       const payload = { amount: Number(form.amount), date: form.date, note: form.note || null }
       if (type === 'bank') {
@@ -329,6 +368,15 @@ function SettleModal({ data, clients, onClose, onDone }) {
   }
 
   const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset') }
+  const formatOffsetIncomeLabel = income => {
+    const parts = [income.invoice_number || '']
+    if (income.date) parts.push(fmtDate(income.date))
+    if (income.client_name) parts.push(income.client_name)
+    if (income.project_code || income.project_name) parts.push([income.project_code, income.project_name].filter(Boolean).join(' / '))
+    if (income.description) parts.push(compactText(income.description, 60))
+    parts.push(`${tr('remainingAmount')}: ${fmt(income.remaining)}`)
+    return parts.filter(Boolean).join(' | ')
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -342,10 +390,10 @@ function SettleModal({ data, clients, onClose, onDone }) {
             <div className="form-group">
               <label className="form-label">{tr('selectBankTx')}</label>
               <select className="form-input" required value={form.bank_transaction_id} onChange={e => {
-                const tx = bankTxs.find(t => t.id === Number(e.target.value))
+                const tx = bankTxs.find(item => item.id === Number(e.target.value))
                 setForm({ ...form, bank_transaction_id: e.target.value, amount: tx ? Number(tx.amount) : form.amount })
               }}>
-                <option value="">—</option>
+                <option value="">-</option>
                 {bankTxs.map(tx => <option key={tx.id} value={tx.id}>{fmtDate(tx.date)} | {fmt(tx.amount)} | {tx.counterparty_name || tx.purpose || tx.bank_reference}</option>)}
               </select>
             </div>
@@ -353,15 +401,25 @@ function SettleModal({ data, clients, onClose, onDone }) {
           {type === 'offset' && (
             <div className="form-group">
               <label className="form-label">{tr('selectIncome')}</label>
-              {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>Для взаимозачёта нужно указать клиента у входящей фактуры.</p> : (
-                <select className="form-input" required value={form.income_id} onChange={e => {
-                  const inc = openIncomes.find(i => i.id === Number(e.target.value))
-                  const maxAmount = inc ? Math.min(Number(inc.remaining), Number(invoice.remaining_amount)) : form.amount
-                  setForm({ ...form, income_id: e.target.value, amount: maxAmount })
-                }}>
-                  <option value="">—</option>
-                  {openIncomes.map(inc => <option key={inc.id} value={inc.id}>{inc.invoice_number} | {fmtDate(inc.date)} | {tr('remainingAmount')}: {fmt(inc.remaining)}</option>)}
-                </select>
+              {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>Для взаимозачета нужно указать клиента у входящей фактуры.</p> : (
+                <div>
+                  <select className="form-input" required value={form.income_id} onChange={e => {
+                    const income = openIncomes.find(item => item.id === Number(e.target.value))
+                    const maxAmount = income ? Math.min(Number(income.remaining), Number(invoice.remaining_amount)) : form.amount
+                    setForm({ ...form, income_id: e.target.value, amount: maxAmount })
+                  }}>
+                    <option value="">-</option>
+                    {openIncomes.map(income => <option key={income.id} value={income.id}>{formatOffsetIncomeLabel(income)}</option>)}
+                  </select>
+                  {selectedIncome && (
+                    <div style={{ marginTop: 8, padding: '0.75rem', border: '1px solid var(--border-color, rgba(255,255,255,0.12))', borderRadius: 8, display: 'grid', gap: 4 }}>
+                      <div><strong>{tr('counterpartyName')}:</strong> {selectedIncome.client_name || '-'}</div>
+                      {(selectedIncome.project_code || selectedIncome.project_name) && <div><strong>{tr('project')}:</strong> {[selectedIncome.project_code, selectedIncome.project_name].filter(Boolean).join(' / ')}</div>}
+                      {selectedIncome.description && <div><strong>{tr('description')}:</strong> {selectedIncome.description}</div>}
+                      <div><strong>{tr('remainingAmount')}:</strong> {fmt(selectedIncome.remaining)}</div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -371,7 +429,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
           </div>
           <div className="form-group">
             <label className="form-label">{tr('settlementDate')}</label>
-            <DatePicker value={form.date} onChange={v => setForm({ ...form, date: v })} />
+            <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>

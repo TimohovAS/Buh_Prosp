@@ -155,6 +155,7 @@ async def open_incomes_for_offset(
     """Открытые исходящие фактуры клиента для взаимозачёта."""
     result = await db.execute(
         select(Income)
+        .options(selectinload(Income.client), selectinload(Income.project))
         .where(Income.client_id == client_id, Income.status.in_(["issued", "partial"]))
         .order_by(Income.issued_date.desc())
     )
@@ -168,6 +169,10 @@ async def open_incomes_for_offset(
             "paid_amount": float(i.paid_amount or 0),
             "remaining": float(to_decimal(i.amount_rsd or 0) - to_decimal(i.paid_amount or 0)),
             "status": i.status,
+            "client_name": i.client.name if i.client else i.client_name,
+            "project_name": i.project.name if i.project else None,
+            "project_code": i.project.code if i.project else None,
+            "description": i.description,
         }
         for i in incomes
     ]
