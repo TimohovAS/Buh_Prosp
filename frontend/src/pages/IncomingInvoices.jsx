@@ -333,7 +333,7 @@ export default function IncomingInvoices() {
 
 function SettleModal({ data, clients, onClose, onDone }) {
   const { invoice, type } = data
-  const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: new Date().toISOString().slice(0, 10), note: '', bank_transaction_id: '', income_id: '' })
+  const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: invoice.date || new Date().toISOString().slice(0, 10), note: '', bank_transaction_id: '', income_id: '' })
   const [bankTxs, setBankTxs] = useState([])
   const [openIncomes, setOpenIncomes] = useState([])
   const [submitting, setSubmitting] = useState(false)
@@ -368,6 +368,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
   }
 
   const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset') }
+  const invoiceProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
   const formatOffsetIncomeLabel = income => {
     const parts = [income.invoice_number || '']
     if (income.date) parts.push(fmtDate(income.date))
@@ -400,6 +401,14 @@ function SettleModal({ data, clients, onClose, onDone }) {
           )}
           {type === 'offset' && (
             <div className="form-group">
+              <div style={{ marginBottom: 10, padding: '0.75rem', border: '1px solid var(--border-color, rgba(255,255,255,0.12))', borderRadius: 8, display: 'grid', gap: 4 }}>
+                <div><strong>{tr('invoiceNumber')}:</strong> {invoice.invoice_number}</div>
+                <div><strong>{tr('date')}:</strong> {fmtDate(invoice.date)}</div>
+                {invoiceProjectLabel && <div><strong>{tr('project')}:</strong> {invoiceProjectLabel}</div>}
+                {invoice.description && <div><strong>{tr('description')}:</strong> {invoice.description}</div>}
+                {invoice.note && <div><strong>{tr('note')}:</strong> {invoice.note}</div>}
+                <div><strong>{tr('remainingAmount')}:</strong> {fmt(invoice.remaining_amount)}</div>
+              </div>
               <label className="form-label">{tr('selectIncome')}</label>
               {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>Для взаимозачета нужно указать клиента у входящей фактуры.</p> : (
                 <div>
