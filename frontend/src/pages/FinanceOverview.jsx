@@ -9,6 +9,11 @@ function fmt(n) {
   return (n ?? 0).toLocaleString('sr-RS')
 }
 
+function localDateIso(value = new Date()) {
+  const tzOffsetMs = value.getTimezoneOffset() * 60000
+  return new Date(value.getTime() - tzOffsetMs).toISOString().slice(0, 10)
+}
+
 function getPeriodRange(quick, customFrom, customTo) {
   const today = new Date()
   const y = today.getFullYear()
@@ -35,8 +40,8 @@ function getPeriodRange(quick, customFrom, customTo) {
     return { from: `${y}-01-01`, to: `${y}-12-31` }
   }
   return {
-    from: customFrom || today.toISOString().slice(0, 10),
-    to: customTo || today.toISOString().slice(0, 10),
+    from: customFrom || localDateIso(today),
+    to: customTo || localDateIso(today),
   }
 }
 
@@ -52,13 +57,15 @@ export default function FinanceOverview() {
   const [error, setError] = useState(null)
 
   const { from, to } = getPeriodRange(periodQuick, customFrom, customTo)
+  const todayIso = localDateIso()
+  const receivablesAsOf = to > todayIso ? todayIso : to
 
   useEffect(() => {
     setLoading(true)
     const modeVal = mode === 'both' ? 'both' : mode
     Promise.all([
       api.finance.summary({ from, to, group_by: 'month', mode: modeVal }),
-      api.finance.ar({ as_of: to }),
+      api.finance.ar({ as_of: receivablesAsOf }),
       api.finance.limits({ as_of: to }),
     ])
       .then(([s, a, l]) => {
@@ -71,7 +78,7 @@ export default function FinanceOverview() {
         setError(e.message)
       })
       .finally(() => setLoading(false))
-  }, [from, to, mode])
+  }, [from, to, mode, receivablesAsOf])
 
   const totals = summary?.totals || {}
   const series = summary?.series || []
