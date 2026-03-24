@@ -50,7 +50,7 @@ function getRiskTone(risk) {
   return ''
 }
 
-function LimitForecastCard({ title, current, limit, percent, risk, note, forecast, estimate }) {
+function LimitForecastCard({ title, current, limit, percent, risk, forecast, estimate }) {
   const fillClass = getRiskTone(risk)
   const percentClass = fillClass ? `dashboard-limit-percent ${fillClass}` : 'dashboard-limit-percent'
 
@@ -66,9 +66,6 @@ function LimitForecastCard({ title, current, limit, percent, risk, note, forecas
           className={`progress-bar-fill ${fillClass}`.trim()}
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
-      </div>
-      <div className="dashboard-summary-note" style={{ marginTop: '0.75rem' }}>
-        {note}
       </div>
       <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
         {tr('forecastYearEnd')}: {fmtCurrency(forecast)}
@@ -232,7 +229,6 @@ export default function Dashboard() {
               limit={limitsData.annual_limit}
               percent={limitsData.annual_percent}
               risk={limitsData.risk}
-              note={tr('limitsAccrualNote')}
               forecast={limitsData.forecast_year_end}
               estimate={limitsData.estimated_limit_date}
             />
@@ -242,7 +238,6 @@ export default function Dashboard() {
               limit={limitsData.vat_limit}
               percent={limitsData.vat_percent}
               risk={limitsData.risk}
-              note={tr('limitsAccrualNote')}
               forecast={limitsData.forecast_year_end}
               estimate={limitsData.estimated_limit_date}
             />

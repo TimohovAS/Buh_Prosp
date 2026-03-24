@@ -265,7 +265,6 @@ export default function FinanceOverview() {
         {limitsData && (
           <div className="card" style={{ marginBottom: '2rem', borderColor: limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-border)' }}>
             <div className="card-title">{tr('financeLimits')}</div>
-            <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>{tr('limitsAccrualNote')}</div>
             <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
               <div
                 className={`progress-bar-fill ${limitsData.risk === 'high' ? 'danger' : limitsData.risk === 'medium' ? 'warning' : ''}`.trim()}
