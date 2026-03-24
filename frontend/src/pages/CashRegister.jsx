@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
@@ -39,12 +40,17 @@ function todayIso() {
 }
 
 export default function CashRegister() {
+  const currentYear = new Date().getFullYear()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState('')
+  const [year, setYear] = useState('')
+  const [availableYears, setAvailableYears] = useState([currentYear])
+  const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
+  const [queryInitialized, setQueryInitialized] = useState(false)
   const [summary, setSummary] = useState({ current_balance: 0, total_in: 0, total_out: 0, entries: [], available_withdrawals: [] })
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -84,14 +90,19 @@ export default function CashRegister() {
   const loadData = () => {
     setLoading(true)
     setPageError('')
+    const params = {}
+    if (year) params.year = year
+    if (year && month) params.month = month
     return Promise.all([
-      api.cash.summary(),
+      api.cash.summary(params),
+      api.cash.years(),
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
       api.contracts.list({ limit: 500 }),
     ])
-      .then(([cashSummary, projectList, categoryList, contractList]) => {
+      .then(([cashSummary, years, projectList, categoryList, contractList]) => {
         setSummary(cashSummary)
+        setAvailableYears(years?.length ? years : [currentYear])
         setProjects(projectList)
         setCategories(categoryList)
         setContracts(contractList)
@@ -104,12 +115,28 @@ export default function CashRegister() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const nextYear = params.get('year')
+    const nextMonth = params.get('month')
     const nextSearch = params.get('search')
+    if (nextYear) setYear(Number(nextYear))
+    if (nextMonth) setMonth(String(Number(nextMonth)))
     if (nextSearch) {
       setSearch(nextSearch)
     }
-    loadData()
+    setQueryInitialized(true)
   }, [])
+
+  useEffect(() => {
+    if (!queryInitialized) return
+    loadData()
+  }, [year, month, queryInitialized])
+
+  useEffect(() => {
+    if (availableYears.length === 0) return
+    if (year !== '' && !availableYears.includes(year)) {
+      setYear(availableYears[0])
+    }
+  }, [availableYears, year])
 
   const getCategoryLabel = (categoryId) => {
     const selectedCategory = categories.find((item) => item.id === categoryId)
@@ -495,6 +522,18 @@ export default function CashRegister() {
           <p className="page-subtitle">{tr('cashRegisterHint')}</p>
         </div>
         <div className="page-header-actions">
+          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
+            <option value="">{tr('allTime')}</option>
+            {availableYears.map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+          <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
+            <option value="">{tr('allMonths')}</option>
+            {MONTHS.map((value) => (
+              <option key={value} value={value}>{String(value).padStart(2, '0')}</option>
+            ))}
+          </select>
           <SearchInput
             placeholder={tr('search')}
             value={search}

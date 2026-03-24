@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -118,6 +118,69 @@ async def _get_cash_totals(db: AsyncSession):
     return total_in - total_out, total_in, total_out
 
 
+def _build_cash_period_filters(year: Optional[int] = None, month: Optional[int] = None):
+    conditions = []
+    if year:
+        conditions.extend([CashEntry.date >= date(year, 1, 1), CashEntry.date <= date(year, 12, 31)])
+    if month and year:
+        import calendar
+
+        last_day = calendar.monthrange(year, month)[1]
+        conditions.extend([CashEntry.date >= date(year, month, 1), CashEntry.date <= date(year, month, last_day)])
+    return conditions
+
+
+async def _get_cash_filtered_totals(db: AsyncSession, conditions: list):
+    total_in = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(
+                CashEntry.direction == "in",
+                *conditions,
+            )
+        )
+        or 0
+    )
+    total_out = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(
+                CashEntry.direction == "out",
+                *conditions,
+            )
+        )
+        or 0
+    )
+    return total_in, total_out
+
+
+async def _get_balance_before_entry(db: AsyncSession, entry: CashEntry):
+    if not entry:
+        return ZERO_DECIMAL
+
+    before_entry = or_(
+        CashEntry.date < entry.date,
+        and_(CashEntry.date == entry.date, CashEntry.id < entry.id),
+    )
+    total_in = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(
+                CashEntry.direction == "in",
+                before_entry,
+            )
+        )
+        or 0
+    )
+    total_out = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(
+                CashEntry.direction == "out",
+                before_entry,
+            )
+        )
+        or 0
+    )
+    return total_in - total_out
+
+
 def _build_withdrawal_description(transaction: BankTransaction) -> str:
     return (
         (transaction.purpose or "").strip()
@@ -197,7 +260,9 @@ async def _build_cash_summary(
     month: Optional[int] = None,
     limit: int = 200,
 ) -> CashSummaryResponse:
-    current_balance, total_in, total_out = await _get_cash_totals(db)
+    current_balance, _, _ = await _get_cash_totals(db)
+    entry_filters = _build_cash_period_filters(year=year, month=month)
+    total_in, total_out = await _get_cash_filtered_totals(db, entry_filters)
 
     entries_query = (
         select(CashEntry)
@@ -207,20 +272,15 @@ async def _build_cash_summary(
         )
         .order_by(CashEntry.date.asc(), CashEntry.id.asc())
     )
-    if year:
-        entries_query = entries_query.where(CashEntry.date >= date(year, 1, 1), CashEntry.date <= date(year, 12, 31))
-    if month and year:
-        import calendar
-
-        last_day = calendar.monthrange(year, month)[1]
-        entries_query = entries_query.where(CashEntry.date >= date(year, month, 1), CashEntry.date <= date(year, month, last_day))
+    if entry_filters:
+        entries_query = entries_query.where(*entry_filters)
 
     entries_result = await db.execute(entries_query)
     entries = list(entries_result.scalars().all())
     if limit:
         entries = entries[-limit:]
 
-    running_balance = ZERO_DECIMAL
+    running_balance = await _get_balance_before_entry(db, entries[0]) if entries else ZERO_DECIMAL
     entry_items: list[CashEntryResponse] = []
     for entry in entries:
         if entry.direction == "in":
@@ -252,6 +312,18 @@ async def _build_cash_summary(
         entries=entry_items,
         available_withdrawals=available_withdrawals,
     )
+
+
+@router.get("/years", response_model=list[int])
+async def list_cash_entry_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(select(CashEntry.date))
+    years = {value.year for (value,) in result.fetchall() if value is not None}
+    if not years:
+        years.add(date.today().year)
+    return sorted(years, reverse=True)
 
 
 @router.get("", response_model=CashSummaryResponse)

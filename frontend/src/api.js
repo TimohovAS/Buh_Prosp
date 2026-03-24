@@ -340,6 +340,7 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/cash${q ? `?${q}` : ''}`)
     },
+    years: () => request('/cash/years'),
     updateEntry: (id, data) => request(`/cash/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     createWithdrawal: (data) => request('/cash/withdrawals', { method: 'POST', body: JSON.stringify(data) }),
     createExpense: (data) => request('/cash/expenses', { method: 'POST', body: JSON.stringify(data) }),
