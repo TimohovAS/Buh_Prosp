@@ -13,6 +13,7 @@ from backend.models import (
     BankTransaction,
     CashEntry,
     Client,
+    EfakturaImportRecord,
     Expense,
     Income,
     IncomingInvoice,
@@ -145,6 +146,82 @@ async def _sync_expense_status(db: AsyncSession, invoice: IncomingInvoice) -> No
         mark_expense_paid(expense, paid_date=invoice.date, allow_same=True)
     elif invoice.status in {"unpaid", "partial"} and expense.status == "paid":
         reopen_expense_for_unmatch(expense)
+
+
+async def attach_existing_expense(
+    db: AsyncSession,
+    invoice: IncomingInvoice,
+    expense_id: int,
+) -> IncomingInvoice:
+    if invoice.status in {"paid", "cancelled"}:
+        raise InvalidStatusTransition(
+            f"IncomingInvoice: cannot attach expense in status '{invoice.status}'."
+        )
+
+    settlements = await _load_settlements(db, invoice.id)
+    if settlements:
+        raise ValueError("Cannot attach an expense after settlements already exist.")
+
+    expense = await db.get(Expense, expense_id)
+    if not expense:
+        raise ValueError("Expense not found.")
+    if expense.status != "paid":
+        raise ValueError("Only paid expenses can be attached.")
+    if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
+        raise ValueError("Reversed expenses cannot be attached.")
+
+    linked_invoice_result = await db.execute(
+        select(IncomingInvoice.id)
+        .where(IncomingInvoice.expense_id == expense.id, IncomingInvoice.id != invoice.id)
+        .limit(1)
+    )
+    if linked_invoice_result.scalar_one_or_none() is not None:
+        raise ValueError("Expense is already linked to another incoming invoice.")
+
+    expense_amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
+    invoice_amount = abs(to_decimal(invoice.amount or ZERO_DECIMAL))
+    if expense_amount != invoice_amount:
+        raise ValueError("Expense amount must match the incoming invoice amount.")
+
+    previous_expense = await db.get(Expense, invoice.expense_id) if invoice.expense_id else None
+    invoice.expense_id = expense.id
+
+    unassigned_project_id = await _get_unassigned_project_id(db)
+    if expense.project_id and invoice.project_id in {None, unassigned_project_id}:
+        invoice.project_id = expense.project_id
+
+    invoice.settled_amount = to_decimal(invoice.amount or ZERO_DECIMAL)
+    reconcile_incoming_invoice_status(invoice)
+
+    if invoice.efaktura_record_id:
+        import_record = await db.get(EfakturaImportRecord, invoice.efaktura_record_id)
+        if import_record and import_record.imported_as == "expense":
+            import_record.imported_record_id = expense.id
+
+    if (
+        previous_expense
+        and previous_expense.id != expense.id
+        and previous_expense.source == INCOMING_INVOICE_SOURCE
+        and previous_expense.status == "planned"
+    ):
+        linked_bank_result = await db.execute(
+            select(BankTransaction.id)
+            .where(
+                BankTransaction.matched_type == "expense",
+                BankTransaction.matched_id == previous_expense.id,
+            )
+            .limit(1)
+        )
+        linked_cash_result = await db.execute(
+            select(CashEntry.id).where(CashEntry.expense_id == previous_expense.id).limit(1)
+        )
+        if (
+            linked_bank_result.scalar_one_or_none() is None
+            and linked_cash_result.scalar_one_or_none() is None
+        ):
+            await db.delete(previous_expense)
+
+    return invoice
 
 
 async def settle_via_bank(

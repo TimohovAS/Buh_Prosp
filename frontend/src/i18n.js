@@ -550,11 +550,16 @@ const t = {
     settleViaBank: 'Затвори банком',
     settleViaCash: 'Затвори готовином',
     settleViaOffset: 'Компензација',
+    attachExpense: 'Повежи расход',
     settlementHistory: 'Историја затварања',
     selectBankTx: 'Изабери банковну трансакцију',
     selectIncome: 'Изабери фактуру за компензацију',
+    selectExpense: 'Изабери постојећи расход',
     settlementAmount: 'Износ затварања',
     settlementDate: 'Датум затварања',
+    noExpenseCandidates: 'Нема плаћених расхода са истим износом који још нису повезани са другом улазном фактуром.',
+    linkedExpense: 'Повезани расход',
+    paymentReference: 'Позив на број',
     receivables: 'Потраживања',
     payables: 'Обавезе',
     netBalance: 'Нето салдо',
@@ -1121,11 +1126,16 @@ const t = {
     settleViaBank: 'Закрыть банком',
     settleViaCash: 'Закрыть наличными',
     settleViaOffset: 'Взаимозачёт',
+    attachExpense: 'Привязать расход',
     settlementHistory: 'История закрытия',
     selectBankTx: 'Выберите банковскую транзакцию',
     selectIncome: 'Выберите фактуру для зачёта',
+    selectExpense: 'Выберите существующий расход',
     settlementAmount: 'Сумма закрытия',
     settlementDate: 'Дата закрытия',
+    noExpenseCandidates: 'Нет оплаченных расходов с такой же суммой, которые ещё не привязаны к другой входящей фактуре.',
+    linkedExpense: 'Связанный расход',
+    paymentReference: 'Номер платёжного поручения',
     receivables: 'Дебиторка',
     payables: 'Кредиторка',
     netBalance: 'Нетто-баланс',
@@ -1170,5 +1180,4 @@ export function getMonthNamesShort() {
 export function getMonthNamesFull() {
   return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR;
 }
-
 

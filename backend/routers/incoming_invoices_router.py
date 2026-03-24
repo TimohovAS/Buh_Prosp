@@ -12,6 +12,7 @@ from backend.database import get_db
 from backend.decimal_utils import to_decimal
 from backend.incoming_invoice_service import (
     INCOMING_INVOICE_SOURCE,
+    attach_existing_expense,
     create_incoming_invoice,
     get_counterparty_balances,
     reverse_settlement,
@@ -21,7 +22,9 @@ from backend.incoming_invoice_service import (
     update_incoming_invoice,
 )
 from backend.models import (
+    BankTransaction,
     Client,
+    Expense,
     Income,
     IncomingInvoice,
     IncomingInvoiceSettlement,
@@ -31,7 +34,9 @@ from backend.schemas import (
     BankSettlementCreate,
     CounterpartyBalanceItem,
     CounterpartyBalanceResponse,
+    IncomingInvoiceAttachExpenseRequest,
     IncomingInvoiceCreate,
+    IncomingInvoiceExpenseCandidateResponse,
     IncomingInvoiceDetailResponse,
     IncomingInvoiceResponse,
     IncomingInvoiceSettlementCreate,
@@ -64,6 +69,31 @@ def _serialize_detail(invoice: IncomingInvoice) -> dict:
         for s in (invoice.settlements or [])
     ]
     return d
+
+
+def _serialize_expense_candidate(expense: Expense, bank_transaction: BankTransaction | None) -> dict:
+    return IncomingInvoiceExpenseCandidateResponse(
+        id=expense.id,
+        date=expense.date,
+        paid_date=expense.paid_date,
+        description=expense.description,
+        amount=abs(to_decimal(expense.amount or 0)),
+        currency=expense.currency or "RSD",
+        category=expense.category,
+        category_id=expense.category_id,
+        status=expense.status,
+        source=expense.source,
+        project_id=expense.project_id,
+        project_name=expense.project.name if expense.project else None,
+        project_code=expense.project.code if expense.project else None,
+        contract_id=expense.contract_id,
+        contract_number=expense.contract.number if expense.contract else None,
+        bank_reference=expense.bank_reference,
+        note=expense.note,
+        bank_transaction_id=bank_transaction.id if bank_transaction else None,
+        bank_counterparty_name=bank_transaction.counterparty_name if bank_transaction else None,
+        bank_purpose=bank_transaction.purpose if bank_transaction else None,
+    ).model_dump()
 
 
 @router.get("")
@@ -178,6 +208,68 @@ async def open_incomes_for_offset(
     ]
 
 
+@router.get("/{invoice_id}/expense-candidates", response_model=list[IncomingInvoiceExpenseCandidateResponse])
+async def expense_candidates(
+    invoice_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+
+    linked_expenses_subquery = (
+        select(IncomingInvoice.expense_id)
+        .where(IncomingInvoice.id != invoice.id, IncomingInvoice.expense_id.is_not(None))
+    )
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.project), selectinload(Expense.contract))
+        .where(
+            Expense.status == "paid",
+            Expense.reversal_of_id.is_(None),
+            func.abs(Expense.amount) == abs(to_decimal(invoice.amount or 0)),
+            Expense.id.not_in(linked_expenses_subquery),
+        )
+        .order_by(Expense.paid_date.desc(), Expense.date.desc(), Expense.id.desc())
+    )
+    expenses = [
+        expense
+        for expense in result.scalars().all()
+        if expense.id != invoice.expense_id and getattr(expense, "reversed_expense_id", None) is None
+    ]
+    if not expenses:
+        return []
+
+    expense_ids = [expense.id for expense in expenses]
+    tx_result = await db.execute(
+        select(BankTransaction)
+        .where(
+            BankTransaction.matched_type == "expense",
+            BankTransaction.matched_id.in_(expense_ids),
+        )
+        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+    )
+    transactions_by_expense: dict[int, BankTransaction] = {}
+    for transaction in tx_result.scalars().all():
+        if transaction.matched_id is None:
+            continue
+        transactions_by_expense.setdefault(int(transaction.matched_id), transaction)
+
+    expenses.sort(
+        key=lambda expense: (
+            0 if expense.source == "bank_import" else 1,
+            abs(((expense.paid_date or expense.date) - invoice.date).days),
+            abs((expense.date - invoice.date).days),
+            -int(expense.id),
+        )
+    )
+    return [
+        _serialize_expense_candidate(expense, transactions_by_expense.get(int(expense.id)))
+        for expense in expenses
+    ]
+
+
 @router.get("/{invoice_id}")
 async def get_invoice(
     invoice_id: int,
@@ -197,6 +289,30 @@ async def get_invoice(
     if not invoice:
         raise HTTPException(404, "IncomingInvoice not found.")
     return _serialize_detail(invoice)
+
+
+@router.post("/{invoice_id}/attach-expense", response_model=IncomingInvoiceResponse)
+async def attach_expense(
+    invoice_id: int,
+    data: IncomingInvoiceAttachExpenseRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    result = await db.execute(
+        select(IncomingInvoice)
+        .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
+        .where(IncomingInvoice.id == invoice_id)
+    )
+    invoice = result.scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        invoice = await attach_existing_expense(db, invoice, data.expense_id)
+    except (InvalidStatusTransition, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(invoice, ["client", "project"])
+    return _serialize(invoice)
 
 
 @router.patch("/{invoice_id}", response_model=IncomingInvoiceResponse)

@@ -1229,6 +1229,33 @@ class IncomingInvoiceResponse(IncomingInvoiceBase):
         from_attributes = True
 
 
+class IncomingInvoiceAttachExpenseRequest(BaseModel):
+    expense_id: int
+
+
+class IncomingInvoiceExpenseCandidateResponse(BaseModel):
+    id: int
+    date: DateType
+    paid_date: Optional[DateType] = None
+    description: str
+    amount: Decimal
+    currency: str = "RSD"
+    category: Optional[str] = None
+    category_id: Optional[int] = None
+    status: Optional[str] = None
+    source: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+    contract_id: Optional[int] = None
+    contract_number: Optional[str] = None
+    bank_reference: Optional[str] = None
+    note: Optional[str] = None
+    bank_transaction_id: Optional[int] = None
+    bank_counterparty_name: Optional[str] = None
+    bank_purpose: Optional[str] = None
+
+
 class IncomingInvoiceSettlementCreate(BaseModel):
     amount: Decimal
     date: DateType
