@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import { useEnterpriseBrand } from '../hooks/useEnterpriseBrand'
@@ -22,7 +22,7 @@ import {
   LogOut
 } from 'lucide-react'
 
-export default function Layout({ lang, toggleLang }) {
+export default function Layout({ lang, toggleLang, children }) {
   const brand = useEnterpriseBrand()
   const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
 
@@ -108,7 +108,7 @@ export default function Layout({ lang, toggleLang }) {
         </div>
       </aside>
       <main className="main">
-        <Outlet />
+        {children}
       </main>
     </div>
   )

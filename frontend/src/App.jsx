@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom'
 import { getToken, setUser, getUser, api } from './api'
 import { getLang, setLang, tr } from './i18n'
 import ToastProvider from './components/ToastProvider'
@@ -25,6 +25,28 @@ import Efaktura from './pages/Efaktura'
 import IncomingInvoices from './pages/IncomingInvoices'
 import CounterpartyBalance from './pages/CounterpartyBalance'
 
+const APP_PAGE_ROUTES = [
+  { id: 'dashboard', path: '/', Component: Dashboard },
+  { id: 'income', path: '/income', Component: Income },
+  { id: 'efaktura', path: '/efaktura', Component: Efaktura },
+  { id: 'incoming-invoices', path: '/incoming-invoices', Component: IncomingInvoices },
+  { id: 'counterparty-balance', path: '/counterparty-balance', Component: CounterpartyBalance },
+  { id: 'clients', path: '/clients', Component: Clients },
+  { id: 'finance', path: '/finance', Component: FinanceOverview },
+  { id: 'finance-pnl', path: '/finance/pnl', Component: ProfitAndLoss },
+  { id: 'finance-ar', path: '/finance/ar', Component: AccountsReceivable },
+  { id: 'finance-cashflow', path: '/finance/cashflow', Component: CashFlow },
+  { id: 'cash', path: '/cash', Component: CashRegister },
+  { id: 'projects', path: '/projects', Component: Projects },
+  { id: 'payments', path: '/payments', Component: Obligations },
+  { id: 'contracts', path: '/contracts', Component: Contracts },
+  { id: 'expenses', path: '/expenses', Component: Expenses },
+  { id: 'planned-expenses', path: '/planned-expenses', Component: PlannedExpenses },
+  { id: 'bank-import', path: '/bank-import', Component: BankImport },
+  { id: 'bank', path: '/bank', Component: BankTransactions },
+  { id: 'settings', path: '/settings', Component: Settings },
+]
+
 function ProtectedRoute({ children }) {
   const [checking, setChecking] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -37,6 +59,39 @@ function ProtectedRoute({ children }) {
   if (checking) return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
   if (!authenticated) return <Navigate to="/login" replace />
   return children
+}
+
+function PersistentPages() {
+  const location = useLocation()
+  const activeRoute = APP_PAGE_ROUTES.find((route) =>
+    !!matchPath({ path: route.path, end: true }, location.pathname),
+  )
+  const [visitedRouteIds, setVisitedRouteIds] = useState(() => (activeRoute ? [activeRoute.id] : []))
+
+  useEffect(() => {
+    if (!activeRoute) return
+    setVisitedRouteIds((prev) => (prev.includes(activeRoute.id) ? prev : [...prev, activeRoute.id]))
+  }, [activeRoute])
+
+  if (!activeRoute) {
+    return <Navigate to="/" replace />
+  }
+
+  return APP_PAGE_ROUTES
+    .filter((route) => visitedRouteIds.includes(route.id))
+    .map((route) => {
+      const PageComponent = route.Component
+      const isActive = route.id === activeRoute.id
+      return (
+        <div
+          key={route.id}
+          className={`route-cache-slot${isActive ? ' active' : ''}`}
+          aria-hidden={!isActive}
+        >
+          <PageComponent />
+        </div>
+      )
+    })
 }
 
 function App() {
@@ -72,34 +127,15 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
         <Route
-          path="/"
+          path="*"
           element={
             <ProtectedRoute>
-              <Layout lang={lang} toggleLang={toggleLang} />
+              <Layout lang={lang} toggleLang={toggleLang}>
+                <PersistentPages />
+              </Layout>
             </ProtectedRoute>
           }
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="income" element={<Income />} />
-          <Route path="efaktura" element={<Efaktura />} />
-          <Route path="incoming-invoices" element={<IncomingInvoices />} />
-          <Route path="counterparty-balance" element={<CounterpartyBalance />} />
-          <Route path="clients" element={<Clients />} />
-          <Route path="finance" element={<FinanceOverview />} />
-          <Route path="finance/pnl" element={<ProfitAndLoss />} />
-          <Route path="finance/ar" element={<AccountsReceivable />} />
-          <Route path="finance/cashflow" element={<CashFlow />} />
-          <Route path="cash" element={<CashRegister />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="payments" element={<Obligations />} />
-          <Route path="contracts" element={<Contracts />} />
-          <Route path="expenses" element={<Expenses />} />
-          <Route path="planned-expenses" element={<PlannedExpenses />} />
-          <Route path="bank-import" element={<BankImport />} />
-          <Route path="bank" element={<BankTransactions />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        />
       </Routes>
       <ToastProvider />
     </>

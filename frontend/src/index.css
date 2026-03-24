@@ -267,6 +267,17 @@ input, select, textarea {
   overflow: hidden;
 }
 
+.route-cache-slot {
+  display: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.route-cache-slot.active {
+  display: flex;
+  flex-direction: column;
+}
+
 .page {
   flex: 1;
   min-height: 0;

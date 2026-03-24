@@ -46,7 +46,7 @@ function getPeriodRange(quick, customFrom, customTo) {
 }
 
 export default function FinanceOverview() {
-  const [periodQuick, setPeriodQuick] = useState('month')
+  const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [mode, setMode] = useState('both')
@@ -58,15 +58,15 @@ export default function FinanceOverview() {
 
   const { from, to } = getPeriodRange(periodQuick, customFrom, customTo)
   const todayIso = localDateIso()
-  const receivablesAsOf = to > todayIso ? todayIso : to
+  const overviewAsOf = to > todayIso ? todayIso : to
 
   useEffect(() => {
     setLoading(true)
     const modeVal = mode === 'both' ? 'both' : mode
     Promise.all([
       api.finance.summary({ from, to, group_by: 'month', mode: modeVal }),
-      api.finance.ar({ as_of: receivablesAsOf }),
-      api.finance.limits({ as_of: to }),
+      api.finance.ar({ as_of: overviewAsOf }),
+      api.finance.limits({ as_of: overviewAsOf }),
     ])
       .then(([s, a, l]) => {
         setSummary(s)
@@ -78,7 +78,7 @@ export default function FinanceOverview() {
         setError(e.message)
       })
       .finally(() => setLoading(false))
-  }, [from, to, mode, receivablesAsOf])
+  }, [from, to, mode, overviewAsOf])
 
   const totals = summary?.totals || {}
   const series = summary?.series || []
