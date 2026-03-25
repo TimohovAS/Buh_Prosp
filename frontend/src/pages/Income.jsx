@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -22,6 +23,8 @@ function buildContractLabel(contract) {
 }
 
 export default function Income() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/income'
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [contracts, setContracts] = useState([])
@@ -79,8 +82,9 @@ export default function Income() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [year, month])
+  }, [year, month, isActivePage])
   useEffect(() => {
     if (availableYears.length === 0) return
     if (year !== '' && !availableYears.includes(year)) {
