@@ -37,6 +37,25 @@ const DEFAULT_SERVICE_FORM = {
   scheduler_check_minutes: 5,
 }
 
+function SettingsTooltip({ text }) {
+  if (!text) return null
+  return (
+    <span className="settings-tooltip" tabIndex={0} aria-label={text}>
+      <span className="settings-tooltip-trigger" aria-hidden="true">i</span>
+      <span className="settings-tooltip-bubble" role="tooltip">{text}</span>
+    </span>
+  )
+}
+
+function SettingsFieldHead({ label, hint }) {
+  return (
+    <div className="settings-field-head">
+      <div className="settings-field-label">{label}</div>
+      <SettingsTooltip text={hint} />
+    </div>
+  )
+}
+
 function SettingsSection({ title, summary, actions, open, onToggle, children }) {
   if (!open) return null
   return (
@@ -126,6 +145,7 @@ export default function Settings() {
   const [efakturaSaving, setEfakturaSaving] = useState(false)
   const [efakturaMessage, setEfakturaMessage] = useState('')
   const [activeSection, setActiveSection] = useState('enterprise')
+  const [backupView, setBackupView] = useState('settings')
 
   const loadUsers = () => {
     if (!isAdmin) return
@@ -478,7 +498,28 @@ export default function Settings() {
   const categoriesSummary = categories.length > 0 ? `${activeCategories}/${categories.length} ${tr('active').toLowerCase()}` : tr('noCategories')
   const backupsSummary = !serviceData?.settings?.supported
     ? tr('serviceBackupsUnsupported')
-    : (latestBackup ? formatDateTime(latestBackup) : tr('serviceBackupsNoItems'))
+    : (latestBackup ? `${tr('serviceBackupsCreatedAt')}: ${formatDateTime(latestBackup)}` : tr('serviceBackupsNoItems'))
+  const backupActions = backupView === 'archives'
+    ? (
+      <>
+        <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
+          {tr('serviceBackupsRefresh')}
+        </button>
+        <button className="btn btn-primary" onClick={handleCreateBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
+          {tr('serviceBackupsCreate')}
+        </button>
+      </>
+    )
+    : (
+      <>
+        <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
+          {tr('serviceBackupsRefresh')}
+        </button>
+        <button className="btn btn-primary" onClick={handleServiceSave} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
+          {tr('save')}
+        </button>
+      </>
+    )
   const sections = [
     { key: 'enterprise', title: tr('enterpriseData'), summary: [tr('name'), tr('address'), tr('bankName'), tr('cashflowOpening')].join(' • ') },
     ...(isAdmin ? [{ key: 'users', title: tr('users'), summary: [tr('role'), tr('language'), tr('status')].join(' • ') }] : []),
@@ -496,19 +537,24 @@ export default function Settings() {
       </div>
 
       <div className="page-body settings-page">
-        <div className="settings-nav">
-          {sections.map((section) => (
-            <button
-              key={section.key}
-              type="button"
-              className={`settings-nav-button ${activeSection === section.key ? 'active' : ''}`}
-              onClick={() => setActiveSection(section.key)}
-            >
-              <span className="settings-nav-title">{section.title}</span>
-              <span className="settings-nav-meta">{section.summary}</span>
-            </button>
-          ))}
-        </div>
+        <div className="settings-shell">
+          <aside className="settings-sidebar">
+            <div className="settings-nav">
+              {sections.map((section) => (
+                <button
+                  key={section.key}
+                  type="button"
+                  className={`settings-nav-button ${activeSection === section.key ? 'active' : ''}`}
+                  onClick={() => setActiveSection(section.key)}
+                >
+                  <span className="settings-nav-title">{section.title}</span>
+                  <span className="settings-nav-meta">{section.summary}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <div className="settings-content">
 
         <SettingsSection
           title={tr('enterpriseData')}
@@ -853,20 +899,8 @@ export default function Settings() {
             summary={serviceData?.settings?.supported ? [tr('serviceBackupsCreate'), tr('download'), tr('restore')].join(' • ') : tr('serviceBackupsUnsupported')}
             open={activeSection === 'backups'}
             onToggle={() => setActiveSection('backups')}
-            actions={(
-              <>
-                <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
-                  {tr('serviceBackupsRefresh')}
-                </button>
-                <button className="btn btn-primary" onClick={handleCreateBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
-                  {tr('serviceBackupsCreate')}
-                </button>
-              </>
-            )}
+            actions={backupActions}
           >
-
-            <p className="settings-section-note">{tr('serviceBackupsHint')}</p>
-
             {serviceMessage ? (
               <div style={{ marginBottom: '1rem', color: serviceMessageTone === 'error' ? 'var(--color-danger)' : 'var(--color-success)' }}>{serviceMessage}</div>
             ) : null}
@@ -877,130 +911,140 @@ export default function Settings() {
               <div style={{ color: 'var(--color-text-muted)' }}>{tr('serviceBackupsUnsupported')}</div>
             ) : (
               <>
-                <div className="settings-info-grid" style={{ marginBottom: '1rem' }}>
-                  <div className="settings-info-item" style={{ gridColumn: '1 / -1' }}>
-                    <div className="settings-field-label">{tr('serviceBackupsLocation')}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsLocationHint')}</div>
-                    <input
-                      className="form-input"
-                      value={serviceForm.backup_dir}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, backup_dir: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsAutoEnabled')}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsAutoEnabledHint')}</div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 600 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!serviceForm.auto_enabled}
-                        onChange={(event) => setServiceForm((current) => ({ ...current, auto_enabled: event.target.checked }))}
-                        disabled={!!serviceBusy}
-                      />
-                      <span>{serviceForm.auto_enabled ? tr('yes') : tr('no')}</span>
-                    </label>
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{`${tr('serviceBackupsInterval')} (${tr('serviceBackupsHours')})`}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsIntervalHint')}</div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-input"
-                      value={serviceForm.auto_interval_hours}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, auto_interval_hours: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsAutoRetention')}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsAutoRetentionHint')}</div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-input"
-                      value={serviceForm.auto_retention_count}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, auto_retention_count: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsManualRetention')}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsManualRetentionHint')}</div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-input"
-                      value={serviceForm.manual_retention_count}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, manual_retention_count: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsPreRestoreRetention')}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsPreRestoreRetentionHint')}</div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-input"
-                      value={serviceForm.pre_restore_retention_count}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, pre_restore_retention_count: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{`${tr('serviceBackupsSchedulerCheck')} (${tr('serviceBackupsMinutes')})`}</div>
-                    <div className="settings-field-help">{tr('serviceBackupsSchedulerCheckHint')}</div>
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-input"
-                      value={serviceForm.scheduler_check_minutes}
-                      onChange={(event) => setServiceForm((current) => ({ ...current, scheduler_check_minutes: event.target.value }))}
-                      disabled={!!serviceBusy}
-                    />
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsDbPath')}</div>
-                    <div className="settings-field-value">{serviceData?.settings?.database_path || UI_DASH}</div>
-                  </div>
-                  <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsDbSize')}</div>
-                    <div className="settings-field-value">{formatBytes(serviceData?.settings?.current_db_size_bytes)}</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-                  <button className="btn btn-primary" onClick={handleServiceSave} disabled={serviceLoading || !!serviceBusy}>
-                    {tr('save')}
+                <div className="settings-subtabs">
+                  <button
+                    type="button"
+                    className={`settings-subtab ${backupView === 'settings' ? 'active' : ''}`}
+                    onClick={() => setBackupView('settings')}
+                  >
+                    {tr('serviceBackupsTabSettings')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-subtab ${backupView === 'archives' ? 'active' : ''}`}
+                    onClick={() => setBackupView('archives')}
+                  >
+                    {tr('serviceBackupsTabArchives')}
                   </button>
                 </div>
 
-                <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsReloadHint')}</div>
+                {backupView === 'settings' ? (
+                  <div className="settings-service-layout">
+                    <div className="settings-callout">
+                      <p>{tr('serviceBackupsHint')}</p>
+                    </div>
 
-                <div className="table-wrap table-wrap-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{tr('serviceBackupsName')}</th>
-                        <th>{tr('serviceBackupsType')}</th>
-                        <th>{tr('serviceBackupsCreatedAt')}</th>
-                        <th>{tr('serviceBackupsSize')}</th>
-                        <th>{tr('cashActions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                    <div className="settings-status-grid">
+                      <div className="settings-status-card">
+                        <div className="settings-field-label">{tr('serviceBackupsDbPath')}</div>
+                        <div className="settings-field-value">{serviceData?.settings?.database_path || UI_DASH}</div>
+                      </div>
+                      <div className="settings-status-card">
+                        <div className="settings-field-label">{tr('serviceBackupsDbSize')}</div>
+                        <div className="settings-field-value">{formatBytes(serviceData?.settings?.current_db_size_bytes)}</div>
+                      </div>
+                    </div>
+
+                    <div className="settings-form-grid">
+                      <div className="settings-info-item settings-info-item--wide">
+                        <SettingsFieldHead label={tr('serviceBackupsLocation')} hint={tr('serviceBackupsLocationHint')} />
+                        <input
+                          className="form-input"
+                          value={serviceForm.backup_dir}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, backup_dir: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={tr('serviceBackupsAutoEnabled')} hint={tr('serviceBackupsAutoEnabledHint')} />
+                        <label className="settings-toggle-control">
+                          <input
+                            type="checkbox"
+                            checked={!!serviceForm.auto_enabled}
+                            onChange={(event) => setServiceForm((current) => ({ ...current, auto_enabled: event.target.checked }))}
+                            disabled={!!serviceBusy}
+                          />
+                          <span>{serviceForm.auto_enabled ? tr('yes') : tr('no')}</span>
+                        </label>
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={`${tr('serviceBackupsInterval')} (${tr('serviceBackupsHours')})`} hint={tr('serviceBackupsIntervalHint')} />
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input"
+                          value={serviceForm.auto_interval_hours}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, auto_interval_hours: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={tr('serviceBackupsAutoRetention')} hint={tr('serviceBackupsAutoRetentionHint')} />
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input"
+                          value={serviceForm.auto_retention_count}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, auto_retention_count: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={tr('serviceBackupsManualRetention')} hint={tr('serviceBackupsManualRetentionHint')} />
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input"
+                          value={serviceForm.manual_retention_count}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, manual_retention_count: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={tr('serviceBackupsPreRestoreRetention')} hint={tr('serviceBackupsPreRestoreRetentionHint')} />
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input"
+                          value={serviceForm.pre_restore_retention_count}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, pre_restore_retention_count: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                      <div className="settings-info-item">
+                        <SettingsFieldHead label={`${tr('serviceBackupsSchedulerCheck')} (${tr('serviceBackupsMinutes')})`} hint={tr('serviceBackupsSchedulerCheckHint')} />
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input"
+                          value={serviceForm.scheduler_check_minutes}
+                          onChange={(event) => setServiceForm((current) => ({ ...current, scheduler_check_minutes: event.target.value }))}
+                          disabled={!!serviceBusy}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="settings-callout" style={{ marginBottom: '1rem' }}>
+                      <p>{tr('serviceBackupsReloadHint')}</p>
+                    </div>
+
+                    <div className="settings-archives-list table-wrap-scroll">
                       {(serviceData?.backups || []).length === 0 ? (
-                        <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('serviceBackupsNoItems')}</td></tr>
+                        <div className="settings-empty-text">{tr('serviceBackupsNoItems')}</div>
                       ) : (
                         (serviceData?.backups || []).map((backup) => (
-                          <tr key={backup.name}>
-                            <td>{backup.name}</td>
-                            <td>{backupTypeLabel(backup.kind)}</td>
-                            <td>{formatDateTime(backup.created_at)}</td>
-                            <td>{formatBytes(backup.archive_size_bytes)}</td>
-                            <td>
+                          <div key={backup.name} className="settings-archive-card">
+                            <div className="settings-archive-main">
+                              <div className="settings-archive-name">{backup.name}</div>
+                              <div className="settings-archive-meta">
+                                <span>{backupTypeLabel(backup.kind)}</span>
+                                <span>{formatDateTime(backup.created_at)}</span>
+                                <span>{formatBytes(backup.archive_size_bytes)}</span>
+                              </div>
+                            </div>
+                            <div className="settings-archive-actions">
                               <button
                                 className="btn btn-sm btn-secondary"
                                 onClick={() => handleDownloadBackup(backup.name)}
@@ -1010,23 +1054,24 @@ export default function Settings() {
                               </button>
                               <button
                                 className="btn btn-sm btn-danger"
-                                style={{ marginLeft: '0.5rem' }}
                                 onClick={() => handleRestoreBackup(backup.name)}
                                 disabled={!!serviceBusy}
                               >
                                 {tr('restore')}
                               </button>
-                            </td>
-                          </tr>
+                            </div>
+                          </div>
                         ))
                       )}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </SettingsSection>
         )}
+          </div>
+        </div>
       </div>
 
       {modal && (
