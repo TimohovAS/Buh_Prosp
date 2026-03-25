@@ -561,6 +561,13 @@ input, select, textarea {
   margin-bottom: 0.35rem;
 }
 
+.settings-field-help {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-bottom: 0.6rem;
+}
+
 .settings-field-value {
   font-weight: 600;
   line-height: 1.45;
@@ -767,6 +774,11 @@ tr.row-reversal {
   overflow: visible;
   position: relative;
   isolation: isolate;
+}
+
+.table-wrap-scroll {
+  max-height: min(52vh, 560px);
+  overflow: auto;
 }
 
 .table-wrap table {

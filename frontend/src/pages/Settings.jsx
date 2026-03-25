@@ -880,6 +880,7 @@ export default function Settings() {
                 <div className="settings-info-grid" style={{ marginBottom: '1rem' }}>
                   <div className="settings-info-item" style={{ gridColumn: '1 / -1' }}>
                     <div className="settings-field-label">{tr('serviceBackupsLocation')}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsLocationHint')}</div>
                     <input
                       className="form-input"
                       value={serviceForm.backup_dir}
@@ -889,6 +890,7 @@ export default function Settings() {
                   </div>
                   <div className="settings-info-item">
                     <div className="settings-field-label">{tr('serviceBackupsAutoEnabled')}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsAutoEnabledHint')}</div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 600 }}>
                       <input
                         type="checkbox"
@@ -900,7 +902,8 @@ export default function Settings() {
                     </label>
                   </div>
                   <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsInterval')}</div>
+                    <div className="settings-field-label">{`${tr('serviceBackupsInterval')} (${tr('serviceBackupsHours')})`}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsIntervalHint')}</div>
                     <input
                       type="number"
                       min="1"
@@ -912,6 +915,7 @@ export default function Settings() {
                   </div>
                   <div className="settings-info-item">
                     <div className="settings-field-label">{tr('serviceBackupsAutoRetention')}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsAutoRetentionHint')}</div>
                     <input
                       type="number"
                       min="1"
@@ -923,6 +927,7 @@ export default function Settings() {
                   </div>
                   <div className="settings-info-item">
                     <div className="settings-field-label">{tr('serviceBackupsManualRetention')}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsManualRetentionHint')}</div>
                     <input
                       type="number"
                       min="1"
@@ -934,6 +939,7 @@ export default function Settings() {
                   </div>
                   <div className="settings-info-item">
                     <div className="settings-field-label">{tr('serviceBackupsPreRestoreRetention')}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsPreRestoreRetentionHint')}</div>
                     <input
                       type="number"
                       min="1"
@@ -944,7 +950,8 @@ export default function Settings() {
                     />
                   </div>
                   <div className="settings-info-item">
-                    <div className="settings-field-label">{tr('serviceBackupsSchedulerCheck')}</div>
+                    <div className="settings-field-label">{`${tr('serviceBackupsSchedulerCheck')} (${tr('serviceBackupsMinutes')})`}</div>
+                    <div className="settings-field-help">{tr('serviceBackupsSchedulerCheckHint')}</div>
                     <input
                       type="number"
                       min="1"
@@ -972,7 +979,7 @@ export default function Settings() {
 
                 <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsReloadHint')}</div>
 
-                <div className="table-wrap">
+                <div className="table-wrap table-wrap-scroll">
                   <table>
                     <thead>
                       <tr>
