@@ -80,6 +80,13 @@ class Enterprise(Base):
     efaktura_incoming_document_path = Column(String(500))
     efaktura_outgoing_list_path = Column(String(500))
     efaktura_outgoing_document_path = Column(String(500))
+    backup_dir = Column(String(500))
+    backup_auto_enabled = Column(Boolean)
+    backup_auto_interval_hours = Column(Integer)
+    backup_auto_retention_count = Column(Integer)
+    backup_manual_retention_count = Column(Integer)
+    backup_pre_restore_retention_count = Column(Integer)
+    backup_scheduler_check_minutes = Column(Integer)
 
 
 class EfakturaImportRecord(Base):

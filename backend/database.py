@@ -45,6 +45,7 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_income_due_date_column)
+        await conn.run_sync(_ensure_enterprise_backup_columns)
 
 
 def _ensure_income_due_date_column(sync_conn):
@@ -58,6 +59,25 @@ def _ensure_income_due_date_column(sync_conn):
     columns = {str(r[1]).lower() for r in rows}
     if "due_date" not in columns:
         sync_conn.exec_driver_sql("ALTER TABLE income ADD COLUMN due_date DATE")
+
+
+def _ensure_enterprise_backup_columns(sync_conn):
+    if sync_conn.dialect.name != "sqlite":
+        return
+    rows = sync_conn.exec_driver_sql("PRAGMA table_info('enterprise')").fetchall()
+    columns = {str(r[1]).lower() for r in rows}
+    required = {
+        "backup_dir": "ALTER TABLE enterprise ADD COLUMN backup_dir VARCHAR(500)",
+        "backup_auto_enabled": "ALTER TABLE enterprise ADD COLUMN backup_auto_enabled BOOLEAN",
+        "backup_auto_interval_hours": "ALTER TABLE enterprise ADD COLUMN backup_auto_interval_hours INTEGER",
+        "backup_auto_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_auto_retention_count INTEGER",
+        "backup_manual_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_manual_retention_count INTEGER",
+        "backup_pre_restore_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_pre_restore_retention_count INTEGER",
+        "backup_scheduler_check_minutes": "ALTER TABLE enterprise ADD COLUMN backup_scheduler_check_minutes INTEGER",
+    }
+    for column, ddl in required.items():
+        if column not in columns:
+            sync_conn.exec_driver_sql(ddl)
 
 
 def get_db_path() -> Path | None:

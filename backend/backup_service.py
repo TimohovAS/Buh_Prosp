@@ -18,12 +18,83 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 BACKUP_DB_FILENAME = "prospel.db"
 BACKUP_META_FILENAME = "meta.json"
 BACKUP_KINDS = {"auto", "manual", "pre-restore"}
+BACKUP_OVERRIDE_COLUMNS = (
+    "backup_dir",
+    "backup_auto_enabled",
+    "backup_auto_interval_hours",
+    "backup_auto_retention_count",
+    "backup_manual_retention_count",
+    "backup_pre_restore_retention_count",
+    "backup_scheduler_check_minutes",
+)
 
 _backup_lock = asyncio.Lock()
 
 
 def _settings():
     return get_settings()
+
+
+def _load_backup_overrides_sync() -> dict[str, Any]:
+    db_path = get_db_path()
+    if db_path is None or not db_path.exists():
+        return {}
+
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(enterprise)")
+            available = {str(row[1]).lower() for row in cursor.fetchall()}
+            selected = [column for column in BACKUP_OVERRIDE_COLUMNS if column.lower() in available]
+            if not selected:
+                return {}
+
+            cursor.execute(f"SELECT {', '.join(selected)} FROM enterprise ORDER BY id LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                return {}
+            return {selected[index]: row[index] for index in range(len(selected))}
+    except sqlite3.Error:
+        return {}
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    return default if value is None else bool(value)
+
+
+def _as_int(value: Any, default: int, minimum: int = 1) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, parsed)
+
+
+def _as_string(value: Any, default: str) -> str:
+    if value is None:
+        return default
+    normalized = str(value).strip()
+    return normalized or default
+
+
+def _effective_backup_settings_sync() -> dict[str, Any]:
+    settings = _settings()
+    overrides = _load_backup_overrides_sync()
+    return {
+        "backup_dir": _as_string(overrides.get("backup_dir"), settings.backup_dir),
+        "auto_enabled": _as_bool(overrides.get("backup_auto_enabled"), settings.backup_auto_enabled),
+        "auto_interval_hours": _as_int(overrides.get("backup_auto_interval_hours"), settings.backup_auto_interval_hours),
+        "auto_retention_count": _as_int(overrides.get("backup_auto_retention_count"), settings.backup_auto_retention_count),
+        "manual_retention_count": _as_int(overrides.get("backup_manual_retention_count"), settings.backup_manual_retention_count),
+        "pre_restore_retention_count": _as_int(
+            overrides.get("backup_pre_restore_retention_count"),
+            settings.backup_pre_restore_retention_count,
+        ),
+        "scheduler_check_minutes": _as_int(
+            overrides.get("backup_scheduler_check_minutes"),
+            settings.backup_scheduler_check_minutes,
+        ),
+    }
 
 
 def _resolve_repo_path(value: str) -> Path:
@@ -34,7 +105,7 @@ def _resolve_repo_path(value: str) -> Path:
 
 
 def get_backup_dir() -> Path:
-    return _resolve_repo_path(_settings().backup_dir)
+    return _resolve_repo_path(_effective_backup_settings_sync()["backup_dir"])
 
 
 def is_backup_supported() -> bool:
@@ -49,13 +120,13 @@ def _require_db_path() -> Path:
 
 
 def _retention_for_kind(kind: str) -> int:
-    settings = _settings()
+    settings = _effective_backup_settings_sync()
     if kind == "auto":
-        return max(1, settings.backup_auto_retention_count)
+        return settings["auto_retention_count"]
     if kind == "manual":
-        return max(1, settings.backup_manual_retention_count)
+        return settings["manual_retention_count"]
     if kind == "pre-restore":
-        return max(1, settings.backup_pre_restore_retention_count)
+        return settings["pre_restore_retention_count"]
     return 0
 
 
@@ -205,18 +276,19 @@ async def list_backups() -> list[dict[str, Any]]:
 async def get_backup_status() -> dict[str, Any]:
     db_path = get_db_path()
     backups = await list_backups()
-    settings = _settings()
+    settings = _effective_backup_settings_sync()
     return {
         "settings": {
             "supported": db_path is not None,
             "backup_dir": str(get_backup_dir()),
             "database_path": str(db_path) if db_path else None,
             "current_db_size_bytes": db_path.stat().st_size if db_path and db_path.exists() else 0,
-            "auto_enabled": settings.backup_auto_enabled and db_path is not None,
-            "auto_interval_hours": settings.backup_auto_interval_hours,
-            "auto_retention_count": settings.backup_auto_retention_count,
-            "manual_retention_count": settings.backup_manual_retention_count,
-            "pre_restore_retention_count": settings.backup_pre_restore_retention_count,
+            "auto_enabled": settings["auto_enabled"] and db_path is not None,
+            "auto_interval_hours": settings["auto_interval_hours"],
+            "auto_retention_count": settings["auto_retention_count"],
+            "manual_retention_count": settings["manual_retention_count"],
+            "pre_restore_retention_count": settings["pre_restore_retention_count"],
+            "scheduler_check_minutes": settings["scheduler_check_minutes"],
         },
         "backups": backups,
     }
@@ -247,8 +319,8 @@ async def restore_backup(backup_name: str) -> dict[str, Any]:
 
 
 async def ensure_auto_backup_due() -> dict[str, Any] | None:
-    settings = _settings()
-    if not settings.backup_auto_enabled or not is_backup_supported():
+    settings = _effective_backup_settings_sync()
+    if not settings["auto_enabled"] or not is_backup_supported():
         return None
 
     backups = await list_backups()
@@ -258,14 +330,12 @@ async def ensure_auto_backup_due() -> dict[str, Any] | None:
         latest_time = latest_auto["created_at"]
         if latest_time.tzinfo is None:
             latest_time = latest_time.replace(tzinfo=timezone.utc)
-        if now - latest_time < timedelta(hours=settings.backup_auto_interval_hours):
+        if now - latest_time < timedelta(hours=settings["auto_interval_hours"]):
             return None
     return await create_backup("auto")
 
 
 async def backup_scheduler_loop() -> None:
-    settings = _settings()
-    delay_seconds = max(60, settings.backup_scheduler_check_minutes * 60)
     while True:
         try:
             await ensure_auto_backup_due()
@@ -273,4 +343,5 @@ async def backup_scheduler_loop() -> None:
             raise
         except Exception:
             traceback.print_exc()
+        delay_seconds = max(60, _effective_backup_settings_sync()["scheduler_check_minutes"] * 60)
         await asyncio.sleep(delay_seconds)

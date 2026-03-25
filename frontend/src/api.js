@@ -354,6 +354,7 @@ export const api = {
 
   service: {
     backups: () => request('/service/backups'),
+    updateSettings: (data) => request('/service/backups/settings', { method: 'PUT', body: JSON.stringify(data) }),
     createBackup: () => request('/service/backups', { method: 'POST' }),
     restoreBackup: (name) => request(`/service/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
     async downloadBackup(name) {

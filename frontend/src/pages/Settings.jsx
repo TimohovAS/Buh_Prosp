@@ -27,8 +27,18 @@ const LANGS = [
 const UI_DASH = '\u2014'
 const UI_CLOSE = '\u00D7'
 const MAX_EMBLEM_FILE_SIZE = 256 * 1024
+const DEFAULT_SERVICE_FORM = {
+  backup_dir: '',
+  auto_enabled: true,
+  auto_interval_hours: 6,
+  auto_retention_count: 60,
+  manual_retention_count: 30,
+  pre_restore_retention_count: 20,
+  scheduler_check_minutes: 5,
+}
 
 function SettingsSection({ title, summary, actions, open, onToggle, children }) {
+  if (!open) return null
   return (
     <section className={`settings-section ${open ? 'open' : ''}`}>
       <div className="settings-section-header">
@@ -93,9 +103,11 @@ export default function Settings() {
     sort_order: 0,
   })
   const [serviceData, setServiceData] = useState(null)
+  const [serviceForm, setServiceForm] = useState(DEFAULT_SERVICE_FORM)
   const [serviceLoading, setServiceLoading] = useState(false)
   const [serviceBusy, setServiceBusy] = useState('')
   const [serviceMessage, setServiceMessage] = useState('')
+  const [serviceMessageTone, setServiceMessageTone] = useState('success')
   const [efakturaForm, setEfakturaForm] = useState({
     efaktura_enabled: false,
     efaktura_api_base_url: '',
@@ -140,7 +152,11 @@ export default function Settings() {
     if (!isAdmin) return
     setServiceLoading(true)
     api.service.backups()
-      .then(setServiceData)
+      .then((response) => {
+        setServiceData(response)
+        setServiceForm(mapServiceSettingsToForm(response?.settings))
+        return response
+      })
       .catch((err) => console.error(err))
       .finally(() => setServiceLoading(false))
   }
@@ -204,6 +220,16 @@ export default function Settings() {
     if (kind === 'pre-restore') return tr('serviceBackupsTypePreRestore')
     return tr('serviceBackupsTypeManual')
   }
+
+  const mapServiceSettingsToForm = (settings) => ({
+    backup_dir: settings?.backup_dir || '',
+    auto_enabled: settings?.auto_enabled ?? true,
+    auto_interval_hours: settings?.auto_interval_hours ?? DEFAULT_SERVICE_FORM.auto_interval_hours,
+    auto_retention_count: settings?.auto_retention_count ?? DEFAULT_SERVICE_FORM.auto_retention_count,
+    manual_retention_count: settings?.manual_retention_count ?? DEFAULT_SERVICE_FORM.manual_retention_count,
+    pre_restore_retention_count: settings?.pre_restore_retention_count ?? DEFAULT_SERVICE_FORM.pre_restore_retention_count,
+    scheduler_check_minutes: settings?.scheduler_check_minutes ?? DEFAULT_SERVICE_FORM.scheduler_check_minutes,
+  })
 
   const openAddUser = () => {
     setUserForm({ username: '', password: '', full_name: '', role: 'accountant', default_language: 'sr' })
@@ -335,12 +361,47 @@ export default function Settings() {
 
   const handleCreateBackup = async () => {
     setServiceBusy('create')
+    setServiceMessage('')
     try {
       await api.service.createBackup()
+      setServiceMessageTone('success')
       setServiceMessage(tr('serviceBackupsCreateSuccess'))
       loadService()
     } catch (err) {
       console.error(err)
+      setServiceMessageTone('error')
+      setServiceMessage(err.message || tr('loadError'))
+    } finally {
+      setServiceBusy('')
+    }
+  }
+
+  const handleServiceSave = async () => {
+    setServiceBusy('save')
+    setServiceMessage('')
+    try {
+      await api.service.updateSettings({
+        backup_dir: serviceForm.backup_dir || null,
+        auto_enabled: !!serviceForm.auto_enabled,
+        auto_interval_hours: Math.max(1, Number(serviceForm.auto_interval_hours) || DEFAULT_SERVICE_FORM.auto_interval_hours),
+        auto_retention_count: Math.max(1, Number(serviceForm.auto_retention_count) || DEFAULT_SERVICE_FORM.auto_retention_count),
+        manual_retention_count: Math.max(1, Number(serviceForm.manual_retention_count) || DEFAULT_SERVICE_FORM.manual_retention_count),
+        pre_restore_retention_count: Math.max(
+          1,
+          Number(serviceForm.pre_restore_retention_count) || DEFAULT_SERVICE_FORM.pre_restore_retention_count,
+        ),
+        scheduler_check_minutes: Math.max(
+          1,
+          Number(serviceForm.scheduler_check_minutes) || DEFAULT_SERVICE_FORM.scheduler_check_minutes,
+        ),
+      })
+      setServiceMessageTone('success')
+      setServiceMessage(tr('serviceBackupsSettingsSaved'))
+      loadService()
+    } catch (err) {
+      console.error(err)
+      setServiceMessageTone('error')
+      setServiceMessage(err.message || tr('serviceBackupsSettingsSaveError'))
     } finally {
       setServiceBusy('')
     }
@@ -374,10 +435,13 @@ export default function Settings() {
 
   const handleDownloadBackup = async (name) => {
     setServiceBusy(`download:${name}`)
+    setServiceMessage('')
     try {
       await api.service.downloadBackup(name)
     } catch (err) {
       console.error(err)
+      setServiceMessageTone('error')
+      setServiceMessage(err.message || tr('loadError'))
     } finally {
       setServiceBusy('')
     }
@@ -386,13 +450,17 @@ export default function Settings() {
   const handleRestoreBackup = async (name) => {
     if (!confirm(tr('serviceBackupsRestoreConfirm'))) return
     setServiceBusy(`restore:${name}`)
+    setServiceMessage('')
     try {
       await api.service.restoreBackup(name)
+      setServiceMessageTone('success')
       setServiceMessage(tr('serviceBackupsRestoreSuccess'))
       loadService()
       setTimeout(() => window.location.reload(), 1200)
     } catch (err) {
       console.error(err)
+      setServiceMessageTone('error')
+      setServiceMessage(err.message || tr('loadError'))
     } finally {
       setServiceBusy('')
     }
@@ -800,7 +868,7 @@ export default function Settings() {
             <p className="settings-section-note">{tr('serviceBackupsHint')}</p>
 
             {serviceMessage ? (
-              <div style={{ marginBottom: '1rem', color: 'var(--color-success)' }}>{serviceMessage}</div>
+              <div style={{ marginBottom: '1rem', color: serviceMessageTone === 'error' ? 'var(--color-danger)' : 'var(--color-success)' }}>{serviceMessage}</div>
             ) : null}
 
             {serviceLoading && !serviceData ? (
@@ -809,35 +877,97 @@ export default function Settings() {
               <div style={{ color: 'var(--color-text-muted)' }}>{tr('serviceBackupsUnsupported')}</div>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <div>
-                    <strong>{tr('serviceBackupsLocation')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)', wordBreak: 'break-word' }}>{serviceData?.settings?.backup_dir || UI_DASH}</div>
+                <div className="settings-info-grid" style={{ marginBottom: '1rem' }}>
+                  <div className="settings-info-item" style={{ gridColumn: '1 / -1' }}>
+                    <div className="settings-field-label">{tr('serviceBackupsLocation')}</div>
+                    <input
+                      className="form-input"
+                      value={serviceForm.backup_dir}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, backup_dir: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsDbPath')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)', wordBreak: 'break-word' }}>{serviceData?.settings?.database_path || UI_DASH}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsAutoEnabled')}</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!serviceForm.auto_enabled}
+                        onChange={(event) => setServiceForm((current) => ({ ...current, auto_enabled: event.target.checked }))}
+                        disabled={!!serviceBusy}
+                      />
+                      <span>{serviceForm.auto_enabled ? tr('yes') : tr('no')}</span>
+                    </label>
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsDbSize')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{formatBytes(serviceData?.settings?.current_db_size_bytes)}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsInterval')}</div>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-input"
+                      value={serviceForm.auto_interval_hours}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, auto_interval_hours: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsInterval')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.auto_interval_hours} {tr('serviceBackupsHours')}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsAutoRetention')}</div>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-input"
+                      value={serviceForm.auto_retention_count}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, auto_retention_count: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsAutoRetention')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.auto_retention_count}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsManualRetention')}</div>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-input"
+                      value={serviceForm.manual_retention_count}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, manual_retention_count: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsManualRetention')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.manual_retention_count}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsPreRestoreRetention')}</div>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-input"
+                      value={serviceForm.pre_restore_retention_count}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, pre_restore_retention_count: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
-                  <div>
-                    <strong>{tr('serviceBackupsPreRestoreRetention')}:</strong>
-                    <div style={{ color: 'var(--color-text-muted)' }}>{serviceData?.settings?.pre_restore_retention_count}</div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsSchedulerCheck')}</div>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-input"
+                      value={serviceForm.scheduler_check_minutes}
+                      onChange={(event) => setServiceForm((current) => ({ ...current, scheduler_check_minutes: event.target.value }))}
+                      disabled={!!serviceBusy}
+                    />
                   </div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsDbPath')}</div>
+                    <div className="settings-field-value">{serviceData?.settings?.database_path || UI_DASH}</div>
+                  </div>
+                  <div className="settings-info-item">
+                    <div className="settings-field-label">{tr('serviceBackupsDbSize')}</div>
+                    <div className="settings-field-value">{formatBytes(serviceData?.settings?.current_db_size_bytes)}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                  <button className="btn btn-primary" onClick={handleServiceSave} disabled={serviceLoading || !!serviceBusy}>
+                    {tr('save')}
+                  </button>
                 </div>
 
                 <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('serviceBackupsReloadHint')}</div>

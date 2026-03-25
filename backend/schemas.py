@@ -1150,6 +1150,25 @@ class ServiceBackupSettings(BaseModel):
     auto_retention_count: int
     manual_retention_count: int
     pre_restore_retention_count: int
+    scheduler_check_minutes: int
+
+
+class ServiceBackupSettingsUpdate(BaseModel):
+    backup_dir: Optional[str] = None
+    auto_enabled: Optional[bool] = None
+    auto_interval_hours: Optional[int] = Field(default=None, ge=1, le=24 * 365)
+    auto_retention_count: Optional[int] = Field(default=None, ge=1, le=1000)
+    manual_retention_count: Optional[int] = Field(default=None, ge=1, le=1000)
+    pre_restore_retention_count: Optional[int] = Field(default=None, ge=1, le=1000)
+    scheduler_check_minutes: Optional[int] = Field(default=None, ge=1, le=24 * 60)
+
+    @field_validator("backup_dir", mode="before")
+    @classmethod
+    def normalize_backup_dir(cls, value):
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
 
 
 class ServiceBackupStatusResponse(BaseModel):
