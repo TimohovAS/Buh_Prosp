@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -40,6 +41,8 @@ function todayIso() {
 }
 
 export default function CashRegister() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/cash'
   const currentYear = new Date().getFullYear()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -127,9 +130,9 @@ export default function CashRegister() {
   }, [])
 
   useEffect(() => {
-    if (!queryInitialized) return
+    if (!queryInitialized || !isActivePage) return
     loadData()
-  }, [year, month, queryInitialized])
+  }, [year, month, queryInitialized, isActivePage])
 
   useEffect(() => {
     if (availableYears.length === 0) return

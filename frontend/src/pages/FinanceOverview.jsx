@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -46,6 +46,8 @@ function getPeriodRange(quick, customFrom, customTo) {
 }
 
 export default function FinanceOverview() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/finance'
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -61,6 +63,7 @@ export default function FinanceOverview() {
   const overviewAsOf = to > todayIso ? todayIso : to
 
   useEffect(() => {
+    if (!isActivePage) return
     setLoading(true)
     const modeVal = mode === 'both' ? 'both' : mode
     Promise.all([
@@ -78,7 +81,7 @@ export default function FinanceOverview() {
         setError(e.message)
       })
       .finally(() => setLoading(false))
-  }, [from, to, mode, overviewAsOf])
+  }, [from, to, mode, overviewAsOf, isActivePage])
 
   const totals = summary?.totals || {}
   const series = summary?.series || []

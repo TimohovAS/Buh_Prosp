@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -15,6 +16,8 @@ function formatDate(s) {
 }
 
 export default function AccountsReceivable() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/finance/ar'
   const [items, setItems] = useState([])
   const [totals, setTotals] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,8 +44,9 @@ export default function AccountsReceivable() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [])
+  }, [isActivePage])
 
   const filtered = useMemo(() => {
     const s = (search || '').trim().toLowerCase()

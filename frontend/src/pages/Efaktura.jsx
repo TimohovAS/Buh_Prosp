@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import {
@@ -67,7 +68,9 @@ function ResultSummary({ result }) {
 }
 
 export default function Efaktura() {
+  const location = useLocation()
   const fileInputRef = useRef(null)
+  const isActivePage = location.pathname === '/efaktura'
   const currentUser = getUser()
   const isAdmin = currentUser?.role === 'admin'
 
@@ -97,8 +100,9 @@ export default function Efaktura() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     loadHistory()
-  }, [])
+  }, [isActivePage])
 
   const handleImportClick = () => {
     if (importing) return

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -14,6 +15,8 @@ const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
 
 export default function Contracts() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/contracts'
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [projects, setProjects] = useState([])
@@ -50,10 +53,12 @@ export default function Contracts() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [statusFilter, clientFilter])
+  }, [statusFilter, clientFilter, isActivePage])
 
   useEffect(() => {
+    if (!isActivePage) return
     Promise.all([
       api.clients.listBrief(),
       api.projects.list({ show_archived: true }),
@@ -61,7 +66,7 @@ export default function Contracts() {
       setClients(clientList)
       setProjects(projectList)
     })
-  }, [])
+  }, [isActivePage])
 
   const openAdd = () => {
     const currentYear = new Date().getFullYear()

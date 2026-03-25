@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -46,7 +46,9 @@ function csvEscape(value) {
 }
 
 export default function Expenses() {
+  const location = useLocation()
   const navigate = useNavigate()
+  const isActivePage = location.pathname === '/expenses'
   const currentYear = new Date().getFullYear()
   const [items, setItems] = useState([])
   const [duplicateGroups, setDuplicateGroups] = useState([])
@@ -103,8 +105,9 @@ export default function Expenses() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [year, month])
+  }, [year, month, isActivePage])
 
   useEffect(() => {
     if (availableYears.length === 0) return
@@ -114,6 +117,7 @@ export default function Expenses() {
   }, [availableYears, year])
 
   useEffect(() => {
+    if (!isActivePage) return
     Promise.all([
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
@@ -125,7 +129,7 @@ export default function Expenses() {
         setContracts(contractList)
       })
       .catch((error) => setPageError(error.message || tr('loadError')))
-  }, [])
+  }, [isActivePage])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

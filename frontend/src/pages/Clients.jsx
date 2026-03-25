@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import SearchInput from '../components/SearchInput'
 
 export default function Clients() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/clients'
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -25,8 +28,9 @@ export default function Clients() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [search])
+  }, [search, isActivePage])
 
   const openAdd = () => {
     setForm({ name: '', address: '', pib: '', maticni_broj: '', contact: '', client_type: 'legal' })

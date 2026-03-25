@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -76,6 +77,8 @@ function SettingsSection({ title, summary, actions, open, onToggle, children }) 
 }
 
 export default function Settings() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/settings'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
@@ -206,20 +209,25 @@ export default function Settings() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     loadUsers()
-  }, [showInactive, isAdmin])
+  }, [showInactive, isAdmin, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     loadCategories()
-  }, [])
+  }, [isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     loadProjects()
-  }, [])
+  }, [isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     loadService()
-  }, [isAdmin])
+  }, [isAdmin, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     loadEfakturaSettings()
-  }, [isAdmin])
+  }, [isAdmin, isActivePage])
 
   const formatBytes = (value) => {
     const size = Number(value) || 0
@@ -343,6 +351,7 @@ export default function Settings() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     api.enterprise.get()
       .then((response) => {
         setData(response)
@@ -364,7 +373,7 @@ export default function Settings() {
         }
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [isActivePage])
 
   const handleSubmit = async (event) => {
     event.preventDefault()

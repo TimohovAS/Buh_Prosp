@@ -86,15 +86,19 @@ export default function Income() {
     load()
   }, [year, month, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
+    api.clients.listBrief().then(setClients)
+  }, [isActivePage])
+  useEffect(() => {
+    if (!isActivePage) return
+    api.projects.list({ show_archived: true }).then(setProjects)
+  }, [isActivePage])
+  useEffect(() => {
     if (availableYears.length === 0) return
     if (year !== '' && !availableYears.includes(year)) {
       setYear(availableYears[0])
     }
   }, [availableYears, year])
-  useEffect(() => { api.clients.listBrief().then(setClients) }, [])
-  useEffect(() => {
-    api.projects.list({ show_archived: true }).then(setProjects)
-  }, [])
   useEffect(() => {
     if (!modal) return setContracts([])
     const params = form.client_id ? { client_id: form.client_id } : {}

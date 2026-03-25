@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 
 export default function BankImport() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/bank-import'
   const [files, setFiles] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -15,10 +17,14 @@ export default function BankImport() {
   const [skippedFiles, setSkippedFiles] = useState([])
   const [recentFiles, setRecentFiles] = useState([])
 
-  useEffect(() => { api.clients.listBrief().then(setClients) }, [])
   useEffect(() => {
+    if (!isActivePage) return
+    api.clients.listBrief().then(setClients)
+  }, [isActivePage])
+  useEffect(() => {
+    if (!isActivePage) return
     api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => setRecentFiles([]))
-  }, [])
+  }, [isActivePage])
 
   const handleFileChange = async (e) => {
     const selectedFiles = e.target.files || []

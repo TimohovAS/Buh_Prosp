@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -23,6 +24,8 @@ function StatusBadge({ status }) {
 }
 
 export default function IncomingInvoices() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/incoming-invoices'
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [projects, setProjects] = useState([])
@@ -52,11 +55,15 @@ export default function IncomingInvoices() {
     api.incomingInvoices.list(params).then(setItems).catch(() => setItems([])).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [year, month, filterStatus])
   useEffect(() => {
+    if (!isActivePage) return
+    load()
+  }, [year, month, filterStatus, isActivePage])
+  useEffect(() => {
+    if (!isActivePage) return
     api.clients.list().then(all => setClients(all.filter(c => !c.is_archived))).catch(() => {})
     api.projects.list().then(setProjects).catch(() => {})
-  }, [])
+  }, [isActivePage])
 
   const filtered = useMemo(() => {
     const q = (search || '').trim().toLowerCase()

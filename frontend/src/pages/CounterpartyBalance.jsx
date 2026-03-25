@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 
@@ -11,6 +12,8 @@ function BalanceCell({ value }) {
 }
 
 export default function CounterpartyBalance() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/counterparty-balance'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -18,12 +21,13 @@ export default function CounterpartyBalance() {
   const [sortAsc, setSortAsc] = useState(true)
 
   useEffect(() => {
+    if (!isActivePage) return
     setLoading(true)
     api.incomingInvoices.counterpartyBalance()
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [])
+  }, [isActivePage])
 
   const items = useMemo(() => {
     if (!data?.items) return []

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -40,6 +41,8 @@ function formatDate(s) {
 }
 
 export default function PlannedExpenses() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/planned-expenses'
   const [items, setItems] = useState([])
   const [upcoming, setUpcoming] = useState([])
   const [loading, setLoading] = useState(true)
@@ -95,15 +98,18 @@ export default function PlannedExpenses() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [filterActive, filterCategory])
+  }, [filterActive, filterCategory, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     loadUpcoming()
-  }, [upcomingDays, items.length])
+  }, [upcomingDays, items.length, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     api.projects.list({ show_archived: true }).then(setProjects)
     api.categories.list({ category_type: 'expense' }).then(setApiCategories)
-  }, [])
+  }, [isActivePage])
 
   const openAdd = () => {
     const unassigned = projects.find(p => p.code === 'INT-UNASSIGNED')

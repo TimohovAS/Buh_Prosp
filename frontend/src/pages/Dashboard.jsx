@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -124,12 +124,15 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
 }
 
 export default function Dashboard() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/'
   const [data, setData] = useState(null)
   const [limits, setLimits] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!isActivePage) return
     Promise.all([api.dashboard(), api.finance.limits()])
       .then(([dashboardResponse, limitsResponse]) => {
         setData(dashboardResponse)
@@ -141,7 +144,7 @@ export default function Dashboard() {
         console.error(err)
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [isActivePage])
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
   if (!data) return <div style={{ padding: '2rem', color: 'var(--color-danger)' }}>{tr('loadError')}{error ? `: ${error}` : ''}</div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -26,8 +27,10 @@ function buildContractLabel(contract) {
 }
 
 export default function BankTransactions() {
+  const location = useLocation()
   const pageBodyRef = useRef(null)
   const pendingScrollTopRef = useRef(null)
+  const isActivePage = location.pathname === '/bank'
   const [data, setData] = useState([])
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -156,9 +159,9 @@ export default function BankTransactions() {
   }, [])
 
   useEffect(() => {
-    if (!queryInitialized) return
+    if (!queryInitialized || !isActivePage) return
     loadData()
-  }, [statusFilter, directionFilter, year, month, queryInitialized])
+  }, [statusFilter, directionFilter, year, month, queryInitialized, isActivePage])
 
   useEffect(() => {
     if (availableYears.length === 0) return

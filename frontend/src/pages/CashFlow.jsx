@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -40,6 +41,8 @@ function getPeriodRange(quick, customFrom, customTo) {
 }
 
 export default function CashFlow() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/finance/cashflow'
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -50,6 +53,7 @@ export default function CashFlow() {
   const { from, to } = getPeriodRange(periodQuick, customFrom, customTo)
 
   useEffect(() => {
+    if (!isActivePage) return
     setLoading(true)
     api.finance.cashflow({ from, to, group_by: 'month' })
       .then(setData)
@@ -58,7 +62,7 @@ export default function CashFlow() {
         setData(null)
       })
       .finally(() => setLoading(false))
-  }, [from, to])
+  }, [from, to, isActivePage])
 
   const series = data?.series || []
 

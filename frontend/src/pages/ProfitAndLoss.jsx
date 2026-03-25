@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { BarChart, Bar, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -14,6 +15,8 @@ const MONTH_LABELS = [
 ]
 
 export default function ProfitAndLoss() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/finance/pnl'
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState(null)
@@ -21,6 +24,7 @@ export default function ProfitAndLoss() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!isActivePage) return
     setLoading(true)
     api.finance.pnl(year)
       .then((response) => {
@@ -29,7 +33,7 @@ export default function ProfitAndLoss() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [year])
+  }, [year, isActivePage])
 
   const years = Array.from({ length: 6 }, (_, index) => currentYear - 4 + index)
   const items = data?.items || []

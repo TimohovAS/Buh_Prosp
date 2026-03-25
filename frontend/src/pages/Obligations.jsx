@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import DatePicker from '../components/DatePicker'
 import { api } from '../api'
 import { getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
@@ -32,6 +33,8 @@ const STATUS_FILTERS = [
 ]
 
 export default function Obligations() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/payments'
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [availableYears, setAvailableYears] = useState([currentYear])
@@ -100,8 +103,9 @@ export default function Obligations() {
   }, [])
 
   useEffect(() => {
+    if (!isActivePage) return
     load()
-  }, [year, paymentTypeFilter])
+  }, [year, paymentTypeFilter, isActivePage])
 
   useEffect(() => {
     if (!availableYears.length) return

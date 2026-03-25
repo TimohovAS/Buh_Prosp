@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -15,6 +16,8 @@ const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
 
 export default function Projects() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/projects'
   const [projects, setProjects] = useState([])
   const [clients, setClients] = useState([])
   const [byProject, setByProject] = useState([])
@@ -95,11 +98,13 @@ export default function Projects() {
   }
 
   useEffect(() => {
+    if (!isActivePage) return
     loadAll()
-  }, [showInactive, from, to, mode])
+  }, [showInactive, from, to, mode, isActivePage])
   useEffect(() => {
+    if (!isActivePage) return
     api.clients.listBrief().then(setClients)
-  }, [])
+  }, [isActivePage])
 
   const openAdd = () => {
     setForm({
