@@ -1221,6 +1221,48 @@ const t = {
   },
 };
 
+Object.assign(t.sr, {
+  incomePaymentTransactionTotal: 'Цео износ уплате',
+  incomePaymentEditInBank: 'Измените расподелу у Банци',
+  bankTxDistributedLabel: 'Расподела',
+  bankTxAllocateMode: 'Расподели уплату',
+  bankTxAllocateAdd: 'Додај',
+  bankTxAllocatedSelected: 'Додато',
+  bankTxAvailableAmount: 'Доступно',
+  bankTxAllocationSelected: 'Расподела уплате',
+  bankTxAllocationPayment: 'Уплата',
+  bankTxAllocationAllocated: 'Распоређено',
+  bankTxAllocationRemaining: 'Остатак',
+  bankTxAllocationOverAllocated: 'Распоређено више од износа уплате за',
+  bankTxAllocationRemainingHint: 'Део уплате још није распоређен:',
+  bankTxAllocationEmpty: 'Изаберите фактуре из десне колоне да распоредите ову уплату.',
+  bankTxAllocationCandidates: 'Отворене фактуре',
+  bankTxAllocationPartialStatus: 'Делимично распоређено',
+  bankTxAllocationFullStatus: 'Распоређено',
+  bankTxAllocationRemainingShort: 'остатак',
+})
+
+Object.assign(t.ru, {
+  incomePaymentTransactionTotal: 'Весь платеж',
+  incomePaymentEditInBank: 'Изменить распределение в Банке',
+  bankTxDistributedLabel: 'Распределение',
+  bankTxAllocateMode: 'Распределить платёж',
+  bankTxAllocateAdd: 'Добавить',
+  bankTxAllocatedSelected: 'Добавлено',
+  bankTxAvailableAmount: 'Доступно',
+  bankTxAllocationSelected: 'Распределение платежа',
+  bankTxAllocationPayment: 'Платёж',
+  bankTxAllocationAllocated: 'Распределено',
+  bankTxAllocationRemaining: 'Остаток',
+  bankTxAllocationOverAllocated: 'Распределено больше суммы платежа на',
+  bankTxAllocationRemainingHint: 'Часть платежа ещё не распределена:',
+  bankTxAllocationEmpty: 'Выберите фактуры из правой колонки, чтобы распределить этот платёж.',
+  bankTxAllocationCandidates: 'Открытые фактуры',
+  bankTxAllocationPartialStatus: 'Частично распределено',
+  bankTxAllocationFullStatus: 'Распределено',
+  bankTxAllocationRemainingShort: 'остаток',
+})
+
 let lang = localStorage.getItem('prospel_lang') || 'sr';
 
 export function setLang(l) {
