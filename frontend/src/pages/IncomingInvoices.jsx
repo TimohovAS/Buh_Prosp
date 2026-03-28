@@ -65,6 +65,16 @@ export default function IncomingInvoices() {
     api.projects.list().then(setProjects).catch(() => {})
   }, [isActivePage])
 
+  const refreshProjects = async () => {
+    try {
+      const projectList = await api.projects.list()
+      setProjects(projectList)
+      return projectList
+    } catch {
+      return projects
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = (search || '').trim().toLowerCase()
     let rows = items
@@ -94,12 +104,14 @@ export default function IncomingInvoices() {
   }
   const SortIcon = ({ col }) => sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''
 
-  const openAdd = () => {
+  const openAdd = async () => {
+    await refreshProjects()
     setForm({ ...defaultForm })
     setModal('add')
   }
 
-  const openEdit = item => {
+  const openEdit = async item => {
+    await refreshProjects()
     setForm({
       invoice_number: item.invoice_number,
       date: item.date,

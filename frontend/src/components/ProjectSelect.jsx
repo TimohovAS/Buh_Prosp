@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { api } from '../api'
 import { tr } from '../i18n'
 
 const UI_DASH = '\u2014'
@@ -18,13 +19,19 @@ export default function ProjectSelect({
   placeholder,
 }) {
   const rootRef = useRef(null)
+  const refreshPromiseRef = useRef(null)
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [liveProjects, setLiveProjects] = useState(projects)
+
+  useEffect(() => {
+    setLiveProjects(projects)
+  }, [projects])
 
   const selectedProject = useMemo(
-    () => projects.find((project) => String(project.id) === String(value)) || null,
-    [projects, value]
+    () => liveProjects.find((project) => String(project.id) === String(value)) || null,
+    [liveProjects, value]
   )
 
   const selectedLabel = selectedProject ? buildProjectLabel(selectedProject) : (allowEmpty ? emptyLabel : '')
@@ -32,7 +39,7 @@ export default function ProjectSelect({
 
   const filteredOptions = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
-    const items = projects
+    const items = liveProjects
       .filter((project) => project.status !== 'archived')
       .filter((project) => {
         if (!normalizedSearch) return true
@@ -53,7 +60,7 @@ export default function ProjectSelect({
     }
 
     return items
-  }, [allowEmpty, emptyLabel, projects, search])
+  }, [allowEmpty, emptyLabel, liveProjects, search])
 
   useEffect(() => {
     if (!isOpen) {
@@ -83,15 +90,36 @@ export default function ProjectSelect({
     setIsOpen(false)
   }
 
+  const refreshProjects = async () => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current
+    }
+    const request = api.projects.list({ show_archived: true })
+      .then((projectList) => {
+        if (Array.isArray(projectList)) {
+          setLiveProjects(projectList)
+        }
+        return projectList
+      })
+      .catch(() => projects)
+      .finally(() => {
+        refreshPromiseRef.current = null
+      })
+    refreshPromiseRef.current = request
+    return request
+  }
+
   const handleFocus = () => {
     setIsOpen(true)
     setSearch('')
+    void refreshProjects()
   }
 
   const handleKeyDown = (event) => {
     if (!isOpen && (event.key === 'ArrowDown' || event.key === 'Enter')) {
       event.preventDefault()
       setIsOpen(true)
+      void refreshProjects()
       return
     }
     if (!isOpen) return

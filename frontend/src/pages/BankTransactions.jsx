@@ -115,6 +115,18 @@ export default function BankTransactions() {
   }
   const expenseUsesDefaultProject = (categoryId) => Boolean(getExpenseCategoryDefaultProjectId(categoryId))
 
+  const loadReferenceData = async () => {
+    const [projectList, contractList, categoryList] = await Promise.all([
+      api.projects.list({ show_archived: true }),
+      api.contracts.list({ limit: 500 }),
+      api.categories.list({ category_type: 'expense' }),
+    ])
+    setProjects(projectList)
+    setContracts(contractList)
+    setCategories(categoryList)
+    return { projectList, contractList, categoryList }
+  }
+
   const loadData = async ({ preserveScroll = false } = {}) => {
     if (preserveScroll && pageBodyRef.current) {
       pendingScrollTopRef.current = pageBodyRef.current.scrollTop
@@ -128,17 +140,12 @@ export default function BankTransactions() {
       if (statusFilter !== 'all') params.status = statusFilter
       if (directionFilter !== 'all') params.direction = directionFilter
 
-      const [transactions, projectList, contractList, categoryList, years] = await Promise.all([
+      const [transactions, years] = await Promise.all([
         api.bankTransactions.list(params),
-        api.projects.list({ show_archived: true }),
-        api.contracts.list({ limit: 500 }),
-        api.categories.list({ category_type: 'expense' }),
         api.bankTransactions.years(),
+        loadReferenceData(),
       ])
       setData(transactions)
-      setProjects(projectList)
-      setContracts(contractList)
-      setCategories(categoryList)
       setAvailableYears(years?.length ? years : [currentYear])
     } catch (error) {
       console.error(error)
@@ -296,6 +303,18 @@ export default function BankTransactions() {
     }
   }
 
+  const openAssignModal = async () => {
+    try {
+      const { projectList } = await loadReferenceData()
+      const nextUnassignedProject = projectList.find((project) => project.code === 'INT-UNASSIGNED') || null
+      setAssignProjectId(nextUnassignedProject ? String(nextUnassignedProject.id) : '')
+    } catch (error) {
+      console.error(error)
+      setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
+    }
+    setModalAssign(true)
+  }
+
   const openMatchModal = async (transaction) => {
     setMatchTx(transaction)
     setMatchError('')
@@ -308,13 +327,20 @@ export default function BankTransactions() {
 
     setSuggestLoading(true)
     try {
+      const referenceDataPromise = loadReferenceData()
       if (transaction.direction === 'out') {
-        const response = await api.bankTransactions.suggest(transaction.id)
+        const [response] = await Promise.all([
+          api.bankTransactions.suggest(transaction.id),
+          referenceDataPromise,
+        ])
         setSuggestions(response)
         const hasLinkOptions = response.some((item) => item.type === 'obligation' && item.section === 'suggested')
         setMatchTab(hasLinkOptions ? 'link' : 'create')
       } else {
-        const response = await api.bankTransactions.incomeAllocation(transaction.id)
+        const [response] = await Promise.all([
+          api.bankTransactions.incomeAllocation(transaction.id),
+          referenceDataPromise,
+        ])
         setSuggestions(response.candidates || [])
         setAllocationLines((response.allocations || []).map((item) => ({
           income_id: item.income_id,
@@ -998,7 +1024,7 @@ export default function BankTransactions() {
             style={{ minWidth: 180 }}
           />
           {selectedIds.length > 0 && (
-            <button className="btn btn-secondary" onClick={() => { setAssignProjectId(unassignedProject ? String(unassignedProject.id) : ''); setModalAssign(true) }}>
+            <button className="btn btn-secondary" onClick={openAssignModal}>
               {tr('assignProject')} ({selectedIds.length})
             </button>
           )}
