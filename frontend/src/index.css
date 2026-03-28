@@ -1264,6 +1264,52 @@ tr:hover td {
   font-weight: 700;
 }
 
+.bank-match-item.selected {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.bank-allocation-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.bank-allocation-summary-item {
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bank-allocation-summary-item span {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.bank-allocation-summary-item strong.warning {
+  color: var(--color-warning);
+}
+
+.bank-allocation-summary-item strong.success {
+  color: var(--color-success);
+}
+
+.bank-allocation-line-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 140px;
+}
+
+.bank-allocation-amount-input {
+  min-width: 0;
+}
+
 .bank-match-form {
   display: flex;
   flex-direction: column;
@@ -1306,6 +1352,10 @@ tr:hover td {
   .bank-match-summary-project {
     text-align: left;
   }
+
+  .bank-allocation-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1315,6 +1365,10 @@ tr:hover td {
 
   .bank-match-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bank-allocation-line-actions {
+    width: 100%;
   }
 }
 

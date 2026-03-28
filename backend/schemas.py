@@ -252,11 +252,15 @@ class IncomePaymentTransactionResponse(BaseModel):
     id: int
     date: DateType
     amount: Decimal
+    transaction_amount: Optional[Decimal] = None
     currency: str = "RSD"
     counterparty_name: Optional[str] = None
     purpose: Optional[str] = None
     bank_reference: Optional[str] = None
     project_id: Optional[int] = None
+    link_kind: str = "direct"
+    allocation_count: int = 1
+    can_unlink: bool = True
 
     class Config:
         from_attributes = True
@@ -933,6 +937,9 @@ class BankTransactionUpdate(BaseModel):
 class BankTransactionResponse(BankTransactionBase):
     id: int
     created_at: datetime
+    allocation_count: int = 0
+    allocated_amount: Decimal = Decimal("0.00")
+    allocation_remaining: Decimal = Decimal("0.00")
 
     class Config:
         from_attributes = True
@@ -1081,6 +1088,40 @@ class MatchCandidate(BaseModel):
 class MatchRequest(BaseModel):
     type: str  # income | expense | obligation
     id: int
+
+
+class BankTransactionIncomeAllocationItem(BaseModel):
+    income_id: int
+    amount: Decimal = Field(gt=0)
+
+
+class BankTransactionIncomeAllocationRequest(BaseModel):
+    allocations: list[BankTransactionIncomeAllocationItem] = Field(default_factory=list)
+
+
+class BankTransactionIncomeAllocationLineResponse(BaseModel):
+    income_id: int
+    invoice_number: str
+    client_name: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[DateType] = None
+    status: Optional[str] = None
+    amount_full: Decimal = Decimal("0.00")
+    amount_paid: Decimal = Decimal("0.00")
+    available_amount: Decimal = Decimal("0.00")
+    allocated_amount: Decimal = Decimal("0.00")
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+
+
+class BankTransactionIncomeAllocationResponse(BaseModel):
+    tx_id: int
+    total_amount: Decimal
+    allocated_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    allocations: list[BankTransactionIncomeAllocationLineResponse] = Field(default_factory=list)
+    candidates: list[MatchCandidate] = Field(default_factory=list)
 
 
 # ---------- TransactionCategory ----------

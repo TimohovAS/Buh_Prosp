@@ -26,6 +26,20 @@ function buildContractLabel(contract) {
   return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
 }
 
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString('sr-RS', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function parseMoneyInput(value) {
+  if (value == null) return 0
+  const normalized = String(value).replace(/\s+/g, '').replace(',', '.')
+  const parsed = Number.parseFloat(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export default function BankTransactions() {
   const location = useLocation()
   const pageBodyRef = useRef(null)
@@ -61,6 +75,8 @@ export default function BankTransactions() {
   const [matchError, setMatchError] = useState('')
   const [matchTab, setMatchTab] = useState('link')
   const [allInvoiceSearch, setAllInvoiceSearch] = useState('')
+  const [allocationLines, setAllocationLines] = useState([])
+  const [allocationSaving, setAllocationSaving] = useState(false)
   const [expenseSaving, setExpenseSaving] = useState(false)
   const [expenseForm, setExpenseForm] = useState({
     date: todayIso(),
@@ -256,26 +272,65 @@ export default function BankTransactions() {
   const getMatchedTypeLabel = (type) => {
     if (type === 'cash') return tr('bankTxMatchedCash')
     if (type === 'income') return tr('income')
+    if (type === 'income_allocation') return tr('bankTxDistributedLabel')
     if (type === 'expense') return tr('expenses')
     if (type === 'obligation') return tr('payments')
     return type || ''
   }
 
+  const isEditableIncomeTransaction = (transaction) => (
+    transaction?.direction === 'in' &&
+    transaction?.status === 'matched' &&
+    ['income', 'income_allocation'].includes(transaction?.matched_type)
+  )
+
+  const getAllocationTotals = (lines = allocationLines) => {
+    const allocated = lines.reduce((sum, line) => sum + parseMoneyInput(line.amount), 0)
+    const total = parseMoneyInput(matchTx?.amount)
+    const remaining = total - allocated
+    return {
+      total,
+      allocated,
+      remaining: remaining > 0 ? remaining : 0,
+      overAllocated: remaining < -0.009 ? Math.abs(remaining) : 0,
+    }
+  }
+
   const openMatchModal = async (transaction) => {
     setMatchTx(transaction)
     setMatchError('')
-    setMatchTab(transaction.direction === 'out' ? 'link' : 'link')
+    setMatchTab(transaction.direction === 'out' ? 'link' : (transaction.status === 'matched' ? 'allocate' : 'link'))
     setAllInvoiceSearch('')
     setSuggestions([])
+    setAllocationLines([])
+    setAllocationSaving(false)
     setExpenseForm(buildExpenseForm(transaction))
 
     setSuggestLoading(true)
     try {
-      const response = await api.bankTransactions.suggest(transaction.id)
-      setSuggestions(response)
       if (transaction.direction === 'out') {
+        const response = await api.bankTransactions.suggest(transaction.id)
+        setSuggestions(response)
         const hasLinkOptions = response.some((item) => item.type === 'obligation' && item.section === 'suggested')
         setMatchTab(hasLinkOptions ? 'link' : 'create')
+      } else {
+        const response = await api.bankTransactions.incomeAllocation(transaction.id)
+        setSuggestions(response.candidates || [])
+        setAllocationLines((response.allocations || []).map((item) => ({
+          income_id: item.income_id,
+          invoice_number: item.invoice_number,
+          client_name: item.client_name,
+          description: item.description,
+          date: item.date,
+          status: item.status,
+          amount_full: item.amount_full,
+          amount_paid: item.amount_paid,
+          available_amount: item.available_amount,
+          allocated_amount: item.allocated_amount,
+          project_name: item.project_name,
+          project_code: item.project_code,
+          amount: String(item.allocated_amount ?? ''),
+        })))
       }
     } catch (error) {
       setMatchError(error.message)
@@ -291,6 +346,8 @@ export default function BankTransactions() {
     setMatchError('')
     setMatchTab('link')
     setAllInvoiceSearch('')
+    setAllocationLines([])
+    setAllocationSaving(false)
     setExpenseSaving(false)
     setExpenseForm({
       date: todayIso(),
@@ -310,6 +367,67 @@ export default function BankTransactions() {
       await loadData({ preserveScroll: true })
     } catch (error) {
       setMatchError(error.message)
+    }
+  }
+
+  const addAllocationLine = (item) => {
+    setAllocationLines((previous) => {
+      if (previous.some((line) => String(line.income_id) === String(item.id))) return previous
+      const totals = getAllocationTotals(previous)
+      const defaultAmount = Math.max(0, Math.min(parseMoneyInput(item.amount), totals.remaining))
+      return [
+        ...previous,
+        {
+          income_id: item.id,
+          invoice_number: item.invoice_number,
+          client_name: item.client_name,
+          description: item.description,
+          date: item.date,
+          status: item.status,
+          amount_full: item.amount_full,
+          amount_paid: item.amount_paid,
+          available_amount: item.amount,
+          allocated_amount: 0,
+          project_name: item.project_name,
+          project_code: item.project_code,
+          amount: defaultAmount > 0 ? String(defaultAmount) : '',
+        },
+      ]
+    })
+  }
+
+  const updateAllocationAmount = (incomeId, value) => {
+    setAllocationLines((previous) => previous.map((line) => (
+      String(line.income_id) !== String(incomeId)
+        ? line
+        : { ...line, amount: value }
+    )))
+  }
+
+  const removeAllocationLine = (incomeId) => {
+    setAllocationLines((previous) => previous.filter((line) => String(line.income_id) !== String(incomeId)))
+  }
+
+  const saveAllocation = async () => {
+    if (!matchTx) return
+    setAllocationSaving(true)
+    setMatchError('')
+    try {
+      const payload = {
+        allocations: allocationLines
+          .map((line) => ({
+            income_id: line.income_id,
+            amount: parseMoneyInput(line.amount),
+          }))
+          .filter((line) => line.amount > 0),
+      }
+      await api.bankTransactions.saveIncomeAllocation(matchTx.id, payload)
+      closeMatchModal()
+      await loadData({ preserveScroll: true })
+    } catch (error) {
+      setMatchError(error.message)
+    } finally {
+      setAllocationSaving(false)
     }
   }
 
@@ -430,6 +548,45 @@ export default function BankTransactions() {
     )
   }
 
+  const renderAllocationCandidateCard = (item) => {
+    const isSelected = allocationLines.some((line) => String(line.income_id) === String(item.id))
+    const amount = parseMoneyInput(item.amount)
+    const fullAmount = item.amount_full != null ? parseMoneyInput(item.amount_full) : amount
+    const isPartial = item.type === 'income' && fullAmount > amount
+    const label = item.invoice_number || item.description || `#${item.id}`
+
+    return (
+      <div key={`allocation-${item.id}`} className={`bank-match-item ${isSelected ? 'selected' : ''}`}>
+        <div style={{ minWidth: 0 }}>
+          <div className="bank-match-item-title">
+            <span>{label}</span>
+            {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
+          </div>
+          {item.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{item.client_name}</div> : null}
+          {item.description ? <div className="bank-match-item-body">{item.description}</div> : null}
+          <div className="bank-match-item-amount">
+            {isPartial ? (
+              <>
+                <span>{tr('bankTxAvailableAmount')}: {formatMoney(amount)} RSD</span>
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> / {formatMoney(fullAmount)} RSD</span>
+              </>
+            ) : (
+              <span>{formatMoney(amount)} RSD</span>
+            )}
+          </div>
+        </div>
+        <button
+          className="btn btn-sm btn-primary"
+          style={{ whiteSpace: 'nowrap' }}
+          onClick={() => addAllocationLine(item)}
+          disabled={isSelected}
+        >
+          {isSelected ? tr('bankTxAllocatedSelected') : tr('bankTxAllocateAdd')}
+        </button>
+      </div>
+    )
+  }
+
   const renderMatchSummary = (transaction) => {
     if (!transaction) return null
     const amount = Number(transaction.amount || 0)
@@ -469,8 +626,17 @@ export default function BankTransactions() {
       String(item.invoice_number || '').toLowerCase().includes(query) ||
       String(item.amount || '').includes(query)
     )
+    const filteredAllocationCandidates = suggestions.filter((item) =>
+      !query ||
+      String(item.description || '').toLowerCase().includes(query) ||
+      String(item.client_name || '').toLowerCase().includes(query) ||
+      String(item.invoice_number || '').toLowerCase().includes(query) ||
+      String(item.amount || '').includes(query)
+    )
+    const totals = getAllocationTotals()
+    const hasInvalidAllocation = allocationLines.some((line) => parseMoneyInput(line.amount) <= 0)
 
-    return (
+    const renderLinkPanel = () => (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {suggested.length > 0 && (
           <div>
@@ -498,12 +664,12 @@ export default function BankTransactions() {
           <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
             {tr('bankTxAllOpenInvoices')}
           </div>
-            <SearchInput
-              placeholder={tr('bankTxSearchInvoices')}
-              value={allInvoiceSearch}
-              onChange={setAllInvoiceSearch}
-              style={{ width: '100%', marginBottom: '0.5rem' }}
-            />
+          <SearchInput
+            placeholder={tr('bankTxSearchInvoices')}
+            value={allInvoiceSearch}
+            onChange={setAllInvoiceSearch}
+            style={{ width: '100%', marginBottom: '0.5rem' }}
+          />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 260, overflowY: 'auto' }}>
             {filteredAll.length === 0 && allInvoices.length === 0 && (
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenInvoices')}</p>
@@ -513,6 +679,134 @@ export default function BankTransactions() {
             )}
             {filteredAll.map(renderSuggestionCard)}
           </div>
+        </div>
+      </div>
+    )
+
+    const renderAllocationPanel = () => (
+      <div className="bank-match-columns bank-match-link-panel">
+        <div className="bank-match-panel">
+          <div className="bank-match-panel-title">{tr('bankTxAllocationSelected')}</div>
+          <div className="bank-allocation-summary">
+            <div className="bank-allocation-summary-item">
+              <span>{tr('bankTxAllocationPayment')}</span>
+              <strong>{formatMoney(totals.total)} RSD</strong>
+            </div>
+            <div className="bank-allocation-summary-item">
+              <span>{tr('bankTxAllocationAllocated')}</span>
+              <strong>{formatMoney(totals.allocated)} RSD</strong>
+            </div>
+            <div className="bank-allocation-summary-item">
+              <span>{tr('bankTxAllocationRemaining')}</span>
+              <strong className={totals.remaining > 0 ? 'warning' : 'success'}>{formatMoney(totals.remaining)} RSD</strong>
+            </div>
+          </div>
+
+          {totals.overAllocated > 0 && (
+            <div className="alert alert-danger" style={{ marginBottom: '0.75rem' }}>
+              {tr('bankTxAllocationOverAllocated')} {formatMoney(totals.overAllocated)} RSD
+            </div>
+          )}
+          {totals.remaining > 0.009 && (
+            <div className="alert alert-warning" style={{ marginBottom: '0.75rem' }}>
+              {tr('bankTxAllocationRemainingHint')} {formatMoney(totals.remaining)} RSD
+            </div>
+          )}
+
+          <div className="bank-match-list">
+            {allocationLines.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>{tr('bankTxAllocationEmpty')}</p>
+            ) : allocationLines.map((line) => (
+              <div key={`selected-${line.income_id}`} className="bank-match-item selected">
+                <div style={{ minWidth: 0 }}>
+                  <div className="bank-match-item-title">
+                    <span>{line.invoice_number}</span>
+                    {line.date ? <span className="bank-match-item-subtle">{line.date}</span> : null}
+                  </div>
+                  {line.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{line.client_name}</div> : null}
+                  {line.description ? <div className="bank-match-item-body">{line.description}</div> : null}
+                  <div className="bank-match-item-body">
+                    {tr('bankTxAvailableAmount')}: {formatMoney(line.available_amount)} RSD
+                  </div>
+                  {(line.project_name || line.project_code) ? (
+                    <div className="bank-match-item-subtle" style={{ marginTop: '0.25rem' }}>
+                      {tr('project')}: {line.project_name || UI_DASH}{line.project_code ? ` (${line.project_code})` : ''}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="bank-allocation-line-actions">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="form-input bank-allocation-amount-input"
+                    value={line.amount}
+                    onChange={(event) => updateAllocationAmount(line.income_id, event.target.value)}
+                  />
+                  <button className="btn btn-sm btn-secondary" type="button" onClick={() => removeAllocationLine(line.income_id)}>
+                    {tr('delete')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={saveAllocation}
+              disabled={allocationSaving || allocationLines.length === 0 || hasInvalidAllocation || totals.overAllocated > 0}
+            >
+              {allocationSaving ? tr('loading') : tr('save')}
+            </button>
+          </div>
+        </div>
+
+        <div className="bank-match-panel">
+          <div className="bank-match-panel-title">{tr('bankTxAllocationCandidates')}</div>
+          <SearchInput
+            placeholder={tr('bankTxSearchInvoices')}
+            value={allInvoiceSearch}
+            onChange={setAllInvoiceSearch}
+            style={{ width: '100%', marginBottom: '0.75rem' }}
+          />
+          <div className="bank-match-list">
+            {filteredAllocationCandidates.length === 0 && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+            )}
+            {filteredAllocationCandidates.map(renderAllocationCandidateCard)}
+          </div>
+        </div>
+      </div>
+    )
+
+    if (matchTx?.status === 'matched') {
+      return renderAllocationPanel()
+    }
+
+    return (
+      <div className="bank-match-layout">
+        <div className="bank-match-tabs">
+          <button
+            type="button"
+            className={`bank-match-tab ${matchTab === 'link' ? 'active' : ''}`}
+            onClick={() => setMatchTab('link')}
+          >
+            {tr('bankTxMatchBtn')}
+          </button>
+          <button
+            type="button"
+            className={`bank-match-tab ${matchTab === 'allocate' ? 'active' : ''}`}
+            onClick={() => setMatchTab('allocate')}
+          >
+            {tr('bankTxAllocateMode')}
+          </button>
+        </div>
+
+        <div className="bank-match-content">
+          {matchTab === 'allocate' ? renderAllocationPanel() : renderLinkPanel()}
         </div>
       </div>
     )
@@ -753,9 +1047,19 @@ export default function BankTransactions() {
                         {transaction.direction === 'in' ? '+' : '-'}{Number(transaction.amount || 0).toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
                       </td>
                       <td>
-                        {transaction.status === 'matched'
-                          ? <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
-                          : <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>}
+                        {transaction.status === 'matched' ? (
+                          transaction.matched_type === 'income_allocation' ? (
+                            <span className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}>
+                              {transaction.allocation_remaining > 0 ? tr('bankTxAllocationPartialStatus') : tr('bankTxAllocationFullStatus')}
+                              {transaction.allocation_count ? ` (${transaction.allocation_count})` : ''}
+                              {transaction.allocation_remaining > 0 ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}` : ''}
+                            </span>
+                          ) : (
+                            <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
+                          )
+                        ) : (
+                          <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
+                        )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         {transaction.status !== 'matched' && (
@@ -766,9 +1070,16 @@ export default function BankTransactions() {
                           </div>
                         )}
                         {transaction.status === 'matched' && (
-                          <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(transaction.id)}>
-                            {tr('bankTxUnmatchBtn')}
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                            {isEditableIncomeTransaction(transaction) ? (
+                              <button className="btn btn-sm btn-secondary" onClick={() => openMatchModal(transaction)}>
+                                {tr('edit')}
+                              </button>
+                            ) : null}
+                            <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(transaction.id)}>
+                              {tr('bankTxUnmatchBtn')}
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -780,13 +1091,13 @@ export default function BankTransactions() {
         </div>
       </div>
 
-      <Modal
-        isOpen={!!matchTx}
-        onClose={closeMatchModal}
-        title={matchTx?.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchTitle')}
-        className={matchTx?.direction === 'out' ? 'bank-match-modal' : ''}
-        maxWidth={matchTx?.direction === 'out' ? '980px' : '700px'}
-      >
+        <Modal
+          isOpen={!!matchTx}
+          onClose={closeMatchModal}
+          title={matchTx?.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchTitle')}
+          className={matchTx ? 'bank-match-modal' : ''}
+          maxWidth={matchTx ? '980px' : '700px'}
+        >
         {matchTx && (
           <div className="bank-match-layout">
             {renderMatchSummary(matchTx)}

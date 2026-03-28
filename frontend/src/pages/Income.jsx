@@ -628,24 +628,40 @@ export default function Income() {
                       {paymentDetails.linked_transactions.map((transaction) => (
                         <div key={transaction.id} className="card" style={{ padding: '0.75rem', display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700 }}>{transaction.amount.toLocaleString('sr-RS')} {transaction.currency || 'RSD'}</div>
+                            <div style={{ fontWeight: 700 }}>{Number(transaction.amount || 0).toLocaleString('sr-RS')} {transaction.currency || 'RSD'}</div>
+                            {transaction.transaction_amount != null && Number(transaction.transaction_amount || 0) !== Number(transaction.amount || 0) ? (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
+                                {tr('incomePaymentTransactionTotal')}: {Number(transaction.transaction_amount || 0).toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
+                              </div>
+                            ) : null}
                             <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{transaction.date}</div>
                             <div style={{ marginTop: '0.35rem' }}>{transaction.counterparty_name || UI_DASH}</div>
                             <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{transaction.purpose || UI_DASH}</div>
+                            {transaction.link_kind === 'allocation' && transaction.allocation_count > 1 ? (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                                {tr('incomePaymentEditInBank')}
+                              </div>
+                            ) : null}
                             {transaction.bank_reference ? (
                               <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
                                 {tr('bankTxReference')}: {transaction.bank_reference}
                               </div>
                             ) : null}
                           </div>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-danger"
-                            onClick={() => handleUnlinkIncomePayment(transaction.id)}
-                            disabled={paymentActionLoading}
-                          >
-                            {paymentActionLoading ? tr('loading') : tr('bankTxUnmatchBtn')}
-                          </button>
+                          {transaction.can_unlink ? (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger"
+                              onClick={() => handleUnlinkIncomePayment(transaction.id)}
+                              disabled={paymentActionLoading}
+                            >
+                              {paymentActionLoading ? tr('loading') : tr('bankTxUnmatchBtn')}
+                            </button>
+                          ) : (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                              {tr('incomePaymentEditInBank')}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

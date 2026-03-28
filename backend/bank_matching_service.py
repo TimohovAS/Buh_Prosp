@@ -1,16 +1,29 @@
 from datetime import date
 import re
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, to_decimal
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
-from backend.models import BankTransaction, CashEntry, Contract, Expense, Income, IncomingInvoice, IncomingInvoiceSettlement, MonthlyObligation, Project
+from backend.models import (
+    BankTransaction,
+    BankTransactionIncomeAllocation,
+    CashEntry,
+    Contract,
+    Expense,
+    Income,
+    IncomingInvoice,
+    IncomingInvoiceSettlement,
+    MonthlyObligation,
+    Project,
+)
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reconcile_incoming_invoice_status, reopen_expense_for_unmatch
+
+MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
 
 
 def _safe_paid_amount(income: Income):
@@ -184,17 +197,305 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
     return [item for _, item in scored]
 
 
-async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
-    if tx.status not in {"unmatched", "ignored"}:
+def _merge_income_payment_summary(
+    summary: dict[int, dict],
+    *,
+    income_id: int | None,
+    tx_id: int,
+    tx_date: date | None,
+    amount,
+    bank_reference: str | None,
+) -> None:
+    if income_id is None:
+        return
+    entry = summary.setdefault(
+        int(income_id),
+        {
+            "paid_amount": ZERO_DECIMAL,
+            "latest_date": None,
+            "latest_tx_id": -1,
+            "bank_reference": None,
+        },
+    )
+    entry["paid_amount"] = to_decimal(entry["paid_amount"]) + to_decimal(amount or ZERO_DECIMAL)
+    if tx_date is None:
+        return
+    latest_date = entry.get("latest_date")
+    latest_tx_id = int(entry.get("latest_tx_id") or -1)
+    if latest_date is None or tx_date > latest_date or (tx_date == latest_date and tx_id > latest_tx_id):
+        entry["latest_date"] = tx_date
+        entry["latest_tx_id"] = tx_id
+        entry["bank_reference"] = bank_reference
+
+
+async def _build_income_payment_summary_map(
+    db: AsyncSession,
+    income_ids: list[int] | set[int] | None = None,
+    *,
+    exclude_tx_id: int | None = None,
+) -> dict[int, dict]:
+    restrict_income_ids = income_ids is not None
+    normalized_income_ids = {int(value) for value in (income_ids or []) if value is not None}
+    if restrict_income_ids and not normalized_income_ids:
+        return {}
+
+    summary: dict[int, dict] = {}
+
+    direct_query = (
+        select(
+            BankTransaction.id,
+            BankTransaction.matched_id,
+            BankTransaction.date,
+            BankTransaction.amount,
+            BankTransaction.bank_reference,
+        )
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == "income",
+        )
+    )
+    if normalized_income_ids:
+        direct_query = direct_query.where(BankTransaction.matched_id.in_(normalized_income_ids))
+    if exclude_tx_id is not None:
+        direct_query = direct_query.where(BankTransaction.id != exclude_tx_id)
+    direct_result = await db.execute(direct_query)
+    for tx_id, income_id, tx_date, amount, bank_reference in direct_result.fetchall():
+        _merge_income_payment_summary(
+            summary,
+            income_id=income_id,
+            tx_id=int(tx_id),
+            tx_date=tx_date,
+            amount=amount,
+            bank_reference=bank_reference,
+        )
+
+    allocation_query = (
+        select(
+            BankTransactionIncomeAllocation.income_id,
+            BankTransaction.id,
+            BankTransaction.date,
+            BankTransactionIncomeAllocation.amount,
+            BankTransaction.bank_reference,
+        )
+        .join(BankTransaction, BankTransaction.id == BankTransactionIncomeAllocation.bank_transaction_id)
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == MATCH_TYPE_INCOME_ALLOCATION,
+        )
+    )
+    if normalized_income_ids:
+        allocation_query = allocation_query.where(BankTransactionIncomeAllocation.income_id.in_(normalized_income_ids))
+    if exclude_tx_id is not None:
+        allocation_query = allocation_query.where(BankTransaction.id != exclude_tx_id)
+    allocation_result = await db.execute(allocation_query)
+    for income_id, tx_id, tx_date, amount, bank_reference in allocation_result.fetchall():
+        _merge_income_payment_summary(
+            summary,
+            income_id=income_id,
+            tx_id=int(tx_id),
+            tx_date=tx_date,
+            amount=amount,
+            bank_reference=bank_reference,
+        )
+
+    return summary
+
+
+def _get_income_available_amount(income: Income, summary_map: dict[int, dict]):
+    total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
+    paid = to_decimal(summary_map.get(int(income.id), {}).get("paid_amount", ZERO_DECIMAL))
+    remaining = total - paid
+    return remaining if remaining > ZERO_DECIMAL else ZERO_DECIMAL
+
+
+async def reconcile_income_payment_links(
+    db: AsyncSession,
+    income_ids: list[int] | set[int],
+) -> None:
+    normalized_income_ids = {int(value) for value in income_ids if value is not None}
+    if not normalized_income_ids:
+        return
+
+    income_result = await db.execute(select(Income).where(Income.id.in_(normalized_income_ids)))
+    incomes = list(income_result.scalars().all())
+    if not incomes:
+        return
+
+    summary_map = await _build_income_payment_summary_map(db, normalized_income_ids)
+    for income in incomes:
+        if income.status == "cancelled":
+            continue
+        linked = summary_map.get(int(income.id), {})
+        linked_paid = to_decimal(linked.get("paid_amount", ZERO_DECIMAL))
+        reconcile_income_payment_state(
+            income,
+            total_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL),
+            paid_amount=linked_paid,
+            paid_date=linked.get("latest_date"),
+        )
+        income.bank_reference = linked.get("bank_reference") if linked_paid > ZERO_DECIMAL else None
+
+    await db.flush()
+
+
+async def get_income_linked_payment_entries(db: AsyncSession, income_id: int) -> list[dict]:
+    direct_query = (
+        select(BankTransaction)
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == "income",
+            BankTransaction.matched_id == income_id,
+        )
+        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+    )
+    direct_result = await db.execute(direct_query)
+    direct_transactions = list(direct_result.scalars().all())
+
+    allocation_query = (
+        select(BankTransactionIncomeAllocation, BankTransaction)
+        .join(BankTransaction, BankTransaction.id == BankTransactionIncomeAllocation.bank_transaction_id)
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == MATCH_TYPE_INCOME_ALLOCATION,
+            BankTransactionIncomeAllocation.income_id == income_id,
+        )
+        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc(), BankTransactionIncomeAllocation.id.desc())
+    )
+    allocation_result = await db.execute(allocation_query)
+    allocation_rows = list(allocation_result.fetchall())
+
+    allocation_count_map: dict[int, int] = {}
+    if allocation_rows:
+        tx_ids = [int(tx.id) for _, tx in allocation_rows]
+        stats = await get_bank_transaction_allocation_stats(db, tx_ids)
+        allocation_count_map = {
+            tx_id: int(info.get("allocation_count", 0))
+            for tx_id, info in stats.items()
+        }
+
+    entries: list[dict] = []
+    for tx in direct_transactions:
+        entries.append(
+            {
+                "id": tx.id,
+                "date": tx.date,
+                "amount": to_decimal(tx.amount or ZERO_DECIMAL),
+                "transaction_amount": to_decimal(tx.amount or ZERO_DECIMAL),
+                "currency": tx.currency or "RSD",
+                "counterparty_name": tx.counterparty_name,
+                "purpose": tx.purpose,
+                "bank_reference": tx.bank_reference,
+                "project_id": tx.project_id,
+                "link_kind": "direct",
+                "allocation_count": 1,
+                "can_unlink": True,
+            }
+        )
+
+    for allocation, tx in allocation_rows:
+        allocation_count = int(allocation_count_map.get(int(tx.id), 1) or 1)
+        entries.append(
+            {
+                "id": tx.id,
+                "date": tx.date,
+                "amount": to_decimal(allocation.amount or ZERO_DECIMAL),
+                "transaction_amount": to_decimal(tx.amount or ZERO_DECIMAL),
+                "currency": tx.currency or "RSD",
+                "counterparty_name": tx.counterparty_name,
+                "purpose": tx.purpose,
+                "bank_reference": tx.bank_reference,
+                "project_id": tx.project_id,
+                "link_kind": "allocation",
+                "allocation_count": allocation_count,
+                "can_unlink": allocation_count <= 1,
+            }
+        )
+
+    entries.sort(key=lambda item: (item["date"], item["id"]), reverse=True)
+    return entries
+
+
+async def get_bank_transaction_allocation_stats(
+    db: AsyncSession,
+    tx_ids: list[int] | set[int],
+) -> dict[int, dict]:
+    normalized_tx_ids = {int(value) for value in tx_ids if value is not None}
+    if not normalized_tx_ids:
+        return {}
+
+    stats_query = (
+        select(
+            BankTransactionIncomeAllocation.bank_transaction_id,
+            func.count(BankTransactionIncomeAllocation.id),
+            func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0),
+        )
+        .where(BankTransactionIncomeAllocation.bank_transaction_id.in_(normalized_tx_ids))
+        .group_by(BankTransactionIncomeAllocation.bank_transaction_id)
+    )
+    stats_result = await db.execute(stats_query)
+    stats: dict[int, dict] = {}
+    for tx_id, allocation_count, allocated_amount in stats_result.fetchall():
+        stats[int(tx_id)] = {
+            "allocation_count": int(allocation_count or 0),
+            "allocated_amount": to_decimal(allocated_amount or ZERO_DECIMAL),
+            "project_ids": set(),
+        }
+
+    project_query = (
+        select(
+            BankTransactionIncomeAllocation.bank_transaction_id,
+            Income.project_id,
+        )
+        .join(Income, Income.id == BankTransactionIncomeAllocation.income_id)
+        .where(BankTransactionIncomeAllocation.bank_transaction_id.in_(normalized_tx_ids))
+    )
+    project_result = await db.execute(project_query)
+    for tx_id, project_id in project_result.fetchall():
+        info = stats.setdefault(
+            int(tx_id),
+            {
+                "allocation_count": 0,
+                "allocated_amount": ZERO_DECIMAL,
+                "project_ids": set(),
+            },
+        )
+        info["project_ids"].add(project_id)
+
+    for info in stats.values():
+        project_ids = {project_id for project_id in info["project_ids"]}
+        info["resolved_project_id"] = next(iter(project_ids)) if len(project_ids) == 1 else None
+        del info["project_ids"]
+
+    return stats
+
+
+async def _suggest_income_matches(
+    db: AsyncSession,
+    tx: BankTransaction,
+    *,
+    exclude_tx_id: int | None = None,
+    include_income_ids: list[int] | set[int] | None = None,
+) -> list[dict]:
+    include_ids = {int(value) for value in (include_income_ids or []) if value is not None}
+    query = select(Income).options(
+        selectinload(Income.client),
+        selectinload(Income.project),
+    )
+    if include_ids:
+        query = query.where(or_(Income.status.in_(["issued", "partial"]), Income.id.in_(include_ids)))
+    else:
+        query = query.where(Income.status.in_(["issued", "partial"]))
+
+    response = await db.execute(query)
+    incomes = list(response.scalars().all())
+    if not incomes:
         return []
 
-    if tx.direction == "out":
-        return await _suggest_outgoing_matches(db, tx)
-
-    result: list[dict] = []
-    query = select(Income).options(selectinload(Income.client)).where(Income.status.in_(["issued", "partial"]))
-    response = await db.execute(query)
-    incomes = response.scalars().all()
+    summary_map = await _build_income_payment_summary_map(
+        db,
+        [income.id for income in incomes],
+        exclude_tx_id=exclude_tx_id,
+    )
 
     extracted_invoices: list[str] = []
     if tx.purpose:
@@ -203,21 +504,20 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
         extracted_invoices.extend(_extract_invoice_candidates(tx.bank_reference))
     normalized_extracted = {_normalize_invoice_number(item) for item in extracted_invoices if item}
 
-    def score_income(income: Income) -> tuple[int, float, int]:
+    def score_income(income: Income, remaining) -> tuple[int, float, int]:
         invoice_score = 1
         if normalized_extracted:
             income_invoice = _normalize_invoice_number(income.invoice_number)
             if income_invoice in normalized_extracted:
                 invoice_score = 0
 
-        remaining = to_decimal(income.amount_rsd) - _safe_paid_amount(income)
         amount_diff = money_abs(remaining - to_decimal(tx.amount))
         date_diff = abs((tx.date - income.issued_date).days)
         return (invoice_score, amount_diff, date_diff)
 
-    def make_income_item(income: Income, score_value: int | None, section: str) -> dict:
-        paid = _safe_paid_amount(income)
-        remaining = to_decimal(income.amount_rsd) - paid
+    def make_income_item(income: Income, remaining, score_value: int | None, section: str) -> dict:
+        total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
+        paid = total - remaining
         client_label = income.client_name or (income.client.name if income.client else "")
         return {
             "id": income.id,
@@ -226,46 +526,294 @@ async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
             "client_name": client_label,
             "description": (income.description or "")[:80],
             "amount": remaining,
-            "amount_full": to_decimal(income.amount_rsd),
-            "amount_paid": paid,
+            "amount_full": total,
+            "amount_paid": paid if paid > ZERO_DECIMAL else ZERO_DECIMAL,
             "date": str(income.issued_date),
             "status": income.status,
             "score": score_value,
             "section": section,
         }
 
-    scored: list[tuple[tuple[int, float, int], Income]] = []
-    counterparty_matches: list[tuple[tuple[int, float, int], Income]] = []
-
+    candidate_items: list[tuple[Income, float]] = []
     for income in incomes:
-        score = score_income(income)
+        remaining = _get_income_available_amount(income, summary_map)
+        if remaining <= ZERO_DECIMAL and income.id not in include_ids:
+            continue
+        candidate_items.append((income, remaining))
+
+    result: list[dict] = []
+    scored: list[tuple[tuple[int, float, int], Income, float]] = []
+    counterparty_matches: list[tuple[tuple[int, float, int], Income, float]] = []
+
+    for income, remaining in candidate_items:
+        score = score_income(income, remaining)
         if score[0] == 0 or score[1] <= 0.5:
             if not (score[0] == 1 and score[2] > 60):
-                scored.append((score, income))
+                scored.append((score, income, remaining))
         if _matches_counterparty_name(tx, income):
-            counterparty_matches.append((score, income))
+            counterparty_matches.append((score, income, remaining))
 
     scored.sort(key=lambda item: item[0])
     picked_ids: set[int] = set()
 
-    for score, income in scored[:5]:
+    for score, income, remaining in scored[:5]:
         score_value = 100 if score[0] == 0 else max(10, 90 - score[2])
-        result.append(make_income_item(income, score_value, "suggested"))
+        result.append(make_income_item(income, remaining, score_value, "suggested"))
         picked_ids.add(income.id)
 
     counterparty_matches.sort(key=lambda item: item[0][2])
-    for score, income in counterparty_matches:
+    for score, income, remaining in counterparty_matches:
         if income.id in picked_ids:
             continue
-        result.append(make_income_item(income, None, "counterparty"))
+        result.append(make_income_item(income, remaining, None, "counterparty"))
         picked_ids.add(income.id)
 
-    remaining = [(score_income(income), income) for income in incomes if income.id not in picked_ids]
-    remaining.sort(key=lambda item: item[0][2])
-    for _, income in remaining:
-        result.append(make_income_item(income, None, "all"))
+    remaining_items = [
+        (score_income(income, remaining), income, remaining)
+        for income, remaining in candidate_items
+        if income.id not in picked_ids
+    ]
+    remaining_items.sort(key=lambda item: item[0][2])
+    for _, income, remaining in remaining_items:
+        result.append(make_income_item(income, remaining, None, "all"))
 
     return result
+
+
+async def suggest_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
+    if tx.direction == "out":
+        if tx.status not in {"unmatched", "ignored"}:
+            return []
+        return await _suggest_outgoing_matches(db, tx)
+
+    if tx.status not in {"unmatched", "ignored", "matched"}:
+        return []
+    if tx.status == "matched" and tx.matched_type not in {"income", MATCH_TYPE_INCOME_ALLOCATION}:
+        return []
+
+    exclude_tx_id = tx.id if tx.status == "matched" else None
+    include_income_ids: set[int] = set()
+    if tx.status == "matched" and tx.matched_type == "income" and tx.matched_id:
+        include_income_ids.add(int(tx.matched_id))
+
+    return await _suggest_income_matches(
+        db,
+        tx,
+        exclude_tx_id=exclude_tx_id,
+        include_income_ids=include_income_ids,
+    )
+
+
+def _build_income_allocation_line(
+    income: Income,
+    *,
+    allocated_amount,
+    available_amount,
+) -> dict:
+    client_label = income.client_name or (income.client.name if income.client else "")
+    project = getattr(income, "project", None)
+    total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
+    available = to_decimal(available_amount or ZERO_DECIMAL)
+    allocated = to_decimal(allocated_amount or ZERO_DECIMAL)
+    paid_excluding_current_tx = total - available
+    return {
+        "income_id": income.id,
+        "invoice_number": income.invoice_number,
+        "client_name": client_label,
+        "description": income.description or "",
+        "date": income.issued_date,
+        "status": income.status,
+        "amount_full": total,
+        "amount_paid": paid_excluding_current_tx if paid_excluding_current_tx > ZERO_DECIMAL else ZERO_DECIMAL,
+        "available_amount": available,
+        "allocated_amount": allocated,
+        "project_id": income.project_id,
+        "project_name": getattr(project, "name", None),
+        "project_code": getattr(project, "code", None),
+    }
+
+
+async def _get_transaction_income_allocations(
+    db: AsyncSession,
+    tx_id: int,
+) -> list[BankTransactionIncomeAllocation]:
+    result = await db.execute(
+        select(BankTransactionIncomeAllocation)
+        .options(
+            selectinload(BankTransactionIncomeAllocation.income).selectinload(Income.client),
+            selectinload(BankTransactionIncomeAllocation.income).selectinload(Income.project),
+        )
+        .where(BankTransactionIncomeAllocation.bank_transaction_id == tx_id)
+        .order_by(BankTransactionIncomeAllocation.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_income_allocation_editor_state(db: AsyncSession, tx: BankTransaction) -> dict:
+    if tx.direction != "in":
+        raise ValueError("Income allocation is only available for incoming transactions")
+    if tx.status == "matched" and tx.matched_type not in {"income", MATCH_TYPE_INCOME_ALLOCATION}:
+        raise ValueError("Transaction is matched to another entity")
+
+    current_income_ids: set[int] = set()
+    current_allocations = await _get_transaction_income_allocations(db, tx.id)
+    if current_allocations:
+        current_income_ids.update(int(item.income_id) for item in current_allocations)
+    elif tx.status == "matched" and tx.matched_type == "income" and tx.matched_id:
+        current_income_ids.add(int(tx.matched_id))
+
+    candidates = await _suggest_income_matches(
+        db,
+        tx,
+        exclude_tx_id=tx.id if tx.status == "matched" else None,
+        include_income_ids=current_income_ids,
+    )
+    candidate_map = {int(item["id"]): item for item in candidates}
+
+    allocations: list[dict] = []
+    if current_income_ids:
+        income_result = await db.execute(
+            select(Income)
+            .options(selectinload(Income.client), selectinload(Income.project))
+            .where(Income.id.in_(current_income_ids))
+        )
+        income_map = {int(income.id): income for income in income_result.scalars().all()}
+    else:
+        income_map = {}
+
+    if current_allocations:
+        for allocation in current_allocations:
+            income = allocation.income
+            if not income:
+                continue
+            available_amount = to_decimal(candidate_map.get(int(income.id), {}).get("amount", ZERO_DECIMAL))
+            allocations.append(
+                _build_income_allocation_line(
+                    income,
+                    allocated_amount=allocation.amount,
+                    available_amount=available_amount,
+                )
+            )
+    elif tx.status == "matched" and tx.matched_type == "income" and tx.matched_id:
+        income = income_map.get(int(tx.matched_id))
+        if income:
+            available_amount = to_decimal(candidate_map.get(int(income.id), {}).get("amount", tx.amount or ZERO_DECIMAL))
+            allocations.append(
+                _build_income_allocation_line(
+                    income,
+                    allocated_amount=tx.amount,
+                    available_amount=available_amount,
+                )
+            )
+
+    allocated_amount = decimal_sum([item["allocated_amount"] for item in allocations])
+    total_amount = to_decimal(tx.amount or ZERO_DECIMAL)
+    remaining_amount = total_amount - allocated_amount
+    if remaining_amount < ZERO_DECIMAL:
+        remaining_amount = ZERO_DECIMAL
+
+    return {
+        "tx_id": tx.id,
+        "total_amount": total_amount,
+        "allocated_amount": allocated_amount,
+        "remaining_amount": remaining_amount,
+        "allocations": allocations,
+        "candidates": candidates,
+    }
+
+
+async def save_income_allocation(
+    db: AsyncSession,
+    tx_id: int,
+    allocations: list,
+    *,
+    current_user_id: int | None = None,
+):
+    response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    tx = response.scalar_one_or_none()
+    if not tx:
+        raise ValueError("BankTransaction not found")
+    if tx.direction != "in":
+        raise ValueError("Only incoming transactions can be distributed")
+    if tx.status == "matched" and tx.matched_type not in {"income", MATCH_TYPE_INCOME_ALLOCATION}:
+        raise ValueError("Transaction is matched to another entity")
+
+    normalized_allocations: list[tuple[int, object]] = []
+    seen_income_ids: set[int] = set()
+    total_allocated = ZERO_DECIMAL
+    for item in allocations:
+        income_id = int(getattr(item, "income_id", None) if not isinstance(item, dict) else item.get("income_id"))
+        amount = to_decimal(getattr(item, "amount", None) if not isinstance(item, dict) else item.get("amount"))
+        if income_id in seen_income_ids:
+            raise ValueError("Duplicate invoice in allocation")
+        if amount <= ZERO_DECIMAL:
+            raise ValueError("Allocation amount must be greater than zero")
+        normalized_allocations.append((income_id, amount))
+        seen_income_ids.add(income_id)
+        total_allocated += amount
+
+    if not normalized_allocations:
+        raise ValueError("Select at least one invoice")
+    if total_allocated > to_decimal(tx.amount or ZERO_DECIMAL) + to_decimal("0.01"):
+        raise ValueError("Allocated amount exceeds transaction amount")
+
+    affected_income_ids: set[int] = set()
+    existing_allocations = await _get_transaction_income_allocations(db, tx.id)
+    if existing_allocations:
+        affected_income_ids.update(int(item.income_id) for item in existing_allocations)
+    elif tx.status == "matched" and tx.matched_type == "income" and tx.matched_id:
+        affected_income_ids.add(int(tx.matched_id))
+
+    requested_income_ids = {income_id for income_id, _ in normalized_allocations}
+    validation_ids = affected_income_ids | requested_income_ids
+    income_result = await db.execute(
+        select(Income)
+        .options(selectinload(Income.client), selectinload(Income.project))
+        .where(Income.id.in_(validation_ids))
+    )
+    income_map = {int(income.id): income for income in income_result.scalars().all()}
+    missing_income_ids = validation_ids.difference(income_map.keys())
+    if missing_income_ids:
+        raise ValueError("Income not found")
+
+    summary_map = await _build_income_payment_summary_map(
+        db,
+        validation_ids,
+        exclude_tx_id=tx.id if tx.status == "matched" else None,
+    )
+
+    for income_id, amount in normalized_allocations:
+        income = income_map[income_id]
+        if income.status == "cancelled":
+            raise ValueError(f"Invoice {income.invoice_number} is cancelled")
+        available_amount = _get_income_available_amount(income, summary_map)
+        if amount > available_amount + to_decimal("0.01"):
+            raise ValueError(f"Allocation exceeds open amount for invoice {income.invoice_number}")
+
+    for allocation in existing_allocations:
+        await db.delete(allocation)
+    await db.flush()
+
+    tx.status = "matched"
+    tx.matched_type = MATCH_TYPE_INCOME_ALLOCATION
+    tx.matched_id = None
+
+    for income_id, amount in normalized_allocations:
+        db.add(
+            BankTransactionIncomeAllocation(
+                bank_transaction_id=tx.id,
+                income_id=income_id,
+                amount=amount,
+                created_by=current_user_id,
+            )
+        )
+
+    project_values = {income_map[income_id].project_id for income_id, _ in normalized_allocations}
+    tx.project_id = next(iter(project_values)) if len(project_values) == 1 else None
+
+    await db.flush()
+    await reconcile_income_payment_links(db, affected_income_ids | requested_income_ids)
+    return tx
 
 
 async def _find_incoming_invoice_by_expense(db: AsyncSession, expense_id: int) -> IncomingInvoice | None:
@@ -350,21 +898,15 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         income = income_response.scalar_one_or_none()
         if not income:
             raise ValueError("Income not found")
-
-        new_paid = to_decimal(income.paid_amount or ZERO_DECIMAL) + to_decimal(tx.amount)
-        reconcile_income_payment_state(
-            income,
-            total_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL),
-            paid_amount=new_paid,
-            paid_date=tx.date,
-        )
-
-        if tx.bank_reference and not income.bank_reference:
-            income.bank_reference = tx.bank_reference
         project_id = tx.project_id or getattr(income, "project_id", None) or await _get_unassigned_project_id(db)
         if project_id is not None:
             await _sync_income_project(db, income, project_id)
             tx.project_id = project_id
+        tx.status = "matched"
+        tx.matched_type = match_type
+        tx.matched_id = match_id
+        await db.flush()
+        await reconcile_income_payment_links(db, {income.id})
 
     elif match_type == "expense":
         expense_response = await db.execute(select(Expense).where(Expense.id == match_id))
@@ -401,7 +943,7 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
     else:
         raise ValueError("Unknown match type")
 
-    if match_type != "obligation":
+    if match_type not in {"obligation", "income"}:
         tx.status = "matched"
         tx.matched_type = match_type
         tx.matched_id = match_id
@@ -416,33 +958,21 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
 
     if not tx:
         raise ValueError("BankTransaction not found")
-    if tx.status != "matched" or not tx.matched_type or not tx.matched_id:
+    if tx.status != "matched" or not tx.matched_type or (tx.matched_type != MATCH_TYPE_INCOME_ALLOCATION and not tx.matched_id):
         raise ValueError("Transaction is not matched")
 
-    if tx.matched_type == "income":
-        income_response = await db.execute(select(Income).where(Income.id == tx.matched_id))
-        income = income_response.scalar_one_or_none()
-        if income:
-            remaining_response = await db.execute(
-                select(BankTransaction)
-                .where(
-                    BankTransaction.matched_type == "income",
-                    BankTransaction.matched_id == income.id,
-                    BankTransaction.id != tx.id,
-                )
-                .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
-            )
-            remaining_transactions = list(remaining_response.scalars().all())
-            remaining_paid = decimal_sum([item.amount or ZERO_DECIMAL for item in remaining_transactions])
-            amount_total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
-            reconcile_income_payment_state(
-                income,
-                total_amount=amount_total,
-                paid_amount=remaining_paid,
-                paid_date=remaining_transactions[0].date if remaining_transactions else None,
-            )
+    affected_income_ids: set[int] = set()
 
-            income.bank_reference = next((item.bank_reference for item in remaining_transactions if item.bank_reference), None)
+    if tx.matched_type == "income":
+        if tx.matched_id:
+            affected_income_ids.add(int(tx.matched_id))
+
+    elif tx.matched_type == MATCH_TYPE_INCOME_ALLOCATION:
+        existing_allocations = await _get_transaction_income_allocations(db, tx.id)
+        affected_income_ids.update(int(item.income_id) for item in existing_allocations)
+        for allocation in existing_allocations:
+            await db.delete(allocation)
+        await db.flush()
 
     elif tx.matched_type == "expense":
         expense_response = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
@@ -471,8 +1001,12 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
     tx.status = "unmatched"
     tx.matched_type = None
     tx.matched_id = None
+    if tx.direction == "in":
+        tx.project_id = None
 
     await db.flush()
+    if affected_income_ids:
+        await reconcile_income_payment_links(db, affected_income_ids)
     return tx
 
 

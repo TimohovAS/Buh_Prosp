@@ -461,6 +461,9 @@ const t = {
     loginCannotChange: 'Логин се не може мењати',
     loginError: 'Грешка пријаве',
 
+    incomePaymentTransactionTotal: 'Р¦РµРѕ РїР»Р°С‚РµР¶',
+    incomePaymentEditInBank: 'РР·РјРµРЅР° СЂР°СЃРїРѕРґРµР»Рµ Сѓ Р‘Р°РЅС†Рё',
+
     // Bank Transactions
     bankTransactions: 'Банка',
     bankTxMatchedCash: 'Готовина',
@@ -493,6 +496,23 @@ const t = {
     bankTxNoOpenObligations: 'Нема отворених обавеза за повезивање.',
     bankTxCreateExpenseFallbackHint: 'Ако ово није порез или допринос, можете испод креирати обичан расход.',
     bankTxCreateAndMatch: 'Креирај и повежи',
+
+    bankTxDistributedLabel: 'Р Р°СЃРїРѕРґРµР»Р°',
+    bankTxAllocateMode: 'Р Р°СЃРїРѕРґРµР»Рё РїР»Р°С‚РµР¶',
+    bankTxAllocateAdd: 'Р”РѕРґР°С',
+    bankTxAllocatedSelected: 'Р”РѕРґР°С‚Рѕ',
+    bankTxAvailableAmount: 'РћС‚РІРѕСЂРµРЅРѕ',
+    bankTxAllocationSelected: 'Р Р°СЃРїРѕРґРµР»Р° РїР»Р°С‚РµР¶Р°',
+    bankTxAllocationPayment: 'РЈРїР»Р°С‚Р°',
+    bankTxAllocationAllocated: 'Р Р°СЃРїРѕСЂРµРґРµРЅРѕ',
+    bankTxAllocationRemaining: 'РћСЃС‚Р°С‚Р°Рє',
+    bankTxAllocationOverAllocated: 'Р Р°СЃРїРѕСЂРµРґРµРЅРѕ РІРёС€Рµ РёР·РЅРѕСЃР° РїР»Р°С‚РµР¶Р° Р·Р°',
+    bankTxAllocationRemainingHint: 'Р”РµРѕ РїР»Р°С‚РµР¶Р° СРѕС€ РЅРёСРµ СЂР°СЃРїРѕСЂРµРґРµРЅ:',
+    bankTxAllocationEmpty: 'РР·Р°Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂРµ РєРѕСРёРјР° СЂР°СЃРїРѕСЂРµС’СѓСРµС‚Рµ РѕРІСѓ СѓРїР»Р°С‚Сѓ.',
+    bankTxAllocationCandidates: 'РћС‚РІРѕСЂРµРЅРµ С„Р°РєС‚СѓСЂРµ Р·Р° СЂР°СЃРїРѕРґРµР»Сѓ',
+    bankTxAllocationPartialStatus: 'Р”РµР»РёРјРёС‡РЅРѕ СЂР°СЃРїРѕСЂРµРґРµРЅРѕ',
+    bankTxAllocationFullStatus: 'Р Р°СЃРїРѕСЂРµРґРµРЅРѕ',
+    bankTxAllocationRemainingShort: 'РѕСЃС‚Р°Р»Рѕ',
 
     // ERP: internal projects, categories
     internalProject: 'Интерни',
@@ -1051,6 +1071,9 @@ const t = {
     loginCannotChange: 'Логин нельзя изменить',
     loginError: 'Ошибка входа',
 
+    incomePaymentTransactionTotal: 'Р’РµСЃСЊ РїР»Р°С‚РµР¶',
+    incomePaymentEditInBank: 'РР·РјРµРЅРёС‚СЊ СЂР°СЃРїСЂРµРґРµР»РµРЅРёРµ РІ Р‘Р°РЅРєРµ',
+
     // Bank Transactions
     bankTransactions: 'Банк',
     bankTxMatchedCash: 'Наличка',
@@ -1083,6 +1106,23 @@ const t = {
     bankTxNoOpenObligations: 'Нет открытых обязательств для связывания.',
     bankTxCreateExpenseFallbackHint: 'Если это не налог или взнос, ниже можно создать обычный расход.',
     bankTxCreateAndMatch: 'Создать и связать',
+
+    bankTxDistributedLabel: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРёРµ',
+    bankTxAllocateMode: 'Р Р°СЃРїСЂРµРґРµР»РёС‚СЊ РїР»Р°С‚РµР¶',
+    bankTxAllocateAdd: 'Р”РѕР±Р°РІРёС‚СЊ',
+    bankTxAllocatedSelected: 'Р”РѕР±Р°РІР»РµРЅРѕ',
+    bankTxAvailableAmount: 'Р”РѕСЃС‚СѓРїРЅРѕ',
+    bankTxAllocationSelected: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРёРµ РїР»Р°С‚РµР¶Р°',
+    bankTxAllocationPayment: 'РџР»Р°С‚РµР¶',
+    bankTxAllocationAllocated: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРѕ',
+    bankTxAllocationRemaining: 'РћСЃС‚Р°С‚РѕРє',
+    bankTxAllocationOverAllocated: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРѕ Р±РѕР»СЊС€Рµ СЃСѓРјРјС‹ РїР»Р°С‚РµР¶Р° РЅР°',
+    bankTxAllocationRemainingHint: 'Р§Р°СЃС‚СЊ РїР»Р°С‚РµР¶Р° РµС‰Рµ РЅРµ СЂР°СЃРїСЂРµРґРµР»РµРЅР°:',
+    bankTxAllocationEmpty: 'Р’С‹Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂС‹, РјРµР¶РґСѓ РєРѕС‚РѕСЂС‹РјРё РЅСѓР¶РЅРѕ СЂР°СЃРїСЂРµРґРµР»РёС‚СЊ РїР»Р°С‚РµР¶.',
+    bankTxAllocationCandidates: 'РћС‚РєСЂС‹С‚С‹Рµ С„Р°РєС‚СѓСЂС‹ РґР»СЏ СЂР°СЃРїСЂРµРґРµР»РµРЅРёСЏ',
+    bankTxAllocationPartialStatus: 'Р§Р°СЃС‚РёС‡РЅРѕ СЂР°СЃРїСЂРµРґРµР»РµРЅРѕ',
+    bankTxAllocationFullStatus: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРѕ',
+    bankTxAllocationRemainingShort: 'РѕСЃС‚Р°С‚РѕРє',
 
     // ERP: internal projects, categories
     internalProject: 'Внутренний',

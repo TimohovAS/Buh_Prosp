@@ -317,6 +317,11 @@ class BankTransaction(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", foreign_keys=[project_id])
+    income_allocations = relationship(
+        "BankTransactionIncomeAllocation",
+        back_populates="bank_transaction",
+        cascade="all, delete-orphan",
+    )
 
 
 class BankImportFile(Base):
@@ -390,6 +395,11 @@ class Income(Base):
     bank_reference = Column(String(100))  # Референция банка при импорте из извода
     contract = relationship("Contract", back_populates="incomes", foreign_keys=[contract_id])
     project = relationship("Project", back_populates="incomes", foreign_keys=[project_id])
+    bank_allocations = relationship(
+        "BankTransactionIncomeAllocation",
+        back_populates="income",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def contract_number(self) -> Optional[str]:
@@ -422,6 +432,24 @@ class Contract(Base):
     items = relationship("ContractItem", back_populates="contract", cascade="all, delete-orphan")
     incomes = relationship("Income", back_populates="contract", foreign_keys="Income.contract_id")
     expenses = relationship("Expense", back_populates="contract", foreign_keys="Expense.contract_id")
+
+
+class BankTransactionIncomeAllocation(Base):
+    """Р Р°СЃРїСЂРµРґРµР»РµРЅРёРµ РѕРґРЅРѕРіРѕ РІС…РѕРґСЏС‰РµРіРѕ РїР»Р°С‚РµР¶Р° РїРѕ РЅРµСЃРєРѕР»СЊРєРёРј С„Р°РєС‚СѓСЂР°Рј."""
+    __tablename__ = "bank_transaction_income_allocations"
+    __table_args__ = (
+        UniqueConstraint("bank_transaction_id", "income_id", name="uq_bank_tx_income_allocation"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=False, index=True)
+    income_id = Column(Integer, ForeignKey("income.id"), nullable=False, index=True)
+    amount = Column(Numeric(14, 2), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    bank_transaction = relationship("BankTransaction", back_populates="income_allocations")
+    income = relationship("Income", back_populates="bank_allocations")
 
 
 class ContractItem(Base):

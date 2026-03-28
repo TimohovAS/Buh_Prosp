@@ -13,9 +13,10 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_db
 from backend.efaktura_service import import_efaktura_documents
-from backend.models import Income, Client, User, Project, BankTransaction, Contract, Enterprise, Expense
+from backend.models import Income, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, Enterprise, Expense
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
+from backend.bank_matching_service import get_income_linked_payment_entries, unmatch_transaction
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.state_machine import (
@@ -151,17 +152,8 @@ async def _clear_contract_if_project_mismatch(db: AsyncSession, income: Income, 
         income.contract_payment_type = None
 
 
-async def _get_income_linked_transactions(db: AsyncSession, income_id: int) -> list[BankTransaction]:
-    result = await db.execute(
-        select(BankTransaction)
-        .where(BankTransaction.matched_type == "income", BankTransaction.matched_id == income_id)
-        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
-    )
-    return list(result.scalars().all())
-
-
-def _build_income_payment_details(income: Income, linked_transactions: list[BankTransaction]) -> IncomePaymentDetailsResponse:
-    linked_total = decimal_sum([tx.amount or ZERO_DECIMAL for tx in linked_transactions])
+def _build_income_payment_details(income: Income, linked_transactions: list[dict]) -> IncomePaymentDetailsResponse:
+    linked_total = decimal_sum([tx.get("amount", ZERO_DECIMAL) for tx in linked_transactions])
     recorded_paid = to_decimal(income.paid_amount or ZERO_DECIMAL)
     manual_paid_amount = max(ZERO_DECIMAL, recorded_paid - linked_total)
     has_manual_payment = manual_paid_amount > ZERO_DECIMAL or (
@@ -188,10 +180,10 @@ def _build_income_payment_details(income: Income, linked_transactions: list[Bank
 
 
 async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> IncomePaymentDetailsResponse:
-    linked_transactions = await _get_income_linked_transactions(db, income.id)
-    linked_total = decimal_sum([tx.amount or ZERO_DECIMAL for tx in linked_transactions])
+    linked_transactions = await get_income_linked_payment_entries(db, income.id)
+    linked_total = decimal_sum([tx.get("amount", ZERO_DECIMAL) for tx in linked_transactions])
     amount_total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
-    latest_linked_date = max((tx.date for tx in linked_transactions), default=None)
+    latest_linked_date = max((tx.get("date") for tx in linked_transactions), default=None)
 
     reconcile_income_payment_state(
         income,
@@ -201,7 +193,7 @@ async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> Inco
     )
 
     if linked_transactions:
-        income.bank_reference = next((tx.bank_reference for tx in linked_transactions if tx.bank_reference), None)
+        income.bank_reference = next((tx.get("bank_reference") for tx in linked_transactions if tx.get("bank_reference")), None)
     else:
         income.bank_reference = None
 
@@ -210,11 +202,23 @@ async def _clear_income_manual_payment(db: AsyncSession, income: Income) -> Inco
 
 
 async def _detach_income_transactions(db: AsyncSession, income_id: int) -> None:
-    linked_transactions = await _get_income_linked_transactions(db, income_id)
-    for transaction in linked_transactions:
-        transaction.status = "unmatched"
-        transaction.matched_type = None
-        transaction.matched_id = None
+    direct_result = await db.execute(
+        select(BankTransaction.id).where(
+            BankTransaction.matched_type == "income",
+            BankTransaction.matched_id == income_id,
+        )
+    )
+    direct_tx_ids = [int(value) for value in direct_result.scalars().all()]
+
+    allocation_result = await db.execute(
+        select(BankTransactionIncomeAllocation.bank_transaction_id).where(
+            BankTransactionIncomeAllocation.income_id == income_id
+        )
+    )
+    allocation_tx_ids = [int(value) for value in allocation_result.scalars().all()]
+
+    for tx_id in dict.fromkeys(direct_tx_ids + allocation_tx_ids):
+        await unmatch_transaction(db, tx_id)
 
 from backend.income_service import (
     to_number_year_format,
@@ -625,7 +629,7 @@ async def get_income_payments(
     income = income_result.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Income not found")
-    linked_transactions = await _get_income_linked_transactions(db, income_id)
+    linked_transactions = await get_income_linked_payment_entries(db, income_id)
     return _build_income_payment_details(income, linked_transactions)
 
 

@@ -6,7 +6,15 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
-from backend.bank_matching_service import match_transaction, suggest_matches, unmatch_transaction
+from backend.bank_matching_service import (
+    MATCH_TYPE_INCOME_ALLOCATION,
+    get_bank_transaction_allocation_stats,
+    get_income_allocation_editor_state,
+    match_transaction,
+    save_income_allocation,
+    suggest_matches,
+    unmatch_transaction,
+)
 from backend.cash_service import (
     CASH_CATEGORY,
     create_cash_transfer_from_transaction,
@@ -20,6 +28,8 @@ from backend.schemas import (
     BankTransactionBulkAssignProject,
     BankTransactionCreate,
     BankTransactionCreateExpenseRequest,
+    BankTransactionIncomeAllocationRequest,
+    BankTransactionIncomeAllocationResponse,
     BankTransactionResponse,
     BankTransactionUpdate,
     MatchCandidate,
@@ -161,22 +171,30 @@ async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: Bank
 def _serialize_bank_transaction(
     transaction: BankTransaction,
     project_id: object = _PROJECT_OVERRIDE_UNSET,
+    allocation_stats: dict | None = None,
 ) -> BankTransactionResponse:
     payload = BankTransactionResponse.model_validate(transaction).model_dump()
     if project_id is not _PROJECT_OVERRIDE_UNSET:
         payload["project_id"] = project_id
+    stats = allocation_stats or {}
+    payload["allocation_count"] = int(stats.get("allocation_count", 0) or 0)
+    payload["allocated_amount"] = to_decimal(stats.get("allocated_amount", ZERO_DECIMAL))
+    remaining_amount = to_decimal(transaction.amount or ZERO_DECIMAL) - payload["allocated_amount"]
+    payload["allocation_remaining"] = remaining_amount if remaining_amount > ZERO_DECIMAL else ZERO_DECIMAL
     return BankTransactionResponse.model_validate(payload)
 
 
 async def _resolve_effective_project_ids(
     db: AsyncSession,
     transactions: list[BankTransaction],
-) -> dict[int, int | None]:
+) -> tuple[dict[int, int | None], dict[int, dict]]:
     expense_ids = [tx.matched_id for tx in transactions if tx.matched_type == "expense" and tx.matched_id]
     income_ids = [tx.matched_id for tx in transactions if tx.matched_type == "income" and tx.matched_id]
+    allocation_tx_ids = [int(tx.id) for tx in transactions if tx.matched_type == MATCH_TYPE_INCOME_ALLOCATION]
 
     expense_projects: dict[int, int | None] = {}
     income_projects: dict[int, int | None] = {}
+    allocation_stats = await get_bank_transaction_allocation_stats(db, allocation_tx_ids)
 
     if expense_ids:
         result = await db.execute(select(Expense.id, Expense.project_id).where(Expense.id.in_(expense_ids)))
@@ -193,17 +211,23 @@ async def _resolve_effective_project_ids(
             project_id = expense_projects.get(int(tx.matched_id), project_id)
         elif tx.matched_type == "income" and tx.matched_id:
             project_id = income_projects.get(int(tx.matched_id), project_id)
+        elif tx.matched_type == MATCH_TYPE_INCOME_ALLOCATION:
+            project_id = allocation_stats.get(int(tx.id), {}).get("resolved_project_id", project_id)
         resolved[int(tx.id)] = project_id
-    return resolved
+    return resolved, allocation_stats
 
 
 async def _serialize_bank_transactions(
     db: AsyncSession,
     transactions: list[BankTransaction],
 ) -> list[BankTransactionResponse]:
-    resolved_projects = await _resolve_effective_project_ids(db, transactions)
+    resolved_projects, allocation_stats = await _resolve_effective_project_ids(db, transactions)
     return [
-        _serialize_bank_transaction(transaction, resolved_projects.get(int(transaction.id), transaction.project_id))
+        _serialize_bank_transaction(
+            transaction,
+            resolved_projects.get(int(transaction.id), transaction.project_id),
+            allocation_stats.get(int(transaction.id)),
+        )
         for transaction in transactions
     ]
 
@@ -212,10 +236,11 @@ async def _serialize_single_bank_transaction(
     db: AsyncSession,
     transaction: BankTransaction,
 ) -> BankTransactionResponse:
-    resolved_projects = await _resolve_effective_project_ids(db, [transaction])
+    resolved_projects, allocation_stats = await _resolve_effective_project_ids(db, [transaction])
     return _serialize_bank_transaction(
         transaction,
         resolved_projects.get(int(transaction.id), transaction.project_id),
+        allocation_stats.get(int(transaction.id)),
     )
 
 
@@ -342,6 +367,44 @@ async def get_suggested_matches(
     if not transaction:
         raise HTTPException(404, "Transaction not found")
     return await suggest_matches(db, transaction)
+
+
+@router.get("/{tx_id}/income-allocation", response_model=BankTransactionIncomeAllocationResponse)
+async def get_income_allocation_state(
+    tx_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    transaction = result.scalar_one_or_none()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    try:
+        state = await get_income_allocation_editor_state(db, transaction)
+        return BankTransactionIncomeAllocationResponse.model_validate(state)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/{tx_id}/income-allocation", response_model=BankTransactionResponse)
+async def save_income_allocation_state(
+    tx_id: int,
+    body: BankTransactionIncomeAllocationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    try:
+        transaction = await save_income_allocation(
+            db,
+            tx_id,
+            body.allocations,
+            current_user_id=current_user.id,
+        )
+        await db.commit()
+        await db.refresh(transaction)
+        return await _serialize_single_bank_transaction(db, transaction)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.post("/{tx_id}/match", response_model=BankTransactionResponse)
