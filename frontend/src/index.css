@@ -922,6 +922,85 @@ tr.row-reversal {
   background-color: rgba(239, 68, 68, 0.12) !important;
 }
 
+.record-row {
+  cursor: pointer;
+}
+
+.record-row:focus-visible {
+  outline: none;
+}
+
+.record-row:hover td,
+.record-row:focus-visible td {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.record-cell-ellipsis {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.record-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+}
+
+.record-detail-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.record-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.record-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.record-field.full {
+  grid-column: 1 / -1;
+}
+
+.record-field-label {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.record-field-value {
+  word-break: break-word;
+}
+
+.record-field-text {
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.record-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.record-actions-grid .btn {
+  width: 100%;
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
@@ -1603,6 +1682,12 @@ tr:hover td {
   .table-wrap {
     overflow-x: auto;
     overflow-y: visible;
+  }
+
+  .record-detail-grid,
+  .record-field-grid,
+  .record-actions-grid {
+    grid-template-columns: 1fr;
   }
 
   th, td {

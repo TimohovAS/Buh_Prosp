@@ -45,6 +45,7 @@ export default function Income() {
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [paymentModal, setPaymentModal] = useState(null)
+  const [detailModal, setDetailModal] = useState(null)
   const [paymentDetails, setPaymentDetails] = useState(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentActionLoading, setPaymentActionLoading] = useState(false)
@@ -299,6 +300,25 @@ export default function Income() {
     setPaymentError('' )
   }
 
+  const openDetail = (item) => {
+    setDetailModal(item)
+  }
+
+  const openEditFromDetail = (item) => {
+    setDetailModal(null)
+    openEdit(item)
+  }
+
+  const openPaymentFromDetail = async (item) => {
+    setDetailModal(null)
+    await openPaymentModal(item)
+  }
+
+  const handleDeleteFromDetail = async (item) => {
+    setDetailModal(null)
+    await handleDelete(item)
+  }
+
   const handleUnlinkIncomePayment = async (transactionId) => {
     if (!paymentModal) return
     if (!confirm(tr('incomeUnlinkPaymentConfirm'))) return
@@ -355,16 +375,7 @@ export default function Income() {
       return <span className="badge badge-warning">{tr('unpaid')}</span>
     }
 
-    return (
-      <button
-        type="button"
-        onClick={() => openPaymentModal(item)}
-        title={tr('incomePaymentDetails')}
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-      >
-        {badge}
-      </button>
-    )
+    return badge
   }
 
   const invoiceDuplicate = modal === 'add' && form.invoice_number?.trim() &&
@@ -543,7 +554,6 @@ export default function Income() {
                   <th>{tr('description')}</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIcon col="amount_rsd" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('is_paid')}>{tr('status')} <SortIcon col="is_paid" /></th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -553,17 +563,29 @@ export default function Income() {
                   <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
-                    <tr key={item.id} className={item.status === 'cancelled' ? 'row-reversal' : ''}>
+                    <tr
+                      key={item.id}
+                      className={`record-row ${item.status === 'cancelled' ? 'row-reversal' : ''}`.trim()}
+                      onClick={() => openDetail(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(item)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(item.id)}
                           onChange={() => toggleSelect(item.id)}
+                          onClick={(event) => event.stopPropagation()}
                         />
                       </td>
                       <td className="date-cell">{item.date}</td>
                       <td className="date-cell">{item.due_date || UI_DASH}</td>
-                      <td>{item.invoice_number}</td>
+                      <td><span className="record-cell-ellipsis">{item.invoice_number || UI_DASH}</span></td>
                       <td>{item.client_name || '-'}</td>
                       <td>{item.contract_number || '-'}</td>
                       <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
@@ -574,7 +596,7 @@ export default function Income() {
                         ) : UI_DASH}
                       </td>
                       <td>
-                        {(item.description || '').slice(0, 40)}
+                        <span className="record-cell-ellipsis">{item.description || UI_DASH}</span>
                         {item.contract_payment_type && (
                           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
                             ({tr(PAYMENT_TYPE_KEYS[item.contract_payment_type] || item.contract_payment_type)})
@@ -583,12 +605,6 @@ export default function Income() {
                       </td>
                       <td>{item.amount_rsd.toLocaleString('sr-RS')}</td>
                       <td>{renderPaymentStatus(item)}</td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" disabled={item.status === 'cancelled'} onClick={() => openEdit(item)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(item)}>
-                          {tr('delete')}
-                        </button>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -597,6 +613,91 @@ export default function Income() {
           </div>
         </div>
       </div>
+
+      {detailModal && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 860 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('income')} {UI_DASH} {detailModal.invoice_number || `#${detailModal.id}`}</h2>
+              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card">
+                  <div className="record-field-grid">
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('valuta')}</span>
+                      <span className="record-field-value">{detailModal.due_date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('amount')}</span>
+                      <span className="record-field-value">{Number(detailModal.amount_rsd || 0).toLocaleString('sr-RS')} RSD</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('status')}</span>
+                      <div>{renderPaymentStatus(detailModal)}</div>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('client')}</span>
+                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('contracts')}</span>
+                      <span className="record-field-value">{detailModal.contract_number || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('project')}</span>
+                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('incomeType')}</span>
+                      <span className="record-field-value">{detailModal.contract_payment_type ? tr(PAYMENT_TYPE_KEYS[detailModal.contract_payment_type] || detailModal.contract_payment_type) : UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('description')}</span>
+                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="record-detail-card">
+                  <div className="record-actions-grid">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => openPaymentFromDetail(detailModal)}
+                    >
+                      {tr('incomePaymentDetails')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={detailModal.status === 'cancelled'}
+                      onClick={() => openEditFromDetail(detailModal)}
+                    >
+                      {tr('edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => handleDeleteFromDetail(detailModal)}
+                    >
+                      {tr('delete')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {paymentModal && (
         <div className="modal-overlay">

@@ -61,6 +61,7 @@ export default function CashRegister() {
   const [expenseModal, setExpenseModal] = useState(null)
   const [adjustmentModal, setAdjustmentModal] = useState(null)
   const [withdrawalModal, setWithdrawalModal] = useState(null)
+  const [detailModal, setDetailModal] = useState(null)
   const [expenseForm, setExpenseForm] = useState({
     date: todayIso(),
     description: '',
@@ -520,6 +521,15 @@ export default function CashRegister() {
     openWithdrawalEdit(entry)
   }
 
+  const openDetail = (entry) => {
+    setDetailModal(entry)
+  }
+
+  const openEditFromDetail = (entry) => {
+    setDetailModal(null)
+    openEditEntry(entry)
+  }
+
   return (
     <>
       <div className="page-header">
@@ -593,23 +603,33 @@ export default function CashRegister() {
                       <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIcon col="inflow" /></th>
                       <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIcon col="outflow" /></th>
                       <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIcon col="balance_after" /></th>
-                      <th style={{ textAlign: 'right' }}>{tr('cashActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
+                        <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
                       </tr>
                     ) : filteredEntries.map((entry) => {
                       const typeLabel = getEntryTypeLabel(entry)
                       const sourceLabel = getEntrySourceLabel(entry)
                       return (
-                        <tr key={entry.id}>
+                        <tr
+                          key={entry.id}
+                          className="record-row"
+                          onClick={() => openDetail(entry)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              openDetail(entry)
+                            }
+                          }}
+                          tabIndex={0}
+                        >
                           <td>{entry.date}</td>
                           <td>{typeLabel}</td>
                           <td>
-                            <div>{entry.description}</div>
+                            <div className="record-cell-ellipsis">{entry.description}</div>
                             {entry.note ? (
                               <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{entry.note}</div>
                             ) : null}
@@ -622,9 +642,6 @@ export default function CashRegister() {
                             {entry.direction === 'out' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(entry.balance_after)} RSD</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button className="btn btn-sm btn-secondary" disabled={saving} onClick={() => openEditEntry(entry)}>{tr('edit')}</button>
-                          </td>
                         </tr>
                       )
                     })}
@@ -635,6 +652,72 @@ export default function CashRegister() {
           </>
         )}
       </div>
+
+      <Modal isOpen={!!detailModal} onClose={() => setDetailModal(null)} title={detailModal ? `${tr('cashEntryType')}: ${getEntryTypeLabel(detailModal)}` : tr('cashEntryType')} maxWidth="860px">
+        {detailModal ? (
+          <div className="record-detail-grid">
+            <div className="record-detail-card">
+              <div className="record-field-grid">
+                <div className="record-field">
+                  <span className="record-field-label">{tr('date')}</span>
+                  <span className="record-field-value">{detailModal.date || UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('cashEntryType')}</span>
+                  <span className="record-field-value">{getEntryTypeLabel(detailModal)}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('cashflowInflow')}</span>
+                  <span className="record-field-value">{detailModal.direction === 'in' ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}` : UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('cashflowOutflow')}</span>
+                  <span className="record-field-value">{detailModal.direction === 'out' ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}` : UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('cashBalanceAfter')}</span>
+                  <span className="record-field-value">{fmtAmount(detailModal.balance_after)} RSD</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('project')}</span>
+                  <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+                </div>
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('description')}</span>
+                  <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+                </div>
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('cashSource')}</span>
+                  <div className="record-field-text">{getEntrySourceLabel(detailModal)}</div>
+                </div>
+                {detailModal.category_id ? (
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('category')}</span>
+                    <span className="record-field-value">{getCategoryLabel(detailModal.category_id)}</span>
+                  </div>
+                ) : null}
+                {detailModal.contract_id ? (
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('contracts')}</span>
+                    <span className="record-field-value">{buildContractLabel(contracts.find((contract) => contract.id === detailModal.contract_id)) || UI_DASH}</span>
+                  </div>
+                ) : null}
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('note')}</span>
+                  <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+                </div>
+              </div>
+            </div>
+            <div className="record-detail-card">
+              <div className="record-actions-grid">
+                <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => openEditFromDetail(detailModal)}>
+                  {tr('edit')}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal isOpen={bankModalOpen} onClose={() => setBankModalOpen(false)} title={tr('cashAddFromBank')}>
         <div className="card" style={{ padding: '1rem' }}>

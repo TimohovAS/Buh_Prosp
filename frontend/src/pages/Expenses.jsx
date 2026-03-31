@@ -62,6 +62,7 @@ export default function Expenses() {
   const [selectedIds, setSelectedIds] = useState([])
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
+  const [detailModal, setDetailModal] = useState(null)
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
@@ -197,6 +198,8 @@ export default function Expenses() {
     }
   }
 
+  const canOpenExpenseSource = (item) => Boolean(item?.bank_reference || item?.source === 'cash' || item?.source === 'obligation')
+
   const toggleSelect = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]))
   }
@@ -251,6 +254,20 @@ export default function Expenses() {
     })
     setPageError('')
     setModal({ type: 'edit', id: item.id })
+  }
+
+  const openDetail = (item) => {
+    setDetailModal(item)
+  }
+
+  const openEditFromDetail = (item) => {
+    setDetailModal(null)
+    openEdit(item)
+  }
+
+  const handleDeleteFromDetail = async (item) => {
+    setDetailModal(null)
+    await handleDelete(item)
   }
 
   const updateProject = (projectId) => {
@@ -599,27 +616,37 @@ export default function Expenses() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIcon col="category" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
                   <th>{tr('paymentRef')}</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
                     <tr
                       key={item.id}
-                      className={(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}
-                      onDoubleClick={() => openExpenseSource(item)}
-                      style={{ cursor: item.bank_reference || item.source === 'cash' || item.source === 'obligation' ? 'pointer' : 'default' }}
+                      className={`record-row ${(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}`.trim()}
+                      onClick={() => openDetail(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(item)
+                        }
+                      }}
+                      tabIndex={0}
                     >
                       <td>
-                        <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelect(item.id)}
+                          onClick={(event) => event.stopPropagation()}
+                        />
                       </td>
                       <td className="date-cell">{item.date}</td>
-                      <td>{(item.description || '').slice(0, 50)}</td>
+                      <td><span className="record-cell-ellipsis">{item.description || UI_DASH}</span></td>
                       <td title={getProjectName(item.project_id) || ''}>
                         {item.project_id ? (
                           <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
@@ -636,18 +663,6 @@ export default function Expenses() {
                       >
                         {item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : UI_DASH)}
                       </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" disabled={item.status === 'reversed' || !!item.reversal_of_id} onClick={() => openEdit(item)}>{tr('edit')}</button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          style={{ marginLeft: '0.5rem' }}
-                          onClick={() => handleDelete(item)}
-                          disabled={item.source === 'cash'}
-                          title={item.source === 'cash' ? tr('cashManagedInRegister') : ''}
-                        >
-                          {tr('delete')}
-                        </button>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -656,6 +671,91 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+
+      {detailModal && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 860 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('expenses')} {UI_DASH} #{detailModal.id}</h2>
+              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card">
+                  <div className="record-field-grid">
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('amount')}</span>
+                      <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')} RSD</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('category')}</span>
+                      <span className="record-field-value">{getCategoryLabel(detailModal)}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('project')}</span>
+                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('contract')}</span>
+                      <span className="record-field-value">{detailModal.contract_id ? getContractLabel(detailModal.contract_id) : UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('description')}</span>
+                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('paymentRef')}</span>
+                      <span className="record-field-value">{detailModal.bank_reference || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('status')}</span>
+                      <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="record-detail-card">
+                  <div className="record-actions-grid">
+                    {canOpenExpenseSource(detailModal) ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => openExpenseSource(detailModal)}
+                      >
+                        {tr('openSource')}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
+                      onClick={() => openEditFromDetail(detailModal)}
+                    >
+                      {tr('edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => handleDeleteFromDetail(detailModal)}
+                      disabled={detailModal.source === 'cash'}
+                      title={detailModal.source === 'cash' ? tr('cashManagedInRegister') : ''}
+                    >
+                      {tr('delete')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">

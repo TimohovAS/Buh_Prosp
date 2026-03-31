@@ -1254,6 +1254,7 @@ Object.assign(t.sr, {
   bankTxOpenDetails: 'Отвори',
   bankTxDetailsTitle: 'Трансакција',
   bankTxBackToDetails: 'Назад на трансакцију',
+  openSource: 'Отвори извор',
 })
 
 Object.assign(t.ru, {
@@ -1289,6 +1290,7 @@ Object.assign(t.ru, {
   bankTxOpenDetails: 'Открыть',
   bankTxDetailsTitle: 'Транзакция',
   bankTxBackToDetails: 'Назад к транзакции',
+  openSource: 'Открыть источник',
 })
 
 let lang = localStorage.getItem('prospel_lang') || 'sr';
