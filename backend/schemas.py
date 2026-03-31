@@ -717,6 +717,11 @@ class DashboardStats(BaseModel):
     recent_incomes: list[DashboardIncomeResponse]
 
 
+class PendingLinkCountsResponse(BaseModel):
+    bank_unmatched_count: int = 0
+    incoming_invoices_pending_count: int = 0
+
+
 # --- Expense ---
 class ExpenseBase(BaseModel):
     date: DateType

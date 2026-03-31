@@ -1,7 +1,23 @@
 // В dev — через proxy Vite (чтобы избежать CORS и Failed to fetch)
 const API_BASE = '/api';
+export const PENDING_LINKS_UPDATE_EVENT = 'pending-links-updated';
 
 let token = null;
+
+function shouldBroadcastPendingLinksUpdate(endpoint, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method === 'GET') return false;
+  return (
+    endpoint.startsWith('/bank-transactions') ||
+    endpoint.startsWith('/incoming-invoices') ||
+    endpoint.startsWith('/bank-import') ||
+    endpoint.startsWith('/efaktura')
+  );
+}
+
+export function broadcastPendingLinksUpdate() {
+  window.dispatchEvent(new CustomEvent(PENDING_LINKS_UPDATE_EVENT));
+}
 
 export function setToken(t) {
   token = t;
@@ -57,12 +73,19 @@ async function request(endpoint, options = {}) {
     throw e;
   }
 
+  if (shouldBroadcastPendingLinksUpdate(endpoint, options)) {
+    broadcastPendingLinksUpdate();
+  }
+
   const contentType = res.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     return res.json();
   }
   return res;
 }
+
+const dashboardApi = () => request('/dashboard');
+dashboardApi.pendingLinks = () => request('/dashboard/pending-links');
 
 export const api = {
   auth: {
@@ -167,7 +190,9 @@ export const api = {
         window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
         throw new Error(msg);
       }
-      return res.json();
+      const payload = await res.json();
+      broadcastPendingLinksUpdate();
+      return payload;
     },
   },
 
@@ -291,7 +316,7 @@ export const api = {
     summary: (year) => request(`/obligations/summary${year ? `?year=${year}` : ''}`),
   },
 
-  dashboard: () => request('/dashboard'),
+  dashboard: dashboardApi,
   bankImport: {
     parse: async (files) => {
       const formData = new FormData();

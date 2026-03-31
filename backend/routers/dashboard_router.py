@@ -13,20 +13,57 @@ from backend.auth import get_current_user_required
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.config import get_settings
 from backend.database import get_db
-from backend.models import BankTransaction, Expense, Income, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
+from backend.models import BankTransaction, BankTransactionIncomeAllocation, Expense, Income, IncomingInvoice, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
-from backend.schemas import DashboardIncomeResponse, DashboardStats, IncomeLimitStatus, UpcomingObligationItem, UpcomingPlannedItem
+from backend.schemas import DashboardIncomeResponse, DashboardStats, IncomeLimitStatus, PendingLinkCountsResponse, UpcomingObligationItem, UpcomingPlannedItem
 from backend.services import get_income_limit_status, get_income_total
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 settings = get_settings()
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
 
 
 def _visible_expense_condition():
     return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
+
+
+@router.get("/pending-links", response_model=PendingLinkCountsResponse)
+async def get_pending_link_counts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    allocation_totals_subquery = (
+        select(
+            BankTransactionIncomeAllocation.bank_transaction_id.label("tx_id"),
+            func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0).label("allocated_amount"),
+        )
+        .group_by(BankTransactionIncomeAllocation.bank_transaction_id)
+        .subquery()
+    )
+
+    unmatched_bank_result = await db.execute(
+        select(func.count(BankTransaction.id)).where(BankTransaction.status == "unmatched")
+    )
+    partial_allocation_result = await db.execute(
+        select(func.count(BankTransaction.id))
+        .outerjoin(allocation_totals_subquery, allocation_totals_subquery.c.tx_id == BankTransaction.id)
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == MATCH_TYPE_INCOME_ALLOCATION,
+            func.coalesce(allocation_totals_subquery.c.allocated_amount, 0) < BankTransaction.amount,
+        )
+    )
+    incoming_invoices_pending_result = await db.execute(
+        select(func.count(IncomingInvoice.id)).where(IncomingInvoice.status.in_(["unpaid", "partial"]))
+    )
+
+    return PendingLinkCountsResponse(
+        bank_unmatched_count=int(unmatched_bank_result.scalar() or 0) + int(partial_allocation_result.scalar() or 0),
+        incoming_invoices_pending_count=int(incoming_invoices_pending_result.scalar() or 0),
+    )
 
 
 @router.get("", response_model=DashboardStats)
@@ -237,5 +274,4 @@ async def get_income_limits(
     selected_year = year or date.today().year
     status = await get_income_limit_status(db, selected_year)
     return IncomeLimitStatus(**status)
-
 

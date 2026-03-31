@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom'
-import { api } from '../api'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { api, PENDING_LINKS_UPDATE_EVENT } from '../api'
 import { tr } from '../i18n'
 import { useEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 import {
@@ -23,8 +24,48 @@ import {
 } from 'lucide-react'
 
 export default function Layout({ lang, toggleLang, children }) {
+  const location = useLocation()
   const brand = useEnterpriseBrand()
   const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
+  const [pendingCounts, setPendingCounts] = useState({
+    bank_unmatched_count: 0,
+    incoming_invoices_pending_count: 0,
+  })
+
+  async function refreshPendingCounts() {
+    try {
+      const data = await api.dashboard.pendingLinks()
+      setPendingCounts({
+        bank_unmatched_count: Number(data?.bank_unmatched_count || 0),
+        incoming_invoices_pending_count: Number(data?.incoming_invoices_pending_count || 0),
+      })
+    } catch {
+    }
+  }
+
+  useEffect(() => {
+    refreshPendingCounts()
+  }, [location.pathname])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      refreshPendingCounts()
+    }
+
+    window.addEventListener(PENDING_LINKS_UPDATE_EVENT, handleRefresh)
+    window.addEventListener('focus', handleRefresh)
+    return () => {
+      window.removeEventListener(PENDING_LINKS_UPDATE_EVENT, handleRefresh)
+      window.removeEventListener('focus', handleRefresh)
+    }
+  }, [])
+
+  const incomingInvoicesBadge = pendingCounts.incoming_invoices_pending_count > 0
+    ? ` (${pendingCounts.incoming_invoices_pending_count})`
+    : ''
+  const bankTransactionsBadge = pendingCounts.bank_unmatched_count > 0
+    ? ` (${pendingCounts.bank_unmatched_count})`
+    : ''
 
   return (
     <div className="app">
@@ -65,7 +106,7 @@ export default function Layout({ lang, toggleLang, children }) {
             <ul className="sidebar-nav">
               <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
               <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
-              <li><NavLink to="/incoming-invoices"><FileInput size={18} /> {tr('incomingInvoices')}</NavLink></li>
+              <li><NavLink to="/incoming-invoices"><FileInput size={18} /> {tr('incomingInvoices')}{incomingInvoicesBadge}</NavLink></li>
               <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
               <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
               <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>
@@ -75,7 +116,7 @@ export default function Layout({ lang, toggleLang, children }) {
           <div className="sidebar-group">
             <div className="sidebar-group-title">Банка</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}</NavLink></li>
+              <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}{bankTransactionsBadge}</NavLink></li>
               <li><NavLink to="/cash"><Wallet size={18} /> {tr('cashRegister')}</NavLink></li>
               <li><NavLink to="/bank-import"><ArrowRightLeft size={18} /> {tr('bankImport')}</NavLink></li>
             </ul>
