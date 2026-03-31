@@ -69,6 +69,7 @@ export default function BankTransactions() {
   const [assignProjectId, setAssignProjectId] = useState('')
 
   const [matchTx, setMatchTx] = useState(null)
+  const [transactionModalMode, setTransactionModalMode] = useState('overview')
   const [suggestions, setSuggestions] = useState([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [matchError, setMatchError] = useState('')
@@ -248,6 +249,42 @@ export default function BankTransactions() {
     note: '',
   })
 
+  const resetTransactionWorkflow = (transaction = null) => {
+    setSuggestLoading(false)
+    setMatchError('')
+    setMatchTab(transaction?.direction === 'out' ? 'link' : (transaction?.status === 'matched' ? 'allocate' : 'link'))
+    setAllInvoiceSearch('')
+    setSuggestions([])
+    setAllocationLines([])
+    setAllocationSaving(false)
+    setExpenseSaving(false)
+    setExpenseForm(buildExpenseForm(transaction))
+  }
+
+  const openTransactionModal = (transaction) => {
+    setMatchTx(transaction)
+    setTransactionModalMode('overview')
+    resetTransactionWorkflow(transaction)
+  }
+
+  const refreshSelectedTransaction = async (txId = matchTx?.id, nextMode = 'overview') => {
+    if (!txId) return null
+    await loadData({ preserveScroll: true })
+    try {
+      const fresh = await api.bankTransactions.get(txId)
+      setMatchTx(fresh)
+      setTransactionModalMode(nextMode)
+      resetTransactionWorkflow(fresh)
+      return fresh
+    } catch (error) {
+      console.error(error)
+      setMatchTx(null)
+      setTransactionModalMode('overview')
+      resetTransactionWorkflow()
+      return null
+    }
+  }
+
   const toggleSelect = (id) => {
     setSelectedIds((previous) => previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id])
   }
@@ -278,7 +315,7 @@ export default function BankTransactions() {
     if (!confirm(tr('bankTxUnmatchBtn'))) return
     try {
       await api.bankTransactions.unmatch(id)
-      await loadData({ preserveScroll: true })
+      await refreshSelectedTransaction(id, 'overview')
     } catch (error) {
       console.error(error)
     }
@@ -291,7 +328,7 @@ export default function BankTransactions() {
     if (!confirm(confirmMessage)) return
     try {
       await api.bankTransactions.classifyOwnerFunds(transaction.id)
-      await loadData({ preserveScroll: true })
+      await refreshSelectedTransaction(transaction.id, 'overview')
     } catch (error) {
       console.error(error)
     }
@@ -357,30 +394,26 @@ export default function BankTransactions() {
     setModalAssign(true)
   }
 
-  const openMatchModal = async (transaction) => {
-    setMatchTx(transaction)
-    setMatchError('')
-    setMatchTab(transaction.direction === 'out' ? 'link' : (transaction.status === 'matched' ? 'allocate' : 'link'))
-    setAllInvoiceSearch('')
-    setSuggestions([])
-    setAllocationLines([])
-    setAllocationSaving(false)
-    setExpenseForm(buildExpenseForm(transaction))
-
+  const openMatchModal = async (transaction, requestedTab = null) => {
+    const activeTransaction = transaction || matchTx
+    if (!activeTransaction) return
+    setMatchTx(activeTransaction)
+    setTransactionModalMode('workflow')
+    resetTransactionWorkflow(activeTransaction)
     setSuggestLoading(true)
     try {
       const referenceDataPromise = loadReferenceData()
-      if (transaction.direction === 'out') {
+      if (activeTransaction.direction === 'out') {
         const [response] = await Promise.all([
-          api.bankTransactions.suggest(transaction.id),
+          api.bankTransactions.suggest(activeTransaction.id),
           referenceDataPromise,
         ])
         setSuggestions(response)
         const hasLinkOptions = response.some((item) => item.type === 'obligation' && item.section === 'suggested')
-        setMatchTab(hasLinkOptions ? 'link' : 'create')
+        setMatchTab(requestedTab || (hasLinkOptions ? 'link' : 'create'))
       } else {
         const [response] = await Promise.all([
-          api.bankTransactions.incomeAllocation(transaction.id),
+          api.bankTransactions.incomeAllocation(activeTransaction.id),
           referenceDataPromise,
         ])
         setSuggestions(response.candidates || [])
@@ -399,6 +432,7 @@ export default function BankTransactions() {
           project_code: item.project_code,
           amount: String(item.allocated_amount ?? ''),
         })))
+        setMatchTab(requestedTab || (activeTransaction.status === 'matched' ? 'allocate' : 'link'))
       }
     } catch (error) {
       setMatchError(error.message)
@@ -409,30 +443,15 @@ export default function BankTransactions() {
 
   const closeMatchModal = () => {
     setMatchTx(null)
-    setSuggestions([])
-    setSuggestLoading(false)
-    setMatchError('')
-    setMatchTab('link')
-    setAllInvoiceSearch('')
-    setAllocationLines([])
-    setAllocationSaving(false)
-    setExpenseSaving(false)
-    setExpenseForm({
-      date: todayIso(),
-      description: '',
-      category_id: '',
-      project_id: '',
-      contract_id: '',
-      note: '',
-    })
+    setTransactionModalMode('overview')
+    resetTransactionWorkflow()
   }
 
   const performMatch = async (targetId, targetType) => {
     if (!matchTx) return
     try {
       await api.bankTransactions.match(matchTx.id, { type: targetType, id: targetId })
-      closeMatchModal()
-      await loadData({ preserveScroll: true })
+      await refreshSelectedTransaction(matchTx.id, 'overview')
     } catch (error) {
       setMatchError(error.message)
     }
@@ -490,8 +509,7 @@ export default function BankTransactions() {
           .filter((line) => line.amount > 0),
       }
       await api.bankTransactions.saveIncomeAllocation(matchTx.id, payload)
-      closeMatchModal()
-      await loadData({ preserveScroll: true })
+      await refreshSelectedTransaction(matchTx.id, 'overview')
     } catch (error) {
       setMatchError(error.message)
     } finally {
@@ -573,8 +591,7 @@ export default function BankTransactions() {
         contract_id: isCashCategorySelected ? null : (expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null),
         note: expenseForm.note?.trim() || null,
       })
-      closeMatchModal()
-      await loadData({ preserveScroll: true })
+      await refreshSelectedTransaction(matchTx.id, 'overview')
     } catch (error) {
       setMatchError(error.message)
     } finally {
@@ -677,6 +694,117 @@ export default function BankTransactions() {
           <div className="bank-match-summary-project">
             {tr('project')}: {getProjectName(transaction.project_id)}
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderTransactionStatusBadge = (transaction) => {
+    if (!transaction) return null
+    if (transaction.status === 'matched') {
+      if (transaction.matched_type === 'income_allocation') {
+        return (
+          <span className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}>
+            {transaction.allocation_remaining > 0 ? tr('bankTxAllocationPartialStatus') : tr('bankTxAllocationFullStatus')}
+            {transaction.allocation_count ? ` (${transaction.allocation_count})` : ''}
+            {transaction.allocation_remaining > 0 ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}` : ''}
+          </span>
+        )
+      }
+      if (transaction.matched_type === 'owner_funds') {
+        return <span className="badge badge-success">{getOwnerFundsStatusLabel(transaction)}</span>
+      }
+      return <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
+    }
+    return <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
+  }
+
+  const renderTransactionDetails = (transaction) => {
+    if (!transaction) return null
+
+    const actions = []
+    if (transaction.status !== 'matched') {
+      if (transaction.direction === 'in') {
+        actions.push(
+          { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
+          { key: 'allocate', label: tr('bankTxAllocateMode'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'allocate') },
+          { key: 'owner-funds-in', label: tr('bankTxOwnerFundsMarkIn'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
+        )
+      } else {
+        actions.push(
+          { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
+          { key: 'create', label: tr('bankTxCreateExpense'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'create') },
+          { key: 'owner-funds-out', label: tr('bankTxOwnerFundsMarkOut'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
+        )
+      }
+    } else {
+      if (isEditableIncomeTransaction(transaction)) {
+        actions.push({ key: 'edit', label: tr('edit'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'allocate') })
+      }
+      if (canConvertExpenseToOwnerFunds(transaction)) {
+        actions.push({ key: 'convert-owner-funds', label: tr('bankTxOwnerFundsConvert'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) })
+      }
+      if (isOwnerFundsTransaction(transaction)) {
+        actions.push({ key: 'document', label: tr('bankTxOwnerFundsDocument'), className: 'btn btn-secondary', onClick: () => handleDownloadOwnerFundsDocument(transaction.id) })
+      }
+      actions.push({ key: 'unmatch', label: tr('bankTxUnmatchBtn'), className: 'btn btn-danger', onClick: () => handleUnmatch(transaction.id) })
+    }
+
+    return (
+      <div className="bank-transaction-details">
+        <div className="bank-transaction-detail-grid">
+          <section className="card bank-transaction-detail-card">
+            <div className="bank-transaction-field-grid">
+              <div className="bank-transaction-field">
+                <span className="bank-transaction-field-label">{tr('status')}</span>
+                <div>{renderTransactionStatusBadge(transaction)}</div>
+              </div>
+              <div className="bank-transaction-field">
+                <span className="bank-transaction-field-label">{tr('amount')}</span>
+                <strong className={`bank-transaction-field-value ${transaction.direction === 'in' ? 'positive' : 'negative'}`}>
+                  {transaction.direction === 'in' ? '+' : '-'}{formatMoney(transaction.amount)} {transaction.currency || 'RSD'}
+                </strong>
+              </div>
+              <div className="bank-transaction-field">
+                <span className="bank-transaction-field-label">{tr('date')}</span>
+                <span className="bank-transaction-field-value">{transaction.date || UI_DASH}</span>
+              </div>
+              <div className="bank-transaction-field">
+                <span className="bank-transaction-field-label">{tr('project')}</span>
+                <span className="bank-transaction-field-value">{getProjectName(transaction.project_id)}</span>
+              </div>
+              <div className="bank-transaction-field full">
+                <span className="bank-transaction-field-label">{tr('bankTxCounterparty')}</span>
+                <span className="bank-transaction-field-value">{transaction.counterparty_name || UI_DASH}</span>
+              </div>
+              <div className="bank-transaction-field full">
+                <span className="bank-transaction-field-label">{tr('bankTxPurpose')}</span>
+                <div className="bank-transaction-field-text">{transaction.purpose || UI_DASH}</div>
+              </div>
+              <div className="bank-transaction-field full">
+                <span className="bank-transaction-field-label">{tr('bankTxReference')}</span>
+                <span className="bank-transaction-field-value">{transaction.bank_reference || UI_DASH}</span>
+              </div>
+              {transaction.status === 'matched' ? (
+                <div className="bank-transaction-field full">
+                  <span className="bank-transaction-field-label">{tr('bankTxMatched')}</span>
+                  <span className="bank-transaction-field-value">
+                    {transaction.matched_type === 'owner_funds' ? getOwnerFundsStatusLabel(transaction) : getMatchedTypeLabel(transaction.matched_type)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="card bank-transaction-detail-card">
+            <div className="bank-transaction-action-grid">
+              {actions.map((action) => (
+                <button key={action.key} type="button" className={action.className} onClick={action.onClick}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     )
@@ -1035,6 +1163,7 @@ export default function BankTransactions() {
       <div className="page-header">
         <div className="page-header-main">
           <h1 className="page-title">{tr('bankTransactions')}</h1>
+          <p className="page-subtitle">{tr('bankTxOpenHint')}</p>
         </div>
         <div className="page-header-actions">
           <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
@@ -1105,10 +1234,15 @@ export default function BankTransactions() {
                       <td style={{ whiteSpace: 'nowrap' }}>{transaction.date}</td>
                       <td>{transaction.counterparty_name || UI_DASH}</td>
                       <td style={{ maxWidth: 320 }}>
-                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={transaction.purpose || ''}>
-                          {transaction.purpose || UI_DASH}
-                        </div>
-                        {transaction.bank_reference ? <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Ref: {transaction.bank_reference}</div> : null}
+                        <button
+                          type="button"
+                          className="bank-transaction-open"
+                          onClick={() => openTransactionModal(transaction)}
+                          title={tr('bankTxOpenDetails')}
+                        >
+                          <span className="bank-transaction-open-title">{transaction.purpose || UI_DASH}</span>
+                          {transaction.bank_reference ? <span className="bank-transaction-open-meta">Ref: {transaction.bank_reference}</span> : null}
+                        </button>
                       </td>
                       <td title={getProjectName(transaction.project_id)}>{getProjectName(transaction.project_id)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: transaction.direction === 'in' ? 'var(--color-success)' : 'var(--color-text)' }}>
@@ -1132,38 +1266,9 @@ export default function BankTransactions() {
                         )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        {transaction.status !== 'matched' && (
-                          <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-sm btn-primary" onClick={() => openMatchModal(transaction)}>
-                              {transaction.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchBtn')}
-                            </button>
-                            <button className="btn btn-sm btn-secondary" onClick={() => handleClassifyOwnerFunds(transaction)}>
-                              {transaction.direction === 'in' ? tr('bankTxOwnerFundsMarkIn') : tr('bankTxOwnerFundsMarkOut')}
-                            </button>
-                          </div>
-                        )}
-                        {transaction.status === 'matched' && (
-                          <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                            {isEditableIncomeTransaction(transaction) ? (
-                              <button className="btn btn-sm btn-secondary" onClick={() => openMatchModal(transaction)}>
-                                {tr('edit')}
-                              </button>
-                            ) : null}
-                            {canConvertExpenseToOwnerFunds(transaction) ? (
-                              <button className="btn btn-sm btn-secondary" onClick={() => handleClassifyOwnerFunds(transaction)}>
-                                {tr('bankTxOwnerFundsConvert')}
-                              </button>
-                            ) : null}
-                            {isOwnerFundsTransaction(transaction) ? (
-                              <button className="btn btn-sm btn-secondary" onClick={() => handleDownloadOwnerFundsDocument(transaction.id)}>
-                                {tr('bankTxOwnerFundsDocument')}
-                              </button>
-                            ) : null}
-                            <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(transaction.id)}>
-                              {tr('bankTxUnmatchBtn')}
-                            </button>
-                          </div>
-                        )}
+                        <button className="btn btn-sm btn-secondary" onClick={() => openTransactionModal(transaction)}>
+                          {tr('bankTxOpenDetails')}
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -1177,7 +1282,7 @@ export default function BankTransactions() {
         <Modal
           isOpen={!!matchTx}
           onClose={closeMatchModal}
-          title={matchTx?.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchTitle')}
+          title={transactionModalMode === 'workflow' ? tr('bankTxMatchTitle') : tr('bankTxDetailsTitle')}
           className={matchTx ? 'bank-match-modal' : ''}
           maxWidth={matchTx ? '980px' : '700px'}
         >
@@ -1185,12 +1290,23 @@ export default function BankTransactions() {
           <div className="bank-match-layout">
             {renderMatchSummary(matchTx)}
 
-            {suggestLoading ? (
-              <p>{tr('loading')}</p>
-            ) : matchTx.direction === 'out' ? (
-              renderOutgoingModalContent()
+            {transactionModalMode === 'overview' ? (
+              renderTransactionDetails(matchTx)
             ) : (
-              renderIncomingModalContent()
+              <>
+                <div className="bank-transaction-workflow-toolbar">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTransactionModalMode('overview')}>
+                    {tr('bankTxBackToDetails')}
+                  </button>
+                </div>
+                {suggestLoading ? (
+                  <p>{tr('loading')}</p>
+                ) : matchTx.direction === 'out' ? (
+                  renderOutgoingModalContent()
+                ) : (
+                  renderIncomingModalContent()
+                )}
+              </>
             )}
 
             {matchError ? <div style={{ color: 'var(--color-danger)' }}>{matchError}</div> : null}

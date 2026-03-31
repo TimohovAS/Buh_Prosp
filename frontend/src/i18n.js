@@ -1250,6 +1250,10 @@ Object.assign(t.sr, {
   bankTxAllocationPartialStatus: 'Делимично распоређено',
   bankTxAllocationFullStatus: 'Распоређено',
   bankTxAllocationRemainingShort: 'остатак',
+  bankTxOpenHint: 'Кликните на операцију да отворите својства и све радње.',
+  bankTxOpenDetails: 'Отвори',
+  bankTxDetailsTitle: 'Трансакција',
+  bankTxBackToDetails: 'Назад на трансакцију',
 })
 
 Object.assign(t.ru, {
@@ -1281,6 +1285,10 @@ Object.assign(t.ru, {
   bankTxAllocationPartialStatus: 'Частично распределено',
   bankTxAllocationFullStatus: 'Распределено',
   bankTxAllocationRemainingShort: 'остаток',
+  bankTxOpenHint: 'Нажмите на операцию, чтобы открыть свойства и все действия.',
+  bankTxOpenDetails: 'Открыть',
+  bankTxDetailsTitle: 'Транзакция',
+  bankTxBackToDetails: 'Назад к транзакции',
 })
 
 let lang = localStorage.getItem('prospel_lang') || 'sr';
