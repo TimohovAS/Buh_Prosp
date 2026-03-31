@@ -1154,19 +1154,30 @@ tr:hover td {
   margin-top: 0.35rem;
 }
 
+.bank-transaction-row {
+  cursor: pointer;
+}
+
+.bank-transaction-row:focus-visible {
+  outline: none;
+}
+
+.bank-transaction-row:hover td,
+.bank-transaction-row:focus-visible td {
+  background: rgba(59, 130, 246, 0.06);
+}
+
 .bank-transaction-open {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
   text-align: left;
   color: inherit;
 }
 
-.bank-transaction-open:hover .bank-transaction-open-title {
+.bank-transaction-row:hover .bank-transaction-open-title,
+.bank-transaction-row:focus-visible .bank-transaction-open-title {
   color: var(--color-accent);
 }
 

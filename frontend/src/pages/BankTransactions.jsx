@@ -1217,32 +1217,42 @@ export default function BankTransactions() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
                   <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIcon col="status" /></th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={7}>{tr('loading')}</td></tr>
                 ) : displayed.length === 0 ? (
-                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   displayed.map((transaction) => (
-                    <tr key={transaction.id}>
+                    <tr
+                      key={transaction.id}
+                      className="bank-transaction-row"
+                      onClick={() => openTransactionModal(transaction)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openTransactionModal(transaction)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>
-                        <input type="checkbox" checked={selectedIds.includes(transaction.id)} onChange={() => toggleSelect(transaction.id)} />
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(transaction.id)}
+                          onChange={() => toggleSelect(transaction.id)}
+                          onClick={(event) => event.stopPropagation()}
+                        />
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{transaction.date}</td>
                       <td>{transaction.counterparty_name || UI_DASH}</td>
                       <td style={{ maxWidth: 320 }}>
-                        <button
-                          type="button"
-                          className="bank-transaction-open"
-                          onClick={() => openTransactionModal(transaction)}
-                          title={tr('bankTxOpenDetails')}
-                        >
+                        <div className="bank-transaction-open">
                           <span className="bank-transaction-open-title">{transaction.purpose || UI_DASH}</span>
                           {transaction.bank_reference ? <span className="bank-transaction-open-meta">Ref: {transaction.bank_reference}</span> : null}
-                        </button>
+                        </div>
                       </td>
                       <td title={getProjectName(transaction.project_id)}>{getProjectName(transaction.project_id)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: transaction.direction === 'in' ? 'var(--color-success)' : 'var(--color-text)' }}>
@@ -1264,11 +1274,6 @@ export default function BankTransactions() {
                         ) : (
                           <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
                         )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openTransactionModal(transaction)}>
-                          {tr('bankTxOpenDetails')}
-                        </button>
                       </td>
                     </tr>
                   ))
