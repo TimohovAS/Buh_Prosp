@@ -351,7 +351,7 @@ export default function Income() {
     }
   }
 
-  const renderPaymentStatus = (item) => {
+  const renderPaymentStatus = (item, compact = false) => {
     let badge = null
     if (item.status === 'cancelled') {
       return <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fda4af' }}>{tr('cancelled')}</span>
@@ -359,6 +359,16 @@ export default function Income() {
     if (item.status === 'paid') {
       badge = <span className="badge badge-success" title={`${tr('paid')}: ${item.paid_date || UI_DASH}`}>{tr('paid')}</span>
     } else if (item.status === 'partial') {
+      if (compact) {
+        return (
+          <span
+            className="badge badge-info"
+            title={`${tr('partial')}: ${(item.paid_amount || 0).toLocaleString('sr-RS')} / ${item.amount_rsd.toLocaleString('sr-RS')} RSD`}
+          >
+            {tr('partial')}
+          </span>
+        )
+      }
       badge = (
         <span
           className="badge"
@@ -535,7 +545,7 @@ export default function Income() {
         )}
         <div className="card">
           <div className="table-wrap">
-            <table>
+            <table className="income-list-table">
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
@@ -546,21 +556,17 @@ export default function Income() {
                     />
                   </th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIcon col="due_date" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIcon col="invoice_number" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
-                  <th>{tr('contracts')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
                   <th>{tr('description')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIcon col="amount_rsd" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('is_paid')}>{tr('status')} <SortIcon col="is_paid" /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIcon col="amount_rsd" /></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={6}>{tr('loading')}</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={10} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
                     <tr
@@ -583,28 +589,42 @@ export default function Income() {
                           onClick={(event) => event.stopPropagation()}
                         />
                       </td>
-                      <td className="date-cell">{item.date}</td>
-                      <td className="date-cell">{item.due_date || UI_DASH}</td>
-                      <td><span className="record-cell-ellipsis">{item.invoice_number || UI_DASH}</span></td>
-                      <td>{item.client_name || '-'}</td>
-                      <td>{item.contract_number || '-'}</td>
-                      <td title={projects.find((project) => project.id === item.project_id)?.name || ''}>
-                        {item.project_id ? (
-                          <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
-                            {projects.find((project) => project.id === item.project_id)?.name || UI_DASH}
-                          </span>
-                        ) : UI_DASH}
+                      <td className="income-list-date-cell">
+                        <div className="income-date-primary">{item.date || UI_DASH}</div>
+                        <div className="income-date-secondary">
+                          {item.due_date ? `${tr('valuta')}: ${item.due_date}` : `${tr('valuta')}: ${UI_DASH}`}
+                        </div>
                       </td>
-                      <td>
-                        <span className="record-cell-ellipsis">{item.description || UI_DASH}</span>
-                        {item.contract_payment_type && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                            ({tr(PAYMENT_TYPE_KEYS[item.contract_payment_type] || item.contract_payment_type)})
-                          </span>
-                        )}
+                      <td className="income-list-document-cell">
+                        <div className="income-document-number">{item.invoice_number || UI_DASH}</div>
+                        <div className="income-document-meta">
+                          {item.status === 'paid' && item.paid_date ? `${tr('paid')}: ${item.paid_date}` : `${tr('status')}: ${tr(item.status || 'unpaid')}`}
+                        </div>
                       </td>
-                      <td>{item.amount_rsd.toLocaleString('sr-RS')}</td>
-                      <td>{renderPaymentStatus(item)}</td>
+                      <td className="income-list-party-cell">
+                        <div className="income-party-name" title={item.client_name || UI_DASH}>{item.client_name || UI_DASH}</div>
+                        <div className="income-meta-chips">
+                          <span className="income-meta-chip" title={getProjectName(item.project_id) || UI_DASH}>{getProjectName(item.project_id) || UI_DASH}</span>
+                          {item.contract_number ? <span className="income-meta-chip" title={item.contract_number}>{item.contract_number}</span> : null}
+                          {item.contract_payment_type ? (
+                            <span className="income-meta-chip income-meta-chip-accent">
+                              {tr(PAYMENT_TYPE_KEYS[item.contract_payment_type] || item.contract_payment_type)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="income-list-description-cell">
+                        <div className="income-description-text" title={item.description || UI_DASH}>{item.description || UI_DASH}</div>
+                      </td>
+                      <td className="income-list-amount-cell">
+                        <div className="income-amount-value">{item.amount_rsd.toLocaleString('sr-RS')} RSD</div>
+                        <div className="income-amount-status">{renderPaymentStatus(item, true)}</div>
+                        {item.status === 'partial' ? (
+                          <div className="income-amount-meta">
+                            +{(item.paid_amount || 0).toLocaleString('sr-RS')} / {item.amount_rsd.toLocaleString('sr-RS')}
+                          </div>
+                        ) : null}
+                      </td>
                     </tr>
                   ))
                 )}
