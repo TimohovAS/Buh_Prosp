@@ -355,6 +355,7 @@ export const api = {
     years: () => request('/bank-transactions/years'),
     update: (id, payload) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     match: (id, payload) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
+    classifyOwnerFunds: (id) => request(`/bank-transactions/${id}/owner-funds`, { method: 'POST' }),
     incomeAllocation: (id) => request(`/bank-transactions/${id}/income-allocation`),
     saveIncomeAllocation: (id, payload) => request(`/bank-transactions/${id}/income-allocation`, { method: 'POST', body: JSON.stringify(payload) }),
     createExpense: (id, payload) => request(`/bank-transactions/${id}/create-expense`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -449,6 +450,27 @@ export const api = {
       const a = document.createElement('a');
       a.href = u;
       a.download = `kpo_${year}${month ? `_${month}` : ''}.pdf`;
+      a.click();
+      URL.revokeObjectURL(u);
+    },
+    async downloadOwnerFundsPdf(txId) {
+      const res = await fetch(`${API_BASE}/reports/bank-transactions/${txId}/owner-funds/pdf`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.detail || 'Ошибка загрузки';
+        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename=([^;]+)/i);
+      const fileName = match ? match[1].replace(/"/g, '') : `owner_funds_${txId}.pdf`;
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = fileName;
       a.click();
       URL.revokeObjectURL(u);
     },

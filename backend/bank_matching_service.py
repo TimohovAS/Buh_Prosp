@@ -18,12 +18,14 @@ from backend.models import (
     IncomingInvoice,
     IncomingInvoiceSettlement,
     MonthlyObligation,
+    PlannedExpensePayment,
     Project,
 )
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
 from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reconcile_incoming_invoice_status, reopen_expense_for_unmatch
 
 MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
+MATCH_TYPE_OWNER_FUNDS = "owner_funds"
 
 
 def _safe_paid_amount(income: Income):
@@ -878,6 +880,87 @@ async def _find_incoming_invoice_by_expense(db: AsyncSession, expense_id: int) -
     return result.scalar_one_or_none()
 
 
+async def _ensure_expense_can_reclassify_to_owner_funds(
+    db: AsyncSession,
+    tx: BankTransaction,
+    expense: Expense,
+) -> None:
+    if is_cash_transfer_expense(expense):
+        raise ValueError("Cash transfer operations must stay in bank/cash workflow")
+    if getattr(expense, "source", None) == "cash":
+        raise ValueError("Cash expenses must be managed from the cash register")
+    if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
+        raise ValueError("Reversed expenses cannot be converted to owner funds")
+
+    invoice = await _find_incoming_invoice_by_expense(db, expense.id)
+    if invoice:
+        raise ValueError("This expense is linked to an incoming invoice")
+
+    obligation_result = await db.execute(
+        select(MonthlyObligation.id).where(MonthlyObligation.expense_id == expense.id).limit(1)
+    )
+    if obligation_result.scalar_one_or_none():
+        raise ValueError("This expense is linked to a tax/obligation payment")
+
+    cash_entry_result = await db.execute(
+        select(func.count()).select_from(CashEntry).where(CashEntry.expense_id == expense.id)
+    )
+    cash_entry_count = int(cash_entry_result.scalar() or 0)
+    if cash_entry_count > 0:
+        raise ValueError("This expense is linked to cash register entries")
+
+    planned_payment_result = await db.execute(
+        select(func.count()).select_from(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id)
+    )
+    if int(planned_payment_result.scalar() or 0) > 0:
+        raise ValueError("This expense is linked to recurring expense payments")
+
+    recurring_payment_result = await db.execute(
+        select(func.count()).select_from(BankTransaction).where(
+            BankTransaction.matched_type == "expense",
+            BankTransaction.matched_id == expense.id,
+            BankTransaction.id != tx.id,
+        )
+    )
+    if int(recurring_payment_result.scalar() or 0) > 0:
+        raise ValueError("This expense is linked to multiple bank transactions")
+
+
+async def classify_transaction_as_owner_funds(
+    db: AsyncSession,
+    tx_id: int,
+):
+    response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    tx = response.scalar_one_or_none()
+    if not tx:
+        raise ValueError("BankTransaction not found")
+
+    if tx.status == "matched":
+        if tx.matched_type == MATCH_TYPE_OWNER_FUNDS:
+            tx.project_id = None
+            await db.flush()
+            return tx
+        if tx.matched_type == "expense" and tx.matched_id:
+            expense_response = await db.execute(select(Expense).where(Expense.id == tx.matched_id))
+            expense = expense_response.scalar_one_or_none()
+            if not expense:
+                raise ValueError("Expense not found")
+            await _ensure_expense_can_reclassify_to_owner_funds(db, tx, expense)
+            await db.delete(expense)
+            await db.flush()
+        else:
+            raise ValueError("Only unmatched transactions or simple expense matches can be classified as owner funds")
+    elif tx.status not in {"unmatched", "ignored"}:
+        raise ValueError("Transaction cannot be classified as owner funds in the current state")
+
+    tx.status = "matched"
+    tx.matched_type = MATCH_TYPE_OWNER_FUNDS
+    tx.matched_id = None
+    tx.project_id = None
+    await db.flush()
+    return tx
+
+
 async def _sync_incoming_invoice_on_match(db: AsyncSession, expense: Expense, tx: BankTransaction) -> None:
     if getattr(expense, "source", None) != "incoming_invoice":
         return
@@ -1013,7 +1096,9 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
 
     if not tx:
         raise ValueError("BankTransaction not found")
-    if tx.status != "matched" or not tx.matched_type or (tx.matched_type != MATCH_TYPE_INCOME_ALLOCATION and not tx.matched_id):
+    if tx.status != "matched" or not tx.matched_type or (
+        tx.matched_type not in {MATCH_TYPE_INCOME_ALLOCATION, MATCH_TYPE_OWNER_FUNDS} and not tx.matched_id
+    ):
         raise ValueError("Transaction is not matched")
 
     affected_income_ids: set[int] = set()
@@ -1039,6 +1124,9 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
                 return tx
             await _sync_incoming_invoice_on_unmatch(db, expense, tx)
             reopen_expense_for_unmatch(expense)
+
+    elif tx.matched_type == MATCH_TYPE_OWNER_FUNDS:
+        pass
 
     elif tx.matched_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))

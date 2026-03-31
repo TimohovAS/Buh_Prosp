@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import (
     MATCH_TYPE_INCOME_ALLOCATION,
+    MATCH_TYPE_OWNER_FUNDS,
+    classify_transaction_as_owner_funds,
     get_bank_transaction_allocation_stats,
     get_income_allocation_editor_state,
     match_transaction,
@@ -435,6 +437,21 @@ async def save_income_allocation_state(
         raise HTTPException(400, str(exc))
 
 
+@router.post("/{tx_id}/owner-funds", response_model=BankTransactionResponse)
+async def classify_as_owner_funds(
+    tx_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    try:
+        transaction = await classify_transaction_as_owner_funds(db, tx_id)
+        await db.commit()
+        await db.refresh(transaction)
+        return await _serialize_single_bank_transaction(db, transaction)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
 @router.post("/{tx_id}/match", response_model=BankTransactionResponse)
 async def apply_match(
     tx_id: int,
@@ -621,6 +638,8 @@ async def bulk_assign_project(
             income = income_result.scalar_one_or_none()
             if income:
                 await _sync_income_project(db, income, project_id)
+        elif item.matched_type == MATCH_TYPE_OWNER_FUNDS:
+            item.project_id = None
         else:
             item.project_id = project_id
 

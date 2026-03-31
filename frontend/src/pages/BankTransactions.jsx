@@ -284,10 +284,32 @@ export default function BankTransactions() {
     }
   }
 
+  const handleClassifyOwnerFunds = async (transaction) => {
+    const confirmMessage = transaction?.status === 'matched' && transaction?.matched_type === 'expense'
+      ? tr('bankTxOwnerFundsConvertConfirm')
+      : (transaction?.direction === 'in' ? tr('bankTxOwnerFundsConfirmIn') : tr('bankTxOwnerFundsConfirmOut'))
+    if (!confirm(confirmMessage)) return
+    try {
+      await api.bankTransactions.classifyOwnerFunds(transaction.id)
+      await loadData({ preserveScroll: true })
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const handleDownloadOwnerFundsDocument = async (transactionId) => {
+    try {
+      await api.reports.downloadOwnerFundsPdf(transactionId)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   const getMatchedTypeLabel = (type) => {
     if (type === 'cash') return tr('bankTxMatchedCash')
     if (type === 'income') return tr('income')
     if (type === 'income_allocation') return tr('bankTxDistributedLabel')
+    if (type === 'owner_funds') return tr('bankTxOwnerFundsLabel')
     if (type === 'expense') return tr('expenses')
     if (type === 'obligation') return tr('payments')
     return type || ''
@@ -297,6 +319,18 @@ export default function BankTransactions() {
     transaction?.direction === 'in' &&
     transaction?.status === 'matched' &&
     ['income', 'income_allocation'].includes(transaction?.matched_type)
+  )
+
+  const isOwnerFundsTransaction = (transaction) => (
+    transaction?.status === 'matched' && transaction?.matched_type === 'owner_funds'
+  )
+
+  const canConvertExpenseToOwnerFunds = (transaction) => (
+    transaction?.status === 'matched' && transaction?.matched_type === 'expense'
+  )
+
+  const getOwnerFundsStatusLabel = (transaction) => (
+    transaction?.direction === 'in' ? tr('bankTxOwnerFundsInStatus') : tr('bankTxOwnerFundsOutStatus')
   )
 
   const getAllocationTotals = (lines = allocationLines) => {
@@ -1088,6 +1122,8 @@ export default function BankTransactions() {
                               {transaction.allocation_count ? ` (${transaction.allocation_count})` : ''}
                               {transaction.allocation_remaining > 0 ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}` : ''}
                             </span>
+                          ) : transaction.matched_type === 'owner_funds' ? (
+                            <span className="badge badge-success">{getOwnerFundsStatusLabel(transaction)}</span>
                           ) : (
                             <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
                           )
@@ -1101,6 +1137,9 @@ export default function BankTransactions() {
                             <button className="btn btn-sm btn-primary" onClick={() => openMatchModal(transaction)}>
                               {transaction.direction === 'out' ? tr('bankTxCreateExpense') : tr('bankTxMatchBtn')}
                             </button>
+                            <button className="btn btn-sm btn-secondary" onClick={() => handleClassifyOwnerFunds(transaction)}>
+                              {transaction.direction === 'in' ? tr('bankTxOwnerFundsMarkIn') : tr('bankTxOwnerFundsMarkOut')}
+                            </button>
                           </div>
                         )}
                         {transaction.status === 'matched' && (
@@ -1108,6 +1147,16 @@ export default function BankTransactions() {
                             {isEditableIncomeTransaction(transaction) ? (
                               <button className="btn btn-sm btn-secondary" onClick={() => openMatchModal(transaction)}>
                                 {tr('edit')}
+                              </button>
+                            ) : null}
+                            {canConvertExpenseToOwnerFunds(transaction) ? (
+                              <button className="btn btn-sm btn-secondary" onClick={() => handleClassifyOwnerFunds(transaction)}>
+                                {tr('bankTxOwnerFundsConvert')}
+                              </button>
+                            ) : null}
+                            {isOwnerFundsTransaction(transaction) ? (
+                              <button className="btn btn-sm btn-secondary" onClick={() => handleDownloadOwnerFundsDocument(transaction.id)}>
+                                {tr('bankTxOwnerFundsDocument')}
                               </button>
                             ) : null}
                             <button className="btn btn-sm btn-danger" onClick={() => handleUnmatch(transaction.id)}>
