@@ -189,12 +189,16 @@ export default function Expenses() {
     }
 
     if (reference) {
-      const params = new URLSearchParams()
-      if (expenseYear) params.set('year', String(expenseYear))
-      if (expenseMonth) params.set('month', expenseMonth)
-      params.set('direction', 'out')
-      params.set('search', reference)
-      navigate(`/bank?${params.toString()}`)
+      setDetailModal(null)
+      navigate('/bank', {
+        state: {
+          openBankReference: reference,
+          openBankYear: expenseYear ? String(expenseYear) : '',
+          openBankMonth: expenseMonth,
+          openBankDirection: 'out',
+          openBankStatus: 'all',
+        },
+      })
     }
   }
 

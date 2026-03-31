@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -42,6 +42,7 @@ function parseMoneyInput(value) {
 
 export default function BankTransactions() {
   const location = useLocation()
+  const navigate = useNavigate()
   const pageBodyRef = useRef(null)
   const pendingScrollTopRef = useRef(null)
   const isActivePage = location.pathname === '/bank'
@@ -60,6 +61,7 @@ export default function BankTransactions() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [pendingBankReferenceOpen, setPendingBankReferenceOpen] = useState(null)
 
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
@@ -194,6 +196,52 @@ export default function BankTransactions() {
 
     loadData()
   }, [statusFilter, directionFilter, year, month, search, isActivePage, location.search])
+
+  useEffect(() => {
+    if (!isActivePage) return
+
+    const deepLink = location.state && typeof location.state === 'object'
+      ? {
+          bankReference: location.state.openBankReference || '',
+          year: location.state.openBankYear ? Number(location.state.openBankYear) : '',
+          month: location.state.openBankMonth || '',
+          direction: location.state.openBankDirection || 'all',
+          status: location.state.openBankStatus || 'all',
+        }
+      : null
+
+    if (!deepLink?.bankReference) return
+
+    setPendingBankReferenceOpen(deepLink)
+
+    if (year !== deepLink.year) setYear(deepLink.year)
+    if (month !== deepLink.month) setMonth(deepLink.month)
+    if (directionFilter !== deepLink.direction) setDirectionFilter(deepLink.direction)
+    if (statusFilter !== deepLink.status) setStatusFilter(deepLink.status)
+    if (search !== '') setSearch('')
+
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [directionFilter, isActivePage, location.pathname, location.search, location.state, month, navigate, search, statusFilter, year])
+
+  useEffect(() => {
+    if (!isActivePage || loading || !pendingBankReferenceOpen?.bankReference) return
+
+    const filtersAligned = (
+      year === pendingBankReferenceOpen.year &&
+      month === pendingBankReferenceOpen.month &&
+      directionFilter === pendingBankReferenceOpen.direction &&
+      statusFilter === pendingBankReferenceOpen.status &&
+      search === ''
+    )
+    const matchedTransaction = data.find((transaction) => transaction.bank_reference === pendingBankReferenceOpen.bankReference)
+    if (!matchedTransaction) {
+      if (filtersAligned) setPendingBankReferenceOpen(null)
+      return
+    }
+
+    openTransactionModal(matchedTransaction)
+    setPendingBankReferenceOpen(null)
+  }, [data, directionFilter, isActivePage, loading, month, pendingBankReferenceOpen, search, statusFilter, year])
 
   useEffect(() => {
     if (availableYears.length === 0) return
