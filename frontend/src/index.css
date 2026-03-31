@@ -942,9 +942,28 @@ tr.row-reversal {
   text-overflow: ellipsis;
 }
 
+.income-list-table {
+  table-layout: fixed;
+}
+
 .income-list-table th:first-child,
 .income-list-table td:first-child {
   width: 44px;
+}
+
+.income-list-table th:nth-child(2),
+.income-list-table td:nth-child(2) {
+  width: 132px;
+}
+
+.income-list-table th:nth-child(3),
+.income-list-table td:nth-child(3) {
+  width: 140px;
+}
+
+.income-list-table th:nth-child(4),
+.income-list-table td:nth-child(4) {
+  width: 220px;
 }
 
 .income-list-date-cell,
@@ -969,6 +988,10 @@ tr.row-reversal {
   margin-top: 0.3rem;
   font-size: 0.78rem;
   color: var(--color-text-muted);
+}
+
+.income-date-secondary {
+  white-space: nowrap;
 }
 
 .income-document-number {
