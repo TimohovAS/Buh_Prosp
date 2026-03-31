@@ -816,6 +816,61 @@ async def save_income_allocation(
     return tx
 
 
+async def detach_income_transaction_link(
+    db: AsyncSession,
+    tx_id: int,
+    income_id: int,
+    *,
+    current_user_id: int | None = None,
+) -> None:
+    response = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+    tx = response.scalar_one_or_none()
+    if not tx or tx.status != "matched":
+        return
+
+    normalized_income_id = int(income_id)
+
+    if tx.matched_type == "income":
+        if int(tx.matched_id or 0) == normalized_income_id:
+            await unmatch_transaction(db, tx_id, current_user_id=current_user_id)
+        return
+
+    if tx.matched_type != MATCH_TYPE_INCOME_ALLOCATION:
+        return
+
+    existing_allocations = await _get_transaction_income_allocations(db, tx.id)
+    target_allocations = [item for item in existing_allocations if int(item.income_id) == normalized_income_id]
+    if not target_allocations:
+        return
+
+    if len(existing_allocations) <= 1:
+        await unmatch_transaction(db, tx_id, current_user_id=current_user_id)
+        return
+
+    affected_income_ids = {int(item.income_id) for item in existing_allocations}
+    remaining_allocations = [item for item in existing_allocations if int(item.income_id) != normalized_income_id]
+
+    for allocation in target_allocations:
+        await db.delete(allocation)
+    await db.flush()
+
+    if remaining_allocations:
+        tx.status = "matched"
+        tx.matched_type = MATCH_TYPE_INCOME_ALLOCATION
+        tx.matched_id = None
+        project_values = {item.income.project_id for item in remaining_allocations if item.income}
+        tx.project_id = next(iter(project_values)) if len(project_values) == 1 else None
+    else:
+        tx.status = "unmatched"
+        tx.matched_type = None
+        tx.matched_id = None
+        if tx.direction == "in":
+            tx.project_id = None
+
+    await db.flush()
+    await reconcile_income_payment_links(db, affected_income_ids)
+
+
 async def _find_incoming_invoice_by_expense(db: AsyncSession, expense_id: int) -> IncomingInvoice | None:
     result = await db.execute(
         select(IncomingInvoice).where(IncomingInvoice.expense_id == expense_id)

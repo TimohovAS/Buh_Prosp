@@ -53,7 +53,6 @@ export default function CashRegister() {
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
-  const [queryInitialized, setQueryInitialized] = useState(false)
   const [summary, setSummary] = useState({ current_balance: 0, total_in: 0, total_out: 0, entries: [], available_withdrawals: [] })
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -117,22 +116,26 @@ export default function CashRegister() {
   }
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const nextYear = params.get('year')
-    const nextMonth = params.get('month')
-    const nextSearch = params.get('search')
-    if (nextYear) setYear(Number(nextYear))
-    if (nextMonth) setMonth(String(Number(nextMonth)))
-    if (nextSearch) {
-      setSearch(nextSearch)
-    }
-    setQueryInitialized(true)
-  }, [])
+    if (!isActivePage) return
 
-  useEffect(() => {
-    if (!queryInitialized || !isActivePage) return
+    const params = new URLSearchParams(location.search || '')
+    const hasExplicitQuery = params.toString().length > 0
+    if (hasExplicitQuery) {
+      const nextYear = params.get('year')
+      const nextMonth = params.get('month')
+      const resolvedYear = nextYear ? Number(nextYear) : ''
+      const resolvedMonth = nextMonth ? String(Number(nextMonth)) : ''
+      const resolvedSearch = params.get('search') || ''
+      if (year !== resolvedYear || month !== resolvedMonth || search !== resolvedSearch) {
+        setYear(resolvedYear)
+        setMonth(resolvedMonth)
+        setSearch(resolvedSearch)
+        return
+      }
+    }
+
     loadData()
-  }, [year, month, queryInitialized, isActivePage])
+  }, [year, month, search, isActivePage, location.search])
 
   useEffect(() => {
     if (availableYears.length === 0) return

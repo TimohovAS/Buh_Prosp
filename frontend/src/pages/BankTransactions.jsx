@@ -60,7 +60,6 @@ export default function BankTransactions() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [queryInitialized, setQueryInitialized] = useState(false)
 
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
@@ -166,25 +165,34 @@ export default function BankTransactions() {
   }
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const nextYear = params.get('year')
-    const nextMonth = params.get('month')
-    const nextStatus = params.get('status')
-    const nextDirection = params.get('direction')
-    const nextSearch = params.get('search')
+    if (!isActivePage) return
 
-    if (nextYear) setYear(Number(nextYear))
-    if (nextMonth) setMonth(nextMonth)
-    if (nextStatus) setStatusFilter(nextStatus)
-    if (nextDirection) setDirectionFilter(nextDirection)
-    if (nextSearch) setSearch(nextSearch)
-    setQueryInitialized(true)
-  }, [])
+    const params = new URLSearchParams(location.search || '')
+    const hasExplicitQuery = params.toString().length > 0
+    if (hasExplicitQuery) {
+      const nextYear = params.get('year') ? Number(params.get('year')) : ''
+      const nextMonth = params.get('month') || ''
+      const nextStatus = params.get('status') || 'all'
+      const nextDirection = params.get('direction') || 'all'
+      const nextSearch = params.get('search') || ''
+      if (
+        year !== nextYear ||
+        month !== nextMonth ||
+        statusFilter !== nextStatus ||
+        directionFilter !== nextDirection ||
+        search !== nextSearch
+      ) {
+        setYear(nextYear)
+        setMonth(nextMonth)
+        setStatusFilter(nextStatus)
+        setDirectionFilter(nextDirection)
+        setSearch(nextSearch)
+        return
+      }
+    }
 
-  useEffect(() => {
-    if (!queryInitialized || !isActivePage) return
     loadData()
-  }, [statusFilter, directionFilter, year, month, queryInitialized, isActivePage])
+  }, [statusFilter, directionFilter, year, month, search, isActivePage, location.search])
 
   useEffect(() => {
     if (availableYears.length === 0) return

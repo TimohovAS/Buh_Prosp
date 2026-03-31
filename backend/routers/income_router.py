@@ -16,7 +16,7 @@ from backend.efaktura_service import import_efaktura_documents
 from backend.models import Income, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, Enterprise, Expense
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
-from backend.bank_matching_service import get_income_linked_payment_entries, unmatch_transaction
+from backend.bank_matching_service import detach_income_transaction_link, get_income_linked_payment_entries
 from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.state_machine import (
@@ -218,7 +218,7 @@ async def _detach_income_transactions(db: AsyncSession, income_id: int) -> None:
     allocation_tx_ids = [int(value) for value in allocation_result.scalars().all()]
 
     for tx_id in dict.fromkeys(direct_tx_ids + allocation_tx_ids):
-        await unmatch_transaction(db, tx_id)
+        await detach_income_transaction_link(db, tx_id, income_id)
 
 from backend.income_service import (
     to_number_year_format,

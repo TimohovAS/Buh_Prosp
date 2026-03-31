@@ -95,17 +95,30 @@ export default function Obligations() {
   }
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const nextYear = params.get('year')
-    const nextSearch = params.get('search')
-    if (nextYear) setYear(parseInt(nextYear, 10))
-    if (nextSearch) setSearch(nextSearch)
-  }, [])
-
-  useEffect(() => {
     if (!isActivePage) return
+
+    const params = new URLSearchParams(location.search || '')
+    const hasExplicitQuery = params.toString().length > 0
+    if (hasExplicitQuery) {
+      const nextYear = params.get('year')
+      const resolvedYear = nextYear ? parseInt(nextYear, 10) : currentYear
+      const resolvedSearch = params.get('search') || ''
+      if (
+        year !== resolvedYear ||
+        search !== resolvedSearch ||
+        statusFilter !== 'all' ||
+        paymentTypeFilter !== ''
+      ) {
+        setYear(resolvedYear)
+        setSearch(resolvedSearch)
+        setStatusFilter('all')
+        setPaymentTypeFilter('')
+        return
+      }
+    }
+
     load()
-  }, [year, paymentTypeFilter, isActivePage])
+  }, [year, paymentTypeFilter, search, statusFilter, isActivePage, location.search])
 
   useEffect(() => {
     if (!availableYears.length) return

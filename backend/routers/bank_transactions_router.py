@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
@@ -255,7 +255,15 @@ async def list_bank_transactions(
 ):
     query = select(BankTransaction)
     if status == "unmatched":
-        query = query.where(BankTransaction.status.in_(["unmatched", "ignored"]))
+        query = query.where(
+            or_(
+                BankTransaction.status.in_(["unmatched", "ignored"]),
+                and_(
+                    BankTransaction.status == "matched",
+                    BankTransaction.matched_type == MATCH_TYPE_INCOME_ALLOCATION,
+                ),
+            )
+        )
     elif status:
         query = query.where(BankTransaction.status == status)
     if direction:
@@ -270,7 +278,27 @@ async def list_bank_transactions(
     query = query.order_by(desc(BankTransaction.date), desc(BankTransaction.id))
     result = await db.execute(query)
     items = list(result.scalars().all())
-    return await _serialize_bank_transactions(db, items)
+    serialized = await _serialize_bank_transactions(db, items)
+    if status == "unmatched":
+        return [
+            item
+            for item in serialized
+            if item.status in {"unmatched", "ignored"}
+            or (
+                item.matched_type == MATCH_TYPE_INCOME_ALLOCATION
+                and to_decimal(item.allocation_remaining or ZERO_DECIMAL) > ZERO_DECIMAL
+            )
+        ]
+    if status == "matched":
+        return [
+            item
+            for item in serialized
+            if not (
+                item.matched_type == MATCH_TYPE_INCOME_ALLOCATION
+                and to_decimal(item.allocation_remaining or ZERO_DECIMAL) > ZERO_DECIMAL
+            )
+        ]
+    return serialized
 
 
 @router.get("/years", response_model=list[int])
