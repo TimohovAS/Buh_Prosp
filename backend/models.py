@@ -130,6 +130,7 @@ class IncomingInvoice(Base):
     source = Column(String(20), nullable=False, default="manual")  # manual | efaktura
     efaktura_record_id = Column(Integer, ForeignKey("efaktura_import_records.id"), nullable=True, unique=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, unique=True)
+    advance_invoice_id = Column(Integer, ForeignKey("incoming_invoices.id"), nullable=True)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -137,6 +138,7 @@ class IncomingInvoice(Base):
     client = relationship("Client")
     project = relationship("Project")
     expense = relationship("Expense")
+    advance_invoice = relationship("IncomingInvoice", remote_side=[id], foreign_keys=[advance_invoice_id], uselist=False)
     efaktura_record = relationship("EfakturaImportRecord")
     settlements = relationship(
         "IncomingInvoiceSettlement",

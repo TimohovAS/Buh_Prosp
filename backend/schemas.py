@@ -1294,6 +1294,24 @@ class IncomingInvoiceResponse(IncomingInvoiceBase):
         from_attributes = True
 
 
+class IncomingInvoiceLinkSummary(BaseModel):
+    id: int
+    invoice_number: str
+    date: DateType
+    amount: Decimal
+    currency: str = "RSD"
+    status: str
+    counterparty_name: str
+    client_name: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class IncomingInvoiceAttachExpenseRequest(BaseModel):
     expense_id: int
 
@@ -1335,6 +1353,14 @@ class OffsetSettlementCreate(IncomingInvoiceSettlementCreate):
     income_id: int
 
 
+class IncomingInvoiceAdvanceLinkRequest(BaseModel):
+    advance_invoice_id: int
+
+
+class IncomingInvoiceClosingLinkRequest(BaseModel):
+    closing_invoice_id: int
+
+
 class IncomingInvoiceSettlementResponse(BaseModel):
     id: int
     incoming_invoice_id: int
@@ -1353,6 +1379,8 @@ class IncomingInvoiceSettlementResponse(BaseModel):
 
 class IncomingInvoiceDetailResponse(IncomingInvoiceResponse):
     settlements: list[IncomingInvoiceSettlementResponse] = Field(default_factory=list)
+    advance_invoice: Optional[IncomingInvoiceLinkSummary] = None
+    closing_invoice: Optional[IncomingInvoiceLinkSummary] = None
 
 
 class CounterpartyBalanceItem(BaseModel):

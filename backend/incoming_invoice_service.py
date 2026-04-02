@@ -135,12 +135,45 @@ async def _load_settlements(db: AsyncSession, invoice_id: int) -> list[IncomingI
     return list(result.scalars().all())
 
 
+async def _find_closing_invoice_for_advance(
+    db: AsyncSession,
+    advance_invoice_id: int,
+    *,
+    exclude_invoice_id: int | None = None,
+) -> IncomingInvoice | None:
+    query = select(IncomingInvoice).where(IncomingInvoice.advance_invoice_id == advance_invoice_id)
+    if exclude_invoice_id is not None:
+        query = query.where(IncomingInvoice.id != exclude_invoice_id)
+    result = await db.execute(
+        query.options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project)).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _normalize_counterparty_name(value: str | None) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+async def _reconcile_invoice_after_change(db: AsyncSession, invoice: IncomingInvoice) -> IncomingInvoice:
+    settlements = await _load_settlements(db, invoice.id)
+    invoice.settled_amount = sum((to_decimal(s.amount) for s in settlements), ZERO_DECIMAL)
+    if invoice.status == "cancelled":
+        invoice.status = "unpaid"
+    reconcile_incoming_invoice_status(invoice)
+    await _sync_expense_status(db, invoice)
+    return invoice
+
+
 async def _sync_expense_status(db: AsyncSession, invoice: IncomingInvoice) -> None:
     """Синхронизировать статус linked Expense с IncomingInvoice."""
     if not invoice.expense_id:
         return
     expense = await db.get(Expense, invoice.expense_id)
     if not expense:
+        return
+    if getattr(invoice, "advance_invoice_id", None) and to_decimal(invoice.amount or ZERO_DECIMAL) == ZERO_DECIMAL:
+        if expense.status == "paid":
+            reopen_expense_for_unmatch(expense)
         return
     if invoice.status == "paid" and expense.status == "planned":
         mark_expense_paid(expense, paid_date=invoice.date, allow_same=True)
@@ -432,6 +465,154 @@ async def reverse_settlement(
     _recalc_settled(invoice, all_settlements)
     await _sync_expense_status(db, invoice)
     return invoice
+
+
+async def restore_incoming_invoice(
+    db: AsyncSession,
+    invoice: IncomingInvoice,
+) -> IncomingInvoice:
+    if invoice.status != "cancelled":
+        raise InvalidStatusTransition("IncomingInvoice: only cancelled invoices can be restored.")
+    return await _reconcile_invoice_after_change(db, invoice)
+
+
+async def list_advance_invoice_candidates(
+    db: AsyncSession,
+    invoice: IncomingInvoice,
+) -> list[IncomingInvoice]:
+    if to_decimal(invoice.amount or ZERO_DECIMAL) != ZERO_DECIMAL:
+        raise ValueError("Only zero closing invoices can be linked to an advance invoice.")
+
+    unassigned_project_id = await _get_unassigned_project_id(db)
+    query = (
+        select(IncomingInvoice)
+        .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
+        .where(
+            IncomingInvoice.id != invoice.id,
+            IncomingInvoice.status == "paid",
+            IncomingInvoice.amount > ZERO_DECIMAL,
+        )
+        .order_by(IncomingInvoice.date.desc(), IncomingInvoice.id.desc())
+    )
+    if invoice.client_id:
+        query = query.where(IncomingInvoice.client_id == invoice.client_id)
+    else:
+        query = query.where(func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name))
+
+    result = await db.execute(query)
+    items: list[IncomingInvoice] = []
+    for candidate in result.scalars().all():
+        linked_closing = await _find_closing_invoice_for_advance(db, candidate.id, exclude_invoice_id=invoice.id)
+        if linked_closing is not None:
+            continue
+        if (
+            invoice.project_id
+            and invoice.project_id != unassigned_project_id
+            and candidate.project_id
+            and candidate.project_id not in {invoice.project_id, unassigned_project_id}
+        ):
+            continue
+        items.append(candidate)
+    return items
+
+
+async def list_closing_invoice_candidates(
+    db: AsyncSession,
+    invoice: IncomingInvoice,
+) -> list[IncomingInvoice]:
+    if to_decimal(invoice.amount or ZERO_DECIMAL) <= ZERO_DECIMAL:
+        raise ValueError("Only paid advance invoices can be linked to a zero closing invoice.")
+    if invoice.status != "paid":
+        raise ValueError("Only paid advance invoices can be linked to a zero closing invoice.")
+
+    unassigned_project_id = await _get_unassigned_project_id(db)
+    query = (
+        select(IncomingInvoice)
+        .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
+        .where(
+            IncomingInvoice.id != invoice.id,
+            IncomingInvoice.amount == ZERO_DECIMAL,
+            IncomingInvoice.advance_invoice_id.is_(None),
+            IncomingInvoice.status.in_(["unpaid", "cancelled"]),
+        )
+        .order_by(IncomingInvoice.date.desc(), IncomingInvoice.id.desc())
+    )
+    if invoice.client_id:
+        query = query.where(IncomingInvoice.client_id == invoice.client_id)
+    else:
+        query = query.where(func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name))
+
+    result = await db.execute(query)
+    items: list[IncomingInvoice] = []
+    for candidate in result.scalars().all():
+        if (
+            invoice.project_id
+            and invoice.project_id != unassigned_project_id
+            and candidate.project_id
+            and candidate.project_id not in {invoice.project_id, unassigned_project_id}
+        ):
+            continue
+        items.append(candidate)
+    return items
+
+
+async def link_advance_invoice(
+    db: AsyncSession,
+    *,
+    closing_invoice: IncomingInvoice,
+    advance_invoice_id: int,
+) -> IncomingInvoice:
+    if closing_invoice.id == advance_invoice_id:
+        raise ValueError("Invoice cannot be linked to itself.")
+    if to_decimal(closing_invoice.amount or ZERO_DECIMAL) != ZERO_DECIMAL:
+        raise ValueError("Only zero closing invoices can be linked to an advance invoice.")
+    if closing_invoice.status not in {"unpaid", "cancelled"}:
+        raise InvalidStatusTransition("Only unpaid or cancelled zero invoices can be linked to an advance invoice.")
+
+    settlements = await _load_settlements(db, closing_invoice.id)
+    if settlements:
+        raise ValueError("Zero closing invoice cannot have settlements before linking to an advance invoice.")
+
+    advance_invoice = await db.get(IncomingInvoice, advance_invoice_id)
+    if not advance_invoice:
+        raise ValueError("Advance invoice not found.")
+    if advance_invoice.status == "cancelled":
+        raise ValueError("Cancelled advance invoice cannot be linked.")
+    if advance_invoice.status != "paid":
+        raise ValueError("Only paid advance invoices can be linked.")
+    if to_decimal(advance_invoice.amount or ZERO_DECIMAL) <= ZERO_DECIMAL:
+        raise ValueError("Advance invoice amount must be greater than zero.")
+    if advance_invoice.client_id and closing_invoice.client_id and advance_invoice.client_id != closing_invoice.client_id:
+        raise ValueError("Advance and closing invoices must belong to the same counterparty.")
+
+    linked_closing = await _find_closing_invoice_for_advance(db, advance_invoice.id, exclude_invoice_id=closing_invoice.id)
+    if linked_closing is not None:
+        raise ValueError("Advance invoice is already linked to another zero closing invoice.")
+
+    unassigned_project_id = await _get_unassigned_project_id(db)
+    if closing_invoice.project_id in {None, unassigned_project_id} and advance_invoice.project_id:
+        closing_invoice.project_id = advance_invoice.project_id
+    if closing_invoice.client_id is None and advance_invoice.client_id:
+        closing_invoice.client_id = advance_invoice.client_id
+    if not closing_invoice.counterparty_name and advance_invoice.counterparty_name:
+        closing_invoice.counterparty_name = advance_invoice.counterparty_name
+
+    closing_invoice.advance_invoice_id = advance_invoice.id
+    return await _reconcile_invoice_after_change(db, closing_invoice)
+
+
+async def unlink_advance_invoice(
+    db: AsyncSession,
+    invoice: IncomingInvoice,
+) -> IncomingInvoice:
+    closing_invoice = invoice
+    if not closing_invoice.advance_invoice_id:
+        closing_invoice = await _find_closing_invoice_for_advance(db, invoice.id)
+    if not closing_invoice or not closing_invoice.advance_invoice_id:
+        raise ValueError("No linked advance or closing invoice found.")
+
+    closing_invoice.advance_invoice_id = None
+    return await _reconcile_invoice_after_change(db, closing_invoice)
 
 
 async def get_counterparty_balances(db: AsyncSession) -> list[dict]:

@@ -277,6 +277,10 @@ def initialize_incoming_invoice_status(invoice: Any, target_status: str) -> None
 
 def reconcile_incoming_invoice_status(invoice: Any) -> None:
     """Пересчитать статус входящей фактуры по settled_amount vs amount."""
+    if getattr(invoice, "advance_invoice_id", None):
+        invoice.status = "paid"
+        return
+
     current = _ensure_known_status("IncomingInvoice", getattr(invoice, "status", None), INCOMING_INVOICE_STATUSES)
     if current == "cancelled":
         raise InvalidStatusTransition("IncomingInvoice: cancelled status is terminal.")

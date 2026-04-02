@@ -15,10 +15,15 @@ from backend.incoming_invoice_service import (
     attach_existing_expense,
     create_incoming_invoice,
     get_counterparty_balances,
+    link_advance_invoice,
+    list_advance_invoice_candidates,
+    list_closing_invoice_candidates,
     reverse_settlement,
+    restore_incoming_invoice,
     settle_via_bank,
     settle_via_cash,
     settle_via_offset,
+    unlink_advance_invoice,
     update_incoming_invoice,
 )
 from backend.models import (
@@ -35,9 +40,12 @@ from backend.schemas import (
     CounterpartyBalanceItem,
     CounterpartyBalanceResponse,
     IncomingInvoiceAttachExpenseRequest,
+    IncomingInvoiceAdvanceLinkRequest,
+    IncomingInvoiceClosingLinkRequest,
     IncomingInvoiceCreate,
     IncomingInvoiceExpenseCandidateResponse,
     IncomingInvoiceDetailResponse,
+    IncomingInvoiceLinkSummary,
     IncomingInvoiceResponse,
     IncomingInvoiceSettlementCreate,
     IncomingInvoiceSettlementResponse,
@@ -68,6 +76,47 @@ def _serialize_detail(invoice: IncomingInvoice) -> dict:
         IncomingInvoiceSettlementResponse.model_validate(s).model_dump()
         for s in (invoice.settlements or [])
     ]
+    return d
+
+
+def _serialize_link_summary(invoice: IncomingInvoice | None) -> dict | None:
+    if not invoice:
+        return None
+    return IncomingInvoiceLinkSummary(
+        id=invoice.id,
+        invoice_number=invoice.invoice_number,
+        date=invoice.date,
+        amount=to_decimal(invoice.amount or 0),
+        currency=invoice.currency or "RSD",
+        status=invoice.status,
+        counterparty_name=invoice.counterparty_name,
+        client_name=invoice.client.name if invoice.client else None,
+        project_id=invoice.project_id,
+        project_name=invoice.project.name if invoice.project else None,
+        project_code=invoice.project.code if invoice.project else None,
+        description=invoice.description,
+    ).model_dump()
+
+
+async def _serialize_detail_with_links(db: AsyncSession, invoice: IncomingInvoice) -> dict:
+    d = _serialize_detail(invoice)
+    advance_invoice = None
+    if invoice.advance_invoice_id:
+        advance_result = await db.execute(
+            select(IncomingInvoice)
+            .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
+            .where(IncomingInvoice.id == invoice.advance_invoice_id)
+        )
+        advance_invoice = advance_result.scalar_one_or_none()
+    closing_result = await db.execute(
+        select(IncomingInvoice)
+        .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
+        .where(IncomingInvoice.advance_invoice_id == invoice.id)
+        .limit(1)
+    )
+    closing_invoice = closing_result.scalar_one_or_none()
+    d["advance_invoice"] = _serialize_link_summary(advance_invoice)
+    d["closing_invoice"] = _serialize_link_summary(closing_invoice)
     return d
 
 
@@ -270,6 +319,38 @@ async def expense_candidates(
     ]
 
 
+@router.get("/{invoice_id}/advance-candidates", response_model=list[IncomingInvoiceLinkSummary])
+async def advance_candidates(
+    invoice_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        items = await list_advance_invoice_candidates(db, invoice)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return [_serialize_link_summary(item) for item in items]
+
+
+@router.get("/{invoice_id}/closing-candidates", response_model=list[IncomingInvoiceLinkSummary])
+async def closing_candidates(
+    invoice_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        items = await list_closing_invoice_candidates(db, invoice)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return [_serialize_link_summary(item) for item in items]
+
+
 @router.get("/{invoice_id}")
 async def get_invoice(
     invoice_id: int,
@@ -281,6 +362,7 @@ async def get_invoice(
         .options(
             selectinload(IncomingInvoice.client),
             selectinload(IncomingInvoice.project),
+            selectinload(IncomingInvoice.advance_invoice),
             selectinload(IncomingInvoice.settlements),
         )
         .where(IncomingInvoice.id == invoice_id)
@@ -288,7 +370,7 @@ async def get_invoice(
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(404, "IncomingInvoice not found.")
-    return _serialize_detail(invoice)
+    return await _serialize_detail_with_links(db, invoice)
 
 
 @router.post("/{invoice_id}/attach-expense", response_model=IncomingInvoiceResponse)
@@ -333,6 +415,83 @@ async def update_invoice(
     await db.commit()
     await db.refresh(invoice, ["client", "project"])
     return _serialize(invoice)
+
+
+@router.post("/{invoice_id}/restore", response_model=IncomingInvoiceResponse)
+async def restore_invoice(
+    invoice_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        invoice = await restore_incoming_invoice(db, invoice)
+    except (InvalidStatusTransition, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(invoice, ["client", "project"])
+    return _serialize(invoice)
+
+
+@router.post("/{invoice_id}/link-advance", response_model=IncomingInvoiceResponse)
+async def link_invoice_advance(
+    invoice_id: int,
+    data: IncomingInvoiceAdvanceLinkRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        invoice = await link_advance_invoice(db, closing_invoice=invoice, advance_invoice_id=data.advance_invoice_id)
+    except (InvalidStatusTransition, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(invoice, ["client", "project", "advance_invoice"])
+    return _serialize(invoice)
+
+
+@router.post("/{invoice_id}/link-closing", response_model=IncomingInvoiceResponse)
+async def link_invoice_closing(
+    invoice_id: int,
+    data: IncomingInvoiceClosingLinkRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    closing_invoice = await db.get(IncomingInvoice, data.closing_invoice_id)
+    if not closing_invoice:
+        raise HTTPException(404, "Closing invoice not found.")
+    try:
+        await link_advance_invoice(db, closing_invoice=closing_invoice, advance_invoice_id=invoice.id)
+    except (InvalidStatusTransition, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(invoice, ["client", "project"])
+    return _serialize(invoice)
+
+
+@router.post("/{invoice_id}/unlink-advance", response_model=IncomingInvoiceResponse)
+async def unlink_invoice_advance(
+    invoice_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    invoice = await db.get(IncomingInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(404, "IncomingInvoice not found.")
+    try:
+        closing_invoice = await unlink_advance_invoice(db, invoice)
+    except (InvalidStatusTransition, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(closing_invoice, ["client", "project", "advance_invoice"])
+    return _serialize(closing_invoice)
 
 
 @router.post("/{invoice_id}/cancel")

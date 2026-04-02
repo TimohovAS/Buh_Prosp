@@ -25,6 +25,23 @@ function StatusBadge({ status }) {
   return <span className={cls[status] || 'badge'}>{tr(STATUS_LABELS[status] || status)}</span>
 }
 
+function LinkedInvoiceSummary({ invoice }) {
+  if (!invoice) return <span className="record-field-value">{UI_DASH}</span>
+  return (
+    <div className="record-field-text">
+      <div style={{ fontWeight: 600 }}>{invoice.invoice_number || UI_DASH}</div>
+      <div style={{ color: 'var(--color-text-muted)' }}>
+        {[fmtDate(invoice.date), `${fmt(invoice.amount)} ${invoice.currency || 'RSD'}`, invoice.counterparty_name].filter(Boolean).join(' • ')}
+      </div>
+      {invoice.project_code || invoice.project_name ? (
+        <div style={{ color: 'var(--color-text-muted)' }}>{[invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')}</div>
+      ) : null}
+      {invoice.description ? <div>{compactText(invoice.description, 120)}</div> : null}
+      <div style={{ marginTop: 4 }}><StatusBadge status={invoice.status} /></div>
+    </div>
+  )
+}
+
 export default function IncomingInvoices() {
   const location = useLocation()
   const isActivePage = location.pathname === '/incoming-invoices'
@@ -40,6 +57,7 @@ export default function IncomingInvoices() {
   const [sortAsc, setSortAsc] = useState(false)
   const [modal, setModal] = useState(null)
   const [settleModal, setSettleModal] = useState(null)
+  const [linkModal, setLinkModal] = useState(null)
   const [detailModal, setDetailModal] = useState(null)
   const [form, setForm] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -171,9 +189,26 @@ export default function IncomingInvoices() {
     setSettleModal({ invoice: item, type })
   }
 
-  const handleCancelFromDetail = async item => {
+  const openInvoiceLinkFromDetail = item => mode => {
     setDetailModal(null)
+    setLinkModal({ invoice: item, mode })
+  }
+
+  const handleCancelFromDetail = async item => {
     await handleCancel(item.id)
+    openDetail(item.id)
+  }
+
+  const handleRestoreFromDetail = async item => {
+    await api.incomingInvoices.restore(item.id).catch(() => {})
+    load()
+    openDetail(item.id)
+  }
+
+  const handleUnlinkFromDetail = async item => {
+    await api.incomingInvoices.unlinkAdvance(item.id).catch(() => {})
+    load()
+    openDetail(item.id)
   }
 
   const totalAmount = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0), [filtered])
@@ -183,7 +218,16 @@ export default function IncomingInvoices() {
     || projects.find(project => project.id === item?.project_id)?.name
     || ''
   )
-  const canManageDetail = detailModal ? detailModal.status !== 'paid' && detailModal.status !== 'cancelled' : false
+  const detailAmount = Number(detailModal?.amount || 0)
+  const canEditDetail = !!detailModal && detailModal.status !== 'paid' && detailModal.status !== 'cancelled'
+  const canRestoreDetail = detailModal?.status === 'cancelled'
+  const canCancelDetail = !!detailModal && detailModal.status !== 'paid' && detailModal.status !== 'cancelled'
+  const canLinkAdvanceDetail = !!detailModal && detailAmount === 0 && !detailModal.advance_invoice && !detailModal.closing_invoice
+  const canLinkClosingDetail = !!detailModal && detailAmount > 0 && detailModal.status === 'paid' && !detailModal.closing_invoice
+  const canUnlinkAdvanceDetail = !!detailModal?.advance_invoice
+  const canUnlinkClosingDetail = !!detailModal?.closing_invoice
+  const canSettleDetail = canEditDetail && detailAmount > 0 && !detailModal?.advance_invoice
+  const showDetailActions = canEditDetail || canRestoreDetail || canCancelDetail || canLinkAdvanceDetail || canLinkClosingDetail || canUnlinkAdvanceDetail || canUnlinkClosingDetail || canSettleDetail
 
   return (
     <div className="page">
@@ -351,7 +395,9 @@ export default function IncomingInvoices() {
         </div>
       )}
 
-      {settleModal && <SettleModal data={settleModal} clients={clients} onClose={() => setSettleModal(null)} onDone={() => { setSettleModal(null); load() }} />}
+      {settleModal && <SettleModal data={settleModal} clients={clients} onClose={() => setSettleModal(null)} onDone={() => { const current = settleModal.invoice; setSettleModal(null); load(); openDetail(current.id) }} />}
+
+      {linkModal && <LinkInvoiceModal data={linkModal} onClose={() => setLinkModal(null)} onDone={() => { const current = linkModal.invoice; setLinkModal(null); load(); openDetail(current.id) }} />}
 
       {detailModal && (
         <div className="modal-overlay" onClick={() => setDetailModal(null)}>
@@ -362,7 +408,7 @@ export default function IncomingInvoices() {
             </div>
             <div className="modal-body">
               <div className="record-detail-grid">
-                <div className="record-detail-card" style={canManageDetail ? undefined : { gridColumn: '1 / -1' }}>
+                <div className="record-detail-card" style={showDetailActions ? undefined : { gridColumn: '1 / -1' }}>
                   <div className="record-field-grid">
                     <div className="record-field">
                       <span className="record-field-label">{tr('date')}</span>
@@ -404,6 +450,24 @@ export default function IncomingInvoices() {
                         <span className="record-field-value">#{detailModal.expense_id}</span>
                       </div>
                     )}
+                    {detailModal.advance_invoice ? (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('advanceInvoice')}</span>
+                        <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
+                      </div>
+                    ) : null}
+                    {detailModal.closing_invoice ? (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('closingInvoice')}</span>
+                        <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
+                      </div>
+                    ) : null}
+                    {detailModal.advance_invoice && detailAmount === 0 ? (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('note')}</span>
+                        <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+                      </div>
+                    ) : null}
                     <div className="record-field full">
                       <span className="record-field-label">{tr('description')}</span>
                       <div className="record-field-text">{detailModal.description || UI_DASH}</div>
@@ -414,15 +478,20 @@ export default function IncomingInvoices() {
                     </div>
                   </div>
                 </div>
-                {canManageDetail ? (
+                {showDetailActions ? (
                   <div className="record-detail-card">
                     <div className="record-actions-grid">
-                      <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button>
-                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button>
-                      <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button>
-                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button>
-                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button>
-                      <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancel')}</button>
+                      {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
+                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
+                      {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
+                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
+                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
+                      {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
+                      {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
+                      {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
+                      {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
+                      {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
+                      {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
                     </div>
                   </div>
                 ) : null}
@@ -639,6 +708,117 @@ function SettleModal({ data, clients, onClose, onDone }) {
             <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id)}>{tr('save')}</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function LinkInvoiceModal({ data, onClose, onDone }) {
+  const { invoice, mode } = data
+  const [candidates, setCandidates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [submittingId, setSubmittingId] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    const loader = mode === 'advance' ? api.incomingInvoices.advanceCandidates : api.incomingInvoices.closingCandidates
+    loader(invoice.id)
+      .then(items => { if (active) setCandidates(items || []) })
+      .catch(() => { if (active) setCandidates([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [invoice.id, mode])
+
+  const handleLink = async candidateId => {
+    setSubmittingId(candidateId)
+    try {
+      if (mode === 'advance') {
+        await api.incomingInvoices.linkAdvance(invoice.id, { advance_invoice_id: candidateId })
+      } else {
+        await api.incomingInvoices.linkClosing(invoice.id, { closing_invoice_id: candidateId })
+      }
+      onDone()
+    } catch {
+      setSubmittingId(null)
+    }
+  }
+
+  const title = mode === 'advance' ? tr('selectAdvanceInvoice') : tr('selectClosingInvoice')
+  const emptyLabel = mode === 'advance' ? tr('noAdvanceInvoiceCandidates') : tr('noClosingInvoiceCandidates')
+  const currentProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 840 }}>
+        <div className="modal-header">
+          <h2 className="modal-title">{title}: {invoice.invoice_number}</h2>
+          <button className="modal-close" onClick={onClose}>{UI_CLOSE}</button>
+        </div>
+        <div className="modal-body">
+          <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
+            <div className="record-field-grid">
+              <div className="record-field">
+                <span className="record-field-label">{tr('invoiceNumber')}</span>
+                <span className="record-field-value">{invoice.invoice_number}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('date')}</span>
+                <span className="record-field-value">{fmtDate(invoice.date)}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('amount')}</span>
+                <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('status')}</span>
+                <div><StatusBadge status={invoice.status} /></div>
+              </div>
+              <div className="record-field full">
+                <span className="record-field-label">{tr('counterpartyName')}</span>
+                <span className="record-field-value">{invoice.counterparty_name || invoice.client_name || UI_DASH}</span>
+              </div>
+              {currentProjectLabel ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('project')}</span>
+                  <span className="record-field-value">{currentProjectLabel}</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="record-detail-card">
+            <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{title}</div>
+            {loading ? <p>{tr('loading')}</p> : candidates.length === 0 ? <p>{emptyLabel}</p> : (
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {candidates.map(candidate => {
+                  const candidateProjectLabel = [candidate.project_code, candidate.project_name].filter(Boolean).join(' / ')
+                  return (
+                    <div key={candidate.id} className="record-detail-card" style={{ margin: 0 }}>
+                      <div className="record-detail-grid" style={{ gridTemplateColumns: '1fr auto', gap: '1rem' }}>
+                        <div className="record-field-text">
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <strong>{candidate.invoice_number}</strong>
+                            <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(candidate.date)}</span>
+                            <StatusBadge status={candidate.status} />
+                          </div>
+                          <div style={{ marginTop: 6 }}>{candidate.counterparty_name || candidate.client_name || UI_DASH}</div>
+                          {candidateProjectLabel ? <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>{candidateProjectLabel}</div> : null}
+                          {candidate.description ? <div style={{ marginTop: 6 }}>{compactText(candidate.description, 140)}</div> : null}
+                        </div>
+                        <div style={{ display: 'grid', gap: '0.75rem', justifyItems: 'end', alignContent: 'start' }}>
+                          <div style={{ fontWeight: 700 }}>{fmt(candidate.amount)} {candidate.currency || 'RSD'}</div>
+                          <button type="button" className="btn btn-primary" disabled={submittingId === candidate.id} onClick={() => handleLink(candidate.id)}>
+                            {tr(mode === 'advance' ? 'linkAdvanceInvoice' : 'linkClosingInvoice')}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

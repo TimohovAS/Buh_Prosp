@@ -1293,6 +1293,38 @@ Object.assign(t.ru, {
   openSource: 'Открыть источник',
 })
 
+Object.assign(t.sr, {
+  restoreIncomingInvoice: 'Врати фактуру',
+  cancelIncomingInvoice: 'Откажи фактуру',
+  linkAdvanceInvoice: 'Повежи с авансном',
+  linkClosingInvoice: 'Повежи с затварајућом',
+  unlinkAdvanceInvoice: 'Развежи авансну везу',
+  unlinkClosingInvoice: 'Развежи затварајућу везу',
+  advanceInvoice: 'Авансна фактура',
+  closingInvoice: 'Затварајућа фактура',
+  selectAdvanceInvoice: 'Изабери авансну фактуру',
+  selectClosingInvoice: 'Изабери затварајућу фактуру',
+  noAdvanceInvoiceCandidates: 'Нема плаћених авансних фактура за ову затварајућу.',
+  noClosingInvoiceCandidates: 'Нема нултих затварајућих фактура за ову авансну.',
+  linkedInvoiceAmountZeroHint: 'Нулта фактура је затворена преко повезане авансне фактуре.',
+})
+
+Object.assign(t.ru, {
+  restoreIncomingInvoice: 'Восстановить фактуру',
+  cancelIncomingInvoice: 'Отменить фактуру',
+  linkAdvanceInvoice: 'Связать с авансной',
+  linkClosingInvoice: 'Связать с закрывающей',
+  unlinkAdvanceInvoice: 'Развязать авансную связь',
+  unlinkClosingInvoice: 'Развязать закрывающую связь',
+  advanceInvoice: 'Авансная фактура',
+  closingInvoice: 'Закрывающая фактура',
+  selectAdvanceInvoice: 'Выберите авансную фактуру',
+  selectClosingInvoice: 'Выберите закрывающую фактуру',
+  noAdvanceInvoiceCandidates: 'Нет оплаченных авансных фактур для этой закрывающей.',
+  noClosingInvoiceCandidates: 'Нет нулевых закрывающих фактур для этой авансной.',
+  linkedInvoiceAmountZeroHint: 'Нулевая фактура закрыта через связанную авансную фактуру.',
+})
+
 let lang = localStorage.getItem('prospel_lang') || 'sr';
 
 export function setLang(l) {
