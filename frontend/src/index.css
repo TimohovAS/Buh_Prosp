@@ -1072,7 +1072,7 @@ tr.row-reversal {
 
 .incoming-invoices-list-table th:nth-child(2),
 .incoming-invoices-list-table td:nth-child(2) {
-  width: 156px;
+  width: 220px;
 }
 
 .incoming-invoices-list-table th:nth-child(3),
