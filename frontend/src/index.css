@@ -1067,27 +1067,22 @@ tr.row-reversal {
 
 .incoming-invoices-list-table th:nth-child(1),
 .incoming-invoices-list-table td:nth-child(1) {
-  width: 120px;
+  width: 132px;
 }
 
 .incoming-invoices-list-table th:nth-child(2),
 .incoming-invoices-list-table td:nth-child(2) {
-  width: 150px;
+  width: 156px;
 }
 
 .incoming-invoices-list-table th:nth-child(3),
 .incoming-invoices-list-table td:nth-child(3) {
-  width: 240px;
+  width: 220px;
 }
 
 .incoming-invoices-list-table th:nth-child(5),
 .incoming-invoices-list-table td:nth-child(5) {
-  width: 190px;
-}
-
-.incoming-invoices-list-table th:nth-child(6),
-.incoming-invoices-list-table td:nth-child(6) {
-  width: 120px;
+  width: 180px;
 }
 
 .incoming-invoice-date-cell,
@@ -1143,6 +1138,10 @@ tr.row-reversal {
 
 .incoming-invoice-amount-cell {
   text-align: right;
+}
+
+.incoming-invoice-status-inline {
+  margin-top: 0.45rem;
 }
 
 .incoming-invoices-list-table tbody td {

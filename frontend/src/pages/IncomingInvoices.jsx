@@ -221,12 +221,11 @@ export default function IncomingInvoices() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')}<SortIcon col="counterparty_name" /></th>
                   <th>{tr('description')}</th>
                   <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')}<SortIcon col="amount" /></th>
-                  <th>{tr('status')}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={6}>{tr('loading')}</td></tr>
-                  : filtered.length === 0 ? <tr><td colSpan={6}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={5}>{tr('loading')}</td></tr>
+                  : filtered.length === 0 ? <tr><td colSpan={5}>{tr('noRecords')}</td></tr>
                     : filtered.map(inv => (
                       <tr
                         key={inv.id}
@@ -270,6 +269,7 @@ export default function IncomingInvoices() {
                         </td>
                         <td className="incoming-invoice-amount-cell">
                           <div className="incoming-invoice-amount-primary">{fmt(inv.amount)} {inv.currency || 'RSD'}</div>
+                          <div className="incoming-invoice-status-inline"><StatusBadge status={inv.status} /></div>
                           <div className="incoming-invoice-amount-meta">
                             {tr('settledAmount')}: {fmt(inv.settled_amount)}
                           </div>
@@ -277,7 +277,6 @@ export default function IncomingInvoices() {
                             {tr('remainingAmount')}: {fmt(inv.remaining_amount)}
                           </div>
                         </td>
-                        <td><StatusBadge status={inv.status} /></td>
                       </tr>
                     ))}
               </tbody>
@@ -285,8 +284,10 @@ export default function IncomingInvoices() {
                 <tfoot>
                   <tr style={{ fontWeight: 'bold' }}>
                     <td colSpan={4}>{tr('total') || 'Total'}: {filtered.length}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(totalAmount)}</td>
-                    <td>{fmt(totalRemaining)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div>{fmt(totalAmount)}</div>
+                      <div className="incoming-invoice-amount-meta">{tr('remainingAmount')}: {fmt(totalRemaining)}</div>
+                    </td>
                   </tr>
                 </tfoot>
               )}
