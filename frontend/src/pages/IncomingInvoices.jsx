@@ -3,8 +3,10 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import SearchInput from '../components/SearchInput'
 
 const UI_CLOSE = '\u2715'
+const UI_DASH = '\u2014'
 const currentYear = new Date().getFullYear()
 const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
 const STATUS_LABELS = { unpaid: 'statusUnpaid', partial: 'statusPartial', paid: 'statusPaid', cancelled: 'statusCancelled' }
@@ -159,14 +161,37 @@ export default function IncomingInvoices() {
     load()
   }
 
+  const openEditFromDetail = async item => {
+    setDetailModal(null)
+    await openEdit(item)
+  }
+
+  const openSettlementFromDetail = item => type => {
+    setDetailModal(null)
+    setSettleModal({ invoice: item, type })
+  }
+
+  const handleCancelFromDetail = async item => {
+    setDetailModal(null)
+    await handleCancel(item.id)
+  }
+
   const totalAmount = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0), [filtered])
   const totalRemaining = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.remaining_amount || 0), 0), [filtered])
+  const getProjectLabel = item => (
+    [item?.project_code, item?.project_name].filter(Boolean).join(' / ')
+    || projects.find(project => project.id === item?.project_id)?.name
+    || ''
+  )
+  const canManageDetail = detailModal ? detailModal.status !== 'paid' && detailModal.status !== 'cancelled' : false
 
   return (
     <div className="page">
       <div className="page-header">
-        <h1>{tr('incomingInvoices')}</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="page-header-main">
+          <h1 className="page-title">{tr('incomingInvoices')}</h1>
+        </div>
+        <div className="page-header-actions">
           <select className="form-input" value={year} onChange={e => setYear(Number(e.target.value))} style={{ width: 100 }}>
             {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -178,7 +203,7 @@ export default function IncomingInvoices() {
             <option value="">{tr('all') || 'All'}</option>
             {STATUSES.map(status => <option key={status} value={status}>{tr(STATUS_LABELS[status])}</option>)}
           </select>
-          <input className="form-input" placeholder={tr('search')} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 180 }} />
+          <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 200 }} />
           <button className="btn btn-primary" onClick={openAdd}>{tr('createIncomingInvoice')}</button>
         </div>
       </div>
@@ -188,56 +213,80 @@ export default function IncomingInvoices() {
       <div className="page-body">
         <div className="card">
           <div className="table-wrap">
-            <table>
+            <table className="incoming-invoices-list-table">
               <thead>
                 <tr>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')}<SortIcon col="date" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')}<SortIcon col="invoice_number" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')}<SortIcon col="counterparty_name" /></th>
+                  <th>{tr('description')}</th>
                   <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')}<SortIcon col="amount" /></th>
-                  <th style={{ textAlign: 'right' }}>{tr('settledAmount')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('remainingAmount')}</th>
                   <th>{tr('status')}</th>
-                  <th>{tr('actions') || ''}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={8}>{tr('loading')}</td></tr>
-                  : filtered.length === 0 ? <tr><td colSpan={8}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={6}>{tr('loading')}</td></tr>
+                  : filtered.length === 0 ? <tr><td colSpan={6}>{tr('noRecords')}</td></tr>
                     : filtered.map(inv => (
-                      <tr key={inv.id}>
-                        <td>{fmtDate(inv.date)}</td>
-                        <td><a href="#" onClick={e => { e.preventDefault(); openDetail(inv.id) }}>{inv.invoice_number}</a></td>
-                        <td>{inv.client_name || inv.counterparty_name}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(inv.amount)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(inv.settled_amount)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(inv.remaining_amount)}</td>
-                        <td><StatusBadge status={inv.status} /></td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                              <>
-                                <button className="btn btn-sm" onClick={() => openEdit(inv)}>{tr('edit')}</button>
-                                <button className="btn btn-sm" onClick={() => setSettleModal({ invoice: inv, type: 'expense' })}>{tr('attachExpense')}</button>
-                                <button className="btn btn-sm btn-primary" onClick={() => setSettleModal({ invoice: inv, type: 'bank' })}>{tr('settleViaBank')}</button>
-                                <button className="btn btn-sm" onClick={() => setSettleModal({ invoice: inv, type: 'cash' })}>{tr('settleViaCash')}</button>
-                                <button className="btn btn-sm" onClick={() => setSettleModal({ invoice: inv, type: 'offset' })}>{tr('settleViaOffset')}</button>
-                                <button className="btn btn-sm btn-danger" onClick={() => handleCancel(inv.id)}>{tr('cancel')}</button>
-                              </>
-                            )}
+                      <tr
+                        key={inv.id}
+                        className={`record-row ${inv.status === 'cancelled' ? 'row-reversal' : ''}`.trim()}
+                        onClick={() => openDetail(inv.id)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openDetail(inv.id)
+                          }
+                        }}
+                        tabIndex={0}
+                      >
+                        <td className="incoming-invoice-date-cell">
+                          <div className="incoming-invoice-date-primary">{fmtDate(inv.date)}</div>
+                          <div className="incoming-invoice-date-secondary">
+                            {getProjectLabel(inv) || UI_DASH}
                           </div>
                         </td>
+                        <td className="incoming-invoice-document-cell">
+                          <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
+                          <div className="incoming-invoice-document-meta">
+                            {inv.currency || 'RSD'}
+                          </div>
+                        </td>
+                        <td className="incoming-invoice-party-cell">
+                          <div className="incoming-invoice-party-name" title={inv.counterparty_name || inv.client_name || UI_DASH}>
+                            {inv.counterparty_name || inv.client_name || UI_DASH}
+                          </div>
+                          {inv.client_name && inv.client_name !== inv.counterparty_name ? (
+                            <div className="incoming-invoice-party-meta" title={inv.client_name}>
+                              {tr('client')}: {inv.client_name}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="incoming-invoice-description-cell">
+                          <div className="incoming-invoice-description" title={inv.description || UI_DASH}>
+                            {inv.description || UI_DASH}
+                          </div>
+                          {inv.note ? <div className="incoming-invoice-note">{inv.note}</div> : null}
+                        </td>
+                        <td className="incoming-invoice-amount-cell">
+                          <div className="incoming-invoice-amount-primary">{fmt(inv.amount)} {inv.currency || 'RSD'}</div>
+                          <div className="incoming-invoice-amount-meta">
+                            {tr('settledAmount')}: {fmt(inv.settled_amount)}
+                          </div>
+                          <div className="incoming-invoice-amount-meta">
+                            {tr('remainingAmount')}: {fmt(inv.remaining_amount)}
+                          </div>
+                        </td>
+                        <td><StatusBadge status={inv.status} /></td>
                       </tr>
                     ))}
               </tbody>
               {filtered.length > 0 && (
                 <tfoot>
                   <tr style={{ fontWeight: 'bold' }}>
-                    <td colSpan={3}>{tr('total') || 'Total'}: {filtered.length}</td>
+                    <td colSpan={4}>{tr('total') || 'Total'}: {filtered.length}</td>
                     <td style={{ textAlign: 'right' }}>{fmt(totalAmount)}</td>
-                    <td></td>
-                    <td style={{ textAlign: 'right' }}>{fmt(totalRemaining)}</td>
-                    <td colSpan={2}></td>
+                    <td>{fmt(totalRemaining)}</td>
                   </tr>
                 </tfoot>
               )}
@@ -305,47 +354,108 @@ export default function IncomingInvoices() {
 
       {detailModal && (
         <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 920 }}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('incomingInvoice')} {detailModal.invoice_number}</h2>
               <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
             </div>
-            <div style={{ padding: '1rem' }}>
-              <p><strong>{tr('counterpartyName')}:</strong> {detailModal.client_name || detailModal.counterparty_name}</p>
-              <p><strong>{tr('date')}:</strong> {fmtDate(detailModal.date)}</p>
-              <p><strong>{tr('amount')}:</strong> {fmt(detailModal.amount)} {detailModal.currency}</p>
-              <p><strong>{tr('settledAmount')}:</strong> {fmt(detailModal.settled_amount)}</p>
-              <p><strong>{tr('remainingAmount')}:</strong> {fmt(detailModal.remaining_amount)}</p>
-              <p><strong>{tr('status')}:</strong> <StatusBadge status={detailModal.status} /></p>
-              {detailModal.status === 'paid' && detailModal.expense_id && (!detailModal.settlements || detailModal.settlements.length === 0) && (
-                <p><strong>{tr('linkedExpense')}:</strong> #{detailModal.expense_id}</p>
-              )}
-              {detailModal.description && <p><strong>{tr('description')}:</strong> {detailModal.description}</p>}
-              <h3 style={{ marginTop: '1rem' }}>{tr('settlementHistory')}</h3>
-              {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr('date')}</th>
-                      <th>{tr('type')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                      <th>{tr('note')}</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailModal.settlements.map(settlement => (
-                      <tr key={settlement.id}>
-                        <td>{fmtDate(settlement.date)}</td>
-                        <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
-                        <td>{settlement.note || ''}</td>
-                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card" style={canManageDetail ? undefined : { gridColumn: '1 / -1' }}>
+                  <div className="record-field-grid">
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-value">{fmtDate(detailModal.date)}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('status')}</span>
+                      <div><StatusBadge status={detailModal.status} /></div>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('amount')}</span>
+                      <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('settledAmount')}</span>
+                      <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('remainingAmount')}</span>
+                      <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('project')}</span>
+                      <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('counterpartyName')}</span>
+                      <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
+                    </div>
+                    {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('client')}</span>
+                        <span className="record-field-value">{detailModal.client_name}</span>
+                      </div>
+                    ) : null}
+                    {detailModal.status === 'paid' && detailModal.expense_id && (!detailModal.settlements || detailModal.settlements.length === 0) && (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('linkedExpense')}</span>
+                        <span className="record-field-value">#{detailModal.expense_id}</span>
+                      </div>
+                    )}
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('description')}</span>
+                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+                    </div>
+                  </div>
+                </div>
+                {canManageDetail ? (
+                  <div className="record-detail-card">
+                    <div className="record-actions-grid">
+                      <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button>
+                      <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button>
+                      <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancel')}</button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="record-detail-card" style={{ marginTop: '1rem' }}>
+                <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('settlementHistory')}</div>
+                {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{tr('date')}</th>
+                          <th>{tr('type')}</th>
+                          <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                          <th>{tr('note')}</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailModal.settlements.map(settlement => (
+                          <tr key={settlement.id}>
+                            <td>{fmtDate(settlement.date)}</td>
+                            <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
+                            <td>{settlement.note || ''}</td>
+                            <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

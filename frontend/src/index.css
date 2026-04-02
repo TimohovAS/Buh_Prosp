@@ -1061,6 +1061,95 @@ tr.row-reversal {
   padding-bottom: 0.9rem;
 }
 
+.incoming-invoices-list-table {
+  table-layout: fixed;
+}
+
+.incoming-invoices-list-table th:nth-child(1),
+.incoming-invoices-list-table td:nth-child(1) {
+  width: 120px;
+}
+
+.incoming-invoices-list-table th:nth-child(2),
+.incoming-invoices-list-table td:nth-child(2) {
+  width: 150px;
+}
+
+.incoming-invoices-list-table th:nth-child(3),
+.incoming-invoices-list-table td:nth-child(3) {
+  width: 240px;
+}
+
+.incoming-invoices-list-table th:nth-child(5),
+.incoming-invoices-list-table td:nth-child(5) {
+  width: 190px;
+}
+
+.incoming-invoices-list-table th:nth-child(6),
+.incoming-invoices-list-table td:nth-child(6) {
+  width: 120px;
+}
+
+.incoming-invoice-date-cell,
+.incoming-invoice-document-cell,
+.incoming-invoice-party-cell,
+.incoming-invoice-description-cell,
+.incoming-invoice-amount-cell {
+  vertical-align: top;
+}
+
+.incoming-invoice-date-primary,
+.incoming-invoice-number,
+.incoming-invoice-party-name,
+.incoming-invoice-amount-primary {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.incoming-invoice-date-secondary,
+.incoming-invoice-document-meta,
+.incoming-invoice-party-meta,
+.incoming-invoice-amount-meta,
+.incoming-invoice-note {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.incoming-invoice-date-secondary,
+.incoming-invoice-document-meta {
+  white-space: nowrap;
+}
+
+.incoming-invoice-party-meta,
+.incoming-invoice-note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.incoming-invoice-party-name,
+.incoming-invoice-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.incoming-invoice-description {
+  color: var(--color-text);
+  line-height: 1.45;
+}
+
+.incoming-invoice-amount-cell {
+  text-align: right;
+}
+
+.incoming-invoices-list-table tbody td {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
 .record-detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
