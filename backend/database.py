@@ -46,7 +46,6 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_income_due_date_column)
         await conn.run_sync(_ensure_enterprise_backup_columns)
-        await conn.run_sync(_ensure_incoming_invoice_advance_column)
 
 
 def _ensure_income_due_date_column(sync_conn):
@@ -79,15 +78,6 @@ def _ensure_enterprise_backup_columns(sync_conn):
     for column, ddl in required.items():
         if column not in columns:
             sync_conn.exec_driver_sql(ddl)
-
-
-def _ensure_incoming_invoice_advance_column(sync_conn):
-    if sync_conn.dialect.name != "sqlite":
-        return
-    rows = sync_conn.exec_driver_sql("PRAGMA table_info('incoming_invoices')").fetchall()
-    columns = {str(r[1]).lower() for r in rows}
-    if "advance_invoice_id" not in columns:
-        sync_conn.exec_driver_sql("ALTER TABLE incoming_invoices ADD COLUMN advance_invoice_id INTEGER")
 
 
 def get_db_path() -> Path | None:
