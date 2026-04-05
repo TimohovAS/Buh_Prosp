@@ -4,6 +4,9 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import SearchInput from '../components/SearchInput'
 
+const UI_DASH = '\u2014'
+const UI_CLOSE = '\u00D7'
+
 export default function Clients() {
   const location = useLocation()
   const isActivePage = location.pathname === '/clients'
@@ -12,6 +15,7 @@ export default function Clients() {
   const [loading, setLoading] = useState(true)
   const [sortCol, setSortCol] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
+  const [detailModal, setDetailModal] = useState(null)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -49,6 +53,15 @@ export default function Clients() {
     setModal({ type: 'edit', id: item.id })
   }
 
+  const openDetail = (item) => {
+    setDetailModal(item)
+  }
+
+  const openEditFromDetail = (item) => {
+    setDetailModal(null)
+    openEdit(item)
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     try {
@@ -64,10 +77,11 @@ export default function Clients() {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDeleteFromDetail = async (item) => {
     if (!confirm(tr('archiveClient'))) return
     try {
-      await api.clients.delete(id)
+      await api.clients.delete(item.id)
+      setDetailModal(null)
       load()
     } catch (err) {
       console.error(err)
@@ -96,6 +110,8 @@ export default function Clients() {
     if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
     return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
   }
+
+  const getClientTypeLabel = (client) => client.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')
 
   return (
     <>
@@ -127,28 +143,32 @@ export default function Clients() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('pib')}>{tr('pib')} <SortIcon col="pib" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('maticni_broj')}>{tr('maticniBroj')} <SortIcon col="maticni_broj" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_type')}>{tr('type')} <SortIcon col="client_type" /></th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={5}>{tr('loading')}</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
+                  <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
                 ) : (
                   sorted.map((client) => (
-                    <tr key={client.id}>
+                    <tr
+                      key={client.id}
+                      className="record-row"
+                      onClick={() => openDetail(client)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(client)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>{client.name}</td>
-                      <td>{(client.address || '').slice(0, 40)}</td>
-                      <td>{client.pib || '-'}</td>
-                      <td>{client.maticni_broj || '-'}</td>
-                      <td>{client.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')}</td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(client)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(client.id)}>
-                          {tr('delete')}
-                        </button>
-                      </td>
+                      <td><span className="record-cell-ellipsis">{client.address || UI_DASH}</span></td>
+                      <td>{client.pib || UI_DASH}</td>
+                      <td>{client.maticni_broj || UI_DASH}</td>
+                      <td>{getClientTypeLabel(client)}</td>
                     </tr>
                   ))
                 )}
@@ -157,6 +177,59 @@ export default function Clients() {
           </div>
         </div>
       </div>
+
+      {detailModal && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 860 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('client')} {UI_DASH} {detailModal.name || `#${detailModal.id}`}</h2>
+              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card">
+                  <div className="record-field-grid">
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('name')}</span>
+                      <span className="record-field-value">{detailModal.name || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('address')}</span>
+                      <div className="record-field-text">{detailModal.address || UI_DASH}</div>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('pib')}</span>
+                      <span className="record-field-value">{detailModal.pib || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('maticniBroj')}</span>
+                      <span className="record-field-value">{detailModal.maticni_broj || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('type')}</span>
+                      <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contact')}</span>
+                      <span className="record-field-value">{detailModal.contact || UI_DASH}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="record-detail-card">
+                  <div className="record-actions-grid">
+                    <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+                      {tr('edit')}
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
+                      {tr('delete')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">

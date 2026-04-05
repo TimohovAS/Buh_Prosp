@@ -24,6 +24,7 @@ export default function Projects() {
   const [unassigned, setUnassigned] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [detailModal, setDetailModal] = useState(null)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -140,6 +141,15 @@ export default function Projects() {
     setModal({ type: 'edit', id: item.id })
   }
 
+  const openDetail = (item) => {
+    setDetailModal(item)
+  }
+
+  const openEditFromDetail = (item) => {
+    setDetailModal(null)
+    openEdit(item)
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     const payload = {
@@ -164,10 +174,11 @@ export default function Projects() {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDeleteFromDetail = async (item) => {
     if (!confirm(tr('confirmDeleteProject'))) return
     try {
-      await api.projects.delete(id)
+      await api.projects.delete(item.id)
+      setDetailModal(null)
       loadAll()
     } catch (err) {
       console.error(err)
@@ -306,19 +317,30 @@ export default function Projects() {
                 <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('revenue')}>{tr('income')} <SortIcon col="revenue" /></th>
                 <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('expenses')}>{tr('expenses')} <SortIcon col="expenses" /></th>
                 <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('projectProfit')} <SortIcon col="profit" /></th>
-                <th style={{ width: 140 }}></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7}>{tr('loading')}</td></tr>
+                <tr><td colSpan={6}>{tr('loading')}</td></tr>
               ) : filteredProjects.length === 0 ? (
-                <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noProjects')}</td></tr>
+                <tr><td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noProjects')}</td></tr>
               ) : (
                 filteredProjects.map((project) => {
                   const row = getRowData(project)
                   return (
-                    <tr key={project.id} style={project.status === 'archived' ? { opacity: 0.6 } : {}}>
+                    <tr
+                      key={project.id}
+                      className="record-row"
+                      style={project.status === 'archived' ? { opacity: 0.6 } : {}}
+                      onClick={() => openDetail(project)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(project)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>
                         {project.name}
                         {project.is_internal ? (
@@ -333,12 +355,6 @@ export default function Projects() {
                       <td>{fmt(row.expenses)} RSD</td>
                       <td style={{ fontWeight: 600, color: (row.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                         {fmt(row.profit)} RSD
-                      </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(project)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(project.id)}>
-                          {tr('delete')}
-                        </button>
                       </td>
                     </tr>
                   )
@@ -373,6 +389,89 @@ export default function Projects() {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {detailModal && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 920 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('project')} {UI_DASH} {detailModal.name || `#${detailModal.id}`}</h2>
+              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card">
+                  <div className="record-field-grid">
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('name')}</span>
+                      <span className="record-field-value">{detailModal.name || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('projectCode')}</span>
+                      <span className="record-field-value">{detailModal.code || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('client')}</span>
+                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('status')}</span>
+                      <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('isInternal')}</span>
+                      <span className="record-field-value">{detailModal.is_internal ? tr('yes') : tr('no')}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('projectPlannedIncome')}</span>
+                      <span className="record-field-value">{fmt(detailModal.planned_income)} RSD</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('projectPlannedExpenses')}</span>
+                      <span className="record-field-value">{fmt(detailModal.planned_expense)} RSD</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-value">{detailModal.start_date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('validTo')}</span>
+                      <span className="record-field-value">{detailModal.end_date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('income')}</span>
+                      <span className="record-field-value">{fmt(getRowData(detailModal).revenue)} RSD</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('expenses')}</span>
+                      <span className="record-field-value">{fmt(getRowData(detailModal).expenses)} RSD</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('projectProfit')}</span>
+                      <span className="record-field-value" style={{ color: (getRowData(detailModal).profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
+                        {fmt(getRowData(detailModal).profit)} RSD
+                      </span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{detailModal.notes || UI_DASH}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="record-detail-card">
+                  <div className="record-actions-grid">
+                    <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+                      {tr('edit')}
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
+                      {tr('delete')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

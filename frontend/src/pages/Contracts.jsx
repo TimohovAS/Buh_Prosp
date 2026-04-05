@@ -26,6 +26,7 @@ export default function Contracts() {
   const [loading, setLoading] = useState(true)
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
+  const [detailModal, setDetailModal] = useState(null)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     number: '',
@@ -130,6 +131,15 @@ export default function Contracts() {
     setModal({ type: 'edit', id: contract.id })
   }
 
+  const openDetail = (contract) => {
+    setDetailModal(contract)
+  }
+
+  const openEditFromDetail = (contract) => {
+    setDetailModal(null)
+    openEdit(contract)
+  }
+
   const addItem = () => {
     setItemsForm([...itemsForm, { description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
   }
@@ -227,10 +237,11 @@ export default function Contracts() {
     return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
   }
 
-  const handleDelete = async (id) => {
+  const handleDeleteFromDetail = async (contract) => {
     if (!confirm(tr('deleteContract'))) return
     try {
-      await api.contracts.delete(id)
+      await api.contracts.delete(contract.id)
+      setDetailModal(null)
       load()
     } catch (error) {
       console.error(error)
@@ -283,17 +294,27 @@ export default function Contracts() {
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_expenses')}>{tr('contractExpenses')} <SortIcon col="total_expenses" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('contractProfit')} <SortIcon col="profit" /></th>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIcon col="status" /></th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={12}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={11}>{tr('loading')}</td></tr>
                 ) : filteredItems.length === 0 ? (
-                  <tr><td colSpan={12} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
+                  <tr><td colSpan={11} style={{ color: 'var(--color-text-muted)' }}>{tr('noContracts')}</td></tr>
                 ) : (
                   filteredItems.map((contract) => (
-                    <tr key={contract.id}>
+                    <tr
+                      key={contract.id}
+                      className="record-row"
+                      onClick={() => openDetail(contract)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(contract)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>{contract.number}</td>
                       <td>{contract.date}</td>
                       <td>{contract.client_name || UI_DASH}</td>
@@ -318,10 +339,6 @@ export default function Contracts() {
                           {tr(STATUS_KEYS[contract.status] || 'active')}
                         </span>
                       </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(contract)}>{tr('edit')}</button>
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleDelete(contract.id)}>{tr('delete')}</button>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -330,6 +347,111 @@ export default function Contracts() {
           </div>
         </div>
       </div>
+
+      {detailModal && (
+        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 960 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('contractForm')} {UI_DASH} {detailModal.number || `#${detailModal.id}`}</h2>
+              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div className="record-detail-grid">
+                <div className="record-detail-card">
+                  <div className="record-field-grid">
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contractNumber')}</span>
+                      <span className="record-field-value">{detailModal.number || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('client')}</span>
+                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('project')}</span>
+                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contractType')}</span>
+                      <span className="record-field-value">{tr(CONTRACT_TYPE_KEYS[detailModal.contract_type] || 'service')}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('status')}</span>
+                      <span className="record-field-value">{tr(STATUS_KEYS[detailModal.status] || 'active')}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('contractSubject')}</span>
+                      <div className="record-field-text">{detailModal.subject || UI_DASH}</div>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('amount')}</span>
+                      <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contractReceived')}</span>
+                      <span className="record-field-value">{Number(detailModal.total_received || 0).toLocaleString('sr-RS')}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contractExpenses')}</span>
+                      <span className="record-field-value">{Number(detailModal.total_expenses || 0).toLocaleString('sr-RS')}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('contractProfit')}</span>
+                      <span className="record-field-value" style={{ color: (detailModal.profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
+                        {Number(detailModal.profit || 0).toLocaleString('sr-RS')}
+                      </span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('validFrom')}</span>
+                      <span className="record-field-value">{detailModal.validity_start || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('validTo')}</span>
+                      <span className="record-field-value">{detailModal.validity_end || UI_DASH}</span>
+                    </div>
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+                    </div>
+                    {detailModal.items?.length ? (
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('contractItems')}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {detailModal.items.map((item, index) => (
+                            <div key={`${detailModal.id}-${index}`} className="card" style={{ padding: '0.85rem' }}>
+                              <div style={{ fontWeight: 700 }}>{item.description || UI_DASH}</div>
+                              <div style={{ marginTop: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                {tr('quantity')}: {Number(item.quantity || 0).toLocaleString('sr-RS')} · {tr('unit')}: {item.unit || UI_DASH} · {tr('price')}: {Number(item.price || 0).toLocaleString('sr-RS')}
+                              </div>
+                              <div style={{ marginTop: '0.35rem' }}>
+                                {tr('amount')}: {Number((item.quantity || 0) * (item.price || 0)).toLocaleString('sr-RS')}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="record-detail-card">
+                  <div className="record-actions-grid">
+                    <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+                      {tr('edit')}
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
+                      {tr('delete')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">
