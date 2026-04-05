@@ -7,31 +7,31 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 
 const PERIODS = [
-  { value: 'weekly', label: '\u2014' },
-  { value: 'monthly', label: '\u2014' },
-  { value: 'quarterly', label: '\u2014' },
-  { value: 'yearly', label: '\u2014' },
+  { value: 'weekly', label: 'weekly' },
+  { value: 'monthly', label: 'monthly' },
+  { value: 'quarterly', label: 'quarterly' },
+  { value: 'yearly', label: 'yearly' },
 ]
 
 const DAYS_OF_WEEK = [
-  { value: 0, label: '\u2014' },
-  { value: 1, label: '\u2014' },
-  { value: 2, label: '\u2014' },
-  { value: 3, label: '\u2014' },
-  { value: 4, label: '\u2014' },
-  { value: 5, label: '\u2014' },
-  { value: 6, label: '\u2014' },
+  { value: 0, label: 'dayMon' },
+  { value: 1, label: 'dayTue' },
+  { value: 2, label: 'dayWed' },
+  { value: 3, label: 'dayThu' },
+  { value: 4, label: 'dayFri' },
+  { value: 5, label: 'daySat' },
+  { value: 6, label: 'daySun' },
 ]
 
 const CATEGORIES = [
   { value: '', label: '\u2014' },
-  { value: 'rent', label: '\u2014' },
-  { value: 'internet', label: '\u2014' },
-  { value: 'phone', label: '\u2014' },
-  { value: 'utilities', label: '\u2014' },
-  { value: 'insurance', label: '\u2014' },
-  { value: 'software', label: '\u2014' },
-  { value: 'other', label: '\u2014' },
+  { value: 'rent', label: 'plannedCatRent' },
+  { value: 'internet', label: 'plannedCatInternet' },
+  { value: 'phone', label: 'plannedCatPhone' },
+  { value: 'utilities', label: 'plannedCatUtilities' },
+  { value: 'insurance', label: 'plannedCatInsurance' },
+  { value: 'software', label: 'plannedCatSoftware' },
+  { value: 'other', label: 'plannedCatOther' },
 ] // legacy, kept for table display fallback
 
 function formatDate(s) {
