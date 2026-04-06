@@ -28,6 +28,9 @@ export default function Projects() {
   const [movementModal, setMovementModal] = useState(null)
   const [movementLoading, setMovementLoading] = useState(false)
   const [movementError, setMovementError] = useState(null)
+  const [movementPeriodQuick, setMovementPeriodQuick] = useState('all')
+  const [movementCustomFrom, setMovementCustomFrom] = useState('')
+  const [movementCustomTo, setMovementCustomTo] = useState('')
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -54,6 +57,7 @@ export default function Projects() {
   const rowClickTimeoutRef = useRef(null)
 
   const currentYear = new Date().getFullYear()
+  const todayIso = new Date().toISOString().slice(0, 10)
 
   const getPeriod = () => {
     if (periodQuick === 'month') {
@@ -158,31 +162,87 @@ export default function Projects() {
     openEdit(item)
   }
 
-  const openMovements = async (item) => {
-    setMovementModal({
-      project_id: item.id,
-      project_name: item.name,
-      mode,
-      from_date: from,
-      to_date: to,
-      items: [],
-    })
+  const getProjectAllTimeRange = (item) => {
+    const fallbackStart = (item?.created_at || '').slice(0, 10) || todayIso
+    const resolvedFrom = item?.start_date || fallbackStart
+    const resolvedTo = item?.end_date && item.end_date < todayIso ? item.end_date : todayIso
+    return { from: resolvedFrom, to: resolvedTo }
+  }
+
+  const getMovementRange = (item = movementModal) => {
+    const allTime = getProjectAllTimeRange(item)
+    if (movementPeriodQuick === 'all') return allTime
+    if (movementPeriodQuick === 'month') {
+      const currentMonth = new Date().getMonth() + 1
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+      return {
+        from: `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+      }
+    }
+    if (movementPeriodQuick === 'quarter') {
+      const currentMonth = new Date().getMonth() + 1
+      const quarter = Math.ceil(currentMonth / 3)
+      const startMonth = (quarter - 1) * 3 + 1
+      const endMonth = quarter * 3
+      const lastDay = new Date(currentYear, endMonth + 1, 0).getDate()
+      return {
+        from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+      }
+    }
+    if (movementPeriodQuick === 'year') {
+      return { from: `${currentYear}-01-01`, to: `${currentYear}-12-31` }
+    }
+    return {
+      from: movementCustomFrom || allTime.from,
+      to: movementCustomTo || allTime.to,
+    }
+  }
+
+  const loadMovements = async (item) => {
+    if (!item?.project_id) return
+    const range = getMovementRange(item)
     setMovementLoading(true)
     setMovementError(null)
     try {
       const payload = await api.finance.projectMovements({
-        project_id: item.id,
-        from,
-        to,
+        project_id: item.project_id,
+        from: range.from,
+        to: range.to,
         mode,
       })
-      setMovementModal(payload)
+      setMovementModal((current) => current ? {
+        ...current,
+        ...payload,
+        project_start_date: current.project_start_date,
+        project_end_date: current.project_end_date,
+        project_created_date: current.project_created_date,
+      } : current)
     } catch (err) {
       console.error(err)
       setMovementError(err.message)
     } finally {
       setMovementLoading(false)
     }
+  }
+
+  const openMovements = async (item) => {
+    const allTime = getProjectAllTimeRange(item)
+    setMovementPeriodQuick('all')
+    setMovementCustomFrom(allTime.from)
+    setMovementCustomTo(allTime.to)
+    setMovementModal({
+      project_id: item.id,
+      project_name: item.name,
+      project_start_date: item.start_date || null,
+      project_end_date: item.end_date || null,
+      project_created_date: (item.created_at || '').slice(0, 10) || null,
+      mode,
+      from_date: allTime.from,
+      to_date: allTime.to,
+      items: [],
+    })
   }
 
   const openMovementsFromDetail = (item) => {
@@ -205,6 +265,11 @@ export default function Projects() {
     }
     openMovements(item)
   }
+
+  useEffect(() => {
+    if (!movementModal?.project_id) return
+    loadMovements(movementModal)
+  }, [movementModal?.project_id, movementPeriodQuick, movementCustomFrom, movementCustomTo, mode])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -549,22 +614,55 @@ export default function Projects() {
       )}
 
       {movementModal && (
-        <div className="modal-overlay" onClick={() => { if (!movementLoading) { setMovementModal(null); setMovementError(null) } }}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 1120 }}>
+        <div className="modal-overlay" onClick={() => { setMovementModal(null); setMovementError(null) }}>
+          <div
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(96vw, 1520px)',
+              maxWidth: 'none',
+              height: 'min(92vh, 980px)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             <div className="modal-header">
               <h2 className="modal-title">{tr('projectMovements')} {UI_DASH} {movementModal.project_name || `#${movementModal.project_id}`}</h2>
               <button className="modal-close" onClick={() => { setMovementModal(null); setMovementError(null) }}>{UI_CLOSE}</button>
             </div>
-            <div className="modal-body">
-              <div style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                {movementModal.from_date} {UI_DASH} {movementModal.to_date} · {tr(movementModal.mode === 'cash' ? 'financeModeCash' : 'financeModeAccrual')}
+            <div className="modal-body" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                    {['all', 'month', 'quarter', 'year', 'custom'].map((quickPeriod) => (
+                      <button
+                        key={quickPeriod}
+                        className={`btn btn-sm ${movementPeriodQuick === quickPeriod ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setMovementPeriodQuick(quickPeriod)}
+                      >
+                        {quickPeriod === 'all' ? tr('allTime') : tr(`financePeriod${quickPeriod.charAt(0).toUpperCase() + quickPeriod.slice(1)}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {movementPeriodQuick === 'custom' ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <DatePicker value={movementCustomFrom} onChange={setMovementCustomFrom} placeholder={tr('periodFrom')} className="form-input" />
+                    <span>{UI_DASH}</span>
+                    <DatePicker value={movementCustomTo} onChange={setMovementCustomTo} placeholder={tr('periodTo')} className="form-input" />
+                  </div>
+                ) : null}
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                  {movementModal.from_date} {UI_DASH} {movementModal.to_date} · {tr(movementModal.mode === 'cash' ? 'financeModeCash' : 'financeModeAccrual')}
+                </div>
               </div>
               {movementError ? (
                 <div className="alert alert-danger">{movementError}</div>
               ) : movementLoading ? (
                 <div style={{ color: 'var(--color-text-muted)' }}>{tr('loading')}</div>
               ) : movementModal.items?.length ? (
-                <div className="table-wrap table-wrap-scroll">
+                <div className="table-wrap table-wrap-scroll" style={{ flex: 1, maxHeight: 'none' }}>
                   <table>
                     <thead>
                       <tr>
