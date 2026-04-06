@@ -73,7 +73,7 @@ export default function Projects() {
       const quarter = Math.ceil(month / 3)
       const startMonth = (quarter - 1) * 3 + 1
       const endMonth = quarter * 3
-      const lastDay = new Date(currentYear, endMonth + 1, 0).getDate()
+      const lastDay = new Date(currentYear, endMonth, 0).getDate()
       return {
         from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
         to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
@@ -163,9 +163,13 @@ export default function Projects() {
   }
 
   const getProjectAllTimeRange = (item) => {
-    const fallbackStart = (item?.created_at || '').slice(0, 10) || todayIso
-    const resolvedFrom = item?.start_date || fallbackStart
-    const resolvedTo = item?.end_date && item.end_date < todayIso ? item.end_date : todayIso
+    const createdAt = item?.created_at || item?.project_created_date || ''
+    const createdDate = typeof createdAt === 'string' ? createdAt.slice(0, 10) : ''
+    const fallbackStart = createdDate || todayIso
+    const projectStart = item?.start_date || item?.project_start_date || fallbackStart
+    const projectEnd = item?.end_date || item?.project_end_date || null
+    const resolvedFrom = projectStart
+    const resolvedTo = projectEnd && projectEnd < todayIso ? projectEnd : todayIso
     return { from: resolvedFrom, to: resolvedTo }
   }
 
@@ -185,7 +189,7 @@ export default function Projects() {
       const quarter = Math.ceil(currentMonth / 3)
       const startMonth = (quarter - 1) * 3 + 1
       const endMonth = quarter * 3
-      const lastDay = new Date(currentYear, endMonth + 1, 0).getDate()
+      const lastDay = new Date(currentYear, endMonth, 0).getDate()
       return {
         from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
         to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
