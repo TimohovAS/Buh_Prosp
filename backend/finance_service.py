@@ -688,6 +688,215 @@ async def get_finance_by_project(
     }
 
 
+async def get_project_movements(
+    db: AsyncSession,
+    project_id: int,
+    date_from: date,
+    date_to: date,
+    mode: Literal["accrual", "cash"] = "accrual",
+) -> dict:
+    project = (
+        await db.execute(select(Project).where(Project.id == project_id))
+    ).scalar_one_or_none()
+    if not project:
+        raise ValueError("Project not found")
+
+    items: list[dict[str, Any]] = []
+
+    if mode == "accrual":
+        income_rows = await db.execute(
+            select(
+                Income.id,
+                Income.issued_date,
+                Income.invoice_number,
+                Income.client_name,
+                Income.description,
+                Income.amount_rsd,
+                Income.status,
+            ).where(
+                and_(
+                    Income.project_id == project_id,
+                    Income.status != "cancelled",
+                    Income.issued_date >= date_from,
+                    Income.issued_date <= date_to,
+                )
+            )
+        )
+        for income_id, issued_date, invoice_number, client_name, description, amount_rsd, status in income_rows.fetchall():
+            items.append({
+                "row_key": f"income-{income_id}",
+                "date": issued_date,
+                "direction": "in",
+                "movement_type": "income",
+                "source_kind": "income",
+                "document_number": invoice_number,
+                "counterparty_name": client_name,
+                "description": description,
+                "amount": to_decimal(amount_rsd or ZERO_DECIMAL),
+                "status": status,
+            })
+
+        expense_rows = await db.execute(
+            select(
+                Expense.id,
+                Expense.date,
+                Expense.bank_reference,
+                Expense.description,
+                Expense.amount,
+                Expense.status,
+            ).where(
+                and_(
+                    _visible_expense_condition(),
+                    Expense.project_id == project_id,
+                    Expense.source != CASH_TRANSFER_SOURCE,
+                    Expense.date >= date_from,
+                    Expense.date <= date_to,
+                )
+            )
+        )
+        for expense_id, expense_date, bank_reference, description, amount, status in expense_rows.fetchall():
+            items.append({
+                "row_key": f"expense-{expense_id}",
+                "date": expense_date,
+                "direction": "out",
+                "movement_type": "expense",
+                "source_kind": "expense",
+                "document_number": bank_reference,
+                "counterparty_name": None,
+                "description": description,
+                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                "status": status,
+            })
+    else:
+        direct_income_rows = await db.execute(
+            select(
+                BankTransaction.id,
+                BankTransaction.date,
+                Income.invoice_number,
+                BankTransaction.counterparty_name,
+                BankTransaction.purpose,
+                Income.description,
+                BankTransaction.amount,
+                BankTransaction.status,
+            )
+            .select_from(BankTransaction)
+            .join(Income, BankTransaction.matched_id == Income.id)
+            .where(
+                and_(
+                    BankTransaction.direction == "in",
+                    BankTransaction.status != "ignored",
+                    BankTransaction.matched_type == "income",
+                    BankTransaction.date >= date_from,
+                    BankTransaction.date <= date_to,
+                    Income.project_id == project_id,
+                )
+            )
+        )
+        for tx_id, tx_date, invoice_number, counterparty_name, purpose, description, amount, status in direct_income_rows.fetchall():
+            items.append({
+                "row_key": f"bank-income-{tx_id}",
+                "date": tx_date,
+                "direction": "in",
+                "movement_type": "income",
+                "source_kind": "bank",
+                "document_number": invoice_number,
+                "counterparty_name": counterparty_name,
+                "description": purpose or description,
+                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                "status": status,
+            })
+
+        allocated_income_rows = await db.execute(
+            select(
+                BankTransaction.id,
+                BankTransactionIncomeAllocation.id,
+                BankTransaction.date,
+                Income.invoice_number,
+                BankTransaction.counterparty_name,
+                BankTransaction.purpose,
+                Income.description,
+                BankTransactionIncomeAllocation.amount,
+                BankTransaction.status,
+            )
+            .select_from(BankTransaction)
+            .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
+            .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
+            .where(
+                and_(
+                    BankTransaction.direction == "in",
+                    BankTransaction.status != "ignored",
+                    BankTransaction.matched_type == "income_allocation",
+                    BankTransaction.date >= date_from,
+                    BankTransaction.date <= date_to,
+                    Income.project_id == project_id,
+                )
+            )
+        )
+        for tx_id, allocation_id, tx_date, invoice_number, counterparty_name, purpose, description, amount, status in allocated_income_rows.fetchall():
+            items.append({
+                "row_key": f"bank-income-allocation-{allocation_id}",
+                "date": tx_date,
+                "direction": "in",
+                "movement_type": "income",
+                "source_kind": "allocation",
+                "document_number": invoice_number,
+                "counterparty_name": counterparty_name,
+                "description": purpose or description,
+                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                "status": status,
+            })
+
+        expense_cash_rows = await db.execute(
+            select(
+                BankTransaction.id,
+                BankTransaction.date,
+                Expense.bank_reference,
+                BankTransaction.counterparty_name,
+                BankTransaction.purpose,
+                Expense.description,
+                BankTransaction.amount,
+                BankTransaction.status,
+            )
+            .select_from(BankTransaction)
+            .join(Expense, BankTransaction.matched_id == Expense.id)
+            .where(
+                and_(
+                    BankTransaction.direction == "out",
+                    BankTransaction.status != "ignored",
+                    BankTransaction.matched_type == "expense",
+                    Expense.source != CASH_TRANSFER_SOURCE,
+                    BankTransaction.date >= date_from,
+                    BankTransaction.date <= date_to,
+                    Expense.project_id == project_id,
+                )
+            )
+        )
+        for tx_id, tx_date, bank_reference, counterparty_name, purpose, description, amount, status in expense_cash_rows.fetchall():
+            items.append({
+                "row_key": f"bank-expense-{tx_id}",
+                "date": tx_date,
+                "direction": "out",
+                "movement_type": "expense",
+                "source_kind": "bank",
+                "document_number": bank_reference,
+                "counterparty_name": counterparty_name,
+                "description": purpose or description,
+                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                "status": status,
+            })
+
+    items.sort(key=lambda item: (item["date"], item["direction"] == "out", item["row_key"]), reverse=True)
+
+    return {
+        "project_id": project.id,
+        "project_name": project.name,
+        "mode": mode,
+        "from_date": date_from,
+        "to_date": date_to,
+        "items": items,
+    }
+
+
 
 
 async def get_finance_pnl(db: AsyncSession, year: int) -> dict:

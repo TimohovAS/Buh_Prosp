@@ -218,6 +218,10 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return request(`/finance/by-project?${q}`);
     },
+    projectMovements: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/finance/project-movements?${q}`);
+    },
   },
   projects: {
     list: (params = {}) => {

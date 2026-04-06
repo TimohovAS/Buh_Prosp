@@ -1,13 +1,13 @@
 """Роутер финансовых отчётов (accrual/cash)."""
 from datetime import date
 from typing import Optional, Literal
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.database import get_db
 from backend.models import User
 from backend.auth import get_current_user_required
-from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project, get_finance_pnl
-from backend.schemas import FinanceLimitsResponse, FinancePnlResponse
+from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project, get_finance_pnl, get_project_movements
+from backend.schemas import FinanceLimitsResponse, FinancePnlResponse, ProjectMovementsResponse
 from backend.services import get_finance_limits_overview
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,3 +95,20 @@ async def finance_by_project(
 ):
     """Аналитика по проектам: revenue, expenses, profit."""
     return await get_finance_by_project(db, from_, to, mode)
+
+
+@router.get("/project-movements", response_model=ProjectMovementsResponse)
+async def finance_project_movements(
+    project_id: int = Query(...),
+    from_: date = Query(..., alias="from", description="РќР°С‡Р°Р»Рѕ РїРµСЂРёРѕРґР°"),
+    to: date = Query(..., alias="to", description="РљРѕРЅРµС† РїРµСЂРёРѕРґР°"),
+    mode: Literal["accrual", "cash"] = Query("accrual"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Таблица движений по проекту за выбранный период."""
+    try:
+        payload = await get_project_movements(db, project_id, from_, to, mode)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return ProjectMovementsResponse(**payload)

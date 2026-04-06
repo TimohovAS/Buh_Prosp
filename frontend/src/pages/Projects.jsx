@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -25,6 +25,9 @@ export default function Projects() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [detailModal, setDetailModal] = useState(null)
+  const [movementModal, setMovementModal] = useState(null)
+  const [movementLoading, setMovementLoading] = useState(false)
+  const [movementError, setMovementError] = useState(null)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -48,6 +51,7 @@ export default function Projects() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [mode, setMode] = useState('accrual')
+  const rowClickTimeoutRef = useRef(null)
 
   const currentYear = new Date().getFullYear()
 
@@ -107,6 +111,10 @@ export default function Projects() {
     api.clients.listBrief().then(setClients)
   }, [isActivePage])
 
+  useEffect(() => () => {
+    if (rowClickTimeoutRef.current) clearTimeout(rowClickTimeoutRef.current)
+  }, [])
+
   const openAdd = () => {
     setForm({
       name: '',
@@ -148,6 +156,54 @@ export default function Projects() {
   const openEditFromDetail = (item) => {
     setDetailModal(null)
     openEdit(item)
+  }
+
+  const openMovements = async (item) => {
+    setMovementModal({
+      project_id: item.id,
+      project_name: item.name,
+      mode,
+      from_date: from,
+      to_date: to,
+      items: [],
+    })
+    setMovementLoading(true)
+    setMovementError(null)
+    try {
+      const payload = await api.finance.projectMovements({
+        project_id: item.id,
+        from,
+        to,
+        mode,
+      })
+      setMovementModal(payload)
+    } catch (err) {
+      console.error(err)
+      setMovementError(err.message)
+    } finally {
+      setMovementLoading(false)
+    }
+  }
+
+  const openMovementsFromDetail = (item) => {
+    setDetailModal(null)
+    openMovements(item)
+  }
+
+  const handleProjectRowClick = (item) => {
+    if (rowClickTimeoutRef.current) clearTimeout(rowClickTimeoutRef.current)
+    rowClickTimeoutRef.current = setTimeout(() => {
+      openDetail(item)
+      rowClickTimeoutRef.current = null
+    }, 180)
+  }
+
+  const handleProjectRowDoubleClick = (item) => {
+    if (rowClickTimeoutRef.current) {
+      clearTimeout(rowClickTimeoutRef.current)
+      rowClickTimeoutRef.current = null
+    }
+    openMovements(item)
   }
 
   const handleSubmit = async (event) => {
@@ -229,6 +285,18 @@ export default function Projects() {
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
     return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
+  }
+
+  const getMovementTypeLabel = (item) => item.movement_type === 'income'
+    ? tr('projectMovementSourceIncome')
+    : tr('projectMovementSourceExpense')
+
+  const getMovementSourceLabel = (item) => {
+    if (item.source_kind === 'allocation') return tr('projectMovementSourceAllocation')
+    if (item.source_kind === 'bank') return tr('projectMovementSourceBank')
+    if (item.source_kind === 'income') return tr('projectMovementSourceIncome')
+    if (item.source_kind === 'expense') return tr('projectMovementSourceExpense')
+    return item.source_kind || UI_DASH
   }
 
   return (
@@ -332,7 +400,8 @@ export default function Projects() {
                       key={project.id}
                       className="record-row"
                       style={project.status === 'archived' ? { opacity: 0.6 } : {}}
-                      onClick={() => openDetail(project)}
+                      onClick={() => handleProjectRowClick(project)}
+                      onDoubleClick={() => handleProjectRowDoubleClick(project)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
@@ -462,6 +531,9 @@ export default function Projects() {
                 </div>
                 <div className="record-detail-card">
                   <div className="record-actions-grid">
+                    <button type="button" className="btn btn-primary" onClick={() => openMovementsFromDetail(detailModal)}>
+                      {tr('projectMovements')}
+                    </button>
                     <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
                       {tr('edit')}
                     </button>
@@ -471,6 +543,60 @@ export default function Projects() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {movementModal && (
+        <div className="modal-overlay" onClick={() => { if (!movementLoading) { setMovementModal(null); setMovementError(null) } }}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 1120 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('projectMovements')} {UI_DASH} {movementModal.project_name || `#${movementModal.project_id}`}</h2>
+              <button className="modal-close" onClick={() => { setMovementModal(null); setMovementError(null) }}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                {movementModal.from_date} {UI_DASH} {movementModal.to_date} · {tr(movementModal.mode === 'cash' ? 'financeModeCash' : 'financeModeAccrual')}
+              </div>
+              {movementError ? (
+                <div className="alert alert-danger">{movementError}</div>
+              ) : movementLoading ? (
+                <div style={{ color: 'var(--color-text-muted)' }}>{tr('loading')}</div>
+              ) : movementModal.items?.length ? (
+                <div className="table-wrap table-wrap-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('date')}</th>
+                        <th>{tr('projectMovementType')}</th>
+                        <th>{tr('projectMovementSource')}</th>
+                        <th>{tr('projectMovementDocument')}</th>
+                        <th>{tr('projectMovementCounterparty')}</th>
+                        <th>{tr('description')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movementModal.items.map((item) => (
+                        <tr key={item.row_key}>
+                          <td>{item.date}</td>
+                          <td>{getMovementTypeLabel(item)}</td>
+                          <td>{getMovementSourceLabel(item)}</td>
+                          <td>{item.document_number || UI_DASH}</td>
+                          <td>{item.counterparty_name || UI_DASH}</td>
+                          <td><span className="record-cell-ellipsis">{item.description || UI_DASH}</span></td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: item.direction === 'in' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                            {item.direction === 'in' ? '+' : '-'}{Number(item.amount || 0).toLocaleString('sr-RS')} RSD
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--color-text-muted)' }}>{tr('projectMovementNoItems')}</div>
+              )}
             </div>
           </div>
         </div>

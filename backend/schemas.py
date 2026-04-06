@@ -4,7 +4,7 @@ from decimal import Decimal
 
 # Р С’Р В»Р С‘Р В°РЎРѓ Р Т‘Р В»РЎРЏ Р С‘Р В·Р В±Р ВµР В¶Р В°Р Р…Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂћР В»Р С‘Р С”РЎвЂљР В° Р С‘Р СР ВµР Р…Р С‘ Р С—Р С•Р В»РЎРЏ date РЎРѓ РЎвЂљР С‘Р С—Р С•Р С date
 DateType = date
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_EMBLEM_DATA_URL_LENGTH = 350000
@@ -264,6 +264,28 @@ class IncomePaymentTransactionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ProjectMovementItemResponse(BaseModel):
+    row_key: str
+    date: DateType
+    direction: Literal["in", "out"]
+    movement_type: Literal["income", "expense"]
+    source_kind: str
+    document_number: Optional[str] = None
+    counterparty_name: Optional[str] = None
+    description: Optional[str] = None
+    amount: Decimal
+    status: Optional[str] = None
+
+
+class ProjectMovementsResponse(BaseModel):
+    project_id: int
+    project_name: Optional[str] = None
+    mode: Literal["accrual", "cash"]
+    from_date: DateType
+    to_date: DateType
+    items: list[ProjectMovementItemResponse] = Field(default_factory=list)
 
 
 class IncomePaymentDetailsResponse(BaseModel):
