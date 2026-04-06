@@ -688,6 +688,71 @@ async def get_finance_by_project(
     }
 
 
+async def get_project_movement_bounds(
+    db: AsyncSession,
+    project_ids: Optional[list[int]] = None,
+) -> dict[int, dict[str, Optional[date]]]:
+    if project_ids is not None and not project_ids:
+        return {}
+
+    bounds: dict[int, dict[str, Optional[date]]] = {}
+
+    income_conditions = [
+        Income.project_id.isnot(None),
+        Income.status != "cancelled",
+    ]
+    if project_ids is not None:
+        income_conditions.append(Income.project_id.in_(project_ids))
+
+    income_rows = await db.execute(
+        select(
+            Income.project_id,
+            func.min(Income.issued_date),
+            func.max(Income.issued_date),
+        ).where(
+            and_(*income_conditions)
+        ).group_by(Income.project_id)
+    )
+
+    for project_id, min_date, max_date in income_rows.fetchall():
+        if project_id is None:
+            continue
+        entry = bounds.setdefault(project_id, {"first_movement_date": None, "last_movement_date": None})
+        if min_date is not None and (entry["first_movement_date"] is None or min_date < entry["first_movement_date"]):
+            entry["first_movement_date"] = min_date
+        if max_date is not None and (entry["last_movement_date"] is None or max_date > entry["last_movement_date"]):
+            entry["last_movement_date"] = max_date
+
+    expense_conditions = [
+        _visible_expense_condition(),
+        Expense.source != CASH_TRANSFER_SOURCE,
+        Expense.project_id.isnot(None),
+    ]
+    if project_ids is not None:
+        expense_conditions.append(Expense.project_id.in_(project_ids))
+
+    expense_rows = await db.execute(
+        select(
+            Expense.project_id,
+            func.min(Expense.date),
+            func.max(Expense.date),
+        ).where(
+            and_(*expense_conditions)
+        ).group_by(Expense.project_id)
+    )
+
+    for project_id, min_date, max_date in expense_rows.fetchall():
+        if project_id is None:
+            continue
+        entry = bounds.setdefault(project_id, {"first_movement_date": None, "last_movement_date": None})
+        if min_date is not None and (entry["first_movement_date"] is None or min_date < entry["first_movement_date"]):
+            entry["first_movement_date"] = min_date
+        if max_date is not None and (entry["last_movement_date"] is None or max_date > entry["last_movement_date"]):
+            entry["last_movement_date"] = max_date
+
+    return bounds
+
+
 async def get_project_movements(
     db: AsyncSession,
     project_id: int,

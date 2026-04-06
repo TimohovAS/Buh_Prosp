@@ -14,8 +14,6 @@ const UI_CLOSE = '\u00D7'
 const UI_SORT_BOTH = '\u2195'
 const UI_SORT_ASC = '\u2191'
 const UI_SORT_DESC = '\u2193'
-const MOVEMENT_HISTORY_START = '2000-01-01'
-
 export default function Projects() {
   const location = useLocation()
   const isActivePage = location.pathname === '/projects'
@@ -167,18 +165,18 @@ export default function Projects() {
     const createdAt = item?.created_at || item?.project_created_date || ''
     const createdDate = typeof createdAt === 'string' ? createdAt.slice(0, 10) : ''
     const fallbackStart = createdDate || todayIso
+    const firstMovementDate = item?.first_movement_date || item?.project_first_movement_date || null
+    const lastMovementDate = item?.last_movement_date || item?.project_last_movement_date || null
     const projectStart = item?.start_date || item?.project_start_date || fallbackStart
     const projectEnd = item?.end_date || item?.project_end_date || null
-    const resolvedFrom = projectStart
-    const resolvedTo = projectEnd && projectEnd < todayIso ? projectEnd : todayIso
+    const resolvedFrom = firstMovementDate || projectStart
+    const resolvedTo = lastMovementDate || (projectEnd && projectEnd < todayIso ? projectEnd : todayIso)
     return { from: resolvedFrom, to: resolvedTo }
   }
 
   const getMovementRange = (item = movementModal) => {
     const allTime = getProjectAllTimeRange(item)
-    if (movementPeriodQuick === 'all') {
-      return { from: MOVEMENT_HISTORY_START, to: todayIso }
-    }
+    if (movementPeriodQuick === 'all') return allTime
     if (movementPeriodQuick === 'month') {
       const currentMonth = new Date().getMonth() + 1
       const lastDay = new Date(currentYear, currentMonth, 0).getDate()
@@ -210,7 +208,6 @@ export default function Projects() {
   const loadMovements = async (item) => {
     if (!item?.project_id) return
     const range = getMovementRange(item)
-    const fallbackAllTime = getProjectAllTimeRange(item)
     setMovementLoading(true)
     setMovementError(null)
     try {
@@ -220,18 +217,13 @@ export default function Projects() {
         to: range.to,
         mode,
       })
-      const movementDates = (payload.items || []).map((movement) => movement.date).filter(Boolean)
-      const actualFromDate = movementPeriodQuick === 'all'
-        ? (movementDates.length ? movementDates.reduce((min, value) => value < min ? value : min, movementDates[0]) : fallbackAllTime.from)
-        : payload.from_date
-      const actualToDate = movementPeriodQuick === 'all'
-        ? (movementDates.length ? movementDates.reduce((max, value) => value > max ? value : max, movementDates[0]) : fallbackAllTime.to)
-        : payload.to_date
       setMovementModal((current) => current ? {
         ...current,
         ...payload,
-        from_date: actualFromDate,
-        to_date: actualToDate,
+        from_date: payload.from_date,
+        to_date: payload.to_date,
+        project_first_movement_date: current.project_first_movement_date,
+        project_last_movement_date: current.project_last_movement_date,
         project_start_date: current.project_start_date,
         project_end_date: current.project_end_date,
         project_created_date: current.project_created_date,
@@ -252,6 +244,8 @@ export default function Projects() {
     setMovementModal({
       project_id: item.id,
       project_name: item.name,
+      project_first_movement_date: item.first_movement_date || null,
+      project_last_movement_date: item.last_movement_date || null,
       project_start_date: item.start_date || null,
       project_end_date: item.end_date || null,
       project_created_date: (item.created_at || '').slice(0, 10) || null,
@@ -584,12 +578,20 @@ export default function Projects() {
                       <span className="record-field-value">{fmt(detailModal.planned_expense)} RSD</span>
                     </div>
                     <div className="record-field">
-                      <span className="record-field-label">{tr('date')}</span>
+                      <span className="record-field-label">{tr('projectStartDate')}</span>
                       <span className="record-field-value">{detailModal.start_date || UI_DASH}</span>
                     </div>
                     <div className="record-field">
                       <span className="record-field-label">{tr('validTo')}</span>
                       <span className="record-field-value">{detailModal.end_date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('projectFirstMovement')}</span>
+                      <span className="record-field-value">{detailModal.first_movement_date || UI_DASH}</span>
+                    </div>
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('projectLastMovement')}</span>
+                      <span className="record-field-value">{detailModal.last_movement_date || UI_DASH}</span>
                     </div>
                     <div className="record-field">
                       <span className="record-field-label">{tr('income')}</span>

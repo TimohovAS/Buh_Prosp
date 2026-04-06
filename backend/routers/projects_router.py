@@ -4,10 +4,11 @@ from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.database import get_db
-from backend.models import Project, User
-from backend.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
 from backend.auth import get_current_user_required, require_edit_access
+from backend.database import get_db
+from backend.finance_service import get_project_movement_bounds
+from backend.models import Project, User
+from backend.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 from backend.services import allocate_next_project_code
 from backend.state_machine import InvalidStatusTransition, initialize_project_status, transition_project_status
 
@@ -24,6 +25,14 @@ def _project_status_sort_order():
     )
 
 
+def _project_response_with_meta(project: Project, movement_bounds: dict[int, dict] | None = None) -> ProjectResponse:
+    movement_bounds = movement_bounds or {}
+    return ProjectResponse.model_validate(project).model_copy(update={
+        "client_name": project.client.name if project.client else None,
+        **movement_bounds.get(project.id, {}),
+    })
+
+
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
     show_archived: bool = Query(False, description="Показывать архивированные"),
@@ -36,10 +45,8 @@ async def list_projects(
         q = q.where(Project.status != "archived")
     result = await db.execute(q)
     projects = result.scalars().all()
-    return [
-        ProjectResponse.model_validate(p).model_copy(update={"client_name": p.client.name if p.client else None})
-        for p in projects
-    ]
+    movement_bounds = await get_project_movement_bounds(db, [project.id for project in projects])
+    return [_project_response_with_meta(project, movement_bounds) for project in projects]
 
 
 @router.post("", response_model=ProjectResponse)
@@ -62,7 +69,7 @@ async def create_project(
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    return ProjectResponse.model_validate(project)
+    return _project_response_with_meta(project)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -76,8 +83,8 @@ async def get_project(
     project = r.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Проект не найден")
-    resp = ProjectResponse.model_validate(project)
-    return resp.model_copy(update={"client_name": project.client.name if project.client else None})
+    movement_bounds = await get_project_movement_bounds(db, [project.id])
+    return _project_response_with_meta(project, movement_bounds)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -88,14 +95,14 @@ async def update_project(
     current_user: User = Depends(require_edit_access),
 ):
     """Обновить проект."""
-    r = await db.execute(select(Project).where(Project.id == project_id))
+    r = await db.execute(select(Project).options(selectinload(Project.client)).where(Project.id == project_id))
     project = r.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Проект не найден")
     dump = data.model_dump(exclude_unset=True)
     next_status = dump.pop("status", None)
-    for k, v in dump.items():
-        setattr(project, k, v)
+    for key, value in dump.items():
+        setattr(project, key, value)
     if next_status is not None:
         try:
             transition_project_status(project, next_status, allow_same=True)
@@ -103,7 +110,8 @@ async def update_project(
             raise HTTPException(400, str(exc)) from exc
     await db.commit()
     await db.refresh(project)
-    return ProjectResponse.model_validate(project)
+    movement_bounds = await get_project_movement_bounds(db, [project.id])
+    return _project_response_with_meta(project, movement_bounds)
 
 
 @router.delete("/{project_id}")

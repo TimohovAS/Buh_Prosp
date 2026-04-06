@@ -129,6 +129,8 @@ class ProjectResponse(ProjectBase):
     id: int
     is_internal: Optional[bool] = False
     client_name: Optional[str] = None
+    first_movement_date: Optional[DateType] = None
+    last_movement_date: Optional[DateType] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
