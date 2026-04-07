@@ -82,6 +82,7 @@ export default function Receipts() {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importUrl, setImportUrl] = useState('')
   const [importing, setImporting] = useState(false)
+  const [pastingClipboard, setPastingClipboard] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scanSupported, setScanSupported] = useState(false)
   const [scanError, setScanError] = useState('')
@@ -286,6 +287,29 @@ export default function Receipts() {
     }
     setScanError('')
     setScannerOpen(true)
+  }
+
+  const handlePasteClipboard = async () => {
+    if (pastingClipboard) return
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+      setScanError(tr('receiptClipboardUnavailable'))
+      return
+    }
+    setPastingClipboard(true)
+    try {
+      const text = (await navigator.clipboard.readText())?.trim()
+      if (!text) {
+        setScanError(tr('receiptClipboardEmpty'))
+        return
+      }
+      setImportUrl(text)
+      setScannerOpen(false)
+      setScanError('')
+    } catch (error) {
+      setScanError(error?.message || tr('receiptClipboardUnavailable'))
+    } finally {
+      setPastingClipboard(false)
+    }
   }
 
   const hydrateDetailState = (receipt) => {
@@ -535,6 +559,9 @@ export default function Receipts() {
                   <div className="receipt-import-actions">
                     <button type="button" className="btn btn-secondary" onClick={handleToggleScanner}>
                       {scannerOpen ? tr('receiptScanStop') : tr('receiptScanStart')}
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={handlePasteClipboard} disabled={pastingClipboard}>
+                      {pastingClipboard ? tr('loading') : tr('receiptPasteClipboard')}
                     </button>
                     <button type="button" className="btn btn-primary" onClick={handleImportReceipt} disabled={importing || !importUrl.trim()}>
                       {importing ? tr('receiptImporting') : tr('receiptImportButton')}
