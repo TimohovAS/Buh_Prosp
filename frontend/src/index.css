@@ -131,6 +131,12 @@ input, select, textarea {
   overflow: hidden;
 }
 
+.mobile-nav-overlay,
+.mobile-topbar,
+.mobile-sidebar-close {
+  display: none;
+}
+
 .sidebar {
   width: 260px;
   background: var(--color-surface);
@@ -1208,6 +1214,65 @@ tr.row-reversal {
   width: 100%;
 }
 
+.receipt-import-modal {
+  width: min(94vw, 980px);
+  max-width: none;
+}
+
+.receipt-detail-modal {
+  width: min(94vw, 1440px);
+  max-width: none;
+}
+
+.receipt-import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.receipt-import-card,
+.receipt-camera-card {
+  min-width: 0;
+}
+
+.receipt-import-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.receipt-import-help {
+  margin-top: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.receipt-camera-preview {
+  width: 100%;
+  border-radius: 12px;
+  background: var(--color-bg);
+  min-height: 320px;
+  max-height: 52vh;
+  object-fit: cover;
+}
+
+.receipt-camera-placeholder {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 1rem;
+  line-height: 1.55;
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
@@ -1824,35 +1889,113 @@ tr:hover td {
   .settings-enterprise-grid {
     grid-template-columns: 1fr;
   }
-}
-@media (max-width: 768px) {
-  .app {
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    margin: -0.25rem -0.25rem 1rem;
+    padding: 0.85rem 0.9rem;
+    background: rgba(26, 35, 50, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-nav-toggle,
+  .mobile-sidebar-close {
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--color-text);
+  }
+
+  .mobile-topbar-copy {
+    display: flex;
     flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 0.1rem;
+  }
+
+  .mobile-topbar-copy strong,
+  .mobile-topbar-copy span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-topbar-copy span {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .mobile-lang-toggle {
+    padding-inline: 0.75rem;
+  }
+}
+@media (max-width: 900px) {
+  .app {
+    display: block;
+    position: relative;
+    height: 100dvh;
+  }
+
+  .mobile-nav-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    border: none;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.56);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+
+  .app.mobile-nav-open .mobile-nav-overlay {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(86vw, 320px);
+    z-index: 1100;
+    border-right: 1px solid var(--color-border);
+    transform: translateX(-104%);
+    transition: transform 0.2s ease;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
   }
 
-  .sidebar-nav {
-    display: flex;
-    overflow-x: auto;
-    padding: 0 0.5rem;
+  .sidebar.open {
+    transform: translateX(0);
   }
 
-  .sidebar-nav a {
-    white-space: nowrap;
+  .mobile-sidebar-close {
+    display: inline-flex;
   }
 
   .main {
     padding: 1rem;
+    height: 100dvh;
   }
 
   .page-header {
     flex-direction: column;
     align-items: flex-start;
+    top: 0;
   }
 
   .settings-shell {
@@ -1896,15 +2039,54 @@ tr:hover td {
     overflow-y: visible;
   }
 
+  th, td {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions > * {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
   .record-detail-grid,
   .record-field-grid,
   .record-actions-grid {
     grid-template-columns: 1fr;
   }
 
-  th, td {
-    padding: 0.5rem;
-    font-size: 0.875rem;
+  .receipt-import-modal,
+  .receipt-detail-modal {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .receipt-import-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-camera-card {
+    order: -1;
+  }
+
+  .receipt-camera-preview,
+  .receipt-camera-placeholder {
+    min-height: clamp(220px, 38vh, 320px);
+    max-height: none;
+  }
+
+  .receipt-import-actions .btn {
+    flex: 1 1 calc(50% - 0.375rem);
   }
 }
 /* react-datepicker — тёмная тема */

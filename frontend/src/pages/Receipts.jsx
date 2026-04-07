@@ -105,6 +105,12 @@ export default function Receipts() {
     payment_mode: 'auto',
   })
 
+  const scannerRequiresHttps =
+    typeof window !== 'undefined' &&
+    !window.isSecureContext &&
+    window.location.hostname !== 'localhost'
+  const canUseScanner = scanSupported && !scannerRequiresHttps
+
   const statusOptions = useMemo(() => ([
     { value: 'all', label: tr('receiptStatusAll') },
     { value: 'new', label: tr('receiptStatusNew') },
@@ -201,14 +207,6 @@ export default function Receipts() {
     }
 
     const startScanner = async () => {
-      if (!scanSupported) {
-        setScanError(tr('receiptScannerUnavailable'))
-        return
-      }
-      if (!window.isSecureContext && window.location.hostname !== 'localhost') {
-        setScanError(tr('receiptScanRequiresHttps'))
-        return
-      }
       try {
         setScanError('')
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -269,6 +267,24 @@ export default function Receipts() {
   const closeImportModal = () => {
     resetImportState()
     setImportModalOpen(false)
+  }
+
+  const handleToggleScanner = () => {
+    if (scannerOpen) {
+      setScannerOpen(false)
+      setScanError('')
+      return
+    }
+    if (!scanSupported) {
+      setScanError(tr('receiptScannerUnavailable'))
+      return
+    }
+    if (scannerRequiresHttps) {
+      setScanError(tr('receiptScanRequiresHttps'))
+      return
+    }
+    setScanError('')
+    setScannerOpen(true)
   }
 
   const hydrateDetailState = (receipt) => {
@@ -479,14 +495,14 @@ export default function Receipts() {
 
       {importModalOpen && (
         <div className="modal-overlay" onClick={closeImportModal}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 760 }}>
+          <div className="modal receipt-import-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{tr('receiptImportTitle')}</h2>
               <button className="modal-close" onClick={closeImportModal}>{UI_CLOSE}</button>
             </div>
             <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card">
+              <div className="receipt-import-layout">
+                <div className="record-detail-card receipt-import-card">
                   <div className="form-group">
                     <label className="form-label">{tr('receiptQrUrl')}</label>
                     <textarea
@@ -498,52 +514,39 @@ export default function Receipts() {
                       style={{ resize: 'vertical' }}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn btn-secondary" onClick={() => setScannerOpen((current) => !current)}>
+                  <div className="receipt-import-actions">
+                    <button type="button" className="btn btn-secondary" onClick={handleToggleScanner}>
                       {scannerOpen ? tr('receiptScanStop') : tr('receiptScanStart')}
                     </button>
                     <button type="button" className="btn btn-primary" onClick={handleImportReceipt} disabled={importing || !importUrl.trim()}>
                       {importing ? tr('receiptImporting') : tr('receiptImportButton')}
                     </button>
                   </div>
-                  <div style={{ marginTop: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                    {scanSupported ? tr('receiptScanHint') : tr('receiptScannerUnavailable')}
+                  <div className="receipt-import-help">
+                    {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
                   </div>
                   {scanError ? (
                     <div className="alert alert-danger" style={{ marginTop: '0.75rem' }}>{scanError}</div>
                   ) : null}
                 </div>
-                <div className="record-detail-card">
+                <div className="record-detail-card receipt-camera-card">
                   <div className="record-field-label">{tr('receiptScanCamera')}</div>
-                  {scannerOpen ? (
+                  {scannerOpen && canUseScanner ? (
                     <video
                       ref={videoRef}
                       autoPlay
                       playsInline
                       muted
-                      style={{
-                        width: '100%',
-                        borderRadius: 12,
-                        background: 'var(--color-bg)',
-                        minHeight: 280,
-                        objectFit: 'cover',
-                      }}
+                      className="receipt-camera-preview"
                     />
                   ) : (
-                    <div
-                      style={{
-                        minHeight: 280,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px dashed var(--color-border)',
-                        borderRadius: 12,
-                        color: 'var(--color-text-muted)',
-                        textAlign: 'center',
-                        padding: '1rem',
-                      }}
-                    >
-                      {tr('receiptScanCameraIdle')}
+                    <div className="receipt-camera-placeholder">
+                      <strong style={{ display: 'block', marginBottom: '0.35rem' }}>
+                        {canUseScanner ? tr('receiptScanCameraIdle') : tr('receiptScanCamera')}
+                      </strong>
+                      <span>
+                        {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -555,7 +558,7 @@ export default function Receipts() {
 
       {(detailReceipt || detailLoading || detailError) && (
         <div className="modal-overlay" onClick={() => { setDetailReceipt(null); setDetailError(''); setDetailAction('') }}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ width: 'min(94vw, 1440px)', maxWidth: 'none' }}>
+          <div className="modal receipt-detail-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">
                 {tr('receiptDetailTitle')} {UI_DASH} {detailReceipt?.invoice_number || (detailReceipt ? `#${detailReceipt.id}` : UI_DASH)}

@@ -21,7 +21,9 @@ import {
   FolderKanban,
   QrCode,
   Settings,
-  LogOut
+  LogOut,
+  Menu,
+  X,
 } from 'lucide-react'
 
 export default function Layout({ lang, toggleLang, children }) {
@@ -32,6 +34,7 @@ export default function Layout({ lang, toggleLang, children }) {
     bank_unmatched_count: 0,
     incoming_invoices_pending_count: 0,
   })
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   async function refreshPendingCounts() {
     try {
@@ -49,6 +52,10 @@ export default function Layout({ lang, toggleLang, children }) {
   }, [location.pathname])
 
   useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
     const handleRefresh = () => {
       refreshPendingCounts()
     }
@@ -61,6 +68,17 @@ export default function Layout({ lang, toggleLang, children }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const previousOverflow = document.body.style.overflow
+    if (mobileNavOpen) {
+      document.body.style.overflow = 'hidden'
+    }
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileNavOpen])
+
   const incomingInvoicesBadge = pendingCounts.incoming_invoices_pending_count > 0
     ? ` (${pendingCounts.incoming_invoices_pending_count})`
     : ''
@@ -69,8 +87,14 @@ export default function Layout({ lang, toggleLang, children }) {
     : ''
 
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div className={`app${mobileNavOpen ? ' mobile-nav-open' : ''}`}>
+      <button
+        type="button"
+        className="mobile-nav-overlay"
+        aria-label="Close navigation"
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside className={`sidebar${mobileNavOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
           <div className="sidebar-brand-main">
             <div className="brand-mark" aria-hidden="true">
@@ -88,8 +112,23 @@ export default function Layout({ lang, toggleLang, children }) {
           >
             {lang === 'sr' ? 'RU' : 'SR'}
           </button>
+          <button
+            type="button"
+            className="mobile-sidebar-close"
+            aria-label="Close navigation"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X size={18} />
+          </button>
         </div>
-        <nav style={{ flex: 1, overflowY: 'auto', paddingBottom: '1rem' }}>
+        <nav
+          style={{ flex: 1, overflowY: 'auto', paddingBottom: '1rem' }}
+          onClick={(event) => {
+            if (event.target.closest('a')) {
+              setMobileNavOpen(false)
+            }
+          }}
+        >
           <div className="sidebar-group">
             <div className="sidebar-group-title">Обзор</div>
             <ul className="sidebar-nav">
@@ -151,6 +190,27 @@ export default function Layout({ lang, toggleLang, children }) {
         </div>
       </aside>
       <main className="main">
+        <div className="mobile-topbar">
+          <button
+            type="button"
+            className="mobile-nav-toggle"
+            aria-label="Open navigation"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu size={18} />
+          </button>
+          <div className="mobile-topbar-copy">
+            <strong>ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v2</span></strong>
+            {enterpriseName ? <span>{enterpriseName}</span> : null}
+          </div>
+          <button
+            onClick={toggleLang}
+            className="btn btn-sm btn-secondary mobile-lang-toggle"
+            title={lang === 'sr' ? tr('langRu') : tr('langSr')}
+          >
+            {lang === 'sr' ? 'RU' : 'SR'}
+          </button>
+        </div>
         {children}
       </main>
     </div>
