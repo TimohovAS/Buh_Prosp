@@ -245,6 +245,7 @@ export const api = {
     linkExpense: (id, data) => request(`/receipts/${id}/link-expense`, { method: 'POST', body: JSON.stringify(data) }),
     createExpense: (id, data) => request(`/receipts/${id}/create-expense`, { method: 'POST', body: JSON.stringify(data) }),
     unlinkExpense: (id) => request(`/receipts/${id}/unlink-expense`, { method: 'POST' }),
+    delete: (id) => request(`/receipts/${id}`, { method: 'DELETE' }),
     byProject: (projectId, params = {}) => {
       const q = new URLSearchParams(params).toString()
       return request(`/receipts/by-project/${projectId}${q ? `?${q}` : ''}`)

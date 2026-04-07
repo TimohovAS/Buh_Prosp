@@ -96,6 +96,7 @@ export default function Receipts() {
   const [expenseCandidatesLoading, setExpenseCandidatesLoading] = useState(false)
   const [createExpenseSaving, setCreateExpenseSaving] = useState(false)
   const [unlinkingExpense, setUnlinkingExpense] = useState(false)
+  const [deletingReceipt, setDeletingReceipt] = useState(false)
   const [createForm, setCreateForm] = useState({
     project_id: '',
     category_id: '',
@@ -414,6 +415,23 @@ export default function Receipts() {
     }
   }
 
+  const handleDeleteReceipt = async () => {
+    if (!detailReceipt || deletingReceipt) return
+    if (typeof window !== 'undefined' && !window.confirm(tr('receiptDeleteConfirm'))) return
+    setDeletingReceipt(true)
+    try {
+      await api.receipts.delete(detailReceipt.id)
+      setDetailReceipt(null)
+      setDetailError('')
+      setDetailAction('')
+      await loadReceipts()
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
+    } finally {
+      setDeletingReceipt(false)
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -646,11 +664,11 @@ export default function Receipts() {
                       </div>
                     </div>
                     <div className="record-detail-card">
-                      <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
-                        {!detailReceipt.expense_id ? (
-                          <>
-                            <button type="button" className="btn btn-primary" onClick={() => setDetailAction('create')}>
-                              {tr('receiptCreateExpense')}
+                    <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
+                      {!detailReceipt.expense_id ? (
+                        <>
+                          <button type="button" className="btn btn-primary" onClick={() => setDetailAction('create')}>
+                            {tr('receiptCreateExpense')}
                             </button>
                             <button type="button" className="btn btn-secondary" onClick={openExpenseCandidates}>
                               {tr('receiptLinkExpense')}
@@ -661,6 +679,9 @@ export default function Receipts() {
                             {unlinkingExpense ? tr('loading') : tr('receiptUnlinkExpense')}
                           </button>
                         )}
+                        <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || assigningProject}>
+                          {deletingReceipt ? tr('loading') : tr('receiptDelete')}
+                        </button>
                       </div>
 
                       <div className="form-group">

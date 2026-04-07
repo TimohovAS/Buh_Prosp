@@ -10,6 +10,7 @@ from backend.receipt_service import (
     ReceiptImportError,
     assign_receipt_project,
     create_expense_from_receipt,
+    delete_receipt,
     get_project_receipt_purchases,
     get_receipt_expense_candidates,
     get_receipt_or_error,
@@ -171,6 +172,20 @@ async def unlink_purchase_receipt(
         await db.commit()
         receipt = await get_receipt_or_error(db, receipt.id)
         return _serialize_receipt_detail(receipt)
+    except ReceiptImportError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.delete("/{receipt_id}")
+async def delete_purchase_receipt(
+    receipt_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    try:
+        await delete_receipt(db, receipt_id)
+        await db.commit()
+        return {"ok": True}
     except ReceiptImportError as exc:
         raise HTTPException(400, str(exc)) from exc
 

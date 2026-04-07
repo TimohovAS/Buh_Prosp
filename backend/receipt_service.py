@@ -10,7 +10,7 @@ from http.cookiejar import CookieJar
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,6 +20,9 @@ from backend.models import (
     CashEntry,
     Contract,
     Expense,
+    IncomingInvoice,
+    MonthlyObligation,
+    PlannedExpensePayment,
     Project,
     PurchaseReceipt,
     PurchaseReceiptItem,
@@ -377,6 +380,46 @@ async def _get_matched_bank_transaction_for_expense(db: AsyncSession, expense_id
     return result.scalar_one_or_none()
 
 
+async def _get_any_bank_transaction_for_expense(db: AsyncSession, expense_id: int) -> BankTransaction | None:
+    result = await db.execute(
+        select(BankTransaction)
+        .where(
+            BankTransaction.matched_type == "expense",
+            BankTransaction.matched_id == expense_id,
+        )
+        .order_by(BankTransaction.id.desc())
+    )
+    return result.scalar_one_or_none()
+
+
+async def _ensure_receipt_generated_expense_can_delete(db: AsyncSession, expense: Expense) -> None:
+    if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
+        raise ReceiptImportError("Reversed expenses cannot be deleted together with the receipt")
+
+    invoice_result = await db.execute(select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1))
+    if invoice_result.scalar_one_or_none():
+        raise ReceiptImportError("This receipt expense is linked to an incoming invoice")
+
+    obligation_result = await db.execute(select(MonthlyObligation.id).where(MonthlyObligation.expense_id == expense.id).limit(1))
+    if obligation_result.scalar_one_or_none():
+        raise ReceiptImportError("This receipt expense is linked to a tax or obligation payment")
+
+    planned_payment_result = await db.execute(
+        select(func.count()).select_from(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id)
+    )
+    if int(planned_payment_result.scalar() or 0) > 0:
+        raise ReceiptImportError("This receipt expense is linked to recurring expense payments")
+
+    bank_tx = await _get_any_bank_transaction_for_expense(db, expense.id)
+    if bank_tx:
+        raise ReceiptImportError("Unmatch the bank transaction first")
+
+
+async def _get_cash_entry_by_id(db: AsyncSession, cash_entry_id: int) -> CashEntry | None:
+    result = await db.execute(select(CashEntry).where(CashEntry.id == cash_entry_id))
+    return result.scalar_one_or_none()
+
+
 async def _sync_receipt_status_for_expense(db: AsyncSession, receipt: PurchaseReceipt, expense: Expense | None = None) -> None:
     linked_expense = expense
     if linked_expense is None and receipt.expense_id:
@@ -653,6 +696,52 @@ async def unlink_receipt_expense(
     receipt.status = RECEIPT_STATUS_NEW
     await db.flush()
     return receipt
+
+
+async def delete_receipt(
+    db: AsyncSession,
+    receipt_id: int,
+) -> None:
+    receipt = await get_receipt_or_error(db, receipt_id)
+
+    expense = None
+    if receipt.expense_id:
+        expense_result = await db.execute(select(Expense).where(Expense.id == receipt.expense_id))
+        expense = expense_result.scalar_one_or_none()
+
+    if receipt.bank_transaction_id:
+        raise ReceiptImportError("Unmatch the bank transaction first")
+
+    cash_entry = None
+    if receipt.cash_entry_id:
+        cash_entry = await _get_cash_entry_by_id(db, receipt.cash_entry_id)
+
+    delete_expense = None
+    delete_cash_entry = None
+
+    if expense:
+        if expense.source == "receipt":
+            await _ensure_receipt_generated_expense_can_delete(db, expense)
+            delete_expense = expense
+        elif expense.source == "cash":
+            await _ensure_receipt_generated_expense_can_delete(db, expense)
+            if not cash_entry:
+                raise ReceiptImportError("This receipt is linked to a cash expense; remove the cash entry first")
+            delete_cash_entry = cash_entry
+            delete_expense = expense
+
+    if expense is not None and delete_expense is None:
+        receipt.expense_id = None
+    receipt.bank_transaction_id = None
+    receipt.cash_entry_id = None
+    await db.flush()
+
+    await db.delete(receipt)
+    if delete_cash_entry is not None:
+        await db.delete(delete_cash_entry)
+    if delete_expense is not None:
+        await db.delete(delete_expense)
+    await db.flush()
 
 
 async def create_expense_from_receipt(
