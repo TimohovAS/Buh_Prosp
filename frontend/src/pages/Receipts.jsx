@@ -618,9 +618,9 @@ export default function Receipts() {
               ) : detailReceipt ? (
                 <>
                   {detailError ? <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{detailError}</div> : null}
-                  <div className="record-detail-grid" style={{ alignItems: 'start' }}>
-                    <div className="record-detail-card">
-                      <div className="record-field-grid">
+                  <div className="receipt-detail-layout">
+                    <div className="record-detail-card receipt-meta-card">
+                      <div className="receipt-summary-grid">
                         <div className="record-field">
                           <span className="record-field-label">{tr('receiptSeller')}</span>
                           <span className="record-field-value">{detailReceipt.seller_name || UI_DASH}</span>
@@ -659,43 +659,14 @@ export default function Receipts() {
                             {[detailReceipt.seller_address, detailReceipt.seller_city].filter(Boolean).join(', ') || UI_DASH}
                           </div>
                         </div>
-                        <div className="record-field full">
-                          <span className="record-field-label">{tr('receiptItems')}</span>
-                          <div className="table-wrap table-wrap-scroll" style={{ maxHeight: 360 }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>#</th>
-                                  <th>{tr('name')}</th>
-                                  <th style={{ textAlign: 'right' }}>{tr('receiptQuantity')}</th>
-                                  <th style={{ textAlign: 'right' }}>{tr('receiptUnitPrice')}</th>
-                                  <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {detailReceipt.items?.length ? detailReceipt.items.map((item) => (
-                                  <tr key={item.id}>
-                                    <td>{item.line_no}</td>
-                                    <td>{item.name}</td>
-                                    <td style={{ textAlign: 'right' }}>{fmtMoney(item.quantity)}</td>
-                                    <td style={{ textAlign: 'right' }}>{fmtMoney(item.unit_price)} RSD</td>
-                                    <td style={{ textAlign: 'right' }}>{fmtMoney(item.total_amount)} RSD</td>
-                                  </tr>
-                                )) : (
-                                  <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
                       </div>
                     </div>
-                    <div className="record-detail-card">
-                    <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
-                      {!detailReceipt.expense_id ? (
-                        <>
-                          <button type="button" className="btn btn-primary" onClick={() => setDetailAction('create')}>
-                            {tr('receiptCreateExpense')}
+                    <div className="record-detail-card receipt-side-card">
+                      <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
+                        {!detailReceipt.expense_id ? (
+                          <>
+                            <button type="button" className="btn btn-primary" onClick={() => setDetailAction('create')}>
+                              {tr('receiptCreateExpense')}
                             </button>
                             <button type="button" className="btn btn-secondary" onClick={openExpenseCandidates}>
                               {tr('receiptLinkExpense')}
@@ -725,7 +696,7 @@ export default function Receipts() {
                         {assigningProject ? tr('loading') : tr('receiptAssignProject')}
                       </button>
 
-                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                      <div className="receipt-linked-grid">
                         <div className="record-field">
                           <span className="record-field-label">{tr('receiptLinkedExpense')}</span>
                           <span className="record-field-value">
@@ -734,28 +705,28 @@ export default function Receipts() {
                               : UI_DASH}
                           </span>
                         </div>
-                        <div className="record-field" style={{ marginTop: '0.75rem' }}>
+                        <div className="record-field">
                           <span className="record-field-label">{tr('receiptLinkedBank')}</span>
                           <span className="record-field-value">{detailReceipt.bank_transaction_id ? `#${detailReceipt.bank_transaction_id}` : UI_DASH}</span>
                         </div>
-                        <div className="record-field" style={{ marginTop: '0.75rem' }}>
+                        <div className="record-field">
                           <span className="record-field-label">{tr('cashRegister')}</span>
                           <span className="record-field-value">{detailReceipt.cash_entry_id ? `#${detailReceipt.cash_entry_id}` : UI_DASH}</span>
                         </div>
                       </div>
 
                       {detailAction === 'link' ? (
-                        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                        <div className="receipt-detail-section">
                           <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('receiptExpenseCandidates')}</div>
                           {expenseCandidatesLoading ? (
                             <div>{tr('loading')}</div>
                           ) : expenseCandidates.length === 0 ? (
                             <div style={{ color: 'var(--color-text-muted)' }}>{tr('receiptNoCandidates')}</div>
                           ) : (
-                            <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 360, overflowY: 'auto' }}>
+                            <div className="receipt-candidates-list">
                               {expenseCandidates.map((candidate) => (
                                 <div key={candidate.id} className="record-detail-card" style={{ padding: '0.85rem' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                  <div className="receipt-candidate-card">
                                     <div>
                                       <div style={{ fontWeight: 700 }}>{candidate.description || UI_DASH}</div>
                                       <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
@@ -780,7 +751,7 @@ export default function Receipts() {
                       ) : null}
 
                       {detailAction === 'create' ? (
-                        <form onSubmit={handleCreateExpense} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                        <form onSubmit={handleCreateExpense} className="receipt-detail-section">
                           <div className="form-group">
                             <label className="form-label">{tr('receiptCreateMode')}</label>
                             <select
@@ -851,6 +822,39 @@ export default function Receipts() {
                           </button>
                         </form>
                       ) : null}
+                    </div>
+
+                    <div className="record-detail-card receipt-items-card">
+                      <div className="receipt-items-header">
+                        <span className="record-field-label">{tr('receiptItems')}</span>
+                        <span className="receipt-items-count">{detailReceipt.items?.length || 0}</span>
+                      </div>
+                      <div className="table-wrap table-wrap-scroll receipt-items-table-wrap">
+                        <table className="receipt-items-table">
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>{tr('name')}</th>
+                              <th style={{ textAlign: 'right' }}>{tr('receiptQuantity')}</th>
+                              <th style={{ textAlign: 'right' }}>{tr('receiptUnitPrice')}</th>
+                              <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detailReceipt.items?.length ? detailReceipt.items.map((item) => (
+                              <tr key={item.id}>
+                                <td>{item.line_no}</td>
+                                <td>{item.name}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.quantity)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.unit_price)} RSD</td>
+                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.total_amount)} RSD</td>
+                              </tr>
+                            )) : (
+                              <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </>
