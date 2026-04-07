@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,7 +25,8 @@ from backend.cash_service import (
 )
 from backend.database import get_db
 from backend.decimal_utils import ZERO_DECIMAL, money_eq, to_decimal
-from backend.models import BankTransaction, Contract, Expense, Income, Project, TransactionCategory, User
+from backend.models import BankTransaction, Contract, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
+from backend.receipt_service import sync_receipt_for_expense_match
 from backend.schemas import (
     BankTransactionBulkAssignProject,
     BankTransactionCreate,
@@ -165,6 +166,48 @@ async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: Bank
         if getattr(expense, "reversed_expense_id", None):
             continue
         if not money_eq(expense.amount or ZERO_DECIMAL, transaction.amount or ZERO_DECIMAL):
+            continue
+        return expense
+    return None
+
+
+async def _find_reusable_receipt_expense(db: AsyncSession, transaction: BankTransaction) -> Expense | None:
+    receipt_window_start = transaction.date - timedelta(days=31)
+    receipt_window_end = transaction.date + timedelta(days=7)
+    result = await db.execute(
+        select(Expense, PurchaseReceipt)
+        .join(PurchaseReceipt, PurchaseReceipt.expense_id == Expense.id)
+        .where(
+            Expense.source == "receipt",
+            Expense.status == "planned",
+            Expense.reversal_of_id.is_(None),
+            Expense.date >= receipt_window_start,
+            Expense.date <= receipt_window_end,
+        )
+        .order_by(Expense.date.desc(), Expense.id.desc())
+    )
+    for expense, receipt in result.fetchall():
+        if not money_eq(expense.amount or ZERO_DECIMAL, transaction.amount or ZERO_DECIMAL):
+            continue
+        seller_text = " ".join(
+            filter(
+                None,
+                [
+                    (receipt.seller_name or "").lower().strip(),
+                    (receipt.seller_tax_id or "").lower().strip(),
+                ],
+            )
+        )
+        tx_text = " ".join(
+            filter(
+                None,
+                [
+                    (transaction.counterparty_name or "").lower().strip(),
+                    (transaction.purpose or "").lower().strip(),
+                ],
+            )
+        )
+        if seller_text and tx_text and not any(token and token in tx_text for token in seller_text.split()[:4]):
             continue
         return expense
     return None
@@ -537,7 +580,9 @@ async def create_expense_from_transaction(
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
-    expense = await _find_reusable_bank_import_expense(db, transaction)
+    expense = await _find_reusable_receipt_expense(db, transaction)
+    if expense is None:
+        expense = await _find_reusable_bank_import_expense(db, transaction)
     if expense:
         expense.date = data.date or transaction.date
         expense.description = description[:500]
@@ -581,6 +626,9 @@ async def create_expense_from_transaction(
     transaction.matched_type = "expense"
     transaction.matched_id = expense.id
     transaction.project_id = project_id
+
+    if expense.source == "receipt":
+        await sync_receipt_for_expense_match(db, expense, transaction)
 
     await db.commit()
     await db.refresh(transaction)

@@ -19,6 +19,7 @@ import {
   Users,
   Briefcase,
   FolderKanban,
+  QrCode,
   Settings,
   LogOut
 } from 'lucide-react'
@@ -108,6 +109,7 @@ export default function Layout({ lang, toggleLang, children }) {
               <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
               <li><NavLink to="/incoming-invoices"><FileInput size={18} /> {tr('incomingInvoices')}{incomingInvoicesBadge}</NavLink></li>
               <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
+              <li><NavLink to="/receipts"><QrCode size={18} /> {tr('receipts')}</NavLink></li>
               <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
               <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>
             </ul>

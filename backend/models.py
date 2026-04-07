@@ -294,6 +294,7 @@ class Project(Base):
     contracts = relationship("Contract", back_populates="project", foreign_keys="[Contract.project_id]")
     incomes = relationship("Income", back_populates="project")
     expenses = relationship("Expense", back_populates="project")
+    purchase_receipts = relationship("PurchaseReceipt", back_populates="project")
 
 
 
@@ -536,6 +537,74 @@ class Expense(Base):
     contract = relationship("Contract", back_populates="expenses", foreign_keys=[contract_id])
     reversal_of = relationship("Expense", remote_side=[id], foreign_keys=[reversal_of_id])
     reversed_by = relationship("Expense", remote_side=[id], foreign_keys=[reversed_expense_id])
+    purchase_receipt = relationship("PurchaseReceipt", back_populates="expense", uselist=False)
+
+
+class PurchaseReceipt(Base):
+    __tablename__ = "purchase_receipts"
+    __table_args__ = (
+        UniqueConstraint("qr_hash", name="uq_purchase_receipts_qr_hash"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    verification_url = Column(Text, nullable=False)
+    qr_hash = Column(String(64), nullable=False, unique=True, index=True)
+    invoice_number = Column(String(100), index=True)
+    token = Column(String(100))
+    seller_name = Column(String(200))
+    seller_tax_id = Column(String(20))
+    seller_address = Column(String(500))
+    seller_city = Column(String(100))
+    receipt_datetime = Column(DateTime, index=True)
+    payment_type = Column(String(100))
+    payment_kind = Column(String(20), default="unknown")  # cash | cashless | unknown
+    total_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    currency = Column(String(5), default="RSD")
+    is_valid = Column(Boolean, default=True)
+    status = Column(String(30), nullable=False, default="new")  # new | linked_expense | waiting_bank | matched_bank | cash_expense | error
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, unique=True)
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=True)
+    cash_entry_id = Column(Integer, ForeignKey("cash_entries.id"), nullable=True)
+    raw_html = Column(Text)
+    raw_specifications_json = Column(Text)
+    raw_recapitulation_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    project = relationship("Project", back_populates="purchase_receipts", foreign_keys=[project_id])
+    category_ref = relationship("TransactionCategory", foreign_keys=[category_id])
+    expense = relationship("Expense", back_populates="purchase_receipt", foreign_keys=[expense_id])
+    bank_transaction = relationship("BankTransaction", foreign_keys=[bank_transaction_id])
+    cash_entry = relationship("CashEntry", foreign_keys=[cash_entry_id])
+    items = relationship(
+        "PurchaseReceiptItem",
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        order_by="PurchaseReceiptItem.line_no.asc()",
+    )
+
+
+class PurchaseReceiptItem(Base):
+    __tablename__ = "purchase_receipt_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    receipt_id = Column(Integer, ForeignKey("purchase_receipts.id"), nullable=False, index=True)
+    line_no = Column(Integer, nullable=False, default=1)
+    gtin = Column(String(100))
+    name = Column(String(500), nullable=False)
+    quantity = Column(Numeric(14, 3), nullable=False, default=0)
+    unit_price = Column(Numeric(14, 2), nullable=False, default=0)
+    total_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    label = Column(String(20))
+    label_rate = Column(Float)
+    tax_base_amount = Column(Numeric(14, 2))
+    vat_amount = Column(Numeric(14, 2))
+    raw_json = Column(Text)
+
+    receipt = relationship("PurchaseReceipt", back_populates="items", foreign_keys=[receipt_id])
 
 
 class PeriodClosure(Base):

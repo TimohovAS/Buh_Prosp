@@ -290,6 +290,142 @@ class ProjectMovementsResponse(BaseModel):
     items: list[ProjectMovementItemResponse] = Field(default_factory=list)
 
 
+class PurchaseReceiptItemResponse(BaseModel):
+    id: int
+    line_no: int
+    gtin: Optional[str] = None
+    name: str
+    quantity: Decimal = Decimal("0.00")
+    unit_price: Decimal = Decimal("0.00")
+    total_amount: Decimal = Decimal("0.00")
+    label: Optional[str] = None
+    label_rate: Optional[float] = None
+    tax_base_amount: Optional[Decimal] = None
+    vat_amount: Optional[Decimal] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PurchaseReceiptBase(BaseModel):
+    verification_url: str
+    invoice_number: Optional[str] = None
+    seller_name: Optional[str] = None
+    seller_tax_id: Optional[str] = None
+    seller_address: Optional[str] = None
+    seller_city: Optional[str] = None
+    receipt_datetime: Optional[datetime] = None
+    payment_type: Optional[str] = None
+    payment_kind: str = "unknown"
+    total_amount: Decimal = Decimal("0.00")
+    currency: str = "RSD"
+    is_valid: bool = True
+    status: str = "new"
+    project_id: Optional[int] = None
+    category_id: Optional[int] = None
+    expense_id: Optional[int] = None
+    bank_transaction_id: Optional[int] = None
+    cash_entry_id: Optional[int] = None
+
+
+class PurchaseReceiptResponse(PurchaseReceiptBase):
+    id: int
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+    expense_status: Optional[str] = None
+    expense_source: Optional[str] = None
+    item_count: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PurchaseReceiptDetailResponse(PurchaseReceiptResponse):
+    items: list[PurchaseReceiptItemResponse] = Field(default_factory=list)
+
+
+class PurchaseReceiptImportRequest(BaseModel):
+    verification_url: str
+
+
+class PurchaseReceiptImportResponse(BaseModel):
+    created: bool
+    receipt: PurchaseReceiptDetailResponse
+
+
+class PurchaseReceiptAssignProjectRequest(BaseModel):
+    project_id: Optional[int] = None
+
+    @field_validator("project_id", mode="before")
+    @classmethod
+    def empty_project_to_none(cls, value):
+        if value == "" or value is None:
+            return None
+        return value
+
+
+class PurchaseReceiptLinkExpenseRequest(BaseModel):
+    expense_id: int
+
+
+class PurchaseReceiptCreateExpenseRequest(BaseModel):
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    description: Optional[str] = None
+    note: Optional[str] = None
+    payment_mode: Literal["auto", "bank", "cash"] = "auto"
+
+    @field_validator("category_id", "project_id", "contract_id", mode="before")
+    @classmethod
+    def empty_link_to_none(cls, value):
+        if value == "" or value is None:
+            return None
+        return value
+
+
+class PurchaseReceiptExpenseCandidateResponse(BaseModel):
+    id: int
+    date: DateType
+    description: str
+    amount: Decimal
+    currency: str = "RSD"
+    status: Optional[str] = None
+    source: Optional[str] = None
+    category_id: Optional[int] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+    contract_id: Optional[int] = None
+    contract_number: Optional[str] = None
+    bank_reference: Optional[str] = None
+    score: Optional[int] = None
+
+
+class ProjectPurchaseItemResponse(BaseModel):
+    receipt_id: int
+    receipt_datetime: Optional[datetime] = None
+    seller_name: Optional[str] = None
+    invoice_number: Optional[str] = None
+    payment_kind: str = "unknown"
+    expense_id: Optional[int] = None
+    expense_status: Optional[str] = None
+    item_id: int
+    item_name: str
+    quantity: Decimal = Decimal("0.00")
+    unit_price: Decimal = Decimal("0.00")
+    total_amount: Decimal = Decimal("0.00")
+
+
+class ProjectPurchasesResponse(BaseModel):
+    project_id: int
+    project_name: Optional[str] = None
+    from_date: DateType
+    to_date: DateType
+    items: list[ProjectPurchaseItemResponse] = Field(default_factory=list)
+
+
 class IncomePaymentDetailsResponse(BaseModel):
     income_id: int
     status: str

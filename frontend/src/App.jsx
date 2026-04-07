@@ -24,6 +24,7 @@ import Obligations from './pages/Obligations'
 import Efaktura from './pages/Efaktura'
 import IncomingInvoices from './pages/IncomingInvoices'
 import CounterpartyBalance from './pages/CounterpartyBalance'
+import Receipts from './pages/Receipts'
 
 const APP_PAGE_ROUTES = [
   { id: 'dashboard', path: '/', Component: Dashboard },
@@ -41,6 +42,7 @@ const APP_PAGE_ROUTES = [
   { id: 'payments', path: '/payments', Component: Obligations },
   { id: 'contracts', path: '/contracts', Component: Contracts },
   { id: 'expenses', path: '/expenses', Component: Expenses },
+  { id: 'receipts', path: '/receipts', Component: Receipts },
   { id: 'planned-expenses', path: '/planned-expenses', Component: PlannedExpenses },
   { id: 'bank-import', path: '/bank-import', Component: BankImport },
   { id: 'bank', path: '/bank', Component: BankTransactions },

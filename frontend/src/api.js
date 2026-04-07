@@ -233,6 +233,23 @@ export const api = {
     update: (id, data) => request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   },
+  receipts: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/receipts${q ? `?${q}` : ''}`)
+    },
+    get: (id) => request(`/receipts/${id}`),
+    importFromQr: (data) => request('/receipts/import-from-qr', { method: 'POST', body: JSON.stringify(data) }),
+    expenseCandidates: (id) => request(`/receipts/${id}/expense-candidates`),
+    assignProject: (id, data) => request(`/receipts/${id}/assign-project`, { method: 'POST', body: JSON.stringify(data) }),
+    linkExpense: (id, data) => request(`/receipts/${id}/link-expense`, { method: 'POST', body: JSON.stringify(data) }),
+    createExpense: (id, data) => request(`/receipts/${id}/create-expense`, { method: 'POST', body: JSON.stringify(data) }),
+    unlinkExpense: (id) => request(`/receipts/${id}/unlink-expense`, { method: 'POST' }),
+    byProject: (projectId, params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/receipts/by-project/${projectId}${q ? `?${q}` : ''}`)
+    },
+  },
 
   categories: {
     list: (params = {}) => {

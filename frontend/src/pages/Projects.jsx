@@ -30,6 +30,12 @@ export default function Projects() {
   const [movementPeriodQuick, setMovementPeriodQuick] = useState('all')
   const [movementCustomFrom, setMovementCustomFrom] = useState('')
   const [movementCustomTo, setMovementCustomTo] = useState('')
+  const [purchaseModal, setPurchaseModal] = useState(null)
+  const [purchaseLoading, setPurchaseLoading] = useState(false)
+  const [purchaseError, setPurchaseError] = useState(null)
+  const [purchasePeriodQuick, setPurchasePeriodQuick] = useState('all')
+  const [purchaseCustomFrom, setPurchaseCustomFrom] = useState('')
+  const [purchaseCustomTo, setPurchaseCustomTo] = useState('')
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({
     name: '',
@@ -261,6 +267,88 @@ export default function Projects() {
     openMovements(item)
   }
 
+  const getPurchaseRange = (item = purchaseModal) => {
+    const allTime = getProjectAllTimeRange(item)
+    if (purchasePeriodQuick === 'all') return allTime
+    if (purchasePeriodQuick === 'month') {
+      const currentMonth = new Date().getMonth() + 1
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+      return {
+        from: `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+      }
+    }
+    if (purchasePeriodQuick === 'quarter') {
+      const currentMonth = new Date().getMonth() + 1
+      const quarter = Math.ceil(currentMonth / 3)
+      const startMonth = (quarter - 1) * 3 + 1
+      const endMonth = quarter * 3
+      const lastDay = new Date(currentYear, endMonth, 0).getDate()
+      return {
+        from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
+        to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+      }
+    }
+    if (purchasePeriodQuick === 'year') {
+      return { from: `${currentYear}-01-01`, to: `${currentYear}-12-31` }
+    }
+    return {
+      from: purchaseCustomFrom || allTime.from,
+      to: purchaseCustomTo || allTime.to,
+    }
+  }
+
+  const loadPurchases = async (item) => {
+    if (!item?.project_id) return
+    const range = getPurchaseRange(item)
+    setPurchaseLoading(true)
+    setPurchaseError(null)
+    try {
+      const payload = await api.receipts.byProject(item.project_id, {
+        from: range.from,
+        to: range.to,
+      })
+      setPurchaseModal((current) => current ? {
+        ...current,
+        ...payload,
+        project_first_movement_date: current.project_first_movement_date,
+        project_last_movement_date: current.project_last_movement_date,
+        project_start_date: current.project_start_date,
+        project_end_date: current.project_end_date,
+        project_created_date: current.project_created_date,
+      } : current)
+    } catch (err) {
+      console.error(err)
+      setPurchaseError(err.message)
+    } finally {
+      setPurchaseLoading(false)
+    }
+  }
+
+  const openPurchases = (item) => {
+    const allTime = getProjectAllTimeRange(item)
+    setPurchasePeriodQuick('all')
+    setPurchaseCustomFrom(allTime.from)
+    setPurchaseCustomTo(allTime.to)
+    setPurchaseModal({
+      project_id: item.id,
+      project_name: item.name,
+      project_first_movement_date: item.first_movement_date || null,
+      project_last_movement_date: item.last_movement_date || null,
+      project_start_date: item.start_date || null,
+      project_end_date: item.end_date || null,
+      project_created_date: (item.created_at || '').slice(0, 10) || null,
+      from_date: allTime.from,
+      to_date: allTime.to,
+      items: [],
+    })
+  }
+
+  const openPurchasesFromDetail = (item) => {
+    setDetailModal(null)
+    openPurchases(item)
+  }
+
   const handleProjectRowClick = (item) => {
     if (rowClickTimeoutRef.current) clearTimeout(rowClickTimeoutRef.current)
     rowClickTimeoutRef.current = setTimeout(() => {
@@ -281,6 +369,11 @@ export default function Projects() {
     if (!movementModal?.project_id) return
     loadMovements(movementModal)
   }, [movementModal?.project_id, movementPeriodQuick, movementCustomFrom, movementCustomTo, mode])
+
+  useEffect(() => {
+    if (!purchaseModal?.project_id) return
+    loadPurchases(purchaseModal)
+  }, [purchaseModal?.project_id, purchasePeriodQuick, purchaseCustomFrom, purchaseCustomTo])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -618,6 +711,9 @@ export default function Projects() {
                     <button type="button" className="btn btn-primary" onClick={() => openMovementsFromDetail(detailModal)}>
                       {tr('projectMovements')}
                     </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => openPurchasesFromDetail(detailModal)}>
+                      {tr('projectPurchases')}
+                    </button>
                     <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
                       {tr('edit')}
                     </button>
@@ -713,6 +809,92 @@ export default function Projects() {
                 </div>
               ) : (
                 <div style={{ color: 'var(--color-text-muted)' }}>{tr('projectMovementNoItems')}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {purchaseModal && (
+        <div className="modal-overlay" onClick={() => { setPurchaseModal(null); setPurchaseError(null) }}>
+          <div
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(96vw, 1520px)',
+              maxWidth: 'none',
+              height: 'min(92vh, 980px)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div className="modal-header">
+              <h2 className="modal-title">{tr('projectPurchases')} {UI_DASH} {purchaseModal.project_name || `#${purchaseModal.project_id}`}</h2>
+              <button className="modal-close" onClick={() => { setPurchaseModal(null); setPurchaseError(null) }}>{UI_CLOSE}</button>
+            </div>
+            <div className="modal-body" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                    {['all', 'month', 'quarter', 'year', 'custom'].map((quickPeriod) => (
+                      <button
+                        key={quickPeriod}
+                        className={`btn btn-sm ${purchasePeriodQuick === quickPeriod ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setPurchasePeriodQuick(quickPeriod)}
+                      >
+                        {quickPeriod === 'all' ? tr('allTime') : tr(`financePeriod${quickPeriod.charAt(0).toUpperCase() + quickPeriod.slice(1)}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {purchasePeriodQuick === 'custom' ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <DatePicker value={purchaseCustomFrom} onChange={setPurchaseCustomFrom} placeholder={tr('periodFrom')} className="form-input" />
+                    <span>{UI_DASH}</span>
+                    <DatePicker value={purchaseCustomTo} onChange={setPurchaseCustomTo} placeholder={tr('periodTo')} className="form-input" />
+                  </div>
+                ) : null}
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                  {purchaseModal.from_date} {UI_DASH} {purchaseModal.to_date}
+                </div>
+              </div>
+              {purchaseError ? (
+                <div className="alert alert-danger">{purchaseError}</div>
+              ) : purchaseLoading ? (
+                <div style={{ color: 'var(--color-text-muted)' }}>{tr('loading')}</div>
+              ) : purchaseModal.items?.length ? (
+                <div className="table-wrap table-wrap-scroll" style={{ flex: 1, maxHeight: 'none' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('date')}</th>
+                        <th>{tr('receiptSeller')}</th>
+                        <th>{tr('name')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('receiptQuantity')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('receiptUnitPrice')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseModal.items.map((item) => (
+                        <tr key={item.item_id}>
+                          <td>{item.receipt_datetime ? String(item.receipt_datetime).slice(0, 10) : UI_DASH}</td>
+                          <td>
+                            <div>{item.seller_name || UI_DASH}</div>
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>{item.invoice_number || UI_DASH}</div>
+                          </td>
+                          <td>{item.item_name || UI_DASH}</td>
+                          <td style={{ textAlign: 'right' }}>{Number(item.quantity || 0).toLocaleString('sr-RS')}</td>
+                          <td style={{ textAlign: 'right' }}>{Number(item.unit_price || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RSD</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(item.total_amount || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RSD</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--color-text-muted)' }}>{tr('projectPurchasesNoItems')}</div>
               )}
             </div>
           </div>
