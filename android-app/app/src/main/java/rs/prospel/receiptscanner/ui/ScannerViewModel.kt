@@ -42,6 +42,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
 
     private var accessToken: String? = null
+    private var lastSubmittedQr: String? = null
+    private var lastSubmittedAtMs: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -83,6 +85,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     fun onQrDetected(value: String) {
         val normalized = value.trim()
         if (normalized.isBlank()) return
+        if (_uiState.value.importing) return
+
+        val now = System.currentTimeMillis()
+        if (normalized == lastSubmittedQr && now - lastSubmittedAtMs < 10_000L) {
+            return
+        }
+
         _uiState.update { current ->
             if (current.qrUrl == normalized) {
                 current
@@ -106,6 +115,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun showSetup() {
         _uiState.update { it.copy(showSetup = true, errorMessage = null, infoMessage = null) }
+    }
+
+    fun clearInfoMessage() {
+        _uiState.update { it.copy(infoMessage = null) }
     }
 
     fun connect() {
@@ -135,6 +148,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
+            lastSubmittedQr = url
+            lastSubmittedAtMs = System.currentTimeMillis()
             _uiState.update { it.copy(importing = true, errorMessage = null, infoMessage = null) }
 
             try {

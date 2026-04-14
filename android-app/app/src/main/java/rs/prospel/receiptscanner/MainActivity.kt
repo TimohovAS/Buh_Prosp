@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import rs.prospel.receiptscanner.network.ProjectResponse
 import rs.prospel.receiptscanner.ui.QrScannerCamera
 import rs.prospel.receiptscanner.ui.ScannerUiState
@@ -115,6 +116,16 @@ private fun ReceiptScannerApp(
     LaunchedEffect(state.scanEventId) {
         if (state.scanEventId > 0L) {
             playScanFeedback(context)
+            if (!state.showSetup && !state.importing && state.qrUrl.isNotBlank()) {
+                viewModel.importCurrentQr()
+            }
+        }
+    }
+
+    LaunchedEffect(state.infoMessage) {
+        if (!state.infoMessage.isNullOrBlank()) {
+            delay(2500L)
+            viewModel.clearInfoMessage()
         }
     }
 
