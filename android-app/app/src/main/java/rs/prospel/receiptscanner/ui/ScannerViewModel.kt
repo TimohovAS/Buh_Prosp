@@ -28,6 +28,7 @@ data class ScannerUiState(
     val selectedProjectId: Int? = null,
     val selectedProjectName: String = "",
     val qrUrl: String = "",
+    val scanEventId: Long = 0L,
     val infoMessage: String? = null,
     val errorMessage: String? = null,
     val lastReceipt: ReceiptDetailResponse? = null,
@@ -83,7 +84,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val normalized = value.trim()
         if (normalized.isBlank()) return
         _uiState.update { current ->
-            if (current.qrUrl == normalized) current else current.copy(qrUrl = normalized)
+            if (current.qrUrl == normalized) {
+                current
+            } else {
+                current.copy(
+                    qrUrl = normalized,
+                    scanEventId = current.scanEventId + 1L,
+                )
+            }
         }
     }
 
@@ -141,6 +149,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     it.copy(
                         importing = false,
                         lastReceipt = receipt,
+                        qrUrl = "",
                         infoMessage = if (imported.created) {
                             "Receipt imported."
                         } else {

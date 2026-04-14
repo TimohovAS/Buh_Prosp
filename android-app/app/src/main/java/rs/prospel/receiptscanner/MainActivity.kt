@@ -1,8 +1,15 @@
 package rs.prospel.receiptscanner
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -105,6 +112,12 @@ private fun ReceiptScannerApp(
         }
     }
 
+    LaunchedEffect(state.scanEventId) {
+        if (state.scanEventId > 0L) {
+            playScanFeedback(context)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -135,6 +148,34 @@ private fun ReceiptScannerApp(
                 onOpenSettings = viewModel::showSetup,
                 onExit = onExit,
             )
+        }
+    }
+}
+
+private fun playScanFeedback(context: Context) {
+    runCatching {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(80L, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(80L)
+        }
+    }
+
+    runCatching {
+        val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+        try {
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+        } finally {
+            tone.release()
         }
     }
 }
