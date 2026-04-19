@@ -894,6 +894,15 @@ input, select, textarea {
   background:
     linear-gradient(180deg, rgba(96, 165, 250, 0.09), rgba(96, 165, 250, 0.03) 28%, var(--color-surface) 72%),
     var(--color-surface);
+  border-color: var(--dashboard-limit-border, var(--color-border));
+}
+
+.dashboard-limit-card--warning {
+  --dashboard-limit-border: rgba(245, 158, 11, 0.55);
+}
+
+.dashboard-limit-card--danger {
+  --dashboard-limit-border: rgba(239, 68, 68, 0.65);
 }
 
 .dashboard-limit-head {

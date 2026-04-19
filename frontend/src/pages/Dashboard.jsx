@@ -50,12 +50,26 @@ function getRiskTone(risk) {
   return ''
 }
 
-function LimitForecastCard({ title, current, limit, percent, risk, forecast, estimate }) {
-  const fillClass = getRiskTone(risk)
+function getAnnualLimitRisk(current, limit, percent, forecast) {
+  if (current >= limit || forecast >= limit || percent >= 90) return 'high'
+  if (forecast >= limit * 0.9 || percent >= 70) return 'medium'
+  return 'low'
+}
+
+function getRollingLimitRisk(current, limit, percent) {
+  if (current >= limit || percent >= 90) return 'high'
+  if (percent >= 75) return 'medium'
+  return 'low'
+}
+
+function LimitForecastCard({ title, current, limit, percent, risk, forecast = null, estimate = null }) {
+  const tone = getRiskTone(risk)
+  const cardClass = tone ? `card dashboard-limit-card dashboard-limit-card--${tone}` : 'card dashboard-limit-card'
+  const fillClass = tone
   const percentClass = fillClass ? `dashboard-limit-percent ${fillClass}` : 'dashboard-limit-percent'
 
   return (
-    <div className="card dashboard-limit-card">
+    <div className={cardClass}>
       <div className="card-title">{title}</div>
       <div className="dashboard-limit-head">
         <div className="dashboard-limit-current">{fmt(current)} / {fmt(limit)} RSD</div>
@@ -67,9 +81,11 @@ function LimitForecastCard({ title, current, limit, percent, risk, forecast, est
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
       </div>
-      <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
-        {tr('forecastYearEnd')}: {fmtCurrency(forecast)}
-      </div>
+      {forecast != null ? (
+        <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
+          {tr('forecastYearEnd')}: {fmtCurrency(forecast)}
+        </div>
+      ) : null}
       {estimate ? (
         <div className="dashboard-summary-note" style={{ marginTop: '0.35rem' }}>
           {tr('estimatedLimitDate')}: {estimate}
@@ -161,6 +177,17 @@ export default function Dashboard() {
     estimated_limit_date: null,
     risk: lim.exceeded_6m || lim.exceeded_8m ? 'high' : lim.warning_6m || lim.warning_8m ? 'medium' : 'low',
   }
+  const annualRisk = getAnnualLimitRisk(
+    limitsData.annual_total,
+    limitsData.annual_limit,
+    limitsData.annual_percent,
+    limitsData.forecast_year_end ?? limitsData.annual_total,
+  )
+  const rollingRisk = getRollingLimitRisk(
+    limitsData.rolling_12_total,
+    limitsData.vat_limit,
+    limitsData.vat_percent,
+  )
 
   return (
     <>
@@ -231,7 +258,7 @@ export default function Dashboard() {
               current={limitsData.annual_total}
               limit={limitsData.annual_limit}
               percent={limitsData.annual_percent}
-              risk={limitsData.risk}
+              risk={annualRisk}
               forecast={limitsData.forecast_year_end}
               estimate={limitsData.estimated_limit_date}
             />
@@ -240,32 +267,10 @@ export default function Dashboard() {
               current={limitsData.rolling_12_total}
               limit={limitsData.vat_limit}
               percent={limitsData.vat_percent}
-              risk={limitsData.risk}
-              forecast={limitsData.forecast_year_end}
-              estimate={limitsData.estimated_limit_date}
+              risk={rollingRisk}
             />
           </div>
         </div>
-
-        {limitsData.risk !== 'low' && (
-          <div
-            className="card"
-            style={{
-              borderColor: limitsData.risk === 'high' ? 'var(--color-danger)' : 'var(--color-warning)',
-              marginBottom: '2rem',
-            }}
-          >
-            {(limitsData.risk === 'high') ? (
-              <p style={{ margin: 0, color: 'var(--color-danger)' }}>
-                {tr('limitRiskHigh')}
-              </p>
-            ) : (
-              <p style={{ margin: 0, color: 'var(--color-warning)' }}>
-                {tr('limitRiskMedium')}
-              </p>
-            )}
-          </div>
-        )}
 
         {data.upcoming_planned_expenses && data.upcoming_planned_expenses.length > 0 && (
           <div

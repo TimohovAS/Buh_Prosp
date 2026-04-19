@@ -14,6 +14,30 @@ function localDateIso(value = new Date()) {
   return new Date(value.getTime() - tzOffsetMs).toISOString().slice(0, 10)
 }
 
+function getAnnualLimitRisk(current, limit, percent, forecast) {
+  if (current >= limit || forecast >= limit || percent >= 90) return 'high'
+  if (forecast >= limit * 0.9 || percent >= 70) return 'medium'
+  return 'low'
+}
+
+function getRollingLimitRisk(current, limit, percent) {
+  if (current >= limit || percent >= 90) return 'high'
+  if (percent >= 75) return 'medium'
+  return 'low'
+}
+
+function getRiskColor(risk) {
+  if (risk === 'high') return 'var(--color-danger)'
+  if (risk === 'medium') return 'var(--color-warning)'
+  return 'var(--color-success)'
+}
+
+function getOverallRisk(...risks) {
+  if (risks.includes('high')) return 'high'
+  if (risks.includes('medium')) return 'medium'
+  return 'low'
+}
+
 function getPeriodRange(quick, customFrom, customTo) {
   const today = new Date()
   const y = today.getFullYear()
@@ -88,6 +112,22 @@ export default function FinanceOverview() {
   const arItems = ar?.items || []
   const arTotals = ar?.totals || {}
   const limitsData = limits
+  const annualRisk = limitsData
+    ? getAnnualLimitRisk(
+        limitsData.annual_total,
+        limitsData.annual_limit,
+        limitsData.annual_percent,
+        limitsData.forecast_year_end ?? limitsData.annual_total,
+      )
+    : 'low'
+  const rollingRisk = limitsData
+    ? getRollingLimitRisk(
+        limitsData.rolling_12_total,
+        limitsData.vat_limit,
+        limitsData.vat_percent,
+      )
+    : 'low'
+  const limitsRisk = getOverallRisk(annualRisk, rollingRisk)
 
   const overdueItems = arItems
     .filter((i) => (i.days_overdue ?? 0) > 0)
@@ -193,18 +233,18 @@ export default function FinanceOverview() {
         }}>
           {limitsData && (
             <>
-              <div className="card" style={{ borderLeft: `4px solid ${limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)'}` }}>
+              <div className="card" style={{ borderLeft: `4px solid ${getRiskColor(annualRisk)}` }}>
                 <div className="card-title">{tr('limit6m')}</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(limitsData.annual_total)} / {fmt(limitsData.annual_limit)} RSD</div>
                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
                   {limitsData.annual_percent.toFixed(1)}% | {tr('forecastYearEnd')}: {fmt(limitsData.forecast_year_end)} RSD
                 </div>
               </div>
-              <div className="card" style={{ borderLeft: `4px solid ${limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)'}` }}>
+              <div className="card" style={{ borderLeft: `4px solid ${getRiskColor(rollingRisk)}` }}>
                 <div className="card-title">{tr('limit8m')}</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(limitsData.rolling_12_total)} / {fmt(limitsData.vat_limit)} RSD</div>
                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                  {limitsData.vat_percent.toFixed(1)}% | {tr(`risk${limitsData.risk.charAt(0).toUpperCase() + limitsData.risk.slice(1)}`)}
+                  {limitsData.vat_percent.toFixed(1)}% | {tr(`risk${rollingRisk.charAt(0).toUpperCase() + rollingRisk.slice(1)}`)}
                 </div>
               </div>
             </>
@@ -266,17 +306,23 @@ export default function FinanceOverview() {
         </div>
 
         {limitsData && (
-          <div className="card" style={{ marginBottom: '2rem', borderColor: limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-border)' }}>
+          <div className="card" style={{ marginBottom: '2rem', borderColor: limitsRisk === 'high' ? 'var(--color-danger)' : limitsRisk === 'medium' ? 'var(--color-warning)' : 'var(--color-border)' }}>
             <div className="card-title">{tr('financeLimits')}</div>
-            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
-              <div
-                className={`progress-bar-fill ${limitsData.risk === 'high' ? 'danger' : limitsData.risk === 'medium' ? 'warning' : ''}`.trim()}
-                style={{ width: `${Math.min(limitsData.annual_percent, 100)}%` }}
-              />
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+              {tr('limit6m')} (6M RSD): {fmt(limitsData.annual_total)} / {fmt(limitsData.annual_limit)} RSD
             </div>
             <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
               <div
-                className={`progress-bar-fill ${limitsData.vat_percent >= 90 ? 'danger' : limitsData.vat_percent >= 75 ? 'warning' : ''}`.trim()}
+                className={`progress-bar-fill ${annualRisk === 'high' ? 'danger' : annualRisk === 'medium' ? 'warning' : ''}`.trim()}
+                style={{ width: `${Math.min(limitsData.annual_percent, 100)}%` }}
+              />
+            </div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+              {tr('limit8m')} ({tr('limitMonths12')}): {fmt(limitsData.rolling_12_total)} / {fmt(limitsData.vat_limit)} RSD
+            </div>
+            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
+              <div
+                className={`progress-bar-fill ${rollingRisk === 'high' ? 'danger' : rollingRisk === 'medium' ? 'warning' : ''}`.trim()}
                 style={{ width: `${Math.min(limitsData.vat_percent, 100)}%` }}
               />
             </div>
@@ -284,7 +330,8 @@ export default function FinanceOverview() {
               <div>{tr('averageMonthlyIncome')}: <strong style={{ color: 'var(--color-text)' }}>{fmt(limitsData.average_monthly_income)} RSD</strong></div>
               <div>{tr('forecastYearEnd')}: <strong style={{ color: 'var(--color-text)' }}>{fmt(limitsData.forecast_year_end)} RSD</strong></div>
               <div>{tr('estimatedLimitDate')}: <strong style={{ color: 'var(--color-text)' }}>{limitsData.estimated_limit_date || tr('notAvailable')}</strong></div>
-              <div>{tr('risk')}: <strong style={{ color: limitsData.risk === 'high' ? 'var(--color-danger)' : limitsData.risk === 'medium' ? 'var(--color-warning)' : 'var(--color-success)' }}>{tr(`risk${limitsData.risk.charAt(0).toUpperCase() + limitsData.risk.slice(1)}`)}</strong></div>
+              <div>{tr('limit6m')}: <strong style={{ color: getRiskColor(annualRisk) }}>{tr(`risk${annualRisk.charAt(0).toUpperCase() + annualRisk.slice(1)}`)}</strong></div>
+              <div>{tr('limit8m')}: <strong style={{ color: getRiskColor(rollingRisk) }}>{tr(`risk${rollingRisk.charAt(0).toUpperCase() + rollingRisk.slice(1)}`)}</strong></div>
             </div>
           </div>
         )}
