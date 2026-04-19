@@ -8,6 +8,7 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
+import { contractMatchesProject, filterContractsForProject } from '../utils/entityLabels'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
@@ -172,19 +173,12 @@ export default function CashRegister() {
     return UI_DASH
   }
 
-  const getContractsForProject = (projectId) => contracts
-    .filter((contract) => contract.project_id === projectId || contract.project_id == null)
-    .sort((left, right) => {
-      const leftRank = left.project_id === projectId ? 0 : 1
-      const rightRank = right.project_id === projectId ? 0 : 1
-      if (leftRank !== rightRank) return leftRank - rightRank
-      return buildContractLabel(left).localeCompare(buildContractLabel(right), 'sr')
-    })
+  const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
 
   const expenseContracts = useMemo(() => {
     const effectiveProjectId = getForcedExpenseProjectId(expenseForm.category_id) || expenseForm.project_id || ''
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
-    return selectedProjectId ? getContractsForProject(selectedProjectId) : []
+    return getContractsForProject(selectedProjectId)
   }, [contracts, expenseForm.project_id, expenseForm.category_id, categories, salaryProject])
 
   const selectedExpenseCategory = useMemo(
@@ -206,7 +200,7 @@ export default function CashRegister() {
 
   const withdrawalContracts = useMemo(() => {
     const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
-    return selectedProjectId ? getContractsForProject(selectedProjectId) : []
+    return getContractsForProject(selectedProjectId)
   }, [contracts, withdrawalForm.project_id])
 
   const filteredEntries = useMemo(() => {
@@ -353,7 +347,7 @@ export default function CashRegister() {
   const updateExpenseProject = (projectId) => {
     setExpenseForm((previous) => {
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      const keepContract = contractMatchesProject(selectedContract, projectId)
       return {
         ...previous,
         project_id: projectId,
@@ -389,7 +383,7 @@ export default function CashRegister() {
   const updateWithdrawalProject = (projectId) => {
     setWithdrawalForm((previous) => {
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      const keepContract = contractMatchesProject(selectedContract, projectId)
       return {
         ...previous,
         project_id: projectId,
@@ -790,7 +784,7 @@ export default function CashRegister() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('contracts')}</label>
-                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)} disabled={!expenseForm.project_id}>
+                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
                   <option value="">{UI_DASH}</option>
                   {expenseContracts.map((contract) => (
                     <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
@@ -868,7 +862,7 @@ export default function CashRegister() {
           </div>
           <div className="form-group">
             <label className="form-label">{tr('contracts')}</label>
-            <select className="form-input" value={withdrawalForm.contract_id} onChange={(event) => updateWithdrawalContract(event.target.value)} disabled={!withdrawalForm.project_id}>
+            <select className="form-input" value={withdrawalForm.contract_id} onChange={(event) => updateWithdrawalContract(event.target.value)}>
               <option value="">{UI_DASH}</option>
               {withdrawalContracts.map((contract) => (
                 <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>

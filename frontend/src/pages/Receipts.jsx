@@ -8,7 +8,7 @@ import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
-import { buildContractLabel } from '../utils/entityLabels'
+import { buildContractLabel, filterContractsForProject } from '../utils/entityLabels'
 import { UI_DASH } from '../utils/formatters'
 
 function fmtMoney(value) {
@@ -119,8 +119,7 @@ export default function Receipts() {
   ]), [])
 
   const filteredContracts = useMemo(() => {
-    if (!createForm.project_id) return contracts
-    return contracts.filter((contract) => contract.project_id == null || String(contract.project_id) === String(createForm.project_id))
+    return filterContractsForProject(contracts, createForm.project_id)
   }, [contracts, createForm.project_id])
 
   const receiptRows = useMemo(

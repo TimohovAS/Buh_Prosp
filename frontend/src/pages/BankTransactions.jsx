@@ -11,7 +11,7 @@ import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
-import { buildContractLabel, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { buildContractLabel, contractMatchesProject, filterContractsForProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
 import { UI_DASH } from '../utils/formatters'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -97,14 +97,7 @@ export default function BankTransactions() {
     return lang === 'ru' ? category.name_ru : category.name_sr
   }
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
-  const getContractsForProject = (projectId) => contracts
-    .filter((contract) => contract.project_id === projectId || contract.project_id == null)
-    .sort((left, right) => {
-      const leftRank = left.project_id === projectId ? 0 : 1
-      const rightRank = right.project_id === projectId ? 0 : 1
-      if (leftRank !== rightRank) return leftRank - rightRank
-      return buildContractLabel(left).localeCompare(buildContractLabel(right), 'sr')
-    })
+  const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
   const getExpenseCategoryById = (categoryId) => categories.find((item) => String(item.id) === String(categoryId)) || null
   const getExpenseCategoryDefaultProjectId = (categoryId) => {
     const category = getExpenseCategoryById(categoryId)
@@ -543,7 +536,7 @@ export default function BankTransactions() {
   const updateExpenseProject = (projectId) => {
     setExpenseForm((previous) => {
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = selectedContract && String(selectedContract.project_id) === String(projectId)
+      const keepContract = contractMatchesProject(selectedContract, projectId)
       return {
         ...previous,
         project_id: projectId,
@@ -1037,7 +1030,7 @@ export default function BankTransactions() {
     const usesDefaultProject = expenseUsesDefaultProject(expenseForm.category_id)
     const effectiveProjectId = categoryDefaultProjectId || expenseForm.project_id || ''
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
-    const filteredContracts = selectedProjectId ? getContractsForProject(selectedProjectId) : []
+    const filteredContracts = getContractsForProject(selectedProjectId)
     const suggested = suggestions.filter((item) => item.section === 'suggested')
     const allObligations = suggestions.filter((item) => item.type === 'obligation' && (item.section === 'all' || !item.section))
     const query = allInvoiceSearch.trim().toLowerCase()
