@@ -3,7 +3,12 @@ import { useLocation } from 'react-router-dom'
 import DatePicker from '../components/DatePicker'
 import { api } from '../api'
 import { getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
+import SharedStatusBadge from '../components/StatusBadge'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
 
 function formatDate(value) {
   if (!value) return '\u2014'
@@ -35,9 +40,10 @@ const STATUS_FILTERS = [
 export default function Obligations() {
   const location = useLocation()
   const isActivePage = location.pathname === '/payments'
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
-  const [availableYears, setAvailableYears] = useState([currentYear])
+  const { currentYear, year, setYear, availableYears, applyAvailableYears, resetAvailableYears } = useAvailableYears({
+    initialYear: new Date().getFullYear(),
+    includeAllTime: false,
+  })
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -83,13 +89,13 @@ export default function Obligations() {
         setTypes(paymentTypes)
         setItems(calendarItems)
         setDecisions(decisionItems)
-        setAvailableYears(years?.length ? years : [currentYear])
+        applyAvailableYears(years)
       })
       .catch(() => {
         setItems([])
         setTypes([])
         setDecisions([])
-        setAvailableYears([currentYear])
+        resetAvailableYears()
       })
       .finally(() => setLoading(false))
   }
@@ -119,13 +125,6 @@ export default function Obligations() {
 
     load()
   }, [year, paymentTypeFilter, search, statusFilter, isActivePage, location.search])
-
-  useEffect(() => {
-    if (!availableYears.length) return
-    if (!availableYears.includes(year)) {
-      setYear(availableYears[0])
-    }
-  }, [availableYears, year])
 
   const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
 
@@ -288,22 +287,17 @@ export default function Obligations() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('payments')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
+      <PageHeader
+        title={tr('payments')}
+        actions={(
+          <>
+          <YearFilterSelect
             value={year}
-            onChange={(event) => setYear(parseInt(event.target.value, 10))}
+            availableYears={availableYears}
+            onChange={setYear}
+            includeAllTime={false}
             title={tr('filterYear')}
-          >
-            {availableYears.map((optionYear) => (
-              <option key={optionYear} value={optionYear}>{optionYear}</option>
-            ))}
-          </select>
+          />
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -336,8 +330,9 @@ export default function Obligations() {
           <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
             {tr('obligationsSettings')}
           </button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="page-body">
         <div className="card">
@@ -375,22 +370,18 @@ export default function Obligations() {
                       <td>{obligation.amount?.toLocaleString('sr-RS')} RSD</td>
                       <td>{formatDate(obligation.deadline)}</td>
                       <td>
-                        <span
-                          className="badge"
-                          style={{
-                            backgroundColor:
-                              obligation.status === 'paid'
-                                ? 'var(--color-success)'
-                                : obligation.status === 'overdue'
-                                  ? 'var(--color-danger)'
-                                  : 'var(--color-warning)',
-                            color: '#fff',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: 4,
-                          }}
+                        <SharedStatusBadge
+                          tone={
+                            obligation.status === 'paid'
+                              ? 'success'
+                              : obligation.status === 'overdue'
+                                ? 'danger'
+                                : 'warning'
+                          }
+                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
                         >
                           {obligation.status === 'paid' ? tr('paid') : obligation.status === 'overdue' ? tr('obligationsOverdue') : tr('unpaid')}
-                        </span>
+                        </SharedStatusBadge>
                       </td>
                       <td>{obligation.paid_date ? formatDate(obligation.paid_date) : empty}</td>
                       <td style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={obligation.payment_reference || empty}>
@@ -416,13 +407,16 @@ export default function Obligations() {
         </div>
       </div>
 
-      {settingsModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 800, maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('obligationsSettings')}</h2>
-              <button className="modal-close" onClick={() => setSettingsModal(false)}>{'\u00D7'}</button>
-            </div>
+      <Modal
+        isOpen={settingsModal}
+        onClose={() => setSettingsModal(false)}
+        title={tr('obligationsSettings')}
+        maxWidth="800px"
+        closeOnOverlay
+        style={{ maxHeight: '90vh', overflow: 'auto' }}
+      >
+        {settingsModal ? (
+          <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <button className="btn btn-primary" onClick={() => openDecisionForm('add')}>
                 {tr('add')}
@@ -480,19 +474,18 @@ export default function Obligations() {
                 {tr('close')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
 
-      {paidModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {tr('markPaid')} {'\u2014'} {getTypeName(paidModal.payment_type_code)} {monthNamesShort[paidModal.month - 1]}
-              </h2>
-              <button className="modal-close" onClick={() => setPaidModal(null)}>{'\u00D7'}</button>
-            </div>
+      <Modal
+        isOpen={!!paidModal}
+        onClose={() => setPaidModal(null)}
+        title={paidModal ? `${tr('markPaid')} \u2014 ${getTypeName(paidModal.payment_type_code)} ${monthNamesShort[paidModal.month - 1]}` : tr('markPaid')}
+        maxWidth="400px"
+        closeOnOverlay
+      >
+        {paidModal ? (
             <form onSubmit={handleMarkPaidSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
@@ -519,19 +512,18 @@ export default function Obligations() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {decisionFormModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {decisionFormModal === 'add' ? tr('add') : tr('edit')} {'\u2014'} {tr('decisionFormTitle')}
-              </h2>
-              <button className="modal-close" onClick={() => setDecisionFormModal(null)}>{'\u00D7'}</button>
-            </div>
+      <Modal
+        isOpen={!!decisionFormModal}
+        onClose={() => setDecisionFormModal(null)}
+        title={`${decisionFormModal === 'add' ? tr('add') : tr('edit')} \u2014 ${tr('decisionFormTitle')}`}
+        maxWidth="520px"
+        closeOnOverlay
+        style={{ maxHeight: '90vh', overflow: 'auto' }}
+      >
+        {decisionFormModal ? (
             <form onSubmit={handleDecisionFormSubmit}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
@@ -615,9 +607,8 @@ export default function Obligations() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
     </div>
   )
 }

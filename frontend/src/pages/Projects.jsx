@@ -3,17 +3,17 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import EntityDetailModal from '../components/EntityDetailModal'
+import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import StatusBadge from '../components/StatusBadge'
+import useListPageState from '../hooks/useListPageState'
+import { UI_DASH, UI_CLOSE, formatInteger } from '../utils/formatters'
 
 function fmt(n) {
-  return (n ?? 0).toLocaleString('sr-RS')
+  return formatInteger(n)
 }
-
-const UI_DASH = '\u2014'
-const UI_CLOSE = '\u00D7'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
 export default function Projects() {
   const location = useLocation()
   const isActivePage = location.pathname === '/projects'
@@ -51,14 +51,18 @@ export default function Projects() {
     is_internal: false,
   })
   const [showInactive, setShowInactive] = useState(false)
-  const [search, setSearch] = useState('')
-  const [sortCol, setSortCol] = useState('name')
-  const [sortAsc, setSortAsc] = useState(true)
   const [projectFilter, setProjectFilter] = useState('all')
   const [periodQuick, setPeriodQuick] = useState('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [mode, setMode] = useState('accrual')
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'name', initialSortAsc: true })
   const rowClickTimeoutRef = useRef(null)
 
   const currentYear = new Date().getFullYear()
@@ -443,19 +447,6 @@ export default function Projects() {
     })
   }, [projects, search, sortCol, sortAsc, byProject, projectFilter])
 
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc((value) => !value)
-    else {
-      setSortCol(col)
-      setSortAsc(true)
-    }
-  }
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
-
   const getMovementTypeLabel = (item) => item.movement_type === 'income'
     ? tr('projectMovementSourceIncome')
     : tr('projectMovementSourceExpense')
@@ -470,35 +461,35 @@ export default function Projects() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('projects')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
-            <span>{tr('showInactive')}</span>
-          </label>
-          <div style={{ display: 'flex', gap: '0.25rem' }}>
-            {['all', 'commercial', 'internal'].map((filterValue) => (
-              <button
-                key={filterValue}
-                className={`btn btn-sm ${projectFilter === filterValue ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setProjectFilter(filterValue)}
-              >
-                {tr(`filter${filterValue.charAt(0).toUpperCase() + filterValue.slice(1)}`)}
-              </button>
-            ))}
-          </div>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 180 }}
-          />
-          <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
-        </div>
-      </div>
+      <PageHeader
+        title={tr('projects')}
+        actions={(
+          <>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
+              <span>{tr('showInactive')}</span>
+            </label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              {['all', 'commercial', 'internal'].map((filterValue) => (
+                <button
+                  key={filterValue}
+                  className={`btn btn-sm ${projectFilter === filterValue ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setProjectFilter(filterValue)}
+                >
+                  {tr(`filter${filterValue.charAt(0).toUpperCase() + filterValue.slice(1)}`)}
+                </button>
+              ))}
+            </div>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
+            <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
+          </>
+        )}
+      />
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
@@ -548,12 +539,12 @@ export default function Projects() {
           <table>
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('project')} <SortIcon col="name" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('code')}>{tr('projectCode')} <SortIcon col="code" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('revenue')}>{tr('income')} <SortIcon col="revenue" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('expenses')}>{tr('expenses')} <SortIcon col="expenses" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('projectProfit')} <SortIcon col="profit" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('project')} <SortIndicator active={sortCol === 'name'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('code')}>{tr('projectCode')} <SortIndicator active={sortCol === 'code'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('revenue')}>{tr('income')} <SortIndicator active={sortCol === 'revenue'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('expenses')}>{tr('expenses')} <SortIndicator active={sortCol === 'expenses'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('projectProfit')} <SortIndicator active={sortCol === 'profit'} asc={sortAsc} /></th>
               </tr>
             </thead>
             <tbody>
@@ -582,9 +573,9 @@ export default function Projects() {
                       <td>
                         {project.name}
                         {project.is_internal ? (
-                          <span className="badge" style={{ marginLeft: '0.5rem', backgroundColor: 'var(--color-info, #0ea5e9)', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: 999 }}>
+                          <StatusBadge tone="info" className="badge-pill" style={{ marginLeft: '0.5rem' }}>
                             {tr('internalProject')}
-                          </span>
+                          </StatusBadge>
                         ) : null}
                       </td>
                       <td>{project.code || UI_DASH}</td>
@@ -631,102 +622,94 @@ export default function Projects() {
         </div>
       )}
 
-      {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 920 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('project')} {UI_DASH} {detailModal.name || `#${detailModal.id}`}</h2>
-              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+      <EntityDetailModal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={detailModal ? `${tr('project')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}` : tr('project')}
+        maxWidth="920px"
+        details={detailModal ? (
+          <div className="record-field-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('name')}</span>
+              <span className="record-field-value">{detailModal.name || UI_DASH}</span>
             </div>
-            <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card">
-                  <div className="record-field-grid">
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('name')}</span>
-                      <span className="record-field-value">{detailModal.name || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectCode')}</span>
-                      <span className="record-field-value">{detailModal.code || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('client')}</span>
-                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('status')}</span>
-                      <span className="record-field-value">{detailModal.status || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('isInternal')}</span>
-                      <span className="record-field-value">{detailModal.is_internal ? tr('yes') : tr('no')}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectPlannedIncome')}</span>
-                      <span className="record-field-value">{fmt(detailModal.planned_income)} RSD</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectPlannedExpenses')}</span>
-                      <span className="record-field-value">{fmt(detailModal.planned_expense)} RSD</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectStartDate')}</span>
-                      <span className="record-field-value">{detailModal.start_date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('validTo')}</span>
-                      <span className="record-field-value">{detailModal.end_date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectFirstMovement')}</span>
-                      <span className="record-field-value">{detailModal.first_movement_date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('projectLastMovement')}</span>
-                      <span className="record-field-value">{detailModal.last_movement_date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('income')}</span>
-                      <span className="record-field-value">{fmt(getRowData(detailModal).revenue)} RSD</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('expenses')}</span>
-                      <span className="record-field-value">{fmt(getRowData(detailModal).expenses)} RSD</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('projectProfit')}</span>
-                      <span className="record-field-value" style={{ color: (getRowData(detailModal).profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
-                        {fmt(getRowData(detailModal).profit)} RSD
-                      </span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{detailModal.notes || UI_DASH}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="record-detail-card">
-                  <div className="record-actions-grid">
-                    <button type="button" className="btn btn-primary" onClick={() => openMovementsFromDetail(detailModal)}>
-                      {tr('projectMovements')}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => openPurchasesFromDetail(detailModal)}>
-                      {tr('projectPurchases')}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
-                      {tr('edit')}
-                    </button>
-                    <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
-                      {tr('delete')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectCode')}</span>
+              <span className="record-field-value">{detailModal.code || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('client')}</span>
+              <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('isInternal')}</span>
+              <span className="record-field-value">{detailModal.is_internal ? tr('yes') : tr('no')}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectPlannedIncome')}</span>
+              <span className="record-field-value">{fmt(detailModal.planned_income)} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectPlannedExpenses')}</span>
+              <span className="record-field-value">{fmt(detailModal.planned_expense)} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectStartDate')}</span>
+              <span className="record-field-value">{detailModal.start_date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('validTo')}</span>
+              <span className="record-field-value">{detailModal.end_date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectFirstMovement')}</span>
+              <span className="record-field-value">{detailModal.first_movement_date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('projectLastMovement')}</span>
+              <span className="record-field-value">{detailModal.last_movement_date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('income')}</span>
+              <span className="record-field-value">{fmt(getRowData(detailModal).revenue)} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('expenses')}</span>
+              <span className="record-field-value">{fmt(getRowData(detailModal).expenses)} RSD</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('projectProfit')}</span>
+              <span className="record-field-value" style={{ color: (getRowData(detailModal).profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
+                {fmt(getRowData(detailModal).profit)} RSD
+              </span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('note')}</span>
+              <div className="record-field-text">{detailModal.notes || UI_DASH}</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+        actions={detailModal ? (
+          <div className="record-actions-grid">
+            <button type="button" className="btn btn-primary" onClick={() => openMovementsFromDetail(detailModal)}>
+              {tr('projectMovements')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => openPurchasesFromDetail(detailModal)}>
+              {tr('projectPurchases')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+              {tr('edit')}
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
+              {tr('delete')}
+            </button>
+          </div>
+        ) : null}
+      />
 
       {movementModal && (
         <div className="modal-overlay" onClick={() => { setMovementModal(null); setMovementError(null) }}>

@@ -206,6 +206,7 @@ export const api = {
       return request(`/finance/limits${q ? `?${q}` : ''}`);
     },
     pnl: (year) => request(`/finance/pnl?year=${year}`),
+    pnlYears: () => request('/finance/pnl/years'),
     ar: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return request(`/finance/ar${q ? `?${q}` : ''}`);
@@ -430,6 +431,7 @@ export const api = {
       const q = new URLSearchParams(params || {}).toString();
       return request(`/incoming-invoices?${q}`);
     },
+      years: () => request('/incoming-invoices/years'),
       get: (id) => request(`/incoming-invoices/${id}`),
       create: (data) => request('/incoming-invoices', { method: 'POST', body: JSON.stringify(data) }),
       update: (id, data) => request(`/incoming-invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

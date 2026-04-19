@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.database import get_db
 from backend.models import User
 from backend.auth import get_current_user_required
-from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project, get_finance_pnl, get_project_movements
+from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project, get_finance_pnl, get_finance_pnl_years, get_project_movements
 from backend.schemas import FinanceLimitsResponse, FinancePnlResponse, ProjectMovementsResponse
 from backend.services import get_finance_limits_overview
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,14 @@ async def finance_limits(
 ):
     """Лимиты паушала по начислению (Income.issued_date), без bank cashflow."""
     return FinanceLimitsResponse(**(await get_finance_limits_overview(db, as_of)))
+
+
+@router.get("/pnl/years", response_model=list[int])
+async def finance_pnl_years_list(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    return await get_finance_pnl_years(db)
 
 
 @router.get("/pnl", response_model=FinancePnlResponse)

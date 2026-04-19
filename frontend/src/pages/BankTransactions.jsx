@@ -4,26 +4,21 @@ import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
+import useListPageState from '../hooks/useListPageState'
+import { buildContractLabel, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_DASH } from '../utils/formatters'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-const UI_DASH = '\u2014'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
 const CASH_CATEGORY_VALUE = '__cash__'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
-}
-
-function buildContractLabel(contract) {
-  if (!contract) return ''
-  const parts = []
-  if (contract.number) parts.push(contract.number)
-  if (contract.subject) parts.push(contract.subject)
-  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
 }
 
 function formatMoney(value) {
@@ -53,18 +48,18 @@ export default function BankTransactions() {
   const [loading, setLoading] = useState(true)
 
   const lang = getLang()
-  const currentYear = new Date().getFullYear()
-
-  const [year, setYear] = useState('')
-  const [availableYears, setAvailableYears] = useState([currentYear])
+  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: '' })
   const [month, setMonth] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
-  const [search, setSearch] = useState('')
   const [pendingBankReferenceOpen, setPendingBankReferenceOpen] = useState(null)
-
-  const [sortCol, setSortCol] = useState('date')
-  const [sortAsc, setSortAsc] = useState(false)
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
 
   const [selectedIds, setSelectedIds] = useState([])
   const [modalAssign, setModalAssign] = useState(false)
@@ -95,7 +90,7 @@ export default function BankTransactions() {
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
 
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || UI_DASH
+  const getProjectName = (projectId) => resolveProjectName(projects, projectId, UI_DASH)
   const getCategoryName = (categoryId) => {
     const category = categories.find((item) => item.id === categoryId)
     if (!category) return UI_DASH
@@ -148,7 +143,7 @@ export default function BankTransactions() {
         loadReferenceData(),
       ])
       setData(transactions)
-      setAvailableYears(years?.length ? years : [currentYear])
+      applyAvailableYears(years)
     } catch (error) {
       console.error(error)
     } finally {
@@ -243,13 +238,6 @@ export default function BankTransactions() {
     setPendingBankReferenceOpen(null)
   }, [data, directionFilter, isActivePage, loading, month, pendingBankReferenceOpen, search, statusFilter, year])
 
-  useEffect(() => {
-    if (availableYears.length === 0) return
-    if (year !== '' && !availableYears.includes(year)) {
-      setYear(availableYears[0])
-    }
-  }, [availableYears, year])
-
   const displayed = useMemo(() => {
     const query = search.trim().toLowerCase()
     let rows = data
@@ -274,19 +262,6 @@ export default function BankTransactions() {
       return 0
     })
   }, [data, search, sortAsc, sortCol, projects])
-
-  const toggleSort = (column) => {
-    if (sortCol === column) setSortAsc((value) => !value)
-    else {
-      setSortCol(column)
-      setSortAsc(true)
-    }
-  }
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.35, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
 
   const buildExpenseForm = (transaction) => ({
     date: transaction?.date || todayIso(),
@@ -1208,18 +1183,19 @@ export default function BankTransactions() {
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('bankTransactions')}</h1>
-          <p className="page-subtitle">{tr('bankTxOpenHint')}</p>
-        </div>
-        <div className="page-header-actions">
-          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
-            <option value="">{tr('allTime')}</option>
-            {availableYears.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
+      <PageHeader
+        title={tr('bankTransactions')}
+        subtitle={tr('bankTxOpenHint')}
+        actions={(
+          <>
+          <YearFilterSelect
+            value={year}
+            availableYears={availableYears}
+            onChange={(nextYear) => {
+              setYear(nextYear)
+              setMonth('')
+            }}
+          />
           <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (
@@ -1247,8 +1223,9 @@ export default function BankTransactions() {
               {tr('assignProject')} ({selectedIds.length})
             </button>
           )}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="page-body" ref={pageBodyRef}>
         <div className="card">
@@ -1259,12 +1236,12 @@ export default function BankTransactions() {
                   <th style={{ width: 40 }}>
                     <input type="checkbox" checked={displayed.length > 0 && selectedIds.length === displayed.length} onChange={toggleSelectAll} />
                   </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIcon col="counterparty_name" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIcon col="purpose" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIcon col="status" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIndicator active={sortCol === 'purpose'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIndicator active={sortCol === 'status'} asc={sortAsc} /></th>
                 </tr>
               </thead>
               <tbody>

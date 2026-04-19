@@ -6,12 +6,21 @@ export default function Modal({
   className = '',
   bodyClassName = '',
   maxWidth,
+  closeOnOverlay = false,
+  style,
 }) {
   if (!isOpen) return null
 
   return (
-    <div className="modal-overlay">
-      <div className={`modal ${className}`.trim()} style={maxWidth ? { maxWidth } : undefined}>
+    <div
+      className="modal-overlay"
+      onClick={closeOnOverlay ? onClose : undefined}
+    >
+      <div
+        className={`modal ${className}`.trim()}
+        style={{ ...(maxWidth ? { maxWidth } : {}), ...(style || {}) }}
+        onClick={closeOnOverlay ? (event) => event.stopPropagation() : undefined}
+      >
         <div className="modal-header">
           <h3 className="modal-title">{title}</h3>
           <button type="button" className="modal-close" onClick={onClose} aria-label="close">

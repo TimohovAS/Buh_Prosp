@@ -3,16 +3,20 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import StatusBadge from '../components/StatusBadge'
+import useListPageState from '../hooks/useListPageState'
+import { getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_DASH, formatInteger } from '../utils/formatters'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
-const UI_DASH = '\u2014'
-const UI_CLOSE = '\u00D7'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
+const DEFAULT_UNIT = '\u0448\u0442'
 
 export default function Contracts() {
   const location = useLocation()
@@ -22,12 +26,16 @@ export default function Contracts() {
   const [projects, setProjects] = useState([])
   const [statusFilter, setStatusFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sortCol, setSortCol] = useState('date')
-  const [sortAsc, setSortAsc] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
   const [modal, setModal] = useState(null)
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
   const [form, setForm] = useState({
     number: '',
     date: new Date().toISOString().slice(0, 10),
@@ -43,7 +51,7 @@ export default function Contracts() {
   })
   const [itemsForm, setItemsForm] = useState([])
 
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
 
   const load = () => {
     setLoading(true)
@@ -87,7 +95,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
+        setItemsForm([{ description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
         setModal('add')
       })
       .catch(() => {
@@ -104,7 +112,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
+        setItemsForm([{ description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
         setModal('add')
       })
   }
@@ -125,7 +133,12 @@ export default function Contracts() {
     })
     setItemsForm(
       contract.items?.length
-        ? contract.items.map((item) => ({ description: item.description, quantity: item.quantity, unit: item.unit, price: item.price }))
+        ? contract.items.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+        }))
         : []
     )
     setModal({ type: 'edit', id: contract.id })
@@ -141,7 +154,7 @@ export default function Contracts() {
   }
 
   const addItem = () => {
-    setItemsForm([...itemsForm, { description: '', quantity: 1, unit: '\u0448\u0442', price: 0 }])
+    setItemsForm([...itemsForm, { description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
   }
 
   const removeItem = (index) => {
@@ -152,7 +165,9 @@ export default function Contracts() {
     const next = [...itemsForm]
     next[index] = { ...next[index], [field]: value }
     if (field === 'quantity' || field === 'price') {
-      next[index].amount = (field === 'quantity' ? parseFloat(value) || 0 : next[index].quantity) * (field === 'price' ? parseFloat(value) || 0 : next[index].price)
+      next[index].amount =
+        (field === 'quantity' ? parseFloat(value) || 0 : next[index].quantity) *
+        (field === 'price' ? parseFloat(value) || 0 : next[index].price)
     }
     setItemsForm(next)
   }
@@ -181,14 +196,14 @@ export default function Contracts() {
             ? itemsForm.filter((item) => item.description.trim()).map((item) => ({
               description: item.description,
               quantity: parseFloat(item.quantity) || 1,
-              unit: item.unit || '\u0448\u0442',
+              unit: item.unit || DEFAULT_UNIT,
               price: parseFloat(item.price) || 0,
             }))
             : null)
           : itemsForm.filter((item) => item.description.trim()).map((item) => ({
             description: item.description,
             quantity: parseFloat(item.quantity) || 1,
-            unit: item.unit || '\u0448\u0442',
+            unit: item.unit || DEFAULT_UNIT,
             price: parseFloat(item.price) || 0,
           })),
       }
@@ -224,19 +239,6 @@ export default function Contracts() {
     })
   }, [items, projects, search, sortCol, sortAsc])
 
-  const toggleSort = (column) => {
-    if (sortCol === column) setSortAsc((value) => !value)
-    else {
-      setSortCol(column)
-      setSortAsc(true)
-    }
-  }
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
-
   const handleDeleteFromDetail = async (contract) => {
     if (!confirm(tr('deleteContract'))) return
     try {
@@ -250,32 +252,32 @@ export default function Contracts() {
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('contracts')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <select className="form-input" style={{ width: 'auto' }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="">{tr('statusFilterAll')}</option>
-            <option value="active">{tr('active')}</option>
-            <option value="completed">{tr('completed')}</option>
-            <option value="cancelled">{tr('cancelled')}</option>
-          </select>
-          <select className="form-input" style={{ width: 180 }} value={clientFilter} onChange={(event) => setClientFilter(event.target.value)}>
-            <option value="">{tr('filterAll')}</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>{client.name}</option>
-            ))}
-          </select>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 180 }}
-          />
-          <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
-        </div>
-      </div>
+      <PageHeader
+        title={tr('contracts')}
+        actions={(
+          <>
+            <select className="form-input" style={{ width: 'auto' }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">{tr('statusFilterAll')}</option>
+              <option value="active">{tr('active')}</option>
+              <option value="completed">{tr('completed')}</option>
+              <option value="cancelled">{tr('cancelled')}</option>
+            </select>
+            <select className="form-input" style={{ width: 180 }} value={clientFilter} onChange={(event) => setClientFilter(event.target.value)}>
+              <option value="">{tr('filterAll')}</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>{client.name}</option>
+              ))}
+            </select>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
+            <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
+          </>
+        )}
+      />
 
       <div className="page-body">
         <div className="card">
@@ -283,17 +285,17 @@ export default function Contracts() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>{'\u2116'} <SortIcon col="number" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_name')}>{tr('project')} <SortIcon col="project_name" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('number')}>{'\u2116'} <SortIndicator active={sortCol === 'number'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_name')}>{tr('project')} <SortIndicator active={sortCol === 'project_name'} asc={sortAsc} /></th>
                   <th>{tr('type')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('subject')}>{tr('contractSubject')} <SortIcon col="subject" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_received')}>{tr('contractReceived')} <SortIcon col="total_received" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_expenses')}>{tr('contractExpenses')} <SortIcon col="total_expenses" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('contractProfit')} <SortIcon col="profit" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIcon col="status" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('subject')}>{tr('contractSubject')} <SortIndicator active={sortCol === 'subject'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_received')}>{tr('contractReceived')} <SortIndicator active={sortCol === 'total_received'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('total_expenses')}>{tr('contractExpenses')} <SortIndicator active={sortCol === 'total_expenses'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('profit')}>{tr('contractProfit')} <SortIndicator active={sortCol === 'profit'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIndicator active={sortCol === 'status'} asc={sortAsc} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -321,23 +323,23 @@ export default function Contracts() {
                       <td>{getProjectName(contract.project_id) || UI_DASH}</td>
                       <td>{tr(CONTRACT_TYPE_KEYS[contract.contract_type] || 'service')}</td>
                       <td>{(contract.subject || '').slice(0, 36)}</td>
-                      <td>{Number(contract.amount || 0).toLocaleString('sr-RS')}</td>
-                      <td title={`${tr('contractPaymentAdvance')}: ${(contract.advance_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentIntermediate')}: ${(contract.intermediate_sum || 0).toLocaleString('sr-RS')}, ${tr('contractPaymentClosing')}: ${(contract.closing_sum || 0).toLocaleString('sr-RS')}`}>
-                        {Number(contract.total_received || 0).toLocaleString('sr-RS')}
-                        {(contract.total_received || 0) > 0 && (
+                      <td>{formatInteger(contract.amount || 0)}</td>
+                      <td title={`${tr('contractPaymentAdvance')}: ${formatInteger(contract.advance_sum || 0)}, ${tr('contractPaymentIntermediate')}: ${formatInteger(contract.intermediate_sum || 0)}, ${tr('contractPaymentClosing')}: ${formatInteger(contract.closing_sum || 0)}`}>
+                        {formatInteger(contract.total_received || 0)}
+                        {(contract.total_received || 0) > 0 ? (
                           <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                            {'\u0410:'}{Number(contract.advance_sum || 0).toLocaleString('sr-RS')} {'\u041F:'}{Number(contract.intermediate_sum || 0).toLocaleString('sr-RS')} {'\u0417:'}{Number(contract.closing_sum || 0).toLocaleString('sr-RS')}
+                            {'A:'}{formatInteger(contract.advance_sum || 0)} {'P:'}{formatInteger(contract.intermediate_sum || 0)} {'Z:'}{formatInteger(contract.closing_sum || 0)}
                           </div>
-                        )}
+                        ) : null}
                       </td>
-                      <td>{Number(contract.total_expenses || 0).toLocaleString('sr-RS')}</td>
+                      <td>{formatInteger(contract.total_expenses || 0)}</td>
                       <td style={{ color: (contract.profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
-                        {Number(contract.profit || 0).toLocaleString('sr-RS')}
+                        {formatInteger(contract.profit || 0)}
                       </td>
                       <td>
-                        <span className={`badge ${contract.status === 'active' ? 'badge-success' : contract.status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
+                        <StatusBadge tone={contract.status === 'active' ? 'success' : contract.status === 'cancelled' ? 'danger' : 'warning'}>
                           {tr(STATUS_KEYS[contract.status] || 'active')}
-                        </span>
+                        </StatusBadge>
                       </td>
                     </tr>
                   ))
@@ -348,228 +350,224 @@ export default function Contracts() {
         </div>
       </div>
 
-      {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 960 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('contractForm')} {UI_DASH} {detailModal.number || `#${detailModal.id}`}</h2>
-              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+      <EntityDetailModal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={detailModal ? `${tr('contractForm')} ${UI_DASH} ${detailModal.number || `#${detailModal.id}`}` : tr('contractForm')}
+        maxWidth="960px"
+        details={detailModal ? (
+          <div className="record-field-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('contractNumber')}</span>
+              <span className="record-field-value">{detailModal.number || UI_DASH}</span>
             </div>
-            <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card">
-                  <div className="record-field-grid">
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('contractNumber')}</span>
-                      <span className="record-field-value">{detailModal.number || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('date')}</span>
-                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('client')}</span>
-                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('project')}</span>
-                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('contractType')}</span>
-                      <span className="record-field-value">{tr(CONTRACT_TYPE_KEYS[detailModal.contract_type] || 'service')}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('status')}</span>
-                      <span className="record-field-value">{tr(STATUS_KEYS[detailModal.status] || 'active')}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('contractSubject')}</span>
-                      <div className="record-field-text">{detailModal.subject || UI_DASH}</div>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('amount')}</span>
-                      <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('contractReceived')}</span>
-                      <span className="record-field-value">{Number(detailModal.total_received || 0).toLocaleString('sr-RS')}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('contractExpenses')}</span>
-                      <span className="record-field-value">{Number(detailModal.total_expenses || 0).toLocaleString('sr-RS')}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('contractProfit')}</span>
-                      <span className="record-field-value" style={{ color: (detailModal.profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
-                        {Number(detailModal.profit || 0).toLocaleString('sr-RS')}
-                      </span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('validFrom')}</span>
-                      <span className="record-field-value">{detailModal.validity_start || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('validTo')}</span>
-                      <span className="record-field-value">{detailModal.validity_end || UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-                    </div>
-                    {detailModal.items?.length ? (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('contractItems')}</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          {detailModal.items.map((item, index) => (
-                            <div key={`${detailModal.id}-${index}`} className="card" style={{ padding: '0.85rem' }}>
-                              <div style={{ fontWeight: 700 }}>{item.description || UI_DASH}</div>
-                              <div style={{ marginTop: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                                {tr('quantity')}: {Number(item.quantity || 0).toLocaleString('sr-RS')} · {tr('unit')}: {item.unit || UI_DASH} · {tr('price')}: {Number(item.price || 0).toLocaleString('sr-RS')}
-                              </div>
-                              <div style={{ marginTop: '0.35rem' }}>
-                                {tr('amount')}: {Number((item.quantity || 0) * (item.price || 0)).toLocaleString('sr-RS')}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="record-detail-card">
-                  <div className="record-actions-grid">
-                    <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
-                      {tr('edit')}
-                    </button>
-                    <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
-                      {tr('delete')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('date')}</span>
+              <span className="record-field-value">{detailModal.date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('client')}</span>
+              <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('contractType')}</span>
+              <span className="record-field-value">{tr(CONTRACT_TYPE_KEYS[detailModal.contract_type] || 'service')}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value">
+                <StatusBadge tone={detailModal.status === 'active' ? 'success' : detailModal.status === 'cancelled' ? 'danger' : 'warning'}>
+                  {tr(STATUS_KEYS[detailModal.status] || 'active')}
+                </StatusBadge>
+              </span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('contractSubject')}</span>
+              <div className="record-field-text">{detailModal.subject || UI_DASH}</div>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('amount')}</span>
+              <span className="record-field-value">{formatInteger(detailModal.amount || 0)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('contractReceived')}</span>
+              <span className="record-field-value">{formatInteger(detailModal.total_received || 0)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('contractExpenses')}</span>
+              <span className="record-field-value">{formatInteger(detailModal.total_expenses || 0)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('contractProfit')}</span>
+              <span className="record-field-value" style={{ color: (detailModal.profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
+                {formatInteger(detailModal.profit || 0)}
+              </span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('validFrom')}</span>
+              <span className="record-field-value">{detailModal.validity_start || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('validTo')}</span>
+              <span className="record-field-value">{detailModal.validity_end || UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('note')}</span>
+              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+        actions={detailModal ? (
+          <div className="record-actions-grid">
+            <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+              {tr('edit')}
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
+              {tr('delete')}
+            </button>
+          </div>
+        ) : null}
+      >
+        {detailModal?.items?.length ? (
+          <div className="record-detail-card">
+            <div className="card-title">{tr('contractItems')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
+              {detailModal.items.map((item, index) => (
+                <div key={`${detailModal.id}-${index}`} className="card" style={{ padding: '0.85rem' }}>
+                  <div style={{ fontWeight: 700 }}>{item.description || UI_DASH}</div>
+                  <div style={{ marginTop: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    {tr('quantity')}: {formatInteger(item.quantity || 0)} | {tr('unit')}: {item.unit || UI_DASH} | {tr('price')}: {formatInteger(item.price || 0)}
+                  </div>
+                  <div style={{ marginTop: '0.35rem' }}>
+                    {tr('amount')}: {formatInteger((item.quantity || 0) * (item.price || 0))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </EntityDetailModal>
 
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 600 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {tr('contractForm')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal === 'add' ? tr('add') : tr('edit')} ${tr('contractForm')}`}
+        maxWidth="600px"
+      >
+        {modal ? (
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('contractNumber')}</label>
+              <input type="text" className="form-input" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} required />
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">{tr('contractNumber')}</label>
-                <input type="text" className="form-input" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('date')}</label>
-                <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('client')}</label>
-                <select className="form-input" value={form.client_id} onChange={(event) => setForm({ ...form, client_id: event.target.value })} required>
-                  <option value="">{UI_DASH} {tr('selectClient')} {UI_DASH}</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={form.project_id}
-                  onChange={(value) => setForm({ ...form, project_id: value })}
-                  allowEmpty
-                  emptyLabel={UI_DASH}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('contractType')}</label>
-                <select className="form-input" value={form.contract_type} onChange={(event) => setForm({ ...form, contract_type: event.target.value })}>
-                  {Object.entries(CONTRACT_TYPE_KEYS).map(([value, key]) => (
-                    <option key={value} value={value}>{tr(key)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('contractSubject')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.subject}
-                  onChange={(event) => setForm({ ...form, subject: event.target.value })}
-                  placeholder={tr('contractSubjectPlaceholder')}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('amount')} {tr('amountIfNoItems')}</label>
-                <input type="number" step="0.01" className="form-input" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('validFrom')}</label>
-                <DatePicker value={form.validity_start} onChange={(value) => setForm({ ...form, validity_start: value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('validTo')}</label>
-                <DatePicker value={form.validity_end} onChange={(value) => setForm({ ...form, validity_end: value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('status')}</label>
-                <select className="form-input" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-                  <option value="active">{tr('active')}</option>
-                  <option value="completed">{tr('completed')}</option>
-                  <option value="cancelled">{tr('cancelled')}</option>
-                </select>
-              </div>
-              <div className="card-title" style={{ marginTop: '1rem' }}>{tr('contractItems')}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-                {itemsForm.map((item, index) => (
-                  <div key={index} className="card" style={{ padding: '0.75rem' }}>
+            <div className="form-group">
+              <label className="form-label">{tr('date')}</label>
+              <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('client')}</label>
+              <select className="form-input" value={form.client_id} onChange={(event) => setForm({ ...form, client_id: event.target.value })} required>
+                <option value="">{UI_DASH} {tr('selectClient')} {UI_DASH}</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <ProjectSelect
+                projects={projects}
+                value={form.project_id}
+                onChange={(value) => setForm({ ...form, project_id: value })}
+                allowEmpty
+                emptyLabel={UI_DASH}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('contractType')}</label>
+              <select className="form-input" value={form.contract_type} onChange={(event) => setForm({ ...form, contract_type: event.target.value })}>
+                {Object.entries(CONTRACT_TYPE_KEYS).map(([value, key]) => (
+                  <option key={value} value={value}>{tr(key)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('contractSubject')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.subject}
+                onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                placeholder={tr('contractSubjectPlaceholder')}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('amount')} {tr('amountIfNoItems')}</label>
+              <input type="number" step="0.01" className="form-input" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('validFrom')}</label>
+              <DatePicker value={form.validity_start} onChange={(value) => setForm({ ...form, validity_start: value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('validTo')}</label>
+              <DatePicker value={form.validity_end} onChange={(value) => setForm({ ...form, validity_end: value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('status')}</label>
+              <select className="form-input" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+                <option value="active">{tr('active')}</option>
+                <option value="completed">{tr('completed')}</option>
+                <option value="cancelled">{tr('cancelled')}</option>
+              </select>
+            </div>
+            <div className="card-title" style={{ marginTop: '1rem' }}>{tr('contractItems')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
+              {itemsForm.map((item, index) => (
+                <div key={index} className="card" style={{ padding: '0.75rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">{tr('description')}</label>
+                    <input type="text" className="form-input" value={item.description} onChange={(event) => updateItem(index, 'description', event.target.value)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
                     <div className="form-group">
-                      <label className="form-label">{tr('description')}</label>
-                      <input type="text" className="form-input" value={item.description} onChange={(event) => updateItem(index, 'description', event.target.value)} />
+                      <label className="form-label">{tr('quantity')}</label>
+                      <input type="number" step="0.01" className="form-input" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} />
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">{tr('quantity')}</label>
-                        <input type="number" step="0.01" className="form-input" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">{tr('unit')}</label>
-                        <input type="text" className="form-input" value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">{tr('price')}</label>
-                        <input type="number" step="0.01" className="form-input" value={item.price} onChange={(event) => updateItem(index, 'price', event.target.value)} />
-                      </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('unit')}</label>
+                      <input type="text" className="form-input" value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}: {Number((item.quantity || 0) * (item.price || 0)).toLocaleString('sr-RS')}</div>
-                      <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(index)}>{tr('delete')}</button>
+                    <div className="form-group">
+                      <label className="form-label">{tr('price')}</label>
+                      <input type="number" step="0.01" className="form-input" value={item.price} onChange={(event) => updateItem(index, 'price', event.target.value)} />
                     </div>
                   </div>
-                ))}
-              </div>
-              <div style={{ marginTop: '0.75rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={addItem}>{tr('addItem')}</button>
-              </div>
-              <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label className="form-label">{tr('note')}</label>
-                <textarea className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} rows={3} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>{tr('cancel')}</button>
-                <button type="submit" className="btn btn-primary">{tr('save')}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}: {formatInteger((item.quantity || 0) * (item.price || 0))}</div>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(index)}>{tr('delete')}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={addItem}>{tr('addItem')}</button>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">{tr('note')}</label>
+              <textarea className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} rows={3} />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>{tr('cancel')}</button>
+              <button type="submit" className="btn btn-primary">{tr('save')}</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </>
   )
 }

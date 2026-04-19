@@ -3,8 +3,11 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SharedStatusBadge from '../components/StatusBadge'
 
 const PERIODS = [
   { value: 'weekly', label: 'weekly' },
@@ -275,11 +278,10 @@ export default function PlannedExpenses() {
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('plannedExpenses')}</h1>
-        </div>
-        <div className="page-header-actions">
+      <PageHeader
+        title={tr('plannedExpenses')}
+        actions={(
+          <>
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -312,8 +314,9 @@ export default function PlannedExpenses() {
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {/* Upcoming payments */}
@@ -361,17 +364,12 @@ export default function PlannedExpenses() {
                         {u.amount.toLocaleString('sr-RS')} {u.currency}
                       </td>
                       <td>
-                        <span
-                          className="badge"
-                          style={{
-                            backgroundColor: u.is_paid ? 'var(--color-success)' : (new Date(u.due_date + 'T12:00:00') < new Date() ? 'var(--color-danger)' : 'var(--color-warning)'),
-                            color: '#fff',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: 4,
-                          }}
+                        <SharedStatusBadge
+                          tone={u.is_paid ? 'success' : (new Date(u.due_date + 'T12:00:00') < new Date() ? 'danger' : 'warning')}
+                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
                         >
                           {u.is_paid ? tr('paid') : (new Date(u.due_date + 'T12:00:00') < new Date() ? tr('obligationsOverdue') : tr('unpaid'))}
-                        </span>
+                        </SharedStatusBadge>
                       </td>
                       <td>
                         {u.is_paid ? (
@@ -448,17 +446,12 @@ export default function PlannedExpenses() {
                           : i.payment_day ?? '\u2014'}
                       </td>
                       <td>
-                        <span
-                          className="badge"
-                          style={{
-                            backgroundColor: i.is_active ? 'var(--color-success)' : 'var(--color-text-muted)',
-                            color: '#fff',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: 4,
-                          }}
+                        <SharedStatusBadge
+                          tone={i.is_active ? 'success' : 'muted'}
+                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
                         >
                           {i.is_active ? tr('active') : tr('inactive')}
-                        </span>
+                        </SharedStatusBadge>
                       </td>
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>
@@ -487,15 +480,15 @@ export default function PlannedExpenses() {
       </div>
 
       {/* Mark paid modal */}
-      {paidModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {tr('markPaid')} {'\u2014'} {paidModal.name}
-              </h2>
-              <button className="modal-close" onClick={() => setPaidModal(null)}>{'\u00D7'}</button>
-            </div>
+      <Modal
+        isOpen={!!paidModal}
+        onClose={() => setPaidModal(null)}
+        title={paidModal ? `${tr('markPaid')} \u2014 ${paidModal.name}` : tr('markPaid')}
+        maxWidth="400px"
+        closeOnOverlay
+      >
+        {paidModal ? (
+          <>
             <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
               {tr('plannedMarkPaidHint')}
             </p>
@@ -525,20 +518,20 @@ export default function PlannedExpenses() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
 
       {/* Add/edit modal */}
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {modal === 'add' ? tr('add') : tr('edit')} {'\u2014'} {tr('plannedExpenses')}
-              </h2>
-              <button className="modal-close" onClick={() => setModal(null)}>{'\u00D7'}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal === 'add' ? tr('add') : tr('edit')} \u2014 ${tr('plannedExpenses')}`}
+        maxWidth="480px"
+        closeOnOverlay
+      >
+        {modal ? (
+          <>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('plannedName')} *</label>
@@ -720,9 +713,9 @@ export default function PlannedExpenses() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
     </>
   )
 }

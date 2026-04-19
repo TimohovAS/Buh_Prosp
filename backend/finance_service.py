@@ -1053,3 +1053,29 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
         "items": items,
         "totals": totals,
     }
+
+
+async def get_finance_pnl_years(db: AsyncSession) -> list[int]:
+    income_rows = await db.execute(
+        select(func.distinct(func.strftime("%Y", Income.issued_date)).label("year"))
+        .where(
+            Income.status != "cancelled",
+            Income.issued_date.isnot(None),
+        )
+    )
+    expense_rows = await db.execute(
+        select(func.distinct(func.strftime("%Y", Expense.date)).label("year"))
+        .where(
+            _visible_expense_condition(),
+            Expense.status != "reversed",
+            Expense.source != CASH_TRANSFER_SOURCE,
+            Expense.date.isnot(None),
+        )
+    )
+
+    years = {
+        int(row.year)
+        for row in income_rows.fetchall() + expense_rows.fetchall()
+        if row.year
+    }
+    return sorted(years, reverse=True)

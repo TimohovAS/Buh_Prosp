@@ -3,11 +3,16 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import EntityDetailModal from '../components/EntityDetailModal'
+import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import SharedStatusBadge from '../components/StatusBadge'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
+import useListPageState from '../hooks/useListPageState'
+import { UI_CLOSE, UI_DASH } from '../utils/formatters'
 
-const UI_CLOSE = '\u2715'
-const UI_DASH = '\u2014'
-const currentYear = new Date().getFullYear()
 const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
 const STATUS_LABELS = { unpaid: 'statusUnpaid', partial: 'statusPartial', paid: 'statusPaid', cancelled: 'statusCancelled' }
 
@@ -21,8 +26,8 @@ function compactText(value, max = 80) {
 }
 
 function StatusBadge({ status }) {
-  const cls = { unpaid: 'badge badge-warning', partial: 'badge badge-info', paid: 'badge badge-success', cancelled: 'badge badge-danger' }
-  return <span className={cls[status] || 'badge'}>{tr(STATUS_LABELS[status] || status)}</span>
+  const tone = { unpaid: 'warning', partial: 'info', paid: 'success', cancelled: 'danger' }
+  return <SharedStatusBadge tone={tone[status] || 'muted'}>{tr(STATUS_LABELS[status] || status)}</SharedStatusBadge>
 }
 
 function LinkedInvoiceSummary({ invoice }) {
@@ -48,13 +53,12 @@ export default function IncomingInvoices() {
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [projects, setProjects] = useState([])
-  const [year, setYear] = useState(currentYear)
+  const { year, setYear, availableYears, applyAvailableYears, resetAvailableYears } = useAvailableYears({
+    initialYear: new Date().getFullYear(),
+  })
   const [month, setMonth] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sortCol, setSortCol] = useState('date')
-  const [sortAsc, setSortAsc] = useState(false)
   const [modal, setModal] = useState(null)
   const [settleModal, setSettleModal] = useState(null)
   const [linkModal, setLinkModal] = useState(null)
@@ -62,6 +66,13 @@ export default function IncomingInvoices() {
   const [form, setForm] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState('')
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
 
   const defaultForm = { invoice_number: '', date: new Date().toISOString().slice(0, 10), client_id: '', counterparty_name: '', project_id: '', amount: '', currency: 'RSD', description: '', note: '' }
 
@@ -72,7 +83,16 @@ export default function IncomingInvoices() {
     if (year) params.year = year
     if (month && year) params.month = month
     if (filterStatus) params.status = filterStatus
-    api.incomingInvoices.list(params).then(setItems).catch(() => setItems([])).finally(() => setLoading(false))
+    Promise.all([api.incomingInvoices.list(params), api.incomingInvoices.years()])
+      .then(([invoiceItems, years]) => {
+        setItems(invoiceItems)
+        applyAvailableYears(years)
+      })
+      .catch(() => {
+        setItems([])
+        resetAvailableYears()
+      })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -114,15 +134,6 @@ export default function IncomingInvoices() {
       return 0
     })
   }, [items, search, sortCol, sortAsc])
-
-  const toggleSort = col => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else {
-      setSortCol(col)
-      setSortAsc(true)
-    }
-  }
-  const SortIcon = ({ col }) => sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''
 
   const openAdd = async () => {
     await refreshProjects()
@@ -231,15 +242,20 @@ export default function IncomingInvoices() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('incomingInvoices')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <select className="form-input" value={year} onChange={e => setYear(Number(e.target.value))} style={{ width: 100 }}>
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select className="form-input" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 80 }}>
+      <PageHeader
+        title={tr('incomingInvoices')}
+        actions={(
+          <>
+          <YearFilterSelect
+            value={year}
+            availableYears={availableYears}
+            onChange={nextYear => {
+              setYear(nextYear)
+              if (nextYear === '') setMonth('')
+            }}
+            style={{ width: 120 }}
+          />
+          <select className="form-input" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 80 }} disabled={!year}>
             <option value="">-</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>)}
           </select>
@@ -249,8 +265,9 @@ export default function IncomingInvoices() {
           </select>
           <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 200 }} />
           <button className="btn btn-primary" onClick={openAdd}>{tr('createIncomingInvoice')}</button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {pageError && <div className="alert alert-danger">{pageError}</div>}
 
@@ -260,11 +277,11 @@ export default function IncomingInvoices() {
             <table className="incoming-invoices-list-table">
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')}<SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')}<SortIcon col="invoice_number" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')}<SortIcon col="counterparty_name" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')} <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} /></th>
                   <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')}<SortIcon col="amount" /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -399,137 +416,129 @@ export default function IncomingInvoices() {
 
       {linkModal && <LinkInvoiceModal data={linkModal} onClose={() => setLinkModal(null)} onDone={() => { const current = linkModal.invoice; setLinkModal(null); load(); openDetail(current.id) }} />}
 
-      {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 920 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('incomingInvoice')} {detailModal.invoice_number}</h2>
-              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+      <EntityDetailModal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={detailModal ? `${tr('incomingInvoice')} ${detailModal.invoice_number}` : ''}
+        maxWidth="920px"
+        details={detailModal ? (
+          <div className="record-field-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('date')}</span>
+              <span className="record-field-value">{fmtDate(detailModal.date)}</span>
             </div>
-            <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card" style={showDetailActions ? undefined : { gridColumn: '1 / -1' }}>
-                  <div className="record-field-grid">
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('date')}</span>
-                      <span className="record-field-value">{fmtDate(detailModal.date)}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('status')}</span>
-                      <div><StatusBadge status={detailModal.status} /></div>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('amount')}</span>
-                      <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('settledAmount')}</span>
-                      <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('remainingAmount')}</span>
-                      <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('project')}</span>
-                      <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('counterpartyName')}</span>
-                      <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
-                    </div>
-                    {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('client')}</span>
-                        <span className="record-field-value">{detailModal.client_name}</span>
-                      </div>
-                    ) : null}
-                    {detailModal.status === 'paid' && detailModal.expense_id && (!detailModal.settlements || detailModal.settlements.length === 0) && (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('linkedExpense')}</span>
-                        <span className="record-field-value">#{detailModal.expense_id}</span>
-                      </div>
-                    )}
-                    {detailModal.advance_invoice ? (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('advanceInvoice')}</span>
-                        <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
-                      </div>
-                    ) : null}
-                    {detailModal.closing_invoice ? (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('closingInvoice')}</span>
-                        <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
-                      </div>
-                    ) : null}
-                    {detailModal.advance_invoice && detailAmount === 0 ? (
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('note')}</span>
-                        <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
-                      </div>
-                    ) : null}
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('description')}</span>
-                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-                    </div>
-                  </div>
-                </div>
-                {showDetailActions ? (
-                  <div className="record-detail-card">
-                    <div className="record-actions-grid">
-                      {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
-                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
-                      {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
-                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
-                      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
-                      {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
-                      {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
-                      {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
-                      {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
-                      {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
-                      {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
-                    </div>
-                  </div>
-                ) : null}
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <div><StatusBadge status={detailModal.status} /></div>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('amount')}</span>
+              <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('settledAmount')}</span>
+              <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('remainingAmount')}</span>
+              <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('counterpartyName')}</span>
+              <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
+            </div>
+            {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('client')}</span>
+                <span className="record-field-value">{detailModal.client_name}</span>
               </div>
-
-              <div className="record-detail-card" style={{ marginTop: '1rem' }}>
-                <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('settlementHistory')}</div>
-                {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{tr('date')}</th>
-                          <th>{tr('type')}</th>
-                          <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                          <th>{tr('note')}</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailModal.settlements.map(settlement => (
-                          <tr key={settlement.id}>
-                            <td>{fmtDate(settlement.date)}</td>
-                            <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
-                            <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
-                            <td>{settlement.note || ''}</td>
-                            <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+            ) : null}
+            {detailModal.status === 'paid' && detailModal.expense_id && (!detailModal.settlements || detailModal.settlements.length === 0) && (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('linkedExpense')}</span>
+                <span className="record-field-value">#{detailModal.expense_id}</span>
               </div>
+            )}
+            {detailModal.advance_invoice ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('advanceInvoice')}</span>
+                <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
+              </div>
+            ) : null}
+            {detailModal.closing_invoice ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('closingInvoice')}</span>
+                <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
+              </div>
+            ) : null}
+            {detailModal.advance_invoice && detailAmount === 0 ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('note')}</span>
+                <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+              </div>
+            ) : null}
+            <div className="record-field full">
+              <span className="record-field-label">{tr('description')}</span>
+              <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('note')}</span>
+              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+        actions={detailModal && showDetailActions ? (
+          <div className="record-actions-grid">
+            {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
+            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
+            {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
+            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
+            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
+            {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
+            {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
+            {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
+            {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
+            {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
+            {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
+          </div>
+        ) : null}
+      >
+        {detailModal ? (
+          <div className="record-detail-card">
+            <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('settlementHistory')}</div>
+            {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{tr('date')}</th>
+                      <th>{tr('type')}</th>
+                      <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                      <th>{tr('note')}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailModal.settlements.map(settlement => (
+                      <tr key={settlement.id}>
+                        <td>{fmtDate(settlement.date)}</td>
+                        <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
+                        <td>{settlement.note || ''}</td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </EntityDetailModal>
     </div>
   )
 }

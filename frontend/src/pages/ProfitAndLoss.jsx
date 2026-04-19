@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom'
 import { BarChart, Bar, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
 
 function fmt(n) {
   return (n ?? 0).toLocaleString('sr-RS')
@@ -17,8 +19,10 @@ const MONTH_LABELS = [
 export default function ProfitAndLoss() {
   const location = useLocation()
   const isActivePage = location.pathname === '/finance/pnl'
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
+  const { year, setYear, availableYears, applyAvailableYears, resetAvailableYears } = useAvailableYears({
+    initialYear: new Date().getFullYear(),
+    includeAllTime: false,
+  })
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -26,16 +30,19 @@ export default function ProfitAndLoss() {
   useEffect(() => {
     if (!isActivePage) return
     setLoading(true)
-    api.finance.pnl(year)
-      .then((response) => {
+    Promise.all([api.finance.pnl(year), api.finance.pnlYears()])
+      .then(([response, years]) => {
         setData(response)
+        applyAvailableYears(years)
         setError(null)
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        resetAvailableYears()
+        setError(e.message)
+      })
       .finally(() => setLoading(false))
   }, [year, isActivePage])
 
-  const years = Array.from({ length: 6 }, (_, index) => currentYear - 4 + index)
   const items = data?.items || []
   const totals = data?.totals || {}
   const chartData = items.map((item) => ({
@@ -52,11 +59,12 @@ export default function ProfitAndLoss() {
           <h1 className="page-title">{tr('pnlTitle')}</h1>
         </div>
         <div className="page-header-actions">
-          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {years.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
+          <YearFilterSelect
+            value={year}
+            availableYears={availableYears}
+            onChange={setYear}
+            includeAllTime={false}
+          />
         </div>
       </div>
 

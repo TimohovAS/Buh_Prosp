@@ -1170,6 +1170,10 @@ tr.row-reversal {
   gap: 1rem;
 }
 
+.record-detail-grid.record-detail-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .record-detail-card {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--color-border);
@@ -1221,6 +1225,13 @@ tr.row-reversal {
 
 .record-actions-grid .btn {
   width: 100%;
+}
+
+.record-detail-stack {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .modal.receipt-import-modal {
@@ -1510,6 +1521,15 @@ tr:hover td {
 .badge-danger {
   background: rgba(239, 68, 68, 0.2);
   color: var(--color-danger);
+}
+
+.badge-muted {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--color-text-muted);
+}
+
+.badge-pill {
+  border-radius: 999px;
 }
 
 .modal-overlay {

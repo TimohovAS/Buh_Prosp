@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
-
-const UI_DASH = '\u2014'
-const UI_CLOSE = '\u00D7'
+import SharedStatusBadge from '../components/StatusBadge'
+import { buildContractLabel } from '../utils/entityLabels'
+import { UI_DASH } from '../utils/formatters'
 
 function fmtMoney(value) {
   return Number(value || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -17,14 +20,6 @@ function fmtDateTime(value) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString('sr-RS')
-}
-
-function buildContractLabel(contract) {
-  if (!contract) return ''
-  const parts = []
-  if (contract.number) parts.push(contract.number)
-  if (contract.subject) parts.push(contract.subject)
-  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
 }
 
 function getReceiptStatusMeta(status) {
@@ -47,8 +42,8 @@ function getReceiptStatusMeta(status) {
 function ReceiptStatusBadge({ status }) {
   const meta = getReceiptStatusMeta(status)
   return (
-    <span
-      className="badge"
+    <SharedStatusBadge
+      tone="muted"
       style={{
         background: meta.background,
         color: meta.color,
@@ -57,7 +52,7 @@ function ReceiptStatusBadge({ status }) {
       }}
     >
       {meta.label}
-    </span>
+    </SharedStatusBadge>
   )
 }
 
@@ -458,11 +453,10 @@ export default function Receipts() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('receipts')}</h1>
-        </div>
-        <div className="page-header-actions">
+      <PageHeader
+        title={tr('receipts')}
+        actions={(
+          <>
           <select className="form-input" style={{ width: 180 }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -478,8 +472,9 @@ export default function Receipts() {
           <button type="button" className="btn btn-primary" onClick={openImportModal}>
             {tr('receiptImportButton')}
           </button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {pageError ? <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{pageError}</div> : null}
 
@@ -535,14 +530,14 @@ export default function Receipts() {
         </div>
       </div>
 
-      {importModalOpen && (
-        <div className="modal-overlay" onClick={closeImportModal}>
-          <div className="modal receipt-import-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('receiptImportTitle')}</h2>
-              <button className="modal-close" onClick={closeImportModal}>{UI_CLOSE}</button>
-            </div>
-            <div className="modal-body">
+      <Modal
+        isOpen={importModalOpen}
+        onClose={closeImportModal}
+        title={tr('receiptImportTitle')}
+        closeOnOverlay
+        className="receipt-import-modal"
+      >
+        {importModalOpen ? (
               <div className="receipt-import-layout">
                 <div className="record-detail-card receipt-import-card">
                   <div className="form-group">
@@ -596,72 +591,65 @@ export default function Receipts() {
                   )}
                 </div>
               </div>
+        ) : null}
+      </Modal>
+
+      <EntityDetailModal
+        isOpen={!!(detailReceipt || detailLoading || detailError)}
+        onClose={() => { setDetailReceipt(null); setDetailError(''); setDetailAction('') }}
+        title={`${tr('receiptDetailTitle')} ${UI_DASH} ${detailReceipt?.invoice_number || (detailReceipt ? `#${detailReceipt.id}` : UI_DASH)}`}
+        maxWidth="1200px"
+        className="receipt-detail-modal"
+        details={detailLoading ? (
+          <div>{tr('loading')}</div>
+        ) : detailError && !detailReceipt ? (
+          <div className="alert alert-danger">{detailError}</div>
+        ) : detailReceipt ? (
+          <div className="receipt-summary-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('receiptSeller')}</span>
+              <span className="record-field-value">{detailReceipt.seller_name || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('invoiceNumber')}</span>
+              <span className="record-field-value">{detailReceipt.invoice_number || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('date')}</span>
+              <span className="record-field-value">{fmtDateTime(detailReceipt.receipt_datetime)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value"><ReceiptStatusBadge status={detailReceipt.status} /></span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('receiptPaymentType')}</span>
+              <span className="record-field-value">{detailReceipt.payment_type || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('amount')}</span>
+              <span className="record-field-value">{fmtMoney(detailReceipt.total_amount)} {detailReceipt.currency || 'RSD'}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{detailReceipt.project_name || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('category')}</span>
+              <span className="record-field-value">{getCategoryLabel(detailReceipt.category_id)}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('address')}</span>
+              <div className="record-field-text">
+                {[detailReceipt.seller_address, detailReceipt.seller_city].filter(Boolean).join(', ') || UI_DASH}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {(detailReceipt || detailLoading || detailError) && (
-        <div className="modal-overlay" onClick={() => { setDetailReceipt(null); setDetailError(''); setDetailAction('') }}>
-          <div className="modal receipt-detail-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {tr('receiptDetailTitle')} {UI_DASH} {detailReceipt?.invoice_number || (detailReceipt ? `#${detailReceipt.id}` : UI_DASH)}
-              </h2>
-              <button className="modal-close" onClick={() => { setDetailReceipt(null); setDetailError(''); setDetailAction('') }}>{UI_CLOSE}</button>
-            </div>
-            <div className="modal-body">
-              {detailLoading ? (
-                <div>{tr('loading')}</div>
-              ) : detailError && !detailReceipt ? (
-                <div className="alert alert-danger">{detailError}</div>
-              ) : detailReceipt ? (
-                <>
-                  {detailError ? <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{detailError}</div> : null}
-                  <div className="receipt-detail-layout">
-                    <div className="record-detail-card receipt-meta-card">
-                      <div className="receipt-summary-grid">
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('receiptSeller')}</span>
-                          <span className="record-field-value">{detailReceipt.seller_name || UI_DASH}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('invoiceNumber')}</span>
-                          <span className="record-field-value">{detailReceipt.invoice_number || UI_DASH}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('date')}</span>
-                          <span className="record-field-value">{fmtDateTime(detailReceipt.receipt_datetime)}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('status')}</span>
-                          <span className="record-field-value"><ReceiptStatusBadge status={detailReceipt.status} /></span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('receiptPaymentType')}</span>
-                          <span className="record-field-value">{detailReceipt.payment_type || UI_DASH}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('amount')}</span>
-                          <span className="record-field-value">{fmtMoney(detailReceipt.total_amount)} {detailReceipt.currency || 'RSD'}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('project')}</span>
-                          <span className="record-field-value">{detailReceipt.project_name || UI_DASH}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('category')}</span>
-                          <span className="record-field-value">{getCategoryLabel(detailReceipt.category_id)}</span>
-                        </div>
-                        <div className="record-field full">
-                          <span className="record-field-label">{tr('address')}</span>
-                          <div className="record-field-text">
-                            {[detailReceipt.seller_address, detailReceipt.seller_city].filter(Boolean).join(', ') || UI_DASH}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="record-detail-card receipt-side-card">
+        ) : null}
+        actions={detailReceipt ? (
+          <>
+            {detailError ? <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{detailError}</div> : null}
+            <div className="receipt-side-card">
                       <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
                         {!detailReceipt.expense_id ? (
                           <>
@@ -822,47 +810,45 @@ export default function Receipts() {
                           </button>
                         </form>
                       ) : null}
-                    </div>
-
-                    <div className="record-detail-card receipt-items-card">
-                      <div className="receipt-items-header">
-                        <span className="record-field-label">{tr('receiptItems')}</span>
-                        <span className="receipt-items-count">{detailReceipt.items?.length || 0}</span>
-                      </div>
-                      <div className="table-wrap table-wrap-scroll receipt-items-table-wrap">
-                        <table className="receipt-items-table">
-                          <thead>
-                            <tr>
-                              <th>#</th>
-                              <th>{tr('name')}</th>
-                              <th style={{ textAlign: 'right' }}>{tr('receiptQuantity')}</th>
-                              <th style={{ textAlign: 'right' }}>{tr('receiptUnitPrice')}</th>
-                              <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {detailReceipt.items?.length ? detailReceipt.items.map((item) => (
-                              <tr key={item.id}>
-                                <td>{item.line_no}</td>
-                                <td>{item.name}</td>
-                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.quantity)}</td>
-                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.unit_price)} RSD</td>
-                                <td style={{ textAlign: 'right' }}>{fmtMoney(item.total_amount)} RSD</td>
-                              </tr>
-                            )) : (
-                              <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : null}
+            </div>
+          </>
+        ) : null}
+      >
+        {detailReceipt ? (
+          <div className="record-detail-card receipt-items-card">
+            <div className="receipt-items-header">
+              <span className="record-field-label">{tr('receiptItems')}</span>
+              <span className="receipt-items-count">{detailReceipt.items?.length || 0}</span>
+            </div>
+            <div className="table-wrap table-wrap-scroll receipt-items-table-wrap">
+              <table className="receipt-items-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>{tr('name')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('receiptQuantity')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('receiptUnitPrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailReceipt.items?.length ? detailReceipt.items.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.line_no}</td>
+                      <td>{item.name}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(item.quantity)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(item.unit_price)} RSD</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(item.total_amount)} RSD</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+      </EntityDetailModal>
     </div>
   )
 }

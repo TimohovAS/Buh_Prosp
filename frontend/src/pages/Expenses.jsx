@@ -3,23 +3,20 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
+import useListPageState from '../hooks/useListPageState'
+import { buildContractLabel, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_CLOSE, UI_DASH } from '../utils/formatters'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-const UI_DASH = '\u2014'
-const UI_CLOSE = '\u00D7'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
-function buildContractLabel(contract) {
-  if (!contract) return ''
-  const parts = []
-  if (contract.number) parts.push(contract.number)
-  if (contract.subject) parts.push(contract.subject)
-  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
-}
 
 function getDuplicateGroupKey(group) {
   const itemIds = (group.items || []).map((item) => item.id).sort((left, right) => left - right).join(',')
@@ -49,17 +46,19 @@ export default function Expenses() {
   const location = useLocation()
   const navigate = useNavigate()
   const isActivePage = location.pathname === '/expenses'
-  const currentYear = new Date().getFullYear()
   const [items, setItems] = useState([])
   const [duplicateGroups, setDuplicateGroups] = useState([])
-  const [year, setYear] = useState(currentYear)
-  const [availableYears, setAvailableYears] = useState([currentYear])
+  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: new Date().getFullYear() })
   const [month, setMonth] = useState('')
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sortCol, setSortCol] = useState('date')
-  const [sortAsc, setSortAsc] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
@@ -95,7 +94,7 @@ export default function Expenses() {
       .then(([expenseItems, groups, years]) => {
         setItems(expenseItems)
         setDuplicateGroups(groups)
-        setAvailableYears(years?.length ? years : [currentYear])
+        applyAvailableYears(years)
       })
       .catch((error) => {
         setItems([])
@@ -109,13 +108,6 @@ export default function Expenses() {
     if (!isActivePage) return
     load()
   }, [year, month, isActivePage])
-
-  useEffect(() => {
-    if (availableYears.length === 0) return
-    if (year !== '' && !availableYears.includes(year)) {
-      setYear(availableYears[0])
-    }
-  }, [availableYears, year])
 
   useEffect(() => {
     if (!isActivePage) return
@@ -140,7 +132,7 @@ export default function Expenses() {
   const lang = getLang()
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
 
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
   const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
   const getContractsForProject = (projectId) => contracts
     .filter((contract) => contract.project_id === projectId || contract.project_id == null)
@@ -433,19 +425,6 @@ export default function Expenses() {
     })
   }, [items, search, sortCol, sortAsc, contracts, projects, categories, lang])
 
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc((value) => !value)
-    else {
-      setSortCol(col)
-      setSortAsc(true)
-    }
-  }
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
-
   const total = filtered.reduce((sum, item) => sum + item.amount, 0)
 
   const handleExportCsv = () => {
@@ -488,11 +467,10 @@ export default function Expenses() {
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('expenses')}</h1>
-        </div>
-        <div className="page-header-actions">
+      <PageHeader
+        title={tr('expenses')}
+        actions={(
+          <>
           <div
             style={{
               alignSelf: 'center',
@@ -503,12 +481,14 @@ export default function Expenses() {
           >
             {tr('total')}: {total.toLocaleString('sr-RS')} RSD
           </div>
-          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { const nextYear = event.target.value ? parseInt(event.target.value, 10) : ''; setYear(nextYear); if (!event.target.value) setMonth('') }}>
-            <option value="">{tr('allTime')}</option>
-            {availableYears.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
+          <YearFilterSelect
+            value={year}
+            availableYears={availableYears}
+            onChange={(nextYear) => {
+              setYear(nextYear)
+              if (nextYear === '') setMonth('')
+            }}
+          />
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -521,12 +501,12 @@ export default function Expenses() {
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 180 }}
-            />
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 180 }}
+          />
           <button
             className="btn btn-secondary"
             disabled={selectedIds.length === 0}
@@ -541,8 +521,9 @@ export default function Expenses() {
             {tr('download')} CSV
           </button>
           <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="page-body">
         {pageError && (
@@ -613,12 +594,12 @@ export default function Expenses() {
                   <th style={{ width: 40 }}>
                     <input type="checkbox" checked={filtered.length > 0 && selectedIds.length >= filtered.length} onChange={toggleSelectAll} />
                   </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIcon col="description" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIcon col="project_id" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('contract_id')}>{tr('contract')} <SortIcon col="contract_id" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIcon col="category" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('contract_id')}>{tr('contract')} <SortIndicator active={sortCol === 'contract_id'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIndicator active={sortCol === 'category'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
                   <th>{tr('paymentRef')}</th>
                 </tr>
               </thead>
@@ -676,98 +657,90 @@ export default function Expenses() {
         </div>
       </div>
 
-      {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 860 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('expenses')} {UI_DASH} #{detailModal.id}</h2>
-              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+      <EntityDetailModal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={detailModal ? `${tr('expenses')} ${UI_DASH} #${detailModal.id}` : ''}
+        maxWidth="860px"
+        details={detailModal ? (
+          <div className="record-field-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('date')}</span>
+              <span className="record-field-value">{detailModal.date || UI_DASH}</span>
             </div>
-            <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card">
-                  <div className="record-field-grid">
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('date')}</span>
-                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('amount')}</span>
-                      <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')} RSD</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('category')}</span>
-                      <span className="record-field-value">{getCategoryLabel(detailModal)}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('project')}</span>
-                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('contract')}</span>
-                      <span className="record-field-value">{detailModal.contract_id ? getContractLabel(detailModal.contract_id) : UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('description')}</span>
-                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('paymentRef')}</span>
-                      <span className="record-field-value">{detailModal.bank_reference || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('status')}</span>
-                      <span className="record-field-value">{detailModal.status || UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="record-detail-card">
-                  <div className="record-actions-grid">
-                    {canOpenExpenseSource(detailModal) ? (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => openExpenseSource(detailModal)}
-                      >
-                        {tr('openSource')}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
-                      onClick={() => openEditFromDetail(detailModal)}
-                    >
-                      {tr('edit')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      onClick={() => handleDeleteFromDetail(detailModal)}
-                      disabled={detailModal.source === 'cash'}
-                      title={detailModal.source === 'cash' ? tr('cashManagedInRegister') : ''}
-                    >
-                      {tr('delete')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('amount')}</span>
+              <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('category')}</span>
+              <span className="record-field-value">{getCategoryLabel(detailModal)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('contract')}</span>
+              <span className="record-field-value">{detailModal.contract_id ? getContractLabel(detailModal.contract_id) : UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('description')}</span>
+              <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('paymentRef')}</span>
+              <span className="record-field-value">{detailModal.bank_reference || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('note')}</span>
+              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+        actions={detailModal ? (
+          <div className="record-actions-grid">
+            {canOpenExpenseSource(detailModal) ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => openExpenseSource(detailModal)}
+              >
+                {tr('openSource')}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
+              onClick={() => openEditFromDetail(detailModal)}
+            >
+              {tr('edit')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => handleDeleteFromDetail(detailModal)}
+              disabled={detailModal.source === 'cash'}
+              title={detailModal.source === 'cash' ? tr('cashManagedInRegister') : ''}
+            >
+              {tr('delete')}
+            </button>
+          </div>
+        ) : null}
+      />
 
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('expenses')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('expenses')}`}
+        closeOnOverlay
+      >
+        {modal ? (
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
@@ -839,17 +812,18 @@ export default function Expenses() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {modalAssign && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={modalAssign}
+        onClose={() => { setModalAssign(false); setAssignProjectId('') }}
+        title={tr('assignProject')}
+        maxWidth="400px"
+        closeOnOverlay
+      >
+        {modalAssign ? (
+          <>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
               <ProjectSelect
@@ -864,9 +838,9 @@ export default function Expenses() {
               <button type="button" className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{tr('cancel')}</button>
               <button type="button" className="btn btn-primary" onClick={handleBulkAssign}>{tr('save')}</button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
     </>
   )
 }

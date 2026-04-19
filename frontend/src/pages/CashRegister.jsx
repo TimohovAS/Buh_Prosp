@@ -6,6 +6,8 @@ import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const UI_DASH = '\u2014'
@@ -43,12 +45,10 @@ function todayIso() {
 export default function CashRegister() {
   const location = useLocation()
   const isActivePage = location.pathname === '/cash'
-  const currentYear = new Date().getFullYear()
+  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState('')
-  const [year, setYear] = useState('')
-  const [availableYears, setAvailableYears] = useState([currentYear])
   const [month, setMonth] = useState('')
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('date')
@@ -105,7 +105,7 @@ export default function CashRegister() {
     ])
       .then(([cashSummary, years, projectList, categoryList, contractList]) => {
         setSummary(cashSummary)
-        setAvailableYears(years?.length ? years : [currentYear])
+        applyAvailableYears(years)
         setProjects(projectList)
         setCategories(categoryList)
         setContracts(contractList)
@@ -137,13 +137,6 @@ export default function CashRegister() {
 
     loadData()
   }, [year, month, search, isActivePage, location.search])
-
-  useEffect(() => {
-    if (availableYears.length === 0) return
-    if (year !== '' && !availableYears.includes(year)) {
-      setYear(availableYears[0])
-    }
-  }, [availableYears, year])
 
   const getCategoryLabel = (categoryId) => {
     const selectedCategory = categories.find((item) => item.id === categoryId)
@@ -538,12 +531,14 @@ export default function CashRegister() {
           <p className="page-subtitle">{tr('cashRegisterHint')}</p>
         </div>
         <div className="page-header-actions">
-          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(event) => { setYear(event.target.value ? Number(event.target.value) : ''); setMonth('') }}>
-            <option value="">{tr('allTime')}</option>
-            {availableYears.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
+          <YearFilterSelect
+            value={year}
+            availableYears={availableYears}
+            onChange={(nextYear) => {
+              setYear(nextYear)
+              setMonth('')
+            }}
+          />
           <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (

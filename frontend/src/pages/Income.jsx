@@ -3,24 +3,20 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import YearFilterSelect from '../components/YearFilterSelect'
+import useAvailableYears from '../hooks/useAvailableYears'
+import useListPageState from '../hooks/useListPageState'
+import { buildContractLabel, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_CLOSE, UI_DASH } from '../utils/formatters'
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
-const UI_DASH = '\u2014'
-const UI_CLOSE = '\u00D7'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
-
-function buildContractLabel(contract) {
-  if (!contract) return ''
-  const parts = []
-  if (contract.number) parts.push(contract.number)
-  if (contract.subject) parts.push(contract.subject)
-  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
-}
 
 export default function Income() {
   const location = useLocation()
@@ -28,15 +24,17 @@ export default function Income() {
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
   const [contracts, setContracts] = useState([])
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
-  const [availableYears, setAvailableYears] = useState([currentYear])
+  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: new Date().getFullYear() })
   const [month, setMonth] = useState('')
-  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sortCol, setSortCol] = useState('date')
-  const [sortAsc, setSortAsc] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const {
+    search,
+    setSearch,
+    sortCol,
+    sortAsc,
+    toggleSort,
+  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [projects, setProjects] = useState([])
@@ -73,7 +71,7 @@ export default function Income() {
     return Promise.all([api.income.list(params), api.income.years()])
       .then(([incomeItems, years]) => {
         setItems(incomeItems)
-        setAvailableYears(years?.length ? years : [currentYear])
+        applyAvailableYears(years)
       })
       .catch((error) => {
         setItems([])
@@ -94,12 +92,6 @@ export default function Income() {
     if (!isActivePage) return
     api.projects.list({ show_archived: true }).then(setProjects)
   }, [isActivePage])
-  useEffect(() => {
-    if (availableYears.length === 0) return
-    if (year !== '' && !availableYears.includes(year)) {
-      setYear(availableYears[0])
-    }
-  }, [availableYears, year])
   useEffect(() => {
     if (!modal) return setContracts([])
     const params = form.client_id ? { client_id: form.client_id } : {}
@@ -397,7 +389,7 @@ export default function Income() {
   const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
-  const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
   const getContractsForProject = (projectId) => contracts
     .filter((contract) => contract.project_id === projectId || contract.project_id == null)
     .sort((left, right) => {
@@ -462,41 +454,20 @@ export default function Income() {
     })
   }, [items, search, sortCol, sortAsc, projects])
 
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc((value) => !value)
-    else {
-      setSortCol(col)
-      setSortAsc(true)
-    }
-  }
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
-
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('income')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
+      <PageHeader
+        title={tr('income')}
+        actions={(
+          <>
+          <YearFilterSelect
             value={year}
-            onChange={(event) => {
-              const nextYear = event.target.value ? parseInt(event.target.value, 10) : ''
+            availableYears={availableYears}
+            onChange={(nextYear) => {
               setYear(nextYear)
-              if (!event.target.value) setMonth('')
+              if (nextYear === '') setMonth('')
             }}
-          >
-            <option value="">{tr('allTime')}</option>
-            {availableYears.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
+          />
           <select
             className="form-input"
             style={{ width: 'auto' }}
@@ -509,12 +480,12 @@ export default function Income() {
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 180 }}
-            />
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 180 }}
+          />
           <button className="btn btn-secondary" onClick={exportCsv}>
             {tr('exportKpo')} CSV
           </button>
@@ -534,8 +505,9 @@ export default function Income() {
           <button className="btn btn-primary" onClick={openAdd}>
             {tr('add')}
           </button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="page-body">
         {pageError && (
@@ -555,11 +527,11 @@ export default function Income() {
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIcon col="invoice_number" /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
                   <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIcon col="amount_rsd" /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount_rsd')}>{tr('amount')} <SortIndicator active={sortCol === 'amount_rsd'} asc={sortAsc} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -634,90 +606,82 @@ export default function Income() {
         </div>
       </div>
 
-      {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 860 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('income')} {UI_DASH} {detailModal.invoice_number || `#${detailModal.id}`}</h2>
-              <button className="modal-close" onClick={() => setDetailModal(null)}>{UI_CLOSE}</button>
+      <EntityDetailModal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={detailModal ? `${tr('income')} ${UI_DASH} ${detailModal.invoice_number || `#${detailModal.id}`}` : ''}
+        maxWidth="860px"
+        details={detailModal ? (
+          <div className="record-field-grid">
+            <div className="record-field">
+              <span className="record-field-label">{tr('date')}</span>
+              <span className="record-field-value">{detailModal.date || UI_DASH}</span>
             </div>
-            <div className="modal-body">
-              <div className="record-detail-grid">
-                <div className="record-detail-card">
-                  <div className="record-field-grid">
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('date')}</span>
-                      <span className="record-field-value">{detailModal.date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('valuta')}</span>
-                      <span className="record-field-value">{detailModal.due_date || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('amount')}</span>
-                      <span className="record-field-value">{Number(detailModal.amount_rsd || 0).toLocaleString('sr-RS')} RSD</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('status')}</span>
-                      <div>{renderPaymentStatus(detailModal)}</div>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('client')}</span>
-                      <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('contracts')}</span>
-                      <span className="record-field-value">{detailModal.contract_number || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('project')}</span>
-                      <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
-                    </div>
-                    <div className="record-field">
-                      <span className="record-field-label">{tr('incomeType')}</span>
-                      <span className="record-field-value">{detailModal.contract_payment_type ? tr(PAYMENT_TYPE_KEYS[detailModal.contract_payment_type] || detailModal.contract_payment_type) : UI_DASH}</span>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('description')}</span>
-                      <div className="record-field-text">{detailModal.description || UI_DASH}</div>
-                    </div>
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="record-detail-card">
-                  <div className="record-actions-grid">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => openPaymentFromDetail(detailModal)}
-                    >
-                      {tr('incomePaymentDetails')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={detailModal.status === 'cancelled'}
-                      onClick={() => openEditFromDetail(detailModal)}
-                    >
-                      {tr('edit')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      onClick={() => handleDeleteFromDetail(detailModal)}
-                    >
-                      {tr('delete')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('valuta')}</span>
+              <span className="record-field-value">{detailModal.due_date || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('amount')}</span>
+              <span className="record-field-value">{Number(detailModal.amount_rsd || 0).toLocaleString('sr-RS')} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <div>{renderPaymentStatus(detailModal)}</div>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('client')}</span>
+              <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('contracts')}</span>
+              <span className="record-field-value">{detailModal.contract_number || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('incomeType')}</span>
+              <span className="record-field-value">{detailModal.contract_payment_type ? tr(PAYMENT_TYPE_KEYS[detailModal.contract_payment_type] || detailModal.contract_payment_type) : UI_DASH}</span>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('description')}</span>
+              <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+            </div>
+            <div className="record-field full">
+              <span className="record-field-label">{tr('note')}</span>
+              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : null}
+        actions={detailModal ? (
+          <div className="record-actions-grid">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => openPaymentFromDetail(detailModal)}
+            >
+              {tr('incomePaymentDetails')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={detailModal.status === 'cancelled'}
+              onClick={() => openEditFromDetail(detailModal)}
+            >
+              {tr('edit')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => handleDeleteFromDetail(detailModal)}
+            >
+              {tr('delete')}
+            </button>
+          </div>
+        ) : null}
+      />
 
       {paymentModal && (
         <div className="modal-overlay">
@@ -818,13 +782,13 @@ export default function Income() {
         </div>
       )}
 
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')}</h2>
-              <button className="modal-close" onClick={closeModal}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={closeModal}
+        title={modal === 'add' ? tr('add') : tr('edit')}
+        closeOnOverlay
+      >
+        {modal ? (
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('date')}</label>
@@ -973,17 +937,18 @@ export default function Income() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {modalAssign && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('assignProject')}</h2>
-              <button className="modal-close" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={modalAssign}
+        onClose={() => { setModalAssign(false); setAssignProjectId('') }}
+        title={tr('assignProject')}
+        maxWidth="400px"
+        closeOnOverlay
+      >
+        {modalAssign ? (
+          <>
             <div className="form-group" style={{ margin: '1rem' }}>
               <label className="form-label">{tr('project')}</label>
               <ProjectSelect
@@ -1002,9 +967,9 @@ export default function Income() {
                 {tr('save')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
     </>
   )
 }

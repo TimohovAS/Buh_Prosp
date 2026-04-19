@@ -184,6 +184,19 @@ async def list_incoming_invoices(
     return [_serialize(inv) for inv in items]
 
 
+@router.get("/years", response_model=list[int])
+async def list_incoming_invoice_years(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(
+        select(func.distinct(func.strftime("%Y", IncomingInvoice.date)).label("year"))
+        .where(IncomingInvoice.date.isnot(None))
+        .order_by(func.strftime("%Y", IncomingInvoice.date).desc())
+    )
+    return [int(row.year) for row in result.fetchall() if row.year]
+
+
 @router.post("", response_model=IncomingInvoiceResponse)
 async def create_invoice(
     data: IncomingInvoiceCreate,
