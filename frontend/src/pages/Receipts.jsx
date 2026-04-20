@@ -60,6 +60,10 @@ function getReceiptDateParts(receipt) {
   }
 }
 
+function normalizeSearchDigits(value) {
+  return String(value || '').replace(/[^\d]/g, '')
+}
+
 export default function Receipts() {
   const location = useLocation()
   const isActivePage = location.pathname === '/receipts'
@@ -151,29 +155,6 @@ export default function Receipts() {
     }
     return years.sort((left, right) => right - left)
   }, [detailReceipt, expenseYears])
-
-  const filteredPeriodExpenses = useMemo(() => {
-    const query = periodExpenseSearch.trim().toLowerCase()
-    if (!query) return periodExpenses
-    return periodExpenses.filter((expense) => {
-      const project = projects.find((item) => String(item.id) === String(expense.project_id))
-      const contract = contracts.find((item) => String(item.id) === String(expense.contract_id))
-      const haystack = [
-        expense.id,
-        expense.description,
-        expense.bank_reference,
-        expense.date,
-        project?.name,
-        project?.code,
-        contract?.number,
-        contract?.subject,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [contracts, periodExpenseSearch, periodExpenses, projects])
 
   const receiptRows = useMemo(
     () => receipts.map((receipt) => ({ ...receipt, statusMeta: getReceiptStatusMeta(receipt.status) })),
@@ -409,6 +390,52 @@ export default function Receipts() {
       matches_amount: amountDeltaAbs < 0.005,
     }
   }
+
+  const compareExpenseLinkCandidates = (left, right) => {
+    const leftCandidate = normalizeExpenseLinkCandidate(left)
+    const rightCandidate = normalizeExpenseLinkCandidate(right)
+    const deltaDiff = Number(leftCandidate?.amount_delta_abs || 0) - Number(rightCandidate?.amount_delta_abs || 0)
+    if (Math.abs(deltaDiff) > 0.0001) return deltaDiff
+    const dateDiff = String(right?.date || '').localeCompare(String(left?.date || ''))
+    if (dateDiff !== 0) return dateDiff
+    return Number(right?.id || 0) - Number(left?.id || 0)
+  }
+
+  const sortedExpenseCandidates = useMemo(
+    () => [...expenseCandidates].sort(compareExpenseLinkCandidates),
+    [detailReceipt, expenseCandidates],
+  )
+
+  const filteredPeriodExpenses = useMemo(() => {
+    const query = periodExpenseSearch.trim().toLowerCase()
+    const queryDigits = normalizeSearchDigits(query)
+    const rows = !query ? periodExpenses : periodExpenses.filter((expense) => {
+      const project = projects.find((item) => String(item.id) === String(expense.project_id))
+      const contract = contracts.find((item) => String(item.id) === String(expense.contract_id))
+      const textHaystack = [
+        expense.id,
+        expense.description,
+        expense.bank_reference,
+        expense.date,
+        project?.name,
+        project?.code,
+        contract?.number,
+        contract?.subject,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (textHaystack.includes(query)) return true
+      if (!queryDigits) return false
+      const amountDigits = normalizeSearchDigits([
+        expense.amount,
+        Number(expense.amount || 0).toFixed(2),
+        fmtMoney(expense.amount),
+      ].join(' '))
+      return amountDigits.includes(queryDigits)
+    })
+    return [...rows].sort(compareExpenseLinkCandidates)
+  }, [contracts, detailReceipt, periodExpenseSearch, periodExpenses, projects])
 
   useEffect(() => {
     if (detailAction !== 'link' || expenseLinkMode !== 'period' || !periodExpenseYear) return
@@ -886,7 +913,7 @@ export default function Receipts() {
                   </div>
 
                   {expenseLinkMode === 'period' ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '140px 160px minmax(0, 1fr)', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(140px, 1fr)', gap: '0.75rem', marginBottom: '0.85rem' }}>
                       <YearFilterSelect
                         value={periodExpenseYear}
                         availableYears={availableExpenseYears}
@@ -900,7 +927,9 @@ export default function Receipts() {
                           <option key={label} value={index + 1}>{label}</option>
                         ))}
                       </select>
-                      <SearchInput placeholder={tr('search')} value={periodExpenseSearch} onChange={setPeriodExpenseSearch} />
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <SearchInput placeholder={tr('search')} value={periodExpenseSearch} onChange={setPeriodExpenseSearch} style={{ width: '100%' }} />
+                      </div>
                     </div>
                   ) : null}
 
@@ -962,7 +991,7 @@ export default function Receipts() {
                     <div style={{ color: 'var(--color-text-muted)' }}>{tr('receiptNoCandidates')}</div>
                   ) : (
                     <div className="receipt-candidates-list">
-                      {expenseCandidates.map((candidate) => (
+                      {sortedExpenseCandidates.map((candidate) => (
                         <div key={candidate.id} className="record-detail-card" style={{ padding: '0.85rem' }}>
                           <div className="receipt-candidate-card">
                             <div>
