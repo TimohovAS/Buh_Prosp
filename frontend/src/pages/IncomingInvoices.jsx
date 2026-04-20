@@ -227,6 +227,7 @@ export default function IncomingInvoices() {
     || projects.find(project => project.id === item?.project_id)?.name
     || ''
   )
+  const renderProjectLabel = item => getProjectLabel(item) || tr('unassigned')
   const detailAmount = Number(detailModal?.amount || 0)
   const canEditDetail = !!detailModal && detailModal.status !== 'paid' && detailModal.status !== 'cancelled'
   const canRestoreDetail = detailModal?.status === 'cancelled'
@@ -244,6 +245,28 @@ export default function IncomingInvoices() {
         title={tr('incomingInvoices')}
         actions={(
           <>
+          {filtered.length > 0 ? (
+            <div
+              style={{
+                alignSelf: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                flexWrap: 'wrap',
+                marginRight: '0.5rem',
+              }}
+            >
+              <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {tr('total')}: {filtered.length}
+              </span>
+              <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>
+                {fmt(totalAmount)}
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {tr('remainingAmount')}: {fmt(totalRemaining)}
+              </span>
+            </div>
+          ) : null}
           <YearFilterSelect
             value={year}
             availableYears={availableYears}
@@ -300,9 +323,6 @@ export default function IncomingInvoices() {
                       >
                         <td className="incoming-invoice-date-cell">
                           <div className="incoming-invoice-date-primary">{fmtDate(inv.date)}</div>
-                          <div className="incoming-invoice-date-secondary">
-                            {getProjectLabel(inv) || UI_DASH}
-                          </div>
                         </td>
                         <td className="incoming-invoice-document-cell">
                           <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
@@ -314,17 +334,24 @@ export default function IncomingInvoices() {
                           <div className="incoming-invoice-party-name" title={inv.counterparty_name || inv.client_name || UI_DASH}>
                             {inv.counterparty_name || inv.client_name || UI_DASH}
                           </div>
-                          {inv.client_name && inv.client_name !== inv.counterparty_name ? (
-                            <div className="incoming-invoice-party-meta" title={inv.client_name}>
-                              {tr('client')}: {inv.client_name}
-                            </div>
-                          ) : null}
+                          <div className="income-meta-chips">
+                            <span
+                              className="income-meta-chip income-meta-chip-accent"
+                              title={renderProjectLabel(inv)}
+                            >
+                              {renderProjectLabel(inv)}
+                            </span>
+                            {inv.client_name && inv.client_name !== inv.counterparty_name ? (
+                              <span className="income-meta-chip" title={inv.client_name}>
+                                {tr('client')}: {inv.client_name}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="incoming-invoice-description-cell">
                           <div className="incoming-invoice-description" title={inv.description || UI_DASH}>
                             {inv.description || UI_DASH}
                           </div>
-                          {inv.note ? <div className="incoming-invoice-note">{inv.note}</div> : null}
                         </td>
                         <td className="incoming-invoice-amount-cell">
                           <div className="incoming-invoice-amount-primary">{fmt(inv.amount)} {inv.currency || 'RSD'}</div>
@@ -339,17 +366,6 @@ export default function IncomingInvoices() {
                       </tr>
                     ))}
               </tbody>
-              {filtered.length > 0 && (
-                <tfoot>
-                  <tr style={{ fontWeight: 'bold' }}>
-                    <td colSpan={4}>{tr('total') || 'Total'}: {filtered.length}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div>{fmt(totalAmount)}</div>
-                      <div className="incoming-invoice-amount-meta">{tr('remainingAmount')}: {fmt(totalRemaining)}</div>
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
             </table>
           </div>
         </div>

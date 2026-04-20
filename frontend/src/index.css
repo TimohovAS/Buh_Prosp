@@ -1082,22 +1082,22 @@ tr.row-reversal {
 
 .incoming-invoices-list-table th:nth-child(1),
 .incoming-invoices-list-table td:nth-child(1) {
-  width: 132px;
+  width: 120px;
 }
 
 .incoming-invoices-list-table th:nth-child(2),
 .incoming-invoices-list-table td:nth-child(2) {
-  width: 220px;
+  width: 180px;
 }
 
 .incoming-invoices-list-table th:nth-child(3),
 .incoming-invoices-list-table td:nth-child(3) {
-  width: 220px;
+  width: 250px;
 }
 
 .incoming-invoices-list-table th:nth-child(5),
 .incoming-invoices-list-table td:nth-child(5) {
-  width: 180px;
+  width: 190px;
 }
 
 .incoming-invoice-date-cell,
@@ -1146,9 +1146,14 @@ tr.row-reversal {
   -webkit-box-orient: vertical;
 }
 
+.incoming-invoice-party-cell .income-meta-chips {
+  margin-top: 0.45rem;
+}
+
 .incoming-invoice-description {
   color: var(--color-text);
   line-height: 1.45;
+  -webkit-line-clamp: 3;
 }
 
 .incoming-invoice-amount-cell {

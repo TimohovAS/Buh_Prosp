@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
-import { tr } from '../i18n'
+import { getMonthNamesFull, tr } from '../i18n'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
+import YearFilterSelect from '../components/YearFilterSelect'
 import { buildContractLabel, filterContractsForProject } from '../utils/entityLabels'
 import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney } from '../utils/formatters'
 
@@ -49,6 +50,16 @@ function formatMoneyWithCurrency(value, currency = 'RSD') {
   return `${fmtMoney(value)} ${currency || 'RSD'}`
 }
 
+function getReceiptDateParts(receipt) {
+  if (!receipt?.receipt_datetime) return null
+  const parsed = new Date(receipt.receipt_datetime)
+  if (Number.isNaN(parsed.getTime())) return null
+  return {
+    year: parsed.getFullYear(),
+    month: parsed.getMonth() + 1,
+  }
+}
+
 export default function Receipts() {
   const location = useLocation()
   const isActivePage = location.pathname === '/receipts'
@@ -60,6 +71,7 @@ export default function Receipts() {
   const [projects, setProjects] = useState([])
   const [categories, setCategories] = useState([])
   const [contracts, setContracts] = useState([])
+  const [expenseYears, setExpenseYears] = useState([])
   const [loading, setLoading] = useState(true)
   const [lookupLoading, setLookupLoading] = useState(false)
   const [pageError, setPageError] = useState('')
@@ -83,6 +95,12 @@ export default function Receipts() {
   const [assigningProject, setAssigningProject] = useState(false)
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [expenseCandidatesLoading, setExpenseCandidatesLoading] = useState(false)
+  const [expenseLinkMode, setExpenseLinkMode] = useState('candidates')
+  const [periodExpenseYear, setPeriodExpenseYear] = useState(new Date().getFullYear())
+  const [periodExpenseMonth, setPeriodExpenseMonth] = useState('')
+  const [periodExpenseSearch, setPeriodExpenseSearch] = useState('')
+  const [periodExpenses, setPeriodExpenses] = useState([])
+  const [periodExpensesLoading, setPeriodExpensesLoading] = useState(false)
   const [createExpenseSaving, setCreateExpenseSaving] = useState(false)
   const [unlinkingExpense, setUnlinkingExpense] = useState(false)
   const [deletingReceipt, setDeletingReceipt] = useState(false)
@@ -100,6 +118,7 @@ export default function Receipts() {
     !window.isSecureContext &&
     window.location.hostname !== 'localhost'
   const canUseScanner = scanSupported && !scannerRequiresHttps
+  const monthNames = getMonthNamesFull()
 
   const statusOptions = useMemo(() => ([
     { value: 'all', label: tr('receiptStatusAll') },
@@ -114,6 +133,47 @@ export default function Receipts() {
   const filteredContracts = useMemo(() => {
     return filterContractsForProject(contracts, createForm.project_id)
   }, [contracts, createForm.project_id])
+
+  const availableExpenseYears = useMemo(() => {
+    const years = Array.from(
+      new Set(
+        (Array.isArray(expenseYears) ? expenseYears : [])
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value))
+      )
+    )
+    const receiptYear = getReceiptDateParts(detailReceipt)?.year
+    if (receiptYear && !years.includes(receiptYear)) {
+      years.push(receiptYear)
+    }
+    if (!years.length) {
+      years.push(new Date().getFullYear())
+    }
+    return years.sort((left, right) => right - left)
+  }, [detailReceipt, expenseYears])
+
+  const filteredPeriodExpenses = useMemo(() => {
+    const query = periodExpenseSearch.trim().toLowerCase()
+    if (!query) return periodExpenses
+    return periodExpenses.filter((expense) => {
+      const project = projects.find((item) => String(item.id) === String(expense.project_id))
+      const contract = contracts.find((item) => String(item.id) === String(expense.contract_id))
+      const haystack = [
+        expense.id,
+        expense.description,
+        expense.bank_reference,
+        expense.date,
+        project?.name,
+        project?.code,
+        contract?.number,
+        contract?.subject,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [contracts, periodExpenseSearch, periodExpenses, projects])
 
   const receiptRows = useMemo(
     () => receipts.map((receipt) => ({ ...receipt, statusMeta: getReceiptStatusMeta(receipt.status) })),
@@ -148,14 +208,16 @@ export default function Receipts() {
   const loadLookups = async () => {
     setLookupLoading(true)
     try {
-      const [projectList, categoryList, contractList] = await Promise.all([
+      const [projectList, categoryList, contractList, expenseYearList] = await Promise.all([
         api.projects.list({ show_archived: true }),
         api.categories.list({ category_type: 'expense' }),
         api.contracts.list({ limit: 500 }),
+        api.expenses.years(),
       ])
       setProjects(projectList || [])
       setCategories(categoryList || [])
       setContracts(contractList || [])
+      setExpenseYears(expenseYearList || [])
     } catch (error) {
       setPageError((previous) => previous || error.message || tr('loadError'))
     } finally {
@@ -302,11 +364,17 @@ export default function Receipts() {
   }
 
   const hydrateDetailState = (receipt) => {
+    const receiptDateParts = getReceiptDateParts(receipt)
     setDetailReceipt(receipt)
     setDetailError('')
     setDetailAction('')
+    setExpenseLinkMode('candidates')
     setAssignProjectId(receipt?.project_id ? String(receipt.project_id) : '')
     setExpenseCandidates([])
+    setPeriodExpenseSearch('')
+    setPeriodExpenses([])
+    setPeriodExpenseYear(receiptDateParts?.year || availableExpenseYears[0] || new Date().getFullYear())
+    setPeriodExpenseMonth(receiptDateParts?.month || '')
     setCreateForm({
       project_id: receipt?.project_id ? String(receipt.project_id) : '',
       category_id: receipt?.category_id ? String(receipt.category_id) : '',
@@ -316,6 +384,65 @@ export default function Receipts() {
       payment_mode: receipt?.payment_kind === 'cash' ? 'cash' : 'auto',
     })
   }
+
+  const getResolvedProjectName = (projectId) => {
+    const project = projects.find((item) => String(item.id) === String(projectId))
+    return project?.name || project?.code || UI_DASH
+  }
+
+  const getResolvedContractLabel = (contractId) => {
+    const contract = contracts.find((item) => String(item.id) === String(contractId))
+    return contract ? buildContractLabel(contract) : UI_DASH
+  }
+
+  const normalizeExpenseLinkCandidate = (item) => {
+    if (!item) return item
+    if (typeof item.matches_amount === 'boolean' && item.amount_delta_abs != null) {
+      return item
+    }
+    const receiptAmount = Number(detailReceipt?.total_amount || 0)
+    const expenseAmount = Number(item.amount || 0)
+    const amountDeltaAbs = Math.abs(receiptAmount - expenseAmount)
+    return {
+      ...item,
+      amount_delta_abs: amountDeltaAbs,
+      matches_amount: amountDeltaAbs < 0.005,
+    }
+  }
+
+  useEffect(() => {
+    if (detailAction !== 'link' || expenseLinkMode !== 'period' || !periodExpenseYear) return
+    let cancelled = false
+
+    const loadPeriodExpenses = async () => {
+      setDetailError('')
+      setPeriodExpensesLoading(true)
+      try {
+        const items = await api.expenses.list({
+          year: periodExpenseYear,
+          ...(periodExpenseMonth ? { month: periodExpenseMonth } : {}),
+          limit: 500,
+        })
+        if (!cancelled) {
+          setPeriodExpenses(items || [])
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPeriodExpenses([])
+          setDetailError(error.message || tr('loadError'))
+        }
+      } finally {
+        if (!cancelled) {
+          setPeriodExpensesLoading(false)
+        }
+      }
+    }
+
+    loadPeriodExpenses()
+    return () => {
+      cancelled = true
+    }
+  }, [detailAction, expenseLinkMode, periodExpenseMonth, periodExpenseYear])
 
   const openReceiptDetail = async (receiptId) => {
     setDetailLoading(true)
@@ -366,6 +493,8 @@ export default function Receipts() {
   const openExpenseCandidates = async () => {
     if (!detailReceipt) return
     setDetailAction('link')
+    setExpenseLinkMode('candidates')
+    setDetailError('')
     setExpenseCandidatesLoading(true)
     try {
       const items = await api.receipts.expenseCandidates(detailReceipt.id)
@@ -380,17 +509,18 @@ export default function Receipts() {
 
   const handleLinkExpense = async (candidate) => {
     if (!detailReceipt) return
-    if (!candidate) return
-    if (!candidate.matches_amount && typeof window !== 'undefined') {
+    const normalizedCandidate = normalizeExpenseLinkCandidate(candidate)
+    if (!normalizedCandidate) return
+    if (!normalizedCandidate.matches_amount && typeof window !== 'undefined') {
       const confirmation = tr('receiptLinkMismatchConfirm')
-        .replace('{receipt}', formatMoneyWithCurrency(detailReceipt.total_amount, detailReceipt.currency || candidate.currency || 'RSD'))
-        .replace('{expense}', formatMoneyWithCurrency(candidate.amount, candidate.currency || detailReceipt.currency || 'RSD'))
-        .replace('{delta}', getAmountDeltaLabel(candidate.amount_delta_abs, candidate.currency || detailReceipt.currency || 'RSD'))
+        .replace('{receipt}', formatMoneyWithCurrency(detailReceipt.total_amount, detailReceipt.currency || normalizedCandidate.currency || 'RSD'))
+        .replace('{expense}', formatMoneyWithCurrency(normalizedCandidate.amount, normalizedCandidate.currency || detailReceipt.currency || 'RSD'))
+        .replace('{delta}', getAmountDeltaLabel(normalizedCandidate.amount_delta_abs, normalizedCandidate.currency || detailReceipt.currency || 'RSD'))
       if (!window.confirm(confirmation)) return
     }
     setExpenseCandidatesLoading(true)
     try {
-      const receipt = await api.receipts.linkExpense(detailReceipt.id, { expense_id: candidate.id })
+      const receipt = await api.receipts.linkExpense(detailReceipt.id, { expense_id: normalizedCandidate.id })
       hydrateDetailState(receipt)
       await loadReceipts()
     } catch (error) {
@@ -468,21 +598,21 @@ export default function Receipts() {
         title={tr('receipts')}
         actions={(
           <>
-          <select className="form-input" style={{ width: 180 }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <select className="form-input" style={{ width: 220 }} value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-            <option value="">{tr('receiptProjectFilterAll')}</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-          <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 220 }} />
-          <button type="button" className="btn btn-primary" onClick={openImportModal}>
-            {tr('receiptImportButton')}
-          </button>
+            <select className="form-input" style={{ width: 180 }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <select className="form-input" style={{ width: 220 }} value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+              <option value="">{tr('receiptProjectFilterAll')}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+            <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 220 }} />
+            <button type="button" className="btn btn-primary" onClick={openImportModal}>
+              {tr('receiptImportButton')}
+            </button>
           </>
         )}
       />
@@ -549,59 +679,59 @@ export default function Receipts() {
         className="receipt-import-modal"
       >
         {importModalOpen ? (
-              <div className="receipt-import-layout">
-                <div className="record-detail-card receipt-import-card">
-                  <div className="form-group">
-                    <label className="form-label">{tr('receiptQrUrl')}</label>
-                    <textarea
-                      className="form-input"
-                      rows={5}
-                      value={importUrl}
-                      onChange={(event) => setImportUrl(event.target.value)}
-                      placeholder="https://suf.purs.gov.rs/v/?vl=..."
-                      style={{ resize: 'vertical' }}
-                    />
-                  </div>
-                  <div className="receipt-import-actions">
-                    <button type="button" className="btn btn-secondary" onClick={handleToggleScanner}>
-                      {scannerOpen ? tr('receiptScanStop') : tr('receiptScanStart')}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={handlePasteClipboard} disabled={pastingClipboard}>
-                      {pastingClipboard ? tr('loading') : tr('receiptPasteClipboard')}
-                    </button>
-                    <button type="button" className="btn btn-primary" onClick={handleImportReceipt} disabled={importing || !importUrl.trim()}>
-                      {importing ? tr('receiptImporting') : tr('receiptImportButton')}
-                    </button>
-                  </div>
-                  <div className="receipt-import-help">
-                    {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
-                  </div>
-                  {scanError ? (
-                    <div className="alert alert-danger" style={{ marginTop: '0.75rem' }}>{scanError}</div>
-                  ) : null}
-                </div>
-                <div className="record-detail-card receipt-camera-card">
-                  <div className="record-field-label">{tr('receiptScanCamera')}</div>
-                  {scannerOpen && canUseScanner ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="receipt-camera-preview"
-                    />
-                  ) : (
-                    <div className="receipt-camera-placeholder">
-                      <strong style={{ display: 'block', marginBottom: '0.35rem' }}>
-                        {canUseScanner ? tr('receiptScanCameraIdle') : tr('receiptScanCamera')}
-                      </strong>
-                      <span>
-                        {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
-                      </span>
-                    </div>
-                  )}
-                </div>
+          <div className="receipt-import-layout">
+            <div className="record-detail-card receipt-import-card">
+              <div className="form-group">
+                <label className="form-label">{tr('receiptQrUrl')}</label>
+                <textarea
+                  className="form-input"
+                  rows={5}
+                  value={importUrl}
+                  onChange={(event) => setImportUrl(event.target.value)}
+                  placeholder="https://suf.purs.gov.rs/v/?vl=..."
+                  style={{ resize: 'vertical' }}
+                />
               </div>
+              <div className="receipt-import-actions">
+                <button type="button" className="btn btn-secondary" onClick={handleToggleScanner}>
+                  {scannerOpen ? tr('receiptScanStop') : tr('receiptScanStart')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={handlePasteClipboard} disabled={pastingClipboard}>
+                  {pastingClipboard ? tr('loading') : tr('receiptPasteClipboard')}
+                </button>
+                <button type="button" className="btn btn-primary" onClick={handleImportReceipt} disabled={importing || !importUrl.trim()}>
+                  {importing ? tr('receiptImporting') : tr('receiptImportButton')}
+                </button>
+              </div>
+              <div className="receipt-import-help">
+                {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
+              </div>
+              {scanError ? (
+                <div className="alert alert-danger" style={{ marginTop: '0.75rem' }}>{scanError}</div>
+              ) : null}
+            </div>
+            <div className="record-detail-card receipt-camera-card">
+              <div className="record-field-label">{tr('receiptScanCamera')}</div>
+              {scannerOpen && canUseScanner ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="receipt-camera-preview"
+                />
+              ) : (
+                <div className="receipt-camera-placeholder">
+                  <strong style={{ display: 'block', marginBottom: '0.35rem' }}>
+                    {canUseScanner ? tr('receiptScanCameraIdle') : tr('receiptScanCamera')}
+                  </strong>
+                  <span>
+                    {canUseScanner ? tr('receiptScanHint') : (scannerRequiresHttps ? tr('receiptScanRequiresHttps') : tr('receiptScannerUnavailable'))}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         ) : null}
       </Modal>
 
@@ -661,204 +791,291 @@ export default function Receipts() {
           <>
             {detailError ? <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{detailError}</div> : null}
             <div className="receipt-side-card">
-                      <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
-                        {!detailReceipt.expense_id ? (
-                          <>
-                            <button type="button" className="btn btn-primary" onClick={() => setDetailAction('create')}>
-                              {tr('receiptCreateExpense')}
-                            </button>
-                            <button type="button" className="btn btn-secondary" onClick={openExpenseCandidates}>
-                              {tr('receiptLinkExpense')}
-                            </button>
-                          </>
-                        ) : (
-                          <button type="button" className="btn btn-danger" onClick={handleUnlinkExpense} disabled={unlinkingExpense}>
-                            {unlinkingExpense ? tr('loading') : tr('receiptUnlinkExpense')}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={handleOpenReceiptInBrowser}
-                          disabled={!detailReceipt.verification_url}
-                          title={!detailReceipt.verification_url ? tr('receiptOpenBrowserUnavailable') : ''}
-                        >
-                          {tr('receiptOpenBrowser')}
-                        </button>
-                        <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || assigningProject}>
-                          {deletingReceipt ? tr('loading') : tr('receiptDelete')}
-                        </button>
-                      </div>
+              <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
+                {!detailReceipt.expense_id ? (
+                  <>
+                    <button type="button" className="btn btn-primary" onClick={openExpenseCandidates}>
+                      {tr('receiptLinkExpense')}
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setDetailAction('create')}>
+                      {tr('receiptCreateExpense')}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn btn-danger" onClick={handleUnlinkExpense} disabled={unlinkingExpense}>
+                    {unlinkingExpense ? tr('loading') : tr('receiptUnlinkExpense')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleOpenReceiptInBrowser}
+                  disabled={!detailReceipt.verification_url}
+                  title={!detailReceipt.verification_url ? tr('receiptOpenBrowserUnavailable') : ''}
+                >
+                  {tr('receiptOpenBrowser')}
+                </button>
+                <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || assigningProject}>
+                  {deletingReceipt ? tr('loading') : tr('receiptDelete')}
+                </button>
+              </div>
 
-                      <div className="form-group">
-                        <label className="form-label">{tr('project')}</label>
-                        <ProjectSelect
-                          projects={projects}
-                          value={assignProjectId}
-                          onChange={setAssignProjectId}
-                          allowEmpty
-                          emptyLabel={tr('receiptProjectFilterAll')}
-                        />
-                      </div>
-                      <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
-                        {assigningProject ? tr('loading') : tr('receiptAssignProject')}
-                      </button>
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect
+                  projects={projects}
+                  value={assignProjectId}
+                  onChange={setAssignProjectId}
+                  allowEmpty
+                  emptyLabel={tr('receiptProjectFilterAll')}
+                />
+              </div>
+              <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
+                {assigningProject ? tr('loading') : tr('receiptAssignProject')}
+              </button>
 
-                      <div className="receipt-linked-grid">
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('receiptLinkedExpense')}</span>
-                          <span className="record-field-value">
-                            {detailReceipt.expense_id
-                              ? `#${detailReceipt.expense_id} ${UI_DASH} ${(detailReceipt.expense_source || '').trim() || UI_DASH} ${UI_DASH} ${(detailReceipt.expense_status || '').trim() || UI_DASH}`
-                              : UI_DASH}
-                          </span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('receiptLinkedBank')}</span>
-                          <span className="record-field-value">{detailReceipt.bank_transaction_id ? `#${detailReceipt.bank_transaction_id}` : UI_DASH}</span>
-                        </div>
-                        <div className="record-field">
-                          <span className="record-field-label">{tr('cashRegister')}</span>
-                          <span className="record-field-value">{detailReceipt.cash_entry_id ? `#${detailReceipt.cash_entry_id}` : UI_DASH}</span>
-                        </div>
-                        {detailReceipt.expense_id ? (
-                          <div className="record-field">
-                            <span className="record-field-label">{tr('receiptAmountDelta')}</span>
-                            <span
-                              className="record-field-value"
-                              style={{ color: detailReceipt.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)' }}
-                            >
-                              {detailReceipt.matches_amount
-                                ? tr('receiptAmountExact')
-                                : getAmountDeltaLabel(detailReceipt.amount_delta_abs, detailReceipt.currency || 'RSD')}
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
+              <div className="receipt-linked-grid">
+                <div className="record-field">
+                  <span className="record-field-label">{tr('receiptLinkedExpense')}</span>
+                  <span className="record-field-value">
+                    {detailReceipt.expense_id
+                      ? `#${detailReceipt.expense_id} ${UI_DASH} ${(detailReceipt.expense_source || '').trim() || UI_DASH} ${UI_DASH} ${(detailReceipt.expense_status || '').trim() || UI_DASH}`
+                      : UI_DASH}
+                  </span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('receiptLinkedBank')}</span>
+                  <span className="record-field-value">{detailReceipt.bank_transaction_id ? `#${detailReceipt.bank_transaction_id}` : UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('cashRegister')}</span>
+                  <span className="record-field-value">{detailReceipt.cash_entry_id ? `#${detailReceipt.cash_entry_id}` : UI_DASH}</span>
+                </div>
+                {detailReceipt.expense_id ? (
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('receiptAmountDelta')}</span>
+                    <span
+                      className="record-field-value"
+                      style={{ color: detailReceipt.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)' }}
+                    >
+                      {detailReceipt.matches_amount
+                        ? tr('receiptAmountExact')
+                        : getAmountDeltaLabel(detailReceipt.amount_delta_abs, detailReceipt.currency || 'RSD')}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
 
-                      {detailAction === 'link' ? (
-                        <div className="receipt-detail-section">
-                          <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('receiptExpenseCandidates')}</div>
-                          {expenseCandidatesLoading ? (
-                            <div>{tr('loading')}</div>
-                          ) : expenseCandidates.length === 0 ? (
-                            <div style={{ color: 'var(--color-text-muted)' }}>{tr('receiptNoCandidates')}</div>
-                          ) : (
-                            <div className="receipt-candidates-list">
-                              {expenseCandidates.map((candidate) => (
-                                <div key={candidate.id} className="record-detail-card" style={{ padding: '0.85rem' }}>
-                                  <div className="receipt-candidate-card">
-                                    <div>
-                                      <div style={{ fontWeight: 700 }}>{candidate.description || UI_DASH}</div>
-                                      <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
-                                        {candidate.date} {UI_DASH} {candidate.project_name || UI_DASH}
-                                      </div>
-                                      <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
-                                        {candidate.contract_number || UI_DASH}
-                                      </div>
-                                      <div
-                                        style={{
-                                          color: candidate.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)',
-                                          fontSize: '0.84rem',
-                                          marginTop: '0.35rem',
-                                        }}
-                                      >
-                                        {candidate.matches_amount
-                                          ? tr('receiptAmountExact')
-                                          : `${tr('receiptAmountDelta')}: ${getAmountDeltaLabel(candidate.amount_delta_abs, candidate.currency || detailReceipt.currency || 'RSD')}`}
-                                      </div>
-                                      {!candidate.matches_amount ? (
-                                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                          {tr('receiptLinkMismatchHint')}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontWeight: 700 }}>{fmtMoney(candidate.amount)} {candidate.currency || 'RSD'}</div>
-                                      <button type="button" className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => handleLinkExpense(candidate)}>
-                                        {tr('receiptLinkExpense')}
-                                      </button>
-                                    </div>
+              {detailAction === 'link' ? (
+                <div className="receipt-detail-section">
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={expenseLinkMode === 'candidates' ? 'btn btn-primary' : 'btn btn-secondary'}
+                      onClick={() => setExpenseLinkMode('candidates')}
+                    >
+                      {tr('receiptLinkModeCandidates')}
+                    </button>
+                    <button
+                      type="button"
+                      className={expenseLinkMode === 'period' ? 'btn btn-primary' : 'btn btn-secondary'}
+                      onClick={() => setExpenseLinkMode('period')}
+                    >
+                      {tr('receiptLinkModePeriod')}
+                    </button>
+                  </div>
+
+                  {expenseLinkMode === 'period' ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '140px 160px minmax(0, 1fr)', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                      <YearFilterSelect
+                        value={periodExpenseYear}
+                        availableYears={availableExpenseYears}
+                        onChange={setPeriodExpenseYear}
+                        includeAllTime={false}
+                        style={{ width: '100%' }}
+                      />
+                      <select className="form-input" value={periodExpenseMonth === '' ? '' : String(periodExpenseMonth)} onChange={(event) => setPeriodExpenseMonth(event.target.value ? Number(event.target.value) : '')}>
+                        <option value="">{tr('allMonths')}</option>
+                        {monthNames.map((label, index) => (
+                          <option key={label} value={index + 1}>{label}</option>
+                        ))}
+                      </select>
+                      <SearchInput placeholder={tr('search')} value={periodExpenseSearch} onChange={setPeriodExpenseSearch} />
+                    </div>
+                  ) : null}
+
+                  <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>
+                    {expenseLinkMode === 'period' ? tr('receiptLinkModePeriod') : tr('receiptExpenseCandidates')}
+                  </div>
+                  {expenseLinkMode === 'period' ? (
+                    periodExpensesLoading ? (
+                      <div>{tr('loading')}</div>
+                    ) : filteredPeriodExpenses.length === 0 ? (
+                      <div style={{ color: 'var(--color-text-muted)' }}>{tr('receiptNoPeriodExpenses')}</div>
+                    ) : (
+                      <div className="receipt-candidates-list">
+                        {filteredPeriodExpenses.map((expense) => {
+                          const candidate = normalizeExpenseLinkCandidate(expense)
+                          return (
+                            <div key={expense.id} className="record-detail-card" style={{ padding: '0.85rem' }}>
+                              <div className="receipt-candidate-card">
+                                <div>
+                                  <div style={{ fontWeight: 700 }}>{expense.description || UI_DASH}</div>
+                                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
+                                    {expense.date} {UI_DASH} {getResolvedProjectName(expense.project_id)}
                                   </div>
+                                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
+                                    {getResolvedContractLabel(expense.contract_id)}
+                                  </div>
+                                  <div
+                                    style={{
+                                      color: candidate.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)',
+                                      fontSize: '0.84rem',
+                                      marginTop: '0.35rem',
+                                    }}
+                                  >
+                                    {candidate.matches_amount
+                                      ? tr('receiptAmountExact')
+                                      : `${tr('receiptAmountDelta')}: ${getAmountDeltaLabel(candidate.amount_delta_abs, expense.currency || detailReceipt.currency || 'RSD')}`}
+                                  </div>
+                                  {expense.bank_reference ? (
+                                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                      {expense.bank_reference}
+                                    </div>
+                                  ) : null}
                                 </div>
-                              ))}
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontWeight: 700 }}>{fmtMoney(expense.amount)} {expense.currency || 'RSD'}</div>
+                                  <button type="button" className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => handleLinkExpense(candidate)}>
+                                    {tr('receiptLinkExpense')}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                          )}
+                          )
+                        })}
+                      </div>
+                    )
+                  ) : expenseCandidatesLoading ? (
+                    <div>{tr('loading')}</div>
+                  ) : expenseCandidates.length === 0 ? (
+                    <div style={{ color: 'var(--color-text-muted)' }}>{tr('receiptNoCandidates')}</div>
+                  ) : (
+                    <div className="receipt-candidates-list">
+                      {expenseCandidates.map((candidate) => (
+                        <div key={candidate.id} className="record-detail-card" style={{ padding: '0.85rem' }}>
+                          <div className="receipt-candidate-card">
+                            <div>
+                              <div style={{ fontWeight: 700 }}>{candidate.description || UI_DASH}</div>
+                              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
+                                {candidate.date} {UI_DASH} {candidate.project_name || UI_DASH}
+                              </div>
+                              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
+                                {candidate.contract_number || UI_DASH}
+                              </div>
+                              <div
+                                style={{
+                                  color: candidate.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)',
+                                  fontSize: '0.84rem',
+                                  marginTop: '0.35rem',
+                                }}
+                              >
+                                {candidate.matches_amount
+                                  ? tr('receiptAmountExact')
+                                  : `${tr('receiptAmountDelta')}: ${getAmountDeltaLabel(candidate.amount_delta_abs, candidate.currency || detailReceipt.currency || 'RSD')}`}
+                              </div>
+                              {!candidate.matches_amount ? (
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                  {tr('receiptLinkMismatchHint')}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700 }}>{fmtMoney(candidate.amount)} {candidate.currency || 'RSD'}</div>
+                              <button type="button" className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => handleLinkExpense(candidate)}>
+                                {tr('receiptLinkExpense')}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      ) : null}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
-                      {detailAction === 'create' ? (
-                        <form onSubmit={handleCreateExpense} className="receipt-detail-section">
-                          <div className="form-group">
-                            <label className="form-label">{tr('receiptCreateMode')}</label>
-                            <select
-                              className="form-input"
-                              value={createForm.payment_mode}
-                              onChange={(event) => setCreateForm((prev) => ({ ...prev, payment_mode: event.target.value }))}
-                            >
-                              <option value="auto">{tr('receiptCreateModeAuto')}</option>
-                              <option value="bank">{tr('receiptCreateModeBank')}</option>
-                              <option value="cash">{tr('receiptCreateModeCash')}</option>
-                            </select>
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">{tr('project')}</label>
-                            <ProjectSelect
-                              projects={projects}
-                              value={createForm.project_id}
-                              onChange={(value) => setCreateForm((prev) => ({ ...prev, project_id: value, contract_id: '' }))}
-                              allowEmpty
-                              emptyLabel={tr('receiptProjectFilterAll')}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">{tr('category')}</label>
-                            <select
-                              className="form-input"
-                              value={createForm.category_id}
-                              onChange={(event) => setCreateForm((prev) => ({ ...prev, category_id: event.target.value }))}
-                            >
-                              <option value="">{UI_DASH}</option>
-                              {categories.map((category) => (
-                                <option key={category.id} value={category.id}>{category.name_ru}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">{tr('contracts')}</label>
-                            <select
-                              className="form-input"
-                              value={createForm.contract_id}
-                              onChange={(event) => setCreateForm((prev) => ({ ...prev, contract_id: event.target.value }))}
-                            >
-                              <option value="">{UI_DASH}</option>
-                              {filteredContracts.map((contract) => (
-                                <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">{tr('description')}</label>
-                            <input
-                              className="form-input"
-                              value={createForm.description}
-                              onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">{tr('note')}</label>
-                            <textarea
-                              className="form-input"
-                              rows={3}
-                              value={createForm.note}
-                              onChange={(event) => setCreateForm((prev) => ({ ...prev, note: event.target.value }))}
-                            />
-                          </div>
-                          <button type="submit" className="btn btn-primary" disabled={createExpenseSaving}>
-                            {createExpenseSaving ? tr('loading') : tr('receiptCreateExpense')}
-                          </button>
-                        </form>
-                      ) : null}
+              {detailAction === 'create' ? (
+                <form onSubmit={handleCreateExpense} className="receipt-detail-section">
+                  <div className="form-group">
+                    <label className="form-label">{tr('receiptCreateMode')}</label>
+                    <select
+                      className="form-input"
+                      value={createForm.payment_mode}
+                      onChange={(event) => setCreateForm((prev) => ({ ...prev, payment_mode: event.target.value }))}
+                    >
+                      <option value="auto">{tr('receiptCreateModeAuto')}</option>
+                      <option value="bank">{tr('receiptCreateModeBank')}</option>
+                      <option value="cash">{tr('receiptCreateModeCash')}</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('project')}</label>
+                    <ProjectSelect
+                      projects={projects}
+                      value={createForm.project_id}
+                      onChange={(value) => setCreateForm((prev) => ({ ...prev, project_id: value, contract_id: '' }))}
+                      allowEmpty
+                      emptyLabel={tr('receiptProjectFilterAll')}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('category')}</label>
+                    <select
+                      className="form-input"
+                      value={createForm.category_id}
+                      onChange={(event) => setCreateForm((prev) => ({ ...prev, category_id: event.target.value }))}
+                    >
+                      <option value="">{UI_DASH}</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>{category.name_ru}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('contracts')}</label>
+                    <select
+                      className="form-input"
+                      value={createForm.contract_id}
+                      onChange={(event) => setCreateForm((prev) => ({ ...prev, contract_id: event.target.value }))}
+                    >
+                      <option value="">{UI_DASH}</option>
+                      {filteredContracts.map((contract) => (
+                        <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('description')}</label>
+                    <input
+                      className="form-input"
+                      value={createForm.description}
+                      onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('note')}</label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      value={createForm.note}
+                      onChange={(event) => setCreateForm((prev) => ({ ...prev, note: event.target.value }))}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={createExpenseSaving}>
+                    {createExpenseSaving ? tr('loading') : tr('receiptCreateExpense')}
+                  </button>
+                </form>
+              ) : null}
             </div>
           </>
         ) : null}
