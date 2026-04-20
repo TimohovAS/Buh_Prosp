@@ -1,19 +1,21 @@
 """Р РѕСѓС‚РµСЂ РґРѕС…РѕРґРѕРІ (РљРџРћ)."""
 from datetime import date
 from typing import Optional
-from decimal import Decimal, InvalidOperation
-import re
-from xml.etree import ElementTree as ET
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, or_, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_db
-from backend.efaktura_service import import_efaktura_documents
-from backend.models import Income, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, Enterprise, Expense
+from backend.db_utils import (
+    get_contract_or_404,
+    get_project_or_404,
+    get_unassigned_project_id,
+)
+from backend.models import Income, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, Expense
 from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import detach_income_transaction_link, get_income_linked_payment_entries
@@ -33,112 +35,26 @@ INVOICE_DUPLICATE_DETAIL = "Invoice number already exists for this year."
 INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    """РџРѕР»СѓС‡РёС‚СЊ id РїСЂРѕРµРєС‚Р° INT-UNASSIGNED."""
-    r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    p = r.scalar_one_or_none()
-    return p.id if p else None
-
-
-async def _get_enterprise(db: AsyncSession) -> Enterprise | None:
-    result = await db.execute(select(Enterprise).order_by(Enterprise.id.asc()).limit(1))
-    return result.scalar_one_or_none()
-
-
-def _enterprise_matches_party(enterprise: Enterprise | None, party_name: str | None, party_pib: str | None) -> bool:
-    if enterprise is None:
-        return False
-    enterprise_pib = normalize_pib(enterprise.pib)
-    enterprise_name = normalize_name(enterprise.name)
-    party_pib_normalized = normalize_pib(party_pib)
-    party_name_normalized = normalize_name(party_name)
-    if enterprise_pib and party_pib_normalized and enterprise_pib == party_pib_normalized:
-        return True
-    if enterprise_name and party_name_normalized and enterprise_name == party_name_normalized:
-        return True
-    return False
-
-
-def _build_efaktura_expense_identity(invoice_number: str, invoice_year: int, supplier_pib: str | None, supplier_name: str | None) -> str:
-    supplier_key = normalize_pib(supplier_pib) or normalize_name(supplier_name) or "unknown"
-    normalized_invoice_number = to_number_year_format(invoice_number, invoice_year)
-    return f"eFaktura-in|{normalized_invoice_number}|{supplier_key}"
-
-
-def _build_efaktura_expense_note(
-    invoice_number: str,
-    invoice_year: int,
-    supplier_name: str | None,
-    supplier_pib: str | None,
-    file_name: str,
-) -> str:
-    identity = _build_efaktura_expense_identity(invoice_number, invoice_year, supplier_pib, supplier_name)
-    display_supplier = supplier_name or "Unknown supplier"
-    display_pib = normalize_pib(supplier_pib) or "n/a"
-    return f"[{identity}] Import eFaktura: {display_supplier}; PIB {display_pib}; file {file_name}"
-
-
-async def _has_efaktura_expense_duplicate(
-    db: AsyncSession,
-    invoice_number: str,
-    invoice_year: int,
-    supplier_pib: str | None,
-    supplier_name: str | None,
-    issued_date: date,
-    amount: Decimal,
-) -> bool:
-    identity = _build_efaktura_expense_identity(invoice_number, invoice_year, supplier_pib, supplier_name)
-    result = await db.execute(
-        select(Expense.note).where(
-            Expense.source == EFAKTURA_IMPORT_SOURCE,
-            Expense.date == issued_date,
-            Expense.amount == amount,
-        )
-    )
-    for (note,) in result.fetchall():
-        if isinstance(note, str) and note.startswith(f"[{identity}]"):
-            return True
-    return False
-
-
-async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Project not found")
-    if project.status == "archived":
-        raise HTTPException(400, "Cannot use archived project")
-    return project
-
-
-async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
-    result = await db.execute(select(Contract).where(Contract.id == contract_id))
-    contract = result.scalar_one_or_none()
-    if not contract:
-        raise HTTPException(404, "Contract not found")
-    return contract
-
-
 async def _resolve_income_links(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
     resolved_contract_id = contract_id
 
     if resolved_contract_id is not None:
-        contract = await _get_contract_or_404(db, resolved_contract_id)
+        contract = await get_contract_or_404(db, resolved_contract_id)
         if contract.project_id is None:
             if resolved_project_id is None:
                 raise HTTPException(400, "Select a project before linking this contract")
-            await _get_project_or_404(db, resolved_project_id)
+            await get_project_or_404(db, resolved_project_id)
             contract.project_id = resolved_project_id
             await db.flush()
         resolved_project_id = contract.project_id
 
     if resolved_project_id is not None:
-        await _get_project_or_404(db, resolved_project_id)
+        await get_project_or_404(db, resolved_project_id)
 
     return resolved_project_id, resolved_contract_id
 
@@ -146,7 +62,7 @@ async def _resolve_income_links(
 async def _clear_contract_if_project_mismatch(db: AsyncSession, income: Income, project_id: int | None) -> None:
     if not income.contract_id or project_id is None:
         return
-    contract = await _get_contract_or_404(db, income.contract_id)
+    contract = await get_contract_or_404(db, income.contract_id)
     if contract.project_id != project_id:
         income.contract_id = None
         income.contract_payment_type = None
@@ -403,7 +319,7 @@ async def bulk_assign_project_income(
         return {"updated": 0}
     pid = data.project_id
     if pid is None:
-        pid = await _get_unassigned_project_id(db)
+        pid = await get_unassigned_project_id(db)
     if pid is not None:
         r = await db.execute(select(Project).where(Project.id == pid))
         proj = r.scalar_one_or_none()
@@ -419,204 +335,6 @@ async def bulk_assign_project_income(
     await db.commit()
     return {"updated": len(items)}
 
-
-@router.post("/import-efaktura")
-async def import_efaktura(
-    files: list[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_edit_access),
-):
-    """РРјРїРѕСЂС‚ С„Р°РєС‚СѓСЂ eFaktura XML РІ РґРѕС…РѕРґС‹."""
-    if not files:
-        raise HTTPException(400, "РќСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ XML-С„Р°Р№Р»")
-    documents = []
-    for upload in files:
-        documents.append(
-            {
-                "file_name": upload.filename or "unknown.xml",
-                "content": await upload.read(),
-            }
-        )
-    return await import_efaktura_documents(
-        db,
-        user_id=current_user.id,
-        documents=documents,
-        source="xml",
-    )
-
-    clients_result = await db.execute(select(Client))
-    clients = clients_result.scalars().all()
-    clients_by_pib: dict[str, Client] = {}
-    clients_by_name: dict[str, Client] = {}
-    for client in clients:
-        pib_key = normalize_pib(client.pib)
-        if pib_key and pib_key not in clients_by_pib:
-            clients_by_pib[pib_key] = client
-        name_key = normalize_name(client.name)
-        if name_key and name_key not in clients_by_name:
-            clients_by_name[name_key] = client
-
-    enterprise = await _get_enterprise(db)
-    has_enterprise_identity = bool(
-        enterprise and (normalize_pib(enterprise.pib) or normalize_name(enterprise.name))
-    )
-    unassigned_project_id = await _get_unassigned_project_id(db)
-    created = []
-    skipped = []
-    errors = []
-    created_income_count = 0
-    created_expense_count = 0
-
-    for upload in files:
-        file_name = upload.filename or "unknown.xml"
-        content = await upload.read()
-        if not content:
-            errors.append({"file_name": file_name, "error": "РџСѓСЃС‚РѕР№ С„Р°Р№Р»"})
-            continue
-
-        try:
-            parsed = parse_efaktura_invoice(content, file_name)
-        except ValueError as exc:
-            errors.append({"file_name": file_name, "error": str(exc)})
-            continue
-
-        matched_client = None
-        if parsed["customer_pib"]:
-            matched_client = clients_by_pib.get(parsed["customer_pib"])
-        if matched_client is None and parsed["client_name"]:
-            matched_client = clients_by_name.get(normalize_name(parsed["client_name"]))
-
-        invoice_year = parsed["issued_date"].year
-        normalized_invoice_number = to_number_year_format(parsed["invoice_number"], invoice_year)
-        supplier_is_enterprise = _enterprise_matches_party(enterprise, parsed.get("supplier_name"), parsed.get("supplier_pib"))
-        customer_is_enterprise = _enterprise_matches_party(enterprise, parsed.get("customer_name"), parsed.get("customer_pib"))
-        direction = "income"
-        if customer_is_enterprise and not supplier_is_enterprise:
-            direction = "expense"
-        elif supplier_is_enterprise and not customer_is_enterprise:
-            direction = "income"
-        elif has_enterprise_identity:
-            errors.append(
-                {
-                    "file_name": file_name,
-                    "error": "Could not determine whether this eFaktura is incoming or outgoing for the configured enterprise",
-                }
-            )
-            continue
-        try:
-            async with db.begin_nested():
-                if direction == "expense":
-                    if await _has_efaktura_expense_duplicate(
-                        db,
-                        normalized_invoice_number,
-                        invoice_year,
-                        parsed.get("supplier_pib"),
-                        parsed.get("supplier_name"),
-                        parsed["issued_date"],
-                        parsed["amount_rsd"],
-                    ):
-                        skipped.append(
-                            {
-                                "file_name": file_name,
-                                "invoice_number": normalized_invoice_number,
-                                "reason": "Incoming eFaktura already exists in expenses",
-                            }
-                        )
-                        continue
-
-                    expense = Expense(
-                        date=parsed["issued_date"],
-                        description=parsed["description"],
-                        amount=parsed["amount_rsd"],
-                        currency=parsed["currency"],
-                        category=None,
-                        category_id=None,
-                        paid_date=None,
-                        status="planned",
-                        is_tax_related=False,
-                        source=EFAKTURA_IMPORT_SOURCE,
-                        project_id=unassigned_project_id,
-                        note=_build_efaktura_expense_note(
-                            normalized_invoice_number,
-                            invoice_year,
-                            parsed.get("supplier_name"),
-                            parsed.get("supplier_pib"),
-                            file_name,
-                        ),
-                        created_by=current_user.id,
-                    )
-                    db.add(expense)
-                    await db.flush()
-                    created.append(
-                        {
-                            "file_name": file_name,
-                            "document_type": "expense",
-                            "expense_id": expense.id,
-                            "invoice_number": normalized_invoice_number,
-                            "counterparty_name": parsed.get("supplier_name"),
-                        }
-                    )
-                    created_expense_count += 1
-                    continue
-
-                if await has_invoice_duplicate(db, normalized_invoice_number, invoice_year):
-                    skipped.append(
-                        {
-                            "file_name": file_name,
-                            "invoice_number": normalized_invoice_number,
-                            "reason": "Р¤Р°РєС‚СѓСЂР° СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ РІ РґРѕС…РѕРґР°С… Р·Р° СЌС‚РѕС‚ РіРѕРґ",
-                        }
-                    )
-                    continue
-
-                income = Income(
-                    issued_date=parsed["issued_date"],
-                    invoice_number=normalized_invoice_number,
-                    invoice_year=invoice_year,
-                    client_id=matched_client.id if matched_client else None,
-                    client_name=matched_client.name if matched_client else parsed["client_name"],
-                    description=parsed["description"],
-                    amount_rsd=parsed["amount_rsd"],
-                    currency=parsed["currency"],
-                    exchange_rate=1.0,
-                    due_date=parsed["due_date"],
-                    project_id=unassigned_project_id,
-                    note=f"РРјРїРѕСЂС‚ eFaktura: {file_name}",
-                    created_by=current_user.id,
-                )
-                initialize_income_status(income, "issued", paid_amount=ZERO_DECIMAL)
-                db.add(income)
-                await db.flush() # Keep flush here to allow rollback on IntegrityError within the loop
-                created.append(
-                    {
-                        "file_name": file_name,
-                        "document_type": "income",
-                        "income_id": income.id,
-                        "invoice_number": income.invoice_number,
-                        "counterparty_name": income.client_name,
-                    }
-                )
-                created_income_count += 1
-        except IntegrityError:
-            skipped.append(
-                {
-                    "file_name": file_name,
-                    "invoice_number": parsed["invoice_number"],
-                    "reason": "Р”СѓР±Р»РёРєР°С‚ С„Р°РєС‚СѓСЂС‹",
-                }
-            )
-    await db.commit() # Commit all changes after the loop
-
-    return {
-        "created_count": len(created),
-        "created_income_count": created_income_count,
-        "created_expense_count": created_expense_count,
-        "skipped_count": len(skipped),
-        "error_count": len(errors),
-        "created": created,
-        "skipped": skipped,
-        "errors": errors,
-    }
 
 
 @router.get("/{income_id}/payments", response_model=IncomePaymentDetailsResponse)
@@ -688,10 +406,10 @@ async def update_income(
     desired_contract_id = dump.get("contract_id", income.contract_id)
 
     if not desired_project_id:
-        desired_project_id = await _get_unassigned_project_id(db)
+        desired_project_id = await get_unassigned_project_id(db)
 
     if desired_contract_id is None and income.contract_id and "project_id" in dump:
-        contract = await _get_contract_or_404(db, income.contract_id)
+        contract = await get_contract_or_404(db, income.contract_id)
         if contract.project_id != desired_project_id:
             desired_contract_id = None
 

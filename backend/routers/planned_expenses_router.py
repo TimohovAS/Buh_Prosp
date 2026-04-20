@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.db_utils import get_category_or_none, get_unassigned_project_id
 from backend.services import create_expense_reversal
 from backend.models import PlannedExpense, PlannedExpensePayment, Expense, TransactionCategory, User, Project
 from backend.planned_expenses_service import next_payment_dates, payment_dates_in_range
@@ -21,21 +22,8 @@ from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/planned-expenses", tags=["planned-expenses"])
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    r = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    p = r.scalar_one_or_none()
-    return p.id if p else None
-
-
-async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
-    if category_id is None:
-        return None
-    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
-    return result.scalar_one_or_none()
-
-
 async def _resolve_category_project_id(db: AsyncSession, category_id: int | None, project_id: int | None) -> int | None:
-    category = await _get_category_or_none(db, category_id)
+    category = await get_category_or_none(db, category_id)
     if category and category.default_project_id:
         return category.default_project_id
     return project_id
@@ -130,14 +118,14 @@ async def mark_planned_expense_paid(
     desc = f"{pe.name}" + (f" ({pe.description})" if pe.description else "")
     if len(desc) > 500:
         desc = desc[:497] + "..."
-    category = await _get_category_or_none(db, getattr(pe, "category_id", None))
+    category = await get_category_or_none(db, getattr(pe, "category_id", None))
     resolved_project_id = await _resolve_category_project_id(
         db,
         getattr(pe, "category_id", None),
         getattr(pe, "project_id", None),
     )
     if not resolved_project_id:
-        resolved_project_id = await _get_unassigned_project_id(db)
+        resolved_project_id = await get_unassigned_project_id(db)
     expense = Expense(
         date=paid_d,
         description=desc,
@@ -212,7 +200,7 @@ async def create_planned_expense(
         data.project_id if hasattr(data, "project_id") else None,
     )
     if not project_id:
-        project_id = await _get_unassigned_project_id(db)
+        project_id = await get_unassigned_project_id(db)
     pe = PlannedExpense(
         name=data.name,
         description=data.description,
@@ -269,10 +257,10 @@ async def update_planned_expense(
         dump.get("project_id", pe.project_id),
     )
     if desired_project_id is None:
-        desired_project_id = await _get_unassigned_project_id(db)
+        desired_project_id = await get_unassigned_project_id(db)
     dump["project_id"] = desired_project_id
     if "project_id" in dump and not dump["project_id"]:
-        dump["project_id"] = await _get_unassigned_project_id(db)
+        dump["project_id"] = await get_unassigned_project_id(db)
     for k, v in dump.items():
         setattr(pe, k, v)
     await db.commit()

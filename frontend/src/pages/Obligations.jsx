@@ -9,16 +9,7 @@ import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
-
-function formatDate(value) {
-  if (!value) return '\u2014'
-  const date = new Date(`${value}T12:00:00`)
-  return date.toLocaleDateString('sr-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
+import { formatDateSr as formatDate, todayIso } from '../utils/formatters'
 
 function emptyValue() {
   const translated = tr('notSet')
@@ -54,7 +45,7 @@ export default function Obligations() {
   const [generating, setGenerating] = useState(false)
   const [paidModal, setPaidModal] = useState(null)
   const [paidForm, setPaidForm] = useState({
-    paid_date: new Date().toISOString().slice(0, 10),
+    paid_date: todayIso(),
     payment_reference: '',
   })
   const [settingsModal, setSettingsModal] = useState(false)
@@ -164,7 +155,7 @@ export default function Obligations() {
 
   const openPaidModal = (obligation) => {
     setPaidForm({
-      paid_date: new Date().toISOString().slice(0, 10),
+      paid_date: todayIso(),
       payment_reference: obligation.payment_reference || '',
     })
     setPaidModal(obligation)

@@ -4,41 +4,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
-
-function fmt(n) {
-  return (n ?? 0).toLocaleString('sr-RS')
-}
-
-function getPeriodRange(quick, customFrom, customTo) {
-  const today = new Date()
-  const y = today.getFullYear()
-  const m = today.getMonth() + 1
-
-  if (quick === 'month') {
-    const lastDay = new Date(y, m, 0).getDate()
-    return {
-      from: `${y}-${String(m).padStart(2, '0')}-01`,
-      to: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-    }
-  }
-  if (quick === 'quarter') {
-    const q = Math.ceil(m / 3)
-    const startM = (q - 1) * 3 + 1
-    const endM = q * 3
-    const lastDay = new Date(y, endM, 0).getDate()
-    return {
-      from: `${y}-${String(startM).padStart(2, '0')}-01`,
-      to: `${y}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-    }
-  }
-  if (quick === 'year') {
-    return { from: `${y}-01-01`, to: `${y}-12-31` }
-  }
-  return {
-    from: customFrom || today.toISOString().slice(0, 10),
-    to: customTo || today.toISOString().slice(0, 10),
-  }
-}
+import { formatInteger as fmt } from '../utils/formatters'
+import { getPeriodRange } from '../utils/periods'
 
 export default function CashFlow() {
   const location = useLocation()

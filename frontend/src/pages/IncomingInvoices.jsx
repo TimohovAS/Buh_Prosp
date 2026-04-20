@@ -4,6 +4,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
@@ -11,13 +12,10 @@ import SharedStatusBadge from '../components/StatusBadge'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
-import { UI_CLOSE, UI_DASH } from '../utils/formatters'
+import { UI_CLOSE, UI_DASH, formatDateSr as fmtDate, formatMoney2OrDash as fmt, todayIso } from '../utils/formatters'
 
 const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
 const STATUS_LABELS = { unpaid: 'statusUnpaid', partial: 'statusPartial', paid: 'statusPaid', cancelled: 'statusCancelled' }
-
-function fmt(n) { return n != null ? Number(n).toLocaleString('sr-RS', { minimumFractionDigits: 2 }) : '-' }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('sr-RS') : '-' }
 
 function compactText(value, max = 80) {
   const text = String(value || '').replace(/\s+/g, ' ').trim()
@@ -74,7 +72,7 @@ export default function IncomingInvoices() {
     toggleSort,
   } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
 
-  const defaultForm = { invoice_number: '', date: new Date().toISOString().slice(0, 10), client_id: '', counterparty_name: '', project_id: '', amount: '', currency: 'RSD', description: '', note: '' }
+  const defaultForm = { invoice_number: '', date: todayIso(), client_id: '', counterparty_name: '', project_id: '', amount: '', currency: 'RSD', description: '', note: '' }
 
   const load = () => {
     setLoading(true)
@@ -357,13 +355,13 @@ export default function IncomingInvoices() {
         </div>
       </div>
 
-      {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('createIncomingInvoice') : tr('edit')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(null)}
+        title={modal === 'add' ? tr('createIncomingInvoice') : tr('edit')}
+        closeOnOverlay
+      >
+        {modal ? (
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('invoiceNumber')}</label>
@@ -408,9 +406,8 @@ export default function IncomingInvoices() {
                 <button type="submit" className="btn btn-primary" disabled={submitting}>{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
       {settleModal && <SettleModal data={settleModal} clients={clients} onClose={() => setSettleModal(null)} onDone={() => { const current = settleModal.invoice; setSettleModal(null); load(); openDetail(current.id) }} />}
 
@@ -545,7 +542,7 @@ export default function IncomingInvoices() {
 
 function SettleModal({ data, clients, onClose, onDone }) {
   const { invoice, type } = data
-  const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: invoice.date || new Date().toISOString().slice(0, 10), note: '', bank_transaction_id: '', income_id: '', expense_id: '' })
+  const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: invoice.date || todayIso(), note: '', bank_transaction_id: '', income_id: '', expense_id: '' })
   const [bankTxs, setBankTxs] = useState([])
   const [openIncomes, setOpenIncomes] = useState([])
   const [expenseCandidates, setExpenseCandidates] = useState([])
@@ -612,12 +609,12 @@ function SettleModal({ data, clients, onClose, onDone }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">{titles[type]}: {invoice.invoice_number}</h2>
-          <button className="modal-close" onClick={onClose}>{UI_CLOSE}</button>
-        </div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`${titles[type]}: ${invoice.invoice_number}`}
+      closeOnOverlay
+    >
         <form onSubmit={handleSubmit}>
           {showInvoiceSummary && (
             <div className="form-group">
@@ -717,8 +714,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
             <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id)}>{tr('save')}</button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -757,13 +753,13 @@ function LinkInvoiceModal({ data, onClose, onDone }) {
   const currentProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 840 }}>
-        <div className="modal-header">
-          <h2 className="modal-title">{title}: {invoice.invoice_number}</h2>
-          <button className="modal-close" onClick={onClose}>{UI_CLOSE}</button>
-        </div>
-        <div className="modal-body">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`${title}: ${invoice.invoice_number}`}
+      maxWidth="840px"
+      closeOnOverlay
+    >
           <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
             <div className="record-field-grid">
               <div className="record-field">
@@ -827,8 +823,6 @@ function LinkInvoiceModal({ data, onClose, onDone }) {
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

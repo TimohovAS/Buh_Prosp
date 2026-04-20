@@ -3,17 +3,10 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
-
-function fmt(n) {
-  return (n ?? 0).toLocaleString('sr-RS')
-}
-
-function formatDate(s) {
-  if (!s) return '\u2014'
-  const d = new Date(s + 'T12:00:00')
-  return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import SortIndicator from '../components/SortIndicator'
+import { UI_DASH, formatDateSr as formatDate, formatInteger as fmt } from '../utils/formatters'
 
 export default function AccountsReceivable() {
   const location = useLocation()
@@ -53,7 +46,7 @@ export default function AccountsReceivable() {
     let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
     if (s) rows = rows.filter(i =>
       (i.invoice_number || '').toLowerCase().includes(s) ||
-      (i.client_name || '\u2014').toLowerCase().includes(s)
+      (i.client_name || UI_DASH).toLowerCase().includes(s)
     )
     return [...rows].sort((a, b) => {
       const valA = a[sortCol] ?? 0
@@ -68,11 +61,6 @@ export default function AccountsReceivable() {
     if (sortCol === col) setSortAsc(v => !v)
     else { setSortCol(col); setSortAsc(true) }
   }
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{'\u2195'}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? '\u2191' : '\u2193'}</span>
-  }
-
   if (loading && items.length === 0) {
     return (
       <div className="page">
@@ -84,11 +72,10 @@ export default function AccountsReceivable() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('financeAR')}</h1>
-        </div>
-        <div className="page-header-actions">
+      <PageHeader
+        title={tr('financeAR')}
+        actions={(
+          <>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -103,8 +90,9 @@ export default function AccountsReceivable() {
             onChange={setSearch}
             style={{ width: 200 }}
           />
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>
@@ -128,12 +116,12 @@ export default function AccountsReceivable() {
           <table>
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIcon col="invoice_number" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIcon col="client_name" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>{tr('date')} <SortIcon col="issued_date" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIcon col="due_date" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIcon col="amount" /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>{tr('financeDaysOverdue')} <SortIcon col="days_overdue" /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>{tr('date')} <SortIndicator active={sortCol === 'issued_date'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIndicator active={sortCol === 'due_date'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>{tr('financeDaysOverdue')} <SortIndicator active={sortCol === 'days_overdue'} asc={sortAsc} /></th>
                 <th style={{ width: 140 }}></th>
               </tr>
             </thead>
@@ -148,7 +136,7 @@ export default function AccountsReceivable() {
                 filtered.map((i) => (
                   <tr key={i.income_id}>
                     <td>{i.invoice_number}</td>
-                    <td>{i.client_name || '\u2014'}</td>
+                    <td>{i.client_name || UI_DASH}</td>
                     <td>{formatDate(i.issued_date)}</td>
                     <td>{formatDate(i.due_date)}</td>
                     <td>{fmt(i.amount)} RSD</td>

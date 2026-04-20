@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.db_utils import get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
     BankTransaction,
@@ -33,12 +34,6 @@ from backend.state_machine import (
 INCOMING_INVOICE_SOURCE = "incoming_invoice"
 
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    project = result.scalar_one_or_none()
-    return project.id if project else None
-
-
 async def create_incoming_invoice(
     db: AsyncSession,
     *,
@@ -55,7 +50,7 @@ async def create_incoming_invoice(
     efaktura_record_id: int | None = None,
     created_by: int | None = None,
 ) -> IncomingInvoice:
-    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
 
     expense = Expense(
         date=invoice_date,
@@ -219,7 +214,7 @@ async def attach_existing_expense(
     previous_expense = await db.get(Expense, invoice.expense_id) if invoice.expense_id else None
     invoice.expense_id = expense.id
 
-    unassigned_project_id = await _get_unassigned_project_id(db)
+    unassigned_project_id = await get_unassigned_project_id(db)
     if expense.project_id and invoice.project_id in {None, unassigned_project_id}:
         invoice.project_id = expense.project_id
 
@@ -483,7 +478,7 @@ async def list_advance_invoice_candidates(
     if to_decimal(invoice.amount or ZERO_DECIMAL) != ZERO_DECIMAL:
         raise ValueError("Only zero closing invoices can be linked to an advance invoice.")
 
-    unassigned_project_id = await _get_unassigned_project_id(db)
+    unassigned_project_id = await get_unassigned_project_id(db)
     query = (
         select(IncomingInvoice)
         .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
@@ -525,7 +520,7 @@ async def list_closing_invoice_candidates(
     if invoice.status != "paid":
         raise ValueError("Only paid advance invoices can be linked to a zero closing invoice.")
 
-    unassigned_project_id = await _get_unassigned_project_id(db)
+    unassigned_project_id = await get_unassigned_project_id(db)
     query = (
         select(IncomingInvoice)
         .options(selectinload(IncomingInvoice.client), selectinload(IncomingInvoice.project))
@@ -589,7 +584,7 @@ async def link_advance_invoice(
     if linked_closing is not None:
         raise ValueError("Advance invoice is already linked to another zero closing invoice.")
 
-    unassigned_project_id = await _get_unassigned_project_id(db)
+    unassigned_project_id = await get_unassigned_project_id(db)
     if closing_invoice.project_id in {None, unassigned_project_id} and advance_invoice.project_id:
         closing_invoice.project_id = advance_invoice.project_id
     if closing_invoice.client_id is None and advance_invoice.client_id:

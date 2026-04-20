@@ -9,18 +9,7 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
 import { buildContractLabel, filterContractsForProject } from '../utils/entityLabels'
-import { UI_DASH } from '../utils/formatters'
-
-function fmtMoney(value) {
-  return Number(value || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function fmtDateTime(value) {
-  if (!value) return UI_DASH
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString('sr-RS')
-}
+import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney } from '../utils/formatters'
 
 function getReceiptStatusMeta(status) {
   switch (status) {

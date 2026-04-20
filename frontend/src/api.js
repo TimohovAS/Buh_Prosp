@@ -44,6 +44,96 @@ export function getToken() {
   return token;
 }
 
+function handleUnauthorized() {
+  setToken(null);
+  setUser(null);
+  window.location.href = '/login';
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}`, ...extraHeaders } : extraHeaders;
+}
+
+async function getErrorMessage(res, fallbackMessage = null) {
+  const err = await res.json().catch(() => ({}));
+  return typeof err.detail === 'string'
+    ? err.detail
+    : (Array.isArray(err.detail)
+      ? err.detail.map((item) => item.msg).join(', ')
+      : err.message || fallbackMessage || `HTTP ${res.status}`);
+}
+
+function resolveApiUrl(pathOrUrl) {
+  if (!pathOrUrl) return API_BASE;
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://') || pathOrUrl.startsWith(API_BASE)) {
+    return pathOrUrl;
+  }
+  return API_BASE + pathOrUrl;
+}
+
+function triggerBrowserDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function getFilenameFromResponse(res, fallbackFilename) {
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename=([^;]+)/i);
+  return match ? match[1].replace(/"/g, '') : fallbackFilename;
+}
+
+async function uploadFiles(endpoint, files, fieldName = 'files') {
+  const formData = new FormData();
+  Array.from(files || []).forEach((file) => formData.append(fieldName, file));
+  const res = await fetch(resolveApiUrl(endpoint), {
+    method: 'POST',
+    body: formData,
+    headers: getAuthHeaders(),
+  });
+
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    const msg = await getErrorMessage(res);
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+    throw new Error(msg);
+  }
+
+  if (shouldBroadcastPendingLinksUpdate(endpoint, { method: 'POST' })) {
+    broadcastPendingLinksUpdate();
+  }
+
+  return res.json();
+}
+
+async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Download failed') {
+  const res = await fetch(resolveApiUrl(pathOrUrl), {
+    headers: getAuthHeaders(),
+  });
+
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    const msg = await getErrorMessage(res, fallbackMessage);
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
+    throw new Error(msg);
+  }
+
+  const blob = await res.blob();
+  triggerBrowserDownload(blob, getFilenameFromResponse(res, fallbackFilename));
+}
+
 async function request(endpoint, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -58,15 +148,12 @@ async function request(endpoint, options = {}) {
   });
 
   if (res.status === 401) {
-    setToken(null);
-    setUser(null);
-    window.location.href = '/login';
+    handleUnauthorized();
     throw new Error('Unauthorized');
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const msg = typeof err.detail === 'string' ? err.detail : (Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(', ') : err.message || `HTTP ${res.status}`);
+    const msg = await getErrorMessage(res);
     window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
     const e = new Error(msg);
     e.status = res.status;
@@ -137,30 +224,6 @@ export const api = {
     bulkAssignProject: (data) => request('/income/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
     nextInvoice: (year) => request(`/income/next-invoice-number?year=${year || new Date().getFullYear()}`),
     checkInvoice: (invoiceNumber, year) => request(`/income/check-invoice?invoice_number=${encodeURIComponent(invoiceNumber)}&year=${year || new Date().getFullYear()}`),
-    importEfaktura: async (files) => {
-      const formData = new FormData();
-      files.forEach((file) => formData.append('files', file));
-      const t = getToken();
-      const headers = t ? { Authorization: `Bearer ${t}` } : {};
-      const res = await fetch(API_BASE + '/income/import-efaktura', {
-        method: 'POST',
-        body: formData,
-        headers,
-      });
-      if (res.status === 401) {
-        setToken(null);
-        setUser(null);
-        window.location.href = '/login';
-        throw new Error('Unauthorized');
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.detail || `HTTP ${res.status}`;
-        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-        throw new Error(msg);
-      }
-      return res.json();
-    },
   },
 
   efaktura: {
@@ -168,32 +231,7 @@ export const api = {
     updateSettings: (data) => request('/efaktura/settings', { method: 'PUT', body: JSON.stringify(data) }),
     history: (limit = 100) => request(`/efaktura/history?limit=${limit}`),
     sync: () => request('/efaktura/sync', { method: 'POST' }),
-    importXml: async (files) => {
-      const formData = new FormData();
-      files.forEach((file) => formData.append('files', file));
-      const t = getToken();
-      const headers = t ? { Authorization: `Bearer ${t}` } : {};
-      const res = await fetch(API_BASE + '/efaktura/import-xml', {
-        method: 'POST',
-        body: formData,
-        headers,
-      });
-      if (res.status === 401) {
-        setToken(null);
-        setUser(null);
-        window.location.href = '/login';
-        throw new Error('Unauthorized');
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.detail || `HTTP ${res.status}`;
-        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-        throw new Error(msg);
-      }
-      const payload = await res.json();
-      broadcastPendingLinksUpdate();
-      return payload;
-    },
+    importXml: (files) => uploadFiles('/efaktura/import-xml', files),
   },
 
   finance: {
@@ -341,32 +379,7 @@ export const api = {
 
   dashboard: dashboardApi,
   bankImport: {
-    parse: async (files) => {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-      }
-      const t = getToken();
-      const headers = t ? { Authorization: `Bearer ${t}` } : {};
-      const res = await fetch(API_BASE + '/bank-import/parse', {
-        method: 'POST',
-        body: formData,
-        headers,
-      });
-      if (res.status === 401) {
-        setToken(null);
-        setUser(null);
-        window.location.href = '/login';
-        throw new Error('Unauthorized');
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.detail || `HTTP ${res.status}`;
-        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-        throw new Error(msg);
-      }
-      return res.json();
-    },
+    parse: (files) => uploadFiles('/bank-import/parse', files),
     apply: (data) => request('/bank-import/apply', { method: 'POST', body: JSON.stringify(data) }),
     recentFiles: (limit = 10) => request(`/bank-import/files?limit=${limit}`),
   },
@@ -408,22 +421,7 @@ export const api = {
     updateSettings: (data) => request('/service/backups/settings', { method: 'PUT', body: JSON.stringify(data) }),
     createBackup: () => request('/service/backups', { method: 'POST' }),
     restoreBackup: (name) => request(`/service/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
-    async downloadBackup(name) {
-      const res = await fetch(`${API_BASE}/service/backups/${encodeURIComponent(name)}/download`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) {
-        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
-        throw new Error('Ошибка загрузки');
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = name;
-      link.click();
-      URL.revokeObjectURL(url);
-    },
+    downloadBackup: (name) => downloadBlob(`/service/backups/${encodeURIComponent(name)}/download`, name, 'Download failed'),
   },
 
   incomingInvoices: {
@@ -466,60 +464,21 @@ export const api = {
       if (month) url += `&month=${month}`;
       return url;
     },
-    async downloadPdf(year, month) {
-      const url = this.kpoPdfUrl(year, month);
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) {
-        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
-        throw new Error('Ошибка загрузки');
-      }
-      const blob = await res.blob();
-      const u = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = u;
-      a.download = `kpo_${year}${month ? `_${month}` : ''}.pdf`;
-      a.click();
-      URL.revokeObjectURL(u);
-    },
-    async downloadOwnerFundsPdf(txId) {
-      const res = await fetch(`${API_BASE}/reports/bank-transactions/${txId}/owner-funds/pdf`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.detail || 'Ошибка загрузки';
-        window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-        throw new Error(msg);
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename=([^;]+)/i);
-      const fileName = match ? match[1].replace(/"/g, '') : `owner_funds_${txId}.pdf`;
-      const u = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = u;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(u);
-    },
-    async downloadCsv(year, month) {
-      const url = this.kpoCsvUrl(year, month);
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) {
-        window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка загрузки' }));
-        throw new Error('Ошибка загрузки');
-      }
-      const blob = await res.blob();
-      const u = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = u;
-      a.download = `kpo_${year}${month ? `_${month}` : ''}.csv`;
-      a.click();
-      URL.revokeObjectURL(u);
-    },
+    downloadPdf: (year, month) => downloadBlob(
+      `/reports/kpo/pdf?year=${year}${month ? `&month=${month}` : ''}`,
+      `kpo_${year}${month ? `_${month}` : ''}.pdf`,
+      'Download failed',
+    ),
+    downloadOwnerFundsPdf: (txId) => downloadBlob(
+      `/reports/bank-transactions/${txId}/owner-funds/pdf`,
+      `owner_funds_${txId}.pdf`,
+      'Download failed',
+    ),
+    downloadCsv: (year, month) => downloadBlob(
+      `/reports/kpo/csv?year=${year}${month ? `&month=${month}` : ''}`,
+      `kpo_${year}${month ? `_${month}` : ''}.csv`,
+      'Download failed',
+    ),
   },
 };
+

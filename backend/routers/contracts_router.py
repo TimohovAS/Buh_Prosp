@@ -9,20 +9,13 @@ from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
+from backend.db_utils import get_project_or_404
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.models import Client, Contract, ContractItem, Project, User
 from backend.schemas import ContractCreate, ContractItemCreate, ContractItemResponse, ContractResponse, ContractUpdate
 from backend.state_machine import initialize_project_status
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
-
-
-async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Project not found")
-    return project
 
 
 @router.get("", response_model=list[ContractResponse])
@@ -95,7 +88,7 @@ async def create_contract(
 
     project_id = data.project_id
     if project_id:
-        await _get_project_or_404(db, project_id)
+        await get_project_or_404(db, project_id)
     else:
         project_name = data.subject or f"Project: {data.number}"
         new_project = Project(
@@ -236,7 +229,7 @@ async def update_contract(
     data_dict = data.model_dump(exclude_unset=True)
     items_data = data_dict.pop("items", None)
     if data_dict.get("project_id"):
-        await _get_project_or_404(db, data_dict["project_id"])
+        await get_project_or_404(db, data_dict["project_id"])
 
     for key, value in data_dict.items():
         setattr(contract, key, value)

@@ -8,6 +8,9 @@ import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
+import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
+import { findUnassignedProject } from '../utils/entityLabels'
+import { UI_DASH, formatDateSr as formatDate, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
 
 const PERIODS = [
   { value: 'weekly', label: 'weekly' },
@@ -37,12 +40,6 @@ const CATEGORIES = [
   { value: 'other', label: 'plannedCatOther' },
 ] // legacy, kept for table display fallback
 
-function formatDate(s) {
-  if (!s) return '\u2014'
-  const d = new Date(s + 'T12:00:00')
-  return d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
 export default function PlannedExpenses() {
   const location = useLocation()
   const isActivePage = location.pathname === '/planned-expenses'
@@ -64,7 +61,7 @@ export default function PlannedExpenses() {
   const [modal, setModal] = useState(null)
   const [paidModal, setPaidModal] = useState(null)
   const [paidForm, setPaidForm] = useState({
-    paid_date: new Date().toISOString().slice(0, 10),
+    paid_date: todayIso(),
     note: '',
   })
   const [form, setForm] = useState({
@@ -78,7 +75,7 @@ export default function PlannedExpenses() {
     period: 'monthly',
     payment_day: 5,
     payment_day_of_week: 0,
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: todayIso(),
     end_date: '',
     reminder_days: 3,
     is_active: true,
@@ -115,7 +112,7 @@ export default function PlannedExpenses() {
   }, [isActivePage])
 
   const openAdd = () => {
-    const unassigned = projects.find(p => p.code === 'INT-UNASSIGNED')
+    const unassigned = findUnassignedProject(projects)
     setForm({
       name: '',
       description: '',
@@ -127,7 +124,7 @@ export default function PlannedExpenses() {
       period: 'monthly',
       payment_day: 5,
       payment_day_of_week: 0,
-      start_date: new Date().toISOString().slice(0, 10),
+      start_date: todayIso(),
       end_date: '',
       reminder_days: 3,
       is_active: true,
@@ -195,7 +192,7 @@ export default function PlannedExpenses() {
 
   const openPaidModal = (u) => {
     setPaidForm({
-      paid_date: new Date().toISOString().slice(0, 10),
+      paid_date: todayIso(),
       note: '',
     })
     setPaidModal(u)
@@ -260,21 +257,21 @@ export default function PlannedExpenses() {
     }, 0)
 
   const lang = getLang()
-  const unassignedProject = projects.find((p) => p.code === 'INT-UNASSIGNED') || null
+  const unassignedProject = findUnassignedProject(projects)
   const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
   const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
+  const {
+    getCategoryById,
+    getCategoryDefaultProjectId,
+    usesCategoryProject,
+    getCategoryLabel: getResolvedCategoryLabel,
+  } = useCategoryProjectResolver(apiCategories, lang)
   const getCategoryLabel = (item) => {
-    const category = apiCategories.find((c) => c.id === item.category_id)
-    if (category) return lang === 'ru' ? category.name_ru : category.name_sr
+    const resolved = getResolvedCategoryLabel(item, '')
+    if (resolved) return resolved
     const legacy = CATEGORIES.find((c) => c.value === item.category)
-    return legacy ? tr(legacy.label) : (item.category || '\u2014')
+    return legacy ? tr(legacy.label) : (item.category || UI_DASH)
   }
-  const getCategoryById = (categoryId) => apiCategories.find((category) => String(category.id) === String(categoryId)) || null
-  const getCategoryDefaultProjectId = (categoryId) => {
-    const category = getCategoryById(categoryId)
-    return category?.default_project_id ? String(category.default_project_id) : ''
-  }
-  const usesCategoryProject = (categoryId) => Boolean(getCategoryDefaultProjectId(categoryId))
 
   return (
     <>
@@ -361,7 +358,7 @@ export default function PlannedExpenses() {
                       <td>{u.name}</td>
                       <td>{formatDate(u.due_date)}</td>
                       <td>
-                        {u.amount.toLocaleString('sr-RS')} {u.currency}
+                        {fmtAmount(u.amount)} {u.currency}
                       </td>
                       <td>
                         <SharedStatusBadge
@@ -437,7 +434,7 @@ export default function PlannedExpenses() {
                       </td>
                       <td>{getCategoryLabel(i)}</td>
                       <td>
-                        {i.amount.toLocaleString('sr-RS')} {i.currency}
+                        {fmtAmount(i.amount)} {i.currency}
                       </td>
                       <td>{tr(PERIODS.find((p) => p.value === i.period)?.label || i.period)}</td>
                       <td>
@@ -473,7 +470,7 @@ export default function PlannedExpenses() {
           </div>
           {items.filter((i) => i.is_active).length > 0 && (
             <div style={{ marginTop: '1rem', fontWeight: 600, color: 'var(--color-accent)' }}>
-              {tr('plannedMonthlyTotal')}: {totalMonthly.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} RSD
+              {tr('plannedMonthlyTotal')}: {fmtAmount(totalMonthly)} RSD
             </div>
           )}
         </div>
@@ -596,7 +593,7 @@ export default function PlannedExpenses() {
                       })
                     }}
                   >
-                  <option value="">{'\u2014'}</option>
+                  <option value="">{UI_DASH}</option>
                   {apiCategories.map((c) => (
                     <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
                   ))}

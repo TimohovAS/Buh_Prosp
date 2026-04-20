@@ -4,16 +4,14 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
+import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
-import { UI_DASH, UI_CLOSE, formatInteger } from '../utils/formatters'
-
-function fmt(n) {
-  return formatInteger(n)
-}
+import { UI_DASH, UI_CLOSE, formatInteger as fmt, formatMoney2, todayIso } from '../utils/formatters'
+import { getPeriodRange } from '../utils/periods'
 export default function Projects() {
   const location = useLocation()
   const isActivePage = location.pathname === '/projects'
@@ -66,38 +64,10 @@ export default function Projects() {
   const rowClickTimeoutRef = useRef(null)
 
   const currentYear = new Date().getFullYear()
-  const todayIso = new Date().toISOString().slice(0, 10)
-
-  const getPeriod = () => {
-    if (periodQuick === 'month') {
-      const month = new Date().getMonth() + 1
-      const lastDay = new Date(currentYear, month, 0).getDate()
-      return {
-        from: `${currentYear}-${String(month).padStart(2, '0')}-01`,
-        to: `${currentYear}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-      }
-    }
-    if (periodQuick === 'quarter') {
-      const month = new Date().getMonth() + 1
-      const quarter = Math.ceil(month / 3)
-      const startMonth = (quarter - 1) * 3 + 1
-      const endMonth = quarter * 3
-      const lastDay = new Date(currentYear, endMonth, 0).getDate()
-      return {
-        from: `${currentYear}-${String(startMonth).padStart(2, '0')}-01`,
-        to: `${currentYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-      }
-    }
-    if (periodQuick === 'year') {
-      return { from: `${currentYear}-01-01`, to: `${currentYear}-12-31` }
-    }
-    return {
-      from: customFrom || `${currentYear}-01-01`,
-      to: customTo || `${currentYear}-12-31`,
-    }
-  }
-
-  const { from, to } = getPeriod()
+  const { from, to } = getPeriodRange(periodQuick, customFrom, customTo, {
+    fallbackFrom: `${currentYear}-01-01`,
+    fallbackTo: `${currentYear}-12-31`,
+  })
 
   const loadAll = () => {
     setLoading(true)
@@ -711,24 +681,22 @@ export default function Projects() {
         ) : null}
       />
 
-      {movementModal && (
-        <div className="modal-overlay" onClick={() => { setMovementModal(null); setMovementError(null) }}>
-          <div
-            className="modal"
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              width: 'min(96vw, 1520px)',
-              maxWidth: 'none',
-              height: 'min(92vh, 980px)',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('projectMovements')} {UI_DASH} {movementModal.project_name || `#${movementModal.project_id}`}</h2>
-              <button className="modal-close" onClick={() => { setMovementModal(null); setMovementError(null) }}>{UI_CLOSE}</button>
-            </div>
-            <div className="modal-body" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Modal
+        isOpen={!!movementModal}
+        onClose={() => { setMovementModal(null); setMovementError(null) }}
+        title={movementModal ? `${tr('projectMovements')} ${UI_DASH} ${movementModal.project_name || `#${movementModal.project_id}`}` : ''}
+        closeOnOverlay
+        style={{
+          width: 'min(96vw, 1520px)',
+          maxWidth: 'none',
+          height: 'min(92vh, 980px)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        bodyClassName="project-workflow-modal-body"
+      >
+        {movementModal ? (
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
                 <div>
                   <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
@@ -783,7 +751,7 @@ export default function Projects() {
                           <td>{item.counterparty_name || UI_DASH}</td>
                           <td><span className="record-cell-ellipsis">{item.description || UI_DASH}</span></td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: item.direction === 'in' ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                            {item.direction === 'in' ? '+' : '-'}{Number(item.amount || 0).toLocaleString('sr-RS')} RSD
+                            {item.direction === 'in' ? '+' : '-'}{formatMoney2(item.amount || 0)} RSD
                           </td>
                         </tr>
                       ))}
@@ -794,28 +762,25 @@ export default function Projects() {
                 <div style={{ color: 'var(--color-text-muted)' }}>{tr('projectMovementNoItems')}</div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {purchaseModal && (
-        <div className="modal-overlay" onClick={() => { setPurchaseModal(null); setPurchaseError(null) }}>
-          <div
-            className="modal"
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              width: 'min(96vw, 1520px)',
-              maxWidth: 'none',
-              height: 'min(92vh, 980px)',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('projectPurchases')} {UI_DASH} {purchaseModal.project_name || `#${purchaseModal.project_id}`}</h2>
-              <button className="modal-close" onClick={() => { setPurchaseModal(null); setPurchaseError(null) }}>{UI_CLOSE}</button>
-            </div>
-            <div className="modal-body" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Modal
+        isOpen={!!purchaseModal}
+        onClose={() => { setPurchaseModal(null); setPurchaseError(null) }}
+        title={purchaseModal ? `${tr('projectPurchases')} ${UI_DASH} ${purchaseModal.project_name || `#${purchaseModal.project_id}`}` : ''}
+        closeOnOverlay
+        style={{
+          width: 'min(96vw, 1520px)',
+          maxWidth: 'none',
+          height: 'min(92vh, 980px)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        bodyClassName="project-workflow-modal-body"
+      >
+        {purchaseModal ? (
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
                 <div>
                   <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
@@ -868,9 +833,9 @@ export default function Projects() {
                             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>{item.invoice_number || UI_DASH}</div>
                           </td>
                           <td>{item.item_name || UI_DASH}</td>
-                          <td style={{ textAlign: 'right' }}>{Number(item.quantity || 0).toLocaleString('sr-RS')}</td>
-                          <td style={{ textAlign: 'right' }}>{Number(item.unit_price || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RSD</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(item.total_amount || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RSD</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(item.quantity || 0)}</td>
+                          <td style={{ textAlign: 'right' }}>{formatMoney2(item.unit_price || 0)} RSD</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney2(item.total_amount || 0)} RSD</td>
                         </tr>
                       ))}
                     </tbody>
@@ -880,17 +845,16 @@ export default function Projects() {
                 <div style={{ color: 'var(--color-text-muted)' }}>{tr('projectPurchasesNoItems')}</div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{modal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('project')}</h2>
-              <button className="modal-close" onClick={() => setModal(null)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(null)}
+        title={modal ? `${modal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('project')}` : ''}
+        maxWidth="420px"
+      >
+        {modal ? (
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('name')}</label>
@@ -957,9 +921,8 @@ export default function Projects() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
     </div>
   )
 }

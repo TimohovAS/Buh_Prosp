@@ -10,23 +10,13 @@ import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
+import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
-import { buildContractLabel, contractMatchesProject, filterContractsForProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_DASH } from '../utils/formatters'
+import { buildContractLabel, contractMatchesProject, filterContractsForProject, findUnassignedProject, getContractLabelById, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_DASH, todayIso, formatMoney2 as formatMoney } from '../utils/formatters'
+import { MONTHS } from '../utils/constants'
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const CASH_CATEGORY_VALUE = '__cash__'
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function formatMoney(value) {
-  return Number(value || 0).toLocaleString('sr-RS', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
 
 function parseMoneyInput(value) {
   if (value == null) return 0
@@ -85,25 +75,21 @@ export default function BankTransactions() {
   })
 
 
-  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const unassignedProject = findUnassignedProject(projects)
   const cashProject = projects.find((project) => project.code === 'INT-CASH') || null
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
+  const {
+    getCategoryById: getExpenseCategoryById,
+    getCategoryDefaultProjectId: getExpenseCategoryDefaultProjectId,
+    usesCategoryProject: expenseUsesDefaultProject,
+    getCategoryLabel: getResolvedCategoryLabel,
+  } = useCategoryProjectResolver(categories, lang)
 
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, UI_DASH)
-  const getCategoryName = (categoryId) => {
-    const category = categories.find((item) => item.id === categoryId)
-    if (!category) return UI_DASH
-    return lang === 'ru' ? category.name_ru : category.name_sr
-  }
-  const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
+  const getCategoryName = (categoryId) => getResolvedCategoryLabel(categoryId, UI_DASH)
+  const getContractLabel = (contractId) => getContractLabelById(contracts, contractId, '')
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
-  const getExpenseCategoryById = (categoryId) => categories.find((item) => String(item.id) === String(categoryId)) || null
-  const getExpenseCategoryDefaultProjectId = (categoryId) => {
-    const category = getExpenseCategoryById(categoryId)
-    return category?.default_project_id ? String(category.default_project_id) : ''
-  }
-  const expenseUsesDefaultProject = (categoryId) => Boolean(getExpenseCategoryDefaultProjectId(categoryId))
 
   const loadReferenceData = async () => {
     const [projectList, contractList, categoryList] = await Promise.all([
@@ -401,7 +387,7 @@ export default function BankTransactions() {
   const openAssignModal = async () => {
     try {
       const { projectList } = await loadReferenceData()
-      const nextUnassignedProject = projectList.find((project) => project.code === 'INT-UNASSIGNED') || null
+      const nextUnassignedProject = findUnassignedProject(projectList)
       setAssignProjectId(nextUnassignedProject ? String(nextUnassignedProject.id) : '')
     } catch (error) {
       console.error(error)

@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.db_utils import get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.income_service import (
     has_invoice_duplicate,
@@ -40,12 +41,6 @@ DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invo
 async def get_efaktura_enterprise(db: AsyncSession) -> Enterprise | None:
     result = await db.execute(select(Enterprise).order_by(Enterprise.id.asc()).limit(1))
     return result.scalar_one_or_none()
-
-
-async def get_unassigned_project_id(db: AsyncSession) -> int | None:
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    project = result.scalar_one_or_none()
-    return project.id if project else None
 
 
 def build_client_lookup(clients: list[Client]) -> tuple[dict[str, Client], dict[str, Client]]:

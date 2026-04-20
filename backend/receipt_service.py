@@ -14,6 +14,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.db_utils import (
+    get_category_or_none,
+    get_contract_or_404,
+    get_project_or_404,
+    get_unassigned_project_id,
+    resolve_category_expense_links,
+)
 from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, money_eq, to_decimal
 from backend.models import (
     BankTransaction,
@@ -244,39 +251,16 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
     )
 
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    project = result.scalar_one_or_none()
-    return project.id if project else None
-
-
 async def _get_project_or_error(db: AsyncSession, project_id: int | None) -> Project | None:
     if project_id is None:
         return None
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise ReceiptImportError("Project not found")
-    if project.status == "archived":
-        raise ReceiptImportError("Cannot use archived project")
-    return project
+    return await get_project_or_404(db, project_id, exc_cls=ReceiptImportError)
 
 
 async def _get_contract_or_error(db: AsyncSession, contract_id: int | None) -> Contract | None:
     if contract_id is None:
         return None
-    result = await db.execute(select(Contract).where(Contract.id == contract_id))
-    contract = result.scalar_one_or_none()
-    if not contract:
-        raise ReceiptImportError("Contract not found")
-    return contract
-
-
-async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
-    if category_id is None:
-        return None
-    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
-    return result.scalar_one_or_none()
+    return await get_contract_or_404(db, contract_id, exc_cls=ReceiptImportError)
 
 
 async def _resolve_category_links(
@@ -285,20 +269,9 @@ async def _resolve_category_links(
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None, bool]:
-    category = await _get_category_or_none(db, category_id)
-    if not category:
-        return project_id, contract_id, False
-
-    resolved_project_id = category.default_project_id or project_id
-    resolved_contract_id = contract_id
-    is_tax_related = category.category_group == "tax"
-
-    if category.default_project_id and resolved_contract_id is not None:
-        contract = await _get_contract_or_error(db, resolved_contract_id)
-        if contract and contract.project_id is not None and contract.project_id != category.default_project_id:
-            resolved_contract_id = None
-
-    return resolved_project_id, resolved_contract_id, is_tax_related
+    return await resolve_category_expense_links(
+        db, category_id, project_id, contract_id, exc_cls=ReceiptImportError
+    )
 
 
 async def _resolve_expense_links(
@@ -306,7 +279,7 @@ async def _resolve_expense_links(
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
     resolved_contract_id = contract_id
 
     if resolved_contract_id is not None:
@@ -630,7 +603,7 @@ async def assign_receipt_project(
     project_id: int | None,
 ) -> PurchaseReceipt:
     receipt = await get_receipt_or_error(db, receipt_id)
-    resolved_project_id = project_id if project_id is not None else await _get_unassigned_project_id(db)
+    resolved_project_id = project_id if project_id is not None else await get_unassigned_project_id(db)
     if resolved_project_id is not None:
         await _get_project_or_error(db, resolved_project_id)
     receipt.project_id = resolved_project_id
@@ -782,7 +755,7 @@ async def create_expense_from_receipt(
 
     category_name = None
     if resolved_category_id is not None:
-        category = await _get_category_or_none(db, resolved_category_id)
+        category = await get_category_or_none(db, resolved_category_id)
         category_name = category.name_ru if category else None
 
     expense_date = receipt.receipt_datetime.date() if receipt.receipt_datetime else date.today()

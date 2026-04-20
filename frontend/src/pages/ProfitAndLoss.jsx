@@ -5,10 +5,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
-
-function fmt(n) {
-  return (n ?? 0).toLocaleString('sr-RS')
-}
+import { formatInteger as fmt } from '../utils/formatters'
 
 const MONTH_LABELS = [
   '',

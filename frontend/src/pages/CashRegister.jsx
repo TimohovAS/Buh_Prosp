@@ -6,27 +6,14 @@ import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
-import { contractMatchesProject, filterContractsForProject } from '../utils/entityLabels'
-
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-const UI_DASH = '\u2014'
-const UI_SORT_BOTH = '\u2195'
-const UI_SORT_ASC = '\u2191'
-const UI_SORT_DESC = '\u2193'
-
-function fmtAmount(value) {
-  return Number(value || 0).toLocaleString('sr-RS')
-}
-
-function buildContractLabel(contract) {
-  if (!contract) return ''
-  const parts = []
-  if (contract.number) parts.push(contract.number)
-  if (contract.subject) parts.push(contract.subject)
-  return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || ''
-}
+import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
+import useProjectContractForm from '../hooks/useProjectContractForm'
+import { buildContractLabel, filterContractsForProject, findUnassignedProject, getContractLabelById } from '../utils/entityLabels'
+import { UI_DASH, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { MONTHS } from '../utils/constants'
 
 function buildBankLabel(item) {
   const parts = [item.counterparty_name, item.purpose, item.bank_reference].filter(Boolean)
@@ -37,10 +24,6 @@ function isSalaryCategory(category) {
   const sr = String(category?.name_sr || '').trim().toLowerCase()
   const ru = String(category?.name_ru || '').trim().toLowerCase()
   return sr === 'zarade' || sr.includes('zarad') || ru.includes('зарп')
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export default function CashRegister() {
@@ -87,8 +70,21 @@ export default function CashRegister() {
   })
 
   const lang = getLang()
-  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const unassignedProject = findUnassignedProject(projects)
   const salaryProject = projects.find((project) => project.code === 'INT-SALARY') || null
+  const {
+    getCategoryById,
+    getCategoryDefaultProjectId,
+    getCategoryLabel: getResolvedCategoryLabel,
+  } = useCategoryProjectResolver(categories, lang)
+  const { updateProject: updateExpenseProjectBase, updateContract: updateExpenseContractBase } = useProjectContractForm({
+    contracts,
+    setForm: setExpenseForm,
+  })
+  const { updateProject: updateWithdrawalProjectBase, updateContract: updateWithdrawalContractBase } = useProjectContractForm({
+    contracts,
+    setForm: setWithdrawalForm,
+  })
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
 
   const loadData = () => {
@@ -139,16 +135,7 @@ export default function CashRegister() {
     loadData()
   }, [year, month, search, isActivePage, location.search])
 
-  const getCategoryLabel = (categoryId) => {
-    const selectedCategory = categories.find((item) => item.id === categoryId)
-    if (!selectedCategory) return UI_DASH
-    return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
-  }
-  const getCategoryById = (categoryId) => categories.find((item) => String(item.id) === String(categoryId)) || null
-  const getCategoryDefaultProjectId = (categoryId) => {
-    const category = getCategoryById(categoryId)
-    return category?.default_project_id ? String(category.default_project_id) : ''
-  }
+  const getCategoryLabel = (categoryId) => getResolvedCategoryLabel(categoryId, UI_DASH)
   const getForcedExpenseProjectId = (categoryId) => {
     const category = getCategoryById(categoryId)
     const defaultProjectId = category?.default_project_id ? String(category.default_project_id) : ''
@@ -281,11 +268,6 @@ export default function CashRegister() {
     }
   }
 
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>{UI_SORT_BOTH}</span>
-    return <span style={{ marginLeft: 4 }}>{sortAsc ? UI_SORT_ASC : UI_SORT_DESC}</span>
-  }
-
   const openExpenseCreate = () => {
     setExpenseForm({
       date: todayIso(),
@@ -344,28 +326,22 @@ export default function CashRegister() {
     setWithdrawalModal({ entryId: entry.id })
   }
 
-  const updateExpenseProject = (projectId) => {
-    setExpenseForm((previous) => {
-      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = contractMatchesProject(selectedContract, projectId)
-      return {
-        ...previous,
-        project_id: projectId,
-        contract_id: keepContract ? previous.contract_id : '',
-      }
-    })
-  }
+  const updateExpenseProject = (projectId) => updateExpenseProjectBase(projectId)
 
   const updateExpenseContract = (contractId) => {
+    if (!contractId) {
+      updateExpenseContractBase('')
+      return
+    }
     setExpenseForm((previous) => {
-      if (!contractId) return { ...previous, contract_id: '' }
       const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
+      const nextProjectId = selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id
       return {
         ...previous,
-        contract_id: contractId,
-        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
+        project_id: nextProjectId,
       }
     })
+    updateExpenseContractBase(contractId)
   }
 
   const updateExpenseCategory = (categoryId) => {
@@ -380,29 +356,8 @@ export default function CashRegister() {
     })
   }
 
-  const updateWithdrawalProject = (projectId) => {
-    setWithdrawalForm((previous) => {
-      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = contractMatchesProject(selectedContract, projectId)
-      return {
-        ...previous,
-        project_id: projectId,
-        contract_id: keepContract ? previous.contract_id : '',
-      }
-    })
-  }
-
-  const updateWithdrawalContract = (contractId) => {
-    setWithdrawalForm((previous) => {
-      if (!contractId) return { ...previous, contract_id: '' }
-      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
-      return {
-        ...previous,
-        contract_id: contractId,
-        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
-      }
-    })
-  }
+  const updateWithdrawalProject = (projectId) => updateWithdrawalProjectBase(projectId)
+  const updateWithdrawalContract = (contractId) => updateWithdrawalContractBase(contractId)
 
   const handleTransferToCash = async (transaction) => {
     setSaving(true)
@@ -585,13 +540,13 @@ export default function CashRegister() {
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIcon col="date" /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIcon col="entry_type" /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIcon col="description" /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIcon col="source" /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIcon col="inflow" /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIcon col="outflow" /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIcon col="balance_after" /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
+                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIndicator active={sortCol === 'inflow'} asc={sortAsc} /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIndicator active={sortCol === 'outflow'} asc={sortAsc} /></th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIndicator active={sortCol === 'balance_after'} asc={sortAsc} /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -688,7 +643,7 @@ export default function CashRegister() {
                 {detailModal.contract_id ? (
                   <div className="record-field">
                     <span className="record-field-label">{tr('contracts')}</span>
-                    <span className="record-field-value">{buildContractLabel(contracts.find((contract) => contract.id === detailModal.contract_id)) || UI_DASH}</span>
+                    <span className="record-field-value">{getContractLabelById(contracts, detailModal.contract_id, UI_DASH)}</span>
                   </div>
                 ) : null}
                 <div className="record-field full">

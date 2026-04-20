@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
-
-function fmt(n) { return n != null ? Number(n).toLocaleString('sr-RS', { minimumFractionDigits: 2 }) : '—' }
+import PageHeader from '../components/PageHeader'
+import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import { formatMoney2OrDash as fmt } from '../utils/formatters'
 
 function BalanceCell({ value }) {
   const n = Number(value || 0)
@@ -33,29 +35,41 @@ export default function CounterpartyBalance() {
     if (!data?.items) return []
     const q = (search || '').trim().toLowerCase()
     let rows = data.items
-    if (q) rows = rows.filter(i => (i.client_name || '').toLowerCase().includes(q))
-    return [...rows].sort((a, b) => {
-      const av = a[sortCol] ?? 0, bv = b[sortCol] ?? 0
-      if (typeof av === 'number' || typeof bv === 'number') {
-        return sortAsc ? Number(av) - Number(bv) : Number(bv) - Number(av)
+    if (q) rows = rows.filter((item) => (item.client_name || '').toLowerCase().includes(q))
+    return [...rows].sort((left, right) => {
+      const leftValue = left[sortCol] ?? 0
+      const rightValue = right[sortCol] ?? 0
+      if (typeof leftValue === 'number' || typeof rightValue === 'number') {
+        return sortAsc ? Number(leftValue) - Number(rightValue) : Number(rightValue) - Number(leftValue)
       }
-      if (av < bv) return sortAsc ? -1 : 1
-      if (av > bv) return sortAsc ? 1 : -1
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
   }, [data, search, sortCol, sortAsc])
 
-  const toggleSort = col => { if (sortCol === col) setSortAsc(v => !v); else { setSortCol(col); setSortAsc(false) } }
-  const SortIcon = ({ col }) => sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''
+  const toggleSort = (column) => {
+    if (sortCol === column) {
+      setSortAsc((value) => !value)
+      return
+    }
+    setSortCol(column)
+    setSortAsc(false)
+  }
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h1>{tr('counterpartyBalance')}</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input className="form-input" placeholder={tr('search')} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
-        </div>
-      </div>
+      <PageHeader
+        title={tr('counterpartyBalance')}
+        actions={(
+          <SearchInput
+            placeholder={tr('search')}
+            value={search}
+            onChange={setSearch}
+            style={{ width: 220 }}
+          />
+        )}
+      />
       <div className="page-body">
         {data && (
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -78,23 +92,25 @@ export default function CounterpartyBalance() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')}<SortIcon col="client_name" /></th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('receivables')}>{tr('receivables')}<SortIcon col="receivables" /></th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('payables')}>{tr('payables')}<SortIcon col="payables" /></th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('net_balance')}>{tr('netBalance')}<SortIcon col="net_balance" /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('receivables')}>{tr('receivables')} <SortIndicator active={sortCol === 'receivables'} asc={sortAsc} /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('payables')}>{tr('payables')} <SortIndicator active={sortCol === 'payables'} asc={sortAsc} /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('net_balance')}>{tr('netBalance')} <SortIndicator active={sortCol === 'net_balance'} asc={sortAsc} /></th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={4}>{tr('loading')}</td></tr>
-                  : items.length === 0 ? <tr><td colSpan={4}>{tr('noRecords')}</td></tr>
-                    : items.map((item, idx) => (
-                      <tr key={item.client_id || idx}>
-                        <td>{item.client_name}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(item.receivables)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(item.payables)}</td>
-                        <BalanceCell value={item.net_balance} />
-                      </tr>
-                    ))}
+                {loading ? (
+                  <tr><td colSpan={4}>{tr('loading')}</td></tr>
+                ) : items.length === 0 ? (
+                  <tr><td colSpan={4}>{tr('noRecords')}</td></tr>
+                ) : items.map((item, index) => (
+                  <tr key={item.client_id || index}>
+                    <td>{item.client_name}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(item.receivables)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(item.payables)}</td>
+                    <BalanceCell value={item.net_balance} />
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

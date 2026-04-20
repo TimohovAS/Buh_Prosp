@@ -6,9 +6,21 @@ export function buildContractLabel(contract, emptyLabel = UI_DASH) {
   return parts.join(` ${UI_DASH} `) || contract.number || contract.subject || emptyLabel
 }
 
+export function getContractLabelById(contracts, contractId, emptyLabel = UI_DASH) {
+  if (contractId == null || contractId === '') return emptyLabel
+  return buildContractLabel(
+    contracts.find((contract) => String(contract.id) === String(contractId)),
+    emptyLabel,
+  )
+}
+
 export function getProjectName(projects, projectId, emptyLabel = UI_DASH) {
   if (projectId == null || projectId === '') return emptyLabel
   return projects.find((project) => project.id === projectId)?.name || emptyLabel
+}
+
+export function findUnassignedProject(projects) {
+  return projects.find((project) => project.code === 'INT-UNASSIGNED') || null
 }
 
 export function contractMatchesProject(contract, projectId) {

@@ -12,10 +12,11 @@ import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
-import { buildContractLabel, contractMatchesProject, filterContractsForProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_CLOSE, UI_DASH } from '../utils/formatters'
+import useProjectContractForm from '../hooks/useProjectContractForm'
+import { buildContractLabel, filterContractsForProject, findUnassignedProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_CLOSE, UI_DASH, todayIso } from '../utils/formatters'
+import { MONTHS } from '../utils/constants'
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
 
 export default function Income() {
@@ -49,7 +50,7 @@ export default function Income() {
   const [paymentActionLoading, setPaymentActionLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
     due_date: '',
     invoice_number: '',
     client_id: '',
@@ -386,39 +387,34 @@ export default function Income() {
   const exportCsv = () => api.reports.downloadCsv(year, month || undefined).catch((error) => console.error(error))
   const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((error) => console.error(error))
 
-  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const unassignedProject = findUnassignedProject(projects)
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
+  const {
+    updateProject: updateProjectBase,
+    updateContract: updateContractBase,
+  } = useProjectContractForm({ contracts, setForm })
 
   const updateProject = (projectId) => {
     setForm((previous) => {
       const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = contractMatchesProject(selectedContract, projectId)
+      const keepPaymentType = selectedContract && (!projectId || String(selectedContract.project_id) === String(projectId) || selectedContract.project_id == null)
       return {
         ...previous,
-        project_id: projectId,
-        contract_id: keepContract ? previous.contract_id : '',
-        contract_payment_type: keepContract ? previous.contract_payment_type : '',
-      }
-    })
-  }
-
-  const updateContract = (contractId) => {
-    setForm((previous) => {
-      if (!contractId) {
-        return { ...previous, contract_id: '', contract_payment_type: '' }
-      }
-      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
-      const keepPaymentType = String(previous.contract_id) === String(contractId)
-      return {
-        ...previous,
-        contract_id: contractId,
-        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
         contract_payment_type: keepPaymentType ? previous.contract_payment_type : '',
       }
     })
+    updateProjectBase(projectId)
+  }
+
+  const updateContract = (contractId) => {
+    setForm((previous) => ({
+      ...previous,
+      contract_payment_type: String(previous.contract_id) === String(contractId) ? previous.contract_payment_type : '',
+    }))
+    updateContractBase(contractId)
   }
 
   const filteredContracts = useMemo(() => {
@@ -676,13 +672,14 @@ export default function Income() {
         ) : null}
       />
 
-      {paymentModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 760 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('incomePaymentDetails')} {UI_DASH} {paymentModal.invoice_number}</h2>
-              <button className="modal-close" onClick={closePaymentModal}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!paymentModal}
+        onClose={closePaymentModal}
+        title={paymentModal ? `${tr('incomePaymentDetails')} ${UI_DASH} ${paymentModal.invoice_number}` : ''}
+        maxWidth="760px"
+      >
+        {paymentModal ? (
+          <>
             <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
               <div style={{ fontWeight: 700 }}>{paymentModal.client_name || UI_DASH}</div>
               <div style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{paymentModal.description || UI_DASH}</div>
@@ -771,9 +768,9 @@ export default function Income() {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
 
       <Modal
         isOpen={!!modal}

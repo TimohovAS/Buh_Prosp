@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 import {
@@ -1083,13 +1084,13 @@ export default function Settings() {
         </div>
       </div>
 
-      {modal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 500 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{tr('enterprise')}</h2>
-              <button className="modal-close" onClick={() => setModal(false)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(false)}
+        title={tr('enterprise')}
+        maxWidth="500px"
+      >
+        {modal ? (
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('name')}</label>
@@ -1218,17 +1219,16 @@ export default function Settings() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {userModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{userModal === 'add' ? tr('add') : tr('edit')} {tr('user')}</h2>
-              <button className="modal-close" onClick={() => setUserModal(null)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!userModal}
+        onClose={() => setUserModal(null)}
+        title={userModal ? `${userModal === 'add' ? tr('add') : tr('edit')} ${tr('user')}` : ''}
+        maxWidth="420px"
+      >
+        {userModal ? (
             <form onSubmit={handleUserSubmit}>
               <div className="form-group">
                 <label className="form-label">{tr('username')}</label>
@@ -1296,17 +1296,16 @@ export default function Settings() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
 
-      {catModal && (
-        <div className="modal-overlay">
-          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">{catModal === 'add' ? tr('add') : tr('edit')} {UI_DASH} {tr('categoriesTitle')}</h2>
-              <button className="modal-close" onClick={() => setCatModal(null)}>{UI_CLOSE}</button>
-            </div>
+      <Modal
+        isOpen={!!catModal}
+        onClose={() => setCatModal(null)}
+        title={catModal ? `${catModal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('categoriesTitle')}` : ''}
+        maxWidth="480px"
+      >
+        {catModal ? (
               <form onSubmit={async (event) => {
                 event.preventDefault()
                 try {
@@ -1363,9 +1362,8 @@ export default function Settings() {
                 <button type="submit" className="btn btn-primary">{tr('save')}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </Modal>
     </>
   )
 }

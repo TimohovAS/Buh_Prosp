@@ -3,19 +3,12 @@ import { Link, useLocation } from 'react-router-dom'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
+import { formatInteger as fmt, formatMoney as fmtCurrency } from '../utils/formatters'
 
 const UI_ARROW = '\u2192'
 const UI_WARNING = '\u26A0'
 const UI_DAYS = ' \u0434\u043d.'
 const UI_SEPARATOR = ' | '
-
-function fmt(n) {
-  return (n ?? 0).toLocaleString('sr-RS')
-}
-
-function fmtCurrency(n) {
-  return `${fmt(n)} RSD`
-}
 
 function formatObligationDays(daysUntil, translate) {
   if (daysUntil === 0) return translate('obligationToday')

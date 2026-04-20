@@ -11,11 +11,14 @@ import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
+import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
-import { buildContractLabel, contractMatchesProject, filterContractsForProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_CLOSE, UI_DASH } from '../utils/formatters'
+import useProjectContractForm from '../hooks/useProjectContractForm'
+import { filterContractsForProject, findUnassignedProject, getContractLabelById, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import { UI_CLOSE, UI_DASH, todayIso } from '../utils/formatters'
+import { MONTHS } from '../utils/constants'
+import { downloadTextFile } from '../utils/download'
 
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
 
 function getDuplicateGroupKey(group) {
@@ -70,7 +73,7 @@ export default function Expenses() {
   const [mergeKeepId, setMergeKeepId] = useState(null)
   const [dismissedDuplicateGroups, setDismissedDuplicateGroups] = useState(() => loadDismissedDuplicateGroups())
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
     description: '',
     amount: '',
     category: '',
@@ -130,26 +133,25 @@ export default function Expenses() {
   }, [dismissedDuplicateGroups])
 
   const lang = getLang()
-  const unassignedProject = projects.find((project) => project.code === 'INT-UNASSIGNED') || null
+  const unassignedProject = findUnassignedProject(projects)
+  const {
+    getCategoryById,
+    getCategoryDefaultProjectId,
+    usesCategoryProject,
+    getCategoryLabel: getResolvedCategoryLabel,
+  } = useCategoryProjectResolver(categories, lang)
 
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
-  const getContractLabel = (contractId) => buildContractLabel(contracts.find((contract) => contract.id === contractId))
+  const getContractLabel = (contractId) => getContractLabelById(contracts, contractId, '')
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
+  const {
+    updateProject,
+    updateContract,
+  } = useProjectContractForm({ contracts, setForm })
 
   const getCategoryLabel = (item) => {
-    const selectedCategory = categories.find((category) => category.id === item.category_id)
-    if (selectedCategory) {
-      return lang === 'ru' ? selectedCategory.name_ru : selectedCategory.name_sr
-    }
-    return item.category || UI_DASH
+    return getResolvedCategoryLabel(item, item.category || UI_DASH)
   }
-
-  const getCategoryById = (categoryId) => categories.find((category) => String(category.id) === String(categoryId)) || null
-  const getCategoryDefaultProjectId = (categoryId) => {
-    const selectedCategory = getCategoryById(categoryId)
-    return selectedCategory?.default_project_id ? String(selectedCategory.default_project_id) : ''
-  }
-  const usesCategoryProject = (categoryId) => Boolean(getCategoryDefaultProjectId(categoryId))
 
   const openExpenseSource = (item) => {
     const expenseDate = item?.date ? new Date(`${item.date}T12:00:00`) : null
@@ -217,7 +219,7 @@ export default function Expenses() {
 
   const openAdd = () => {
     setForm({
-      date: new Date().toISOString().slice(0, 10),
+      date: todayIso(),
       description: '',
       amount: '',
       category: '',
@@ -257,32 +259,6 @@ export default function Expenses() {
   const handleDeleteFromDetail = async (item) => {
     setDetailModal(null)
     await handleDelete(item)
-  }
-
-  const updateProject = (projectId) => {
-    setForm((previous) => {
-      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
-      const keepContract = contractMatchesProject(selectedContract, projectId)
-      return {
-        ...previous,
-        project_id: projectId,
-        contract_id: keepContract ? previous.contract_id : '',
-      }
-    })
-  }
-
-  const updateContract = (contractId) => {
-    setForm((previous) => {
-      if (!contractId) {
-        return { ...previous, contract_id: '' }
-      }
-      const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
-      return {
-        ...previous,
-        contract_id: contractId,
-        project_id: selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id,
-      }
-    })
   }
 
   const updateCategory = (categoryId) => {
@@ -448,14 +424,8 @@ export default function Expenses() {
     ]
 
     const content = `\ufeff${rows.map((row) => row.map(csvEscape).join(';')).join('\n')}`
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
     const filename = `expenses${year ? `_${year}` : ''}${month ? `_${String(month).padStart(2, '0')}` : ''}.csv`
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadTextFile(content, filename, 'text/csv;charset=utf-8;')
   }
 
   return (

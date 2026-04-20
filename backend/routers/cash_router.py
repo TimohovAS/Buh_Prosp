@@ -9,6 +9,12 @@ from sqlalchemy.orm import selectinload
 from backend.auth import get_current_user_required, require_edit_access
 from backend.cash_service import create_cash_transfer_from_transaction
 from backend.database import get_db
+from backend.db_utils import (
+    get_contract_or_404,
+    get_project_or_404,
+    get_unassigned_project_id,
+    resolve_category_expense_links,
+)
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import BankTransaction, CashEntry, Contract, Expense, Project, TransactionCategory, User
 from backend.state_machine import initialize_expense_status
@@ -25,79 +31,26 @@ from backend.schemas import (
 router = APIRouter(prefix="/cash", tags=["cash"])
 
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    project = result.scalar_one_or_none()
-    return project.id if project else None
-
-
-async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Project not found")
-    if project.status == "archived":
-        raise HTTPException(400, "Cannot use archived project")
-    return project
-
-
-async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
-    result = await db.execute(select(Contract).where(Contract.id == contract_id))
-    contract = result.scalar_one_or_none()
-    if not contract:
-        raise HTTPException(404, "Contract not found")
-    return contract
-
-
-async def _get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
-    if category_id is None:
-        return None
-    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
-    return result.scalar_one_or_none()
-
-
-async def _resolve_category_expense_links(
-    db: AsyncSession,
-    category_id: int | None,
-    project_id: int | None,
-    contract_id: int | None,
-) -> tuple[int | None, int | None, bool]:
-    category = await _get_category_or_none(db, category_id)
-    if not category:
-        return project_id, contract_id, False
-
-    resolved_project_id = category.default_project_id or project_id
-    resolved_contract_id = contract_id
-    is_tax_related = category.category_group == "tax"
-
-    if category.default_project_id and resolved_contract_id is not None:
-        contract = await _get_contract_or_404(db, resolved_contract_id)
-        if contract.project_id is not None and contract.project_id != category.default_project_id:
-            resolved_contract_id = None
-
-    return resolved_project_id, resolved_contract_id, is_tax_related
-
-
 async def _resolve_expense_links(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
     resolved_contract_id = contract_id
 
     if resolved_contract_id is not None:
-        contract = await _get_contract_or_404(db, resolved_contract_id)
+        contract = await get_contract_or_404(db, resolved_contract_id)
         if contract.project_id is None:
             if resolved_project_id is None:
                 raise HTTPException(400, "Select a project before linking this contract")
-            await _get_project_or_404(db, resolved_project_id)
+            await get_project_or_404(db, resolved_project_id)
             contract.project_id = resolved_project_id
             await db.flush()
         resolved_project_id = contract.project_id
 
     if resolved_project_id is not None:
-        await _get_project_or_404(db, resolved_project_id)
+        await get_project_or_404(db, resolved_project_id)
 
     return resolved_project_id, resolved_contract_id
 
@@ -378,15 +331,15 @@ async def update_cash_entry(
         desired_project_id = payload.get("project_id", expense.project_id)
         desired_contract_id = payload.get("contract_id", expense.contract_id)
         if not desired_project_id:
-            desired_project_id = await _get_unassigned_project_id(db)
-        desired_project_id, desired_contract_id, is_tax_related = await _resolve_category_expense_links(
+            desired_project_id = await get_unassigned_project_id(db)
+        desired_project_id, desired_contract_id, is_tax_related = await resolve_category_expense_links(
             db,
             payload.get("category_id", expense.category_id),
             desired_project_id,
             desired_contract_id,
         )
         if desired_contract_id is None and expense.contract_id and "project_id" in payload:
-            current_contract = await _get_contract_or_404(db, expense.contract_id)
+            current_contract = await get_contract_or_404(db, expense.contract_id)
             if current_contract.project_id != desired_project_id:
                 desired_contract_id = None
         desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
@@ -438,7 +391,7 @@ async def update_cash_entry(
         desired_project_id = payload.get("project_id", getattr(expense, "project_id", None))
         desired_contract_id = payload.get("contract_id", getattr(expense, "contract_id", None))
         if not desired_project_id:
-            desired_project_id = await _get_unassigned_project_id(db)
+            desired_project_id = await get_unassigned_project_id(db)
         desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
 
         note = payload.get("note", getattr(expense, "note", entry.note))
@@ -519,7 +472,7 @@ async def create_cash_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    project_id, contract_id, is_tax_related = await _resolve_category_expense_links(
+    project_id, contract_id, is_tax_related = await resolve_category_expense_links(
         db,
         data.category_id,
         data.project_id,

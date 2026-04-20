@@ -24,6 +24,13 @@ from backend.cash_service import (
     is_cash_transfer_expense,
 )
 from backend.database import get_db
+from backend.db_utils import (
+    get_category_or_404,
+    get_contract_or_404,
+    get_project_or_404,
+    get_unassigned_project_id,
+    resolve_category_expense_links,
+)
 from backend.decimal_utils import ZERO_DECIMAL, money_eq, to_decimal
 from backend.models import BankTransaction, Contract, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
 from backend.receipt_service import sync_receipt_for_expense_match
@@ -44,80 +51,26 @@ router = APIRouter(prefix="/bank-transactions", tags=["bank-transactions"])
 _PROJECT_OVERRIDE_UNSET = object()
 
 
-async def _get_unassigned_project_id(db: AsyncSession) -> int | None:
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
-    project = result.scalar_one_or_none()
-    return project.id if project else None
-
-
-async def _get_project_or_404(db: AsyncSession, project_id: int) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Project not found")
-    if project.status == "archived":
-        raise HTTPException(400, "Cannot use archived project")
-    return project
-
-
-async def _get_contract_or_404(db: AsyncSession, contract_id: int) -> Contract:
-    result = await db.execute(select(Contract).where(Contract.id == contract_id))
-    contract = result.scalar_one_or_none()
-    if not contract:
-        raise HTTPException(404, "Contract not found")
-    return contract
-
-
-async def _get_category_or_404(db: AsyncSession, category_id: int) -> TransactionCategory:
-    category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
-    category = category_result.scalar_one_or_none()
-    if not category:
-        raise HTTPException(404, "Category not found")
-    return category
-
-
-async def _resolve_category_expense_links(
-    db: AsyncSession,
-    category_id: int | None,
-    project_id: int | None,
-    contract_id: int | None,
-) -> tuple[int | None, int | None, bool]:
-    if category_id is None:
-        return project_id, contract_id, False
-
-    category = await _get_category_or_404(db, category_id)
-    resolved_project_id = category.default_project_id or project_id
-    resolved_contract_id = contract_id
-    is_tax_related = category.category_group == "tax"
-
-    if category.default_project_id and resolved_contract_id is not None:
-        contract = await _get_contract_or_404(db, resolved_contract_id)
-        if contract.project_id is not None and contract.project_id != category.default_project_id:
-            resolved_contract_id = None
-
-    return resolved_project_id, resolved_contract_id, is_tax_related
-
-
 async def _resolve_expense_links(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await _get_unassigned_project_id(db)
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
     resolved_contract_id = contract_id
 
     if resolved_contract_id is not None:
-        contract = await _get_contract_or_404(db, resolved_contract_id)
+        contract = await get_contract_or_404(db, resolved_contract_id)
         if contract.project_id is None:
             if resolved_project_id is None:
                 raise HTTPException(400, "Select a project before linking this contract")
-            await _get_project_or_404(db, resolved_project_id)
+            await get_project_or_404(db, resolved_project_id)
             contract.project_id = resolved_project_id
             await db.flush()
         resolved_project_id = contract.project_id
 
     if resolved_project_id is not None:
-        await _get_project_or_404(db, resolved_project_id)
+        await get_project_or_404(db, resolved_project_id)
 
     return resolved_project_id, resolved_contract_id
 
@@ -126,7 +79,7 @@ async def _sync_expense_project(db: AsyncSession, expense: Expense, project_id: 
     expense.project_id = project_id
     if expense.contract_id is None or project_id is None:
         return
-    contract = await _get_contract_or_404(db, expense.contract_id)
+    contract = await get_contract_or_404(db, expense.contract_id)
     if contract.project_id != project_id:
         expense.contract_id = None
 
@@ -136,9 +89,9 @@ async def _sync_income_project(db: AsyncSession, income: Income, project_id: int
     if income.contract_id is None or project_id is None:
         return
 
-    contract = await _get_contract_or_404(db, income.contract_id)
+    contract = await get_contract_or_404(db, income.contract_id)
     if contract.project_id is None:
-        await _get_project_or_404(db, project_id)
+        await get_project_or_404(db, project_id)
         contract.project_id = project_id
         await db.flush()
         return
@@ -398,9 +351,9 @@ async def update_bank_transaction(
 
     payload = data.model_dump(exclude_unset=True)
     if "project_id" in payload and not payload["project_id"]:
-        payload["project_id"] = await _get_unassigned_project_id(db)
+        payload["project_id"] = await get_unassigned_project_id(db)
     if payload.get("project_id") is not None:
-        await _get_project_or_404(db, payload["project_id"])
+        await get_project_or_404(db, payload["project_id"])
 
     for key, value in payload.items():
         setattr(transaction, key, value)
@@ -534,15 +487,16 @@ async def create_expense_from_transaction(
     selected_category: TransactionCategory | None = None
     is_tax_related = False
     if data.category_id is not None:
-        selected_category = await _get_category_or_404(db, data.category_id)
+        selected_category = await get_category_or_404(db, data.category_id)
         category_name = selected_category.name_ru
 
     if not is_cash_transfer:
-        project_id, contract_id, is_tax_related = await _resolve_category_expense_links(
+        project_id, contract_id, is_tax_related = await resolve_category_expense_links(
             db,
             data.category_id,
             data.project_id or transaction.project_id,
             data.contract_id,
+            strict=True,
         )
         project_id, contract_id = await _resolve_expense_links(
             db,
@@ -661,9 +615,9 @@ async def bulk_assign_project(
 ):
     project_id = data.project_id
     if project_id is None:
-        project_id = await _get_unassigned_project_id(db)
+        project_id = await get_unassigned_project_id(db)
     if project_id is not None:
-        await _get_project_or_404(db, project_id)
+        await get_project_or_404(db, project_id)
 
     result = await db.execute(select(BankTransaction).where(BankTransaction.id.in_(data.ids)))
     items = result.scalars().all()

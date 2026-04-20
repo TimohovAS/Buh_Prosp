@@ -12,7 +12,7 @@ import SortIndicator from '../components/SortIndicator'
 import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_DASH, formatInteger } from '../utils/formatters'
+import { UI_DASH, formatInteger, todayIso } from '../utils/formatters'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
@@ -38,7 +38,7 @@ export default function Contracts() {
   } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
   const [form, setForm] = useState({
     number: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIso(),
     client_id: '',
     project_id: '',
     contract_type: 'service',
@@ -84,7 +84,7 @@ export default function Contracts() {
       .then((response) => {
         setForm({
           number: response.number || fallbackNumber,
-          date: new Date().toISOString().slice(0, 10),
+          date: todayIso(),
           client_id: '',
           project_id: '',
           contract_type: 'service',
@@ -101,7 +101,7 @@ export default function Contracts() {
       .catch(() => {
         setForm({
           number: fallbackNumber,
-          date: new Date().toISOString().slice(0, 10),
+          date: todayIso(),
           client_id: '',
           project_id: '',
           contract_type: 'service',
