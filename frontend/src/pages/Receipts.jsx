@@ -439,6 +439,15 @@ export default function Receipts() {
     }
   }
 
+  const handleOpenReceiptInBrowser = () => {
+    if (!detailReceipt?.verification_url) {
+      setDetailError(tr('receiptOpenBrowserUnavailable'))
+      return
+    }
+    if (typeof window === 'undefined') return
+    window.open(detailReceipt.verification_url, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -653,6 +662,15 @@ export default function Receipts() {
                             {unlinkingExpense ? tr('loading') : tr('receiptUnlinkExpense')}
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleOpenReceiptInBrowser}
+                          disabled={!detailReceipt.verification_url}
+                          title={!detailReceipt.verification_url ? tr('receiptOpenBrowserUnavailable') : ''}
+                        >
+                          {tr('receiptOpenBrowser')}
+                        </button>
                         <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || assigningProject}>
                           {deletingReceipt ? tr('loading') : tr('receiptDelete')}
                         </button>
