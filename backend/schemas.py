@@ -334,6 +334,10 @@ class PurchaseReceiptResponse(PurchaseReceiptBase):
     project_code: Optional[str] = None
     expense_status: Optional[str] = None
     expense_source: Optional[str] = None
+    expense_amount: Optional[Decimal] = None
+    amount_delta: Optional[Decimal] = None
+    amount_delta_abs: Optional[Decimal] = None
+    matches_amount: bool = False
     item_count: int = 0
     created_at: datetime
 
@@ -400,6 +404,9 @@ class PurchaseReceiptExpenseCandidateResponse(BaseModel):
     contract_id: Optional[int] = None
     contract_number: Optional[str] = None
     bank_reference: Optional[str] = None
+    amount_delta: Decimal = Decimal("0.00")
+    amount_delta_abs: Decimal = Decimal("0.00")
+    matches_amount: bool = False
     score: Optional[int] = None
 
 

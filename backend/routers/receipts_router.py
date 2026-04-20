@@ -40,6 +40,17 @@ def _serialize_receipt(receipt: PurchaseReceipt) -> PurchaseReceiptResponse:
     payload["project_code"] = getattr(receipt.project, "code", None)
     payload["expense_status"] = getattr(receipt.expense, "status", None)
     payload["expense_source"] = getattr(receipt.expense, "source", None)
+    expense_amount = getattr(receipt.expense, "amount", None)
+    payload["expense_amount"] = expense_amount
+    if expense_amount is not None:
+        amount_delta = receipt.total_amount - expense_amount
+        payload["amount_delta"] = amount_delta
+        payload["amount_delta_abs"] = abs(amount_delta)
+        payload["matches_amount"] = amount_delta == 0
+    else:
+        payload["amount_delta"] = None
+        payload["amount_delta_abs"] = None
+        payload["matches_amount"] = False
     payload["item_count"] = len(receipt.items or [])
     return PurchaseReceiptResponse.model_validate(payload)
 

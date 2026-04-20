@@ -45,6 +45,10 @@ function ReceiptStatusBadge({ status }) {
   )
 }
 
+function formatMoneyWithCurrency(value, currency = 'RSD') {
+  return `${fmtMoney(value)} ${currency || 'RSD'}`
+}
+
 export default function Receipts() {
   const location = useLocation()
   const isActivePage = location.pathname === '/receipts'
@@ -120,6 +124,8 @@ export default function Receipts() {
     const category = categories.find((item) => String(item.id) === String(categoryId))
     return category ? category.name_ru : UI_DASH
   }
+
+  const getAmountDeltaLabel = (delta, currency = 'RSD') => formatMoneyWithCurrency(delta, currency)
 
   const loadReceipts = async () => {
     setLoading(true)
@@ -372,11 +378,19 @@ export default function Receipts() {
     }
   }
 
-  const handleLinkExpense = async (expenseId) => {
+  const handleLinkExpense = async (candidate) => {
     if (!detailReceipt) return
+    if (!candidate) return
+    if (!candidate.matches_amount && typeof window !== 'undefined') {
+      const confirmation = tr('receiptLinkMismatchConfirm')
+        .replace('{receipt}', formatMoneyWithCurrency(detailReceipt.total_amount, detailReceipt.currency || candidate.currency || 'RSD'))
+        .replace('{expense}', formatMoneyWithCurrency(candidate.amount, candidate.currency || detailReceipt.currency || 'RSD'))
+        .replace('{delta}', getAmountDeltaLabel(candidate.amount_delta_abs, candidate.currency || detailReceipt.currency || 'RSD'))
+      if (!window.confirm(confirmation)) return
+    }
     setExpenseCandidatesLoading(true)
     try {
-      const receipt = await api.receipts.linkExpense(detailReceipt.id, { expense_id: expenseId })
+      const receipt = await api.receipts.linkExpense(detailReceipt.id, { expense_id: candidate.id })
       hydrateDetailState(receipt)
       await loadReceipts()
     } catch (error) {
@@ -707,6 +721,19 @@ export default function Receipts() {
                           <span className="record-field-label">{tr('cashRegister')}</span>
                           <span className="record-field-value">{detailReceipt.cash_entry_id ? `#${detailReceipt.cash_entry_id}` : UI_DASH}</span>
                         </div>
+                        {detailReceipt.expense_id ? (
+                          <div className="record-field">
+                            <span className="record-field-label">{tr('receiptAmountDelta')}</span>
+                            <span
+                              className="record-field-value"
+                              style={{ color: detailReceipt.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)' }}
+                            >
+                              {detailReceipt.matches_amount
+                                ? tr('receiptAmountExact')
+                                : getAmountDeltaLabel(detailReceipt.amount_delta_abs, detailReceipt.currency || 'RSD')}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       {detailAction === 'link' ? (
@@ -729,10 +756,26 @@ export default function Receipts() {
                                       <div style={{ color: 'var(--color-text-muted)', fontSize: '0.84rem', marginTop: '0.25rem' }}>
                                         {candidate.contract_number || UI_DASH}
                                       </div>
+                                      <div
+                                        style={{
+                                          color: candidate.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)',
+                                          fontSize: '0.84rem',
+                                          marginTop: '0.35rem',
+                                        }}
+                                      >
+                                        {candidate.matches_amount
+                                          ? tr('receiptAmountExact')
+                                          : `${tr('receiptAmountDelta')}: ${getAmountDeltaLabel(candidate.amount_delta_abs, candidate.currency || detailReceipt.currency || 'RSD')}`}
+                                      </div>
+                                      {!candidate.matches_amount ? (
+                                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                          {tr('receiptLinkMismatchHint')}
+                                        </div>
+                                      ) : null}
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                       <div style={{ fontWeight: 700 }}>{fmtMoney(candidate.amount)} {candidate.currency || 'RSD'}</div>
-                                      <button type="button" className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => handleLinkExpense(candidate.id)}>
+                                      <button type="button" className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => handleLinkExpense(candidate)}>
                                         {tr('receiptLinkExpense')}
                                       </button>
                                     </div>

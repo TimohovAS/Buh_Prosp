@@ -553,23 +553,36 @@ async def get_receipt_expense_candidates(
     result = await db.execute(query)
     items = list(result.scalars().all())
     candidates: list[tuple[tuple[int, int, int], dict]] = []
+    receipt_amount = to_decimal(receipt.total_amount or ZERO_DECIMAL)
     for expense in items:
         if not receipt.expense_id and expense.id in occupied_expense_ids:
             continue
         if receipt.expense_id and expense.id != receipt.expense_id and expense.id in occupied_expense_ids:
             continue
-        if not money_eq(expense.amount or ZERO_DECIMAL, receipt.total_amount or ZERO_DECIMAL):
-            continue
+        expense_amount = to_decimal(expense.amount or ZERO_DECIMAL)
+        amount_delta = (receipt_amount - expense_amount).quantize(MONEY_PLACES)
+        amount_delta_abs = money_abs(amount_delta)
+        matches_amount = money_eq(expense_amount, receipt_amount)
         date_diff = abs((expense.date - receipt_date).days) if receipt_date else 9999
         if receipt_date and date_diff > 31:
             continue
-        score = 60
+        score = 40
+        if matches_amount:
+            score += 30
+        elif amount_delta_abs <= Decimal("1.00"):
+            score += 24
+        elif amount_delta_abs <= Decimal("10.00"):
+            score += 18
+        elif amount_delta_abs <= Decimal("100.00"):
+            score += 10
         if date_diff <= 1:
             score += 25
         elif date_diff <= 7:
             score += 15
         elif date_diff <= 14:
             score += 10
+        if receipt.project_id and expense.project_id == receipt.project_id:
+            score += 12
         score += _match_text_score(receipt, expense)
         candidates.append(
             (
@@ -578,7 +591,7 @@ async def get_receipt_expense_candidates(
                     "id": expense.id,
                     "date": expense.date,
                     "description": expense.description,
-                    "amount": to_decimal(expense.amount or ZERO_DECIMAL),
+                    "amount": expense_amount,
                     "currency": expense.currency or "RSD",
                     "status": expense.status,
                     "source": expense.source,
@@ -589,6 +602,9 @@ async def get_receipt_expense_candidates(
                     "contract_id": expense.contract_id,
                     "contract_number": getattr(expense.contract, "number", None),
                     "bank_reference": expense.bank_reference,
+                    "amount_delta": amount_delta,
+                    "amount_delta_abs": amount_delta_abs,
+                    "matches_amount": matches_amount,
                     "score": score,
                 },
             )
