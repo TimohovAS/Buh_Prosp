@@ -9,7 +9,7 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
 import YearFilterSelect from '../components/YearFilterSelect'
-import { buildContractLabel, filterContractsForProject } from '../utils/entityLabels'
+import { buildContractLabel, filterContractsForProject, findUnassignedProject } from '../utils/entityLabels'
 import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney } from '../utils/formatters'
 
 function getReceiptStatusMeta(status) {
@@ -138,6 +138,8 @@ export default function Receipts() {
     return filterContractsForProject(contracts, createForm.project_id)
   }, [contracts, createForm.project_id])
 
+  const unassignedProject = useMemo(() => findUnassignedProject(projects), [projects])
+
   const availableExpenseYears = useMemo(() => {
     const years = Array.from(
       new Set(
@@ -167,6 +169,30 @@ export default function Receipts() {
   }
 
   const getAmountDeltaLabel = (delta, currency = 'RSD') => formatMoneyWithCurrency(delta, currency)
+
+  const detailProjectLabel = useMemo(() => {
+    if (!detailReceipt) return ''
+    const project = projects.find((item) => String(item.id) === String(detailReceipt.project_id))
+    const projectName = project?.name || detailReceipt.project_name || ''
+    const projectCode = project?.code || ''
+    const isUnassigned =
+      (unassignedProject && String(detailReceipt.project_id) === String(unassignedProject.id))
+      || projectCode === 'INT-UNASSIGNED'
+      || (unassignedProject?.name && projectName === unassignedProject.name)
+    if (!projectName || isUnassigned) return ''
+    return projectName
+  }, [detailReceipt, projects, unassignedProject])
+
+  const detailCategoryLabel = useMemo(() => {
+    if (!detailReceipt?.category_id) return ''
+    const label = getCategoryLabel(detailReceipt.category_id)
+    return label === UI_DASH ? '' : label
+  }, [categories, detailReceipt])
+
+  const detailAddressLabel = useMemo(
+    () => [detailReceipt?.seller_address, detailReceipt?.seller_city].filter(Boolean).join(', '),
+    [detailReceipt],
+  )
 
   const loadReceipts = async () => {
     setLoading(true)
@@ -798,20 +824,24 @@ export default function Receipts() {
               <span className="record-field-label">{tr('amount')}</span>
               <span className="record-field-value">{fmtMoney(detailReceipt.total_amount)} {detailReceipt.currency || 'RSD'}</span>
             </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('project')}</span>
-              <span className="record-field-value">{detailReceipt.project_name || UI_DASH}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('category')}</span>
-              <span className="record-field-value">{getCategoryLabel(detailReceipt.category_id)}</span>
-            </div>
-            <div className="record-field full">
-              <span className="record-field-label">{tr('address')}</span>
-              <div className="record-field-text">
-                {[detailReceipt.seller_address, detailReceipt.seller_city].filter(Boolean).join(', ') || UI_DASH}
+            {detailProjectLabel ? (
+              <div className="record-field">
+                <span className="record-field-label">{tr('project')}</span>
+                <span className="record-field-value">{detailProjectLabel}</span>
               </div>
-            </div>
+            ) : null}
+            {detailCategoryLabel ? (
+              <div className="record-field">
+                <span className="record-field-label">{tr('category')}</span>
+                <span className="record-field-value">{detailCategoryLabel}</span>
+              </div>
+            ) : null}
+            {detailAddressLabel ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('address')}</span>
+                <div className="record-field-text">{detailAddressLabel}</div>
+              </div>
+            ) : null}
           </div>
         ) : null}
         actions={detailReceipt ? (
@@ -861,37 +891,41 @@ export default function Receipts() {
                 {assigningProject ? tr('loading') : tr('receiptAssignProject')}
               </button>
 
-              <div className="receipt-linked-grid">
-                <div className="record-field">
-                  <span className="record-field-label">{tr('receiptLinkedExpense')}</span>
-                  <span className="record-field-value">
-                    {detailReceipt.expense_id
-                      ? `#${detailReceipt.expense_id} ${UI_DASH} ${(detailReceipt.expense_source || '').trim() || UI_DASH} ${UI_DASH} ${(detailReceipt.expense_status || '').trim() || UI_DASH}`
-                      : UI_DASH}
-                  </span>
+              {detailReceipt.expense_id || detailReceipt.bank_transaction_id || detailReceipt.cash_entry_id ? (
+                <div className="receipt-linked-grid">
+                  {detailReceipt.expense_id ? (
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('receiptLinkedExpense')}</span>
+                      <span className="record-field-value">
+                        {`#${detailReceipt.expense_id} ${UI_DASH} ${(detailReceipt.expense_source || '').trim() || UI_DASH} ${UI_DASH} ${(detailReceipt.expense_status || '').trim() || UI_DASH}`}
+                      </span>
+                    </div>
+                  ) : null}
+                  {detailReceipt.bank_transaction_id ? (
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('receiptLinkedBank')}</span>
+                      <span className="record-field-value">#{detailReceipt.bank_transaction_id}</span>
+                    </div>
+                  ) : null}
+                  {detailReceipt.cash_entry_id ? (
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('cashRegister')}</span>
+                      <span className="record-field-value">#{detailReceipt.cash_entry_id}</span>
+                    </div>
+                  ) : null}
+                  {detailReceipt.expense_id && !detailReceipt.matches_amount ? (
+                    <div className="record-field">
+                      <span className="record-field-label">{tr('receiptAmountDelta')}</span>
+                      <span
+                        className="record-field-value"
+                        style={{ color: 'var(--color-warning)' }}
+                      >
+                        {getAmountDeltaLabel(detailReceipt.amount_delta_abs, detailReceipt.currency || 'RSD')}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('receiptLinkedBank')}</span>
-                  <span className="record-field-value">{detailReceipt.bank_transaction_id ? `#${detailReceipt.bank_transaction_id}` : UI_DASH}</span>
-                </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('cashRegister')}</span>
-                  <span className="record-field-value">{detailReceipt.cash_entry_id ? `#${detailReceipt.cash_entry_id}` : UI_DASH}</span>
-                </div>
-                {detailReceipt.expense_id ? (
-                  <div className="record-field">
-                    <span className="record-field-label">{tr('receiptAmountDelta')}</span>
-                    <span
-                      className="record-field-value"
-                      style={{ color: detailReceipt.matches_amount ? 'var(--color-text-muted)' : 'var(--color-warning)' }}
-                    >
-                      {detailReceipt.matches_amount
-                        ? tr('receiptAmountExact')
-                        : getAmountDeltaLabel(detailReceipt.amount_delta_abs, detailReceipt.currency || 'RSD')}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
 
               {detailAction === 'link' ? (
                 <div className="receipt-detail-section">
