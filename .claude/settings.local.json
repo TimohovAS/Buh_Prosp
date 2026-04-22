@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python)",
+      "Bash(python -m py_compile backend/routers/income_router.py)",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe -m pytest backend/ --co -q)"
+    ]
+  }
+}
