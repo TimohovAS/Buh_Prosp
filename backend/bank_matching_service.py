@@ -12,7 +12,7 @@ from backend.db_utils import (
     get_project_or_404,
     get_unassigned_project_id,
 )
-from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, to_decimal
+from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, money_eq, to_decimal
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
 from backend.models import (
     BankTransaction,
