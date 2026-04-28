@@ -563,6 +563,7 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
   const [openIncomes, setOpenIncomes] = useState([])
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [bankSearch, setBankSearch] = useState('')
+  const [expenseSearch, setExpenseSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const selectedBankTx = bankTxs.find(i => i.id === Number(form.bank_transaction_id)) || null
   const selectedIncome = openIncomes.find(i => i.id === Number(form.income_id)) || null
@@ -668,16 +669,49 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
     parts.push(`${tr('remainingAmount')}: ${fmt(income.remaining)}`)
     return parts.filter(Boolean).join(' | ')
   }
-  const formatExpenseLabel = expense => {
-    const parts = [fmtDate(expense.date)]
-    if (expense.description) parts.push(compactText(expense.description, 72))
-    if (expense.project_code || expense.project_name) parts.push([expense.project_code, expense.project_name].filter(Boolean).join(' / '))
-    if (expense.contract_number) parts.push(`${tr('contractNumber')}: ${expense.contract_number}`)
-    if (expense.category) parts.push(expense.category)
-    if (expense.bank_reference) parts.push(`${tr('paymentReference')}: ${expense.bank_reference}`)
-    parts.push(fmt(expense.amount))
-    return parts.filter(Boolean).join(' | ')
-  }
+  const expenseCandidatesView = useMemo(() => {
+    const query = expenseSearch.trim().toLowerCase()
+    const normalizedInvoiceDescription = String(invoice.description || '').toLowerCase().trim()
+    const descriptionTokens = normalizedInvoiceDescription.split(/\s+/).filter(token => token.length >= 5)
+    return expenseCandidates
+      .map(expense => {
+        const candidateDate = expense.paid_date || expense.date
+        const description = expense.description || ''
+        const projectLabel = [expense.project_code, expense.project_name].filter(Boolean).join(' / ')
+        const searchText = [
+          expense.id,
+          expense.date,
+          expense.paid_date,
+          description,
+          projectLabel,
+          expense.contract_number,
+          expense.category,
+          expense.bank_reference,
+          expense.note,
+          expense.bank_counterparty_name,
+          expense.bank_purpose,
+        ].filter(Boolean).join(' ').toLowerCase()
+        const descriptionMatch = descriptionTokens.length > 0
+          && descriptionTokens.some(token => searchText.includes(token))
+        return {
+          ...expense,
+          candidateDate,
+          projectLabel,
+          searchText,
+          dateDelta: getDateDelta(candidateDate, invoice.date),
+          descriptionMatch,
+        }
+      })
+      .filter(expense => !query || expense.searchText.includes(query))
+      .sort((a, b) => {
+        if (a.descriptionMatch !== b.descriptionMatch) return a.descriptionMatch ? -1 : 1
+        if (a.dateDelta !== b.dateDelta) return a.dateDelta - b.dateDelta
+        return String(b.candidateDate || '').localeCompare(String(a.candidateDate || ''))
+      })
+  }, [expenseCandidates, expenseSearch, getDateDelta, invoice.date, invoice.description])
+  const suggestedExpenseCandidates = expenseCandidatesView.filter(expense => expense.descriptionMatch || expense.dateDelta <= 10).slice(0, 6)
+  const suggestedExpenseIds = new Set(suggestedExpenseCandidates.map(expense => expense.id))
+  const allExpenseCandidates = expenseCandidatesView.filter(expense => !suggestedExpenseIds.has(expense.id))
   const renderBankTxCard = tx => {
     const isSelected = selectedBankTx?.id === tx.id
     return (
@@ -719,6 +753,62 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
                 {tr('receiptAmountDelta')}: {fmt(tx.amountDelta)}
               </div>
             ) : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const renderExpenseCandidateCard = expense => {
+    const isSelected = selectedExpense?.id === expense.id
+    return (
+      <div
+        key={expense.id}
+        className="record-detail-card"
+        role="button"
+        tabIndex={0}
+        onClick={() => setForm(previous => ({ ...previous, expense_id: String(expense.id) }))}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setForm(previous => ({ ...previous, expense_id: String(expense.id) }))
+          }
+        }}
+        style={{
+          margin: 0,
+          cursor: 'pointer',
+          borderColor: isSelected ? 'var(--color-primary)' : undefined,
+          boxShadow: isSelected ? '0 0 0 1px var(--color-primary) inset' : undefined,
+          background: isSelected ? 'rgba(78, 134, 255, 0.08)' : undefined,
+        }}
+      >
+        <div className="record-detail-grid" style={{ gridTemplateColumns: '1fr auto', gap: '1rem' }}>
+          <div className="record-field-text">
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong>{expense.description || `#${expense.id}`}</strong>
+              <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(expense.date)}</span>
+              {expense.paid_date ? <span style={{ color: 'var(--color-text-muted)' }}>{tr('dateOfPayment')}: {fmtDate(expense.paid_date)}</span> : null}
+            </div>
+            <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
+              {[
+                expense.projectLabel,
+                expense.contract_number ? `${tr('contractNumber')}: ${expense.contract_number}` : '',
+                expense.category,
+              ].filter(Boolean).join(` ${UI_DASH} `) || UI_DASH}
+            </div>
+            {expense.bank_reference ? (
+              <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
+                {tr('paymentReference')}: {expense.bank_reference}
+              </div>
+            ) : null}
+            {expense.bank_counterparty_name || expense.bank_purpose ? (
+              <div style={{ marginTop: 6 }}>
+                {compactText([expense.bank_counterparty_name, expense.bank_purpose].filter(Boolean).join(` ${UI_DASH} `), 140)}
+              </div>
+            ) : null}
+          </div>
+          <div style={{ display: 'grid', gap: '0.5rem', justifyItems: 'end', alignContent: 'start' }}>
+            <div style={{ fontWeight: 700 }}>{fmt(expense.amount)} {expense.currency || 'RSD'}</div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>#{expense.id}</div>
           </div>
         </div>
       </div>
@@ -839,27 +929,35 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           )}
           {type === 'expense' && (
             <div className="form-group">
-              <label className="form-label">{tr('selectExpense')}</label>
               {expenseCandidates.length === 0 ? <p style={{ color: 'var(--color-text-muted)' }}>{tr('noExpenseCandidates')}</p> : (
-                <div>
-                  <select className="form-input" required value={form.expense_id} onChange={e => setForm({ ...form, expense_id: e.target.value })}>
-                    <option value="">-</option>
-                    {expenseCandidates.map(expense => <option key={expense.id} value={expense.id}>{formatExpenseLabel(expense)}</option>)}
-                  </select>
-                  {selectedExpense && (
-                    <div style={{ marginTop: 8, padding: '0.75rem', border: '1px solid var(--border-color, rgba(255,255,255,0.12))', borderRadius: 8, display: 'grid', gap: 4 }}>
-                      <div><strong>{tr('linkedExpense')}:</strong> #{selectedExpense.id}</div>
-                      <div><strong>{tr('date')}:</strong> {fmtDate(selectedExpense.date)}</div>
-                      {selectedExpense.paid_date && <div><strong>{tr('dateOfPayment')}:</strong> {fmtDate(selectedExpense.paid_date)}</div>}
-                      <div><strong>{tr('description')}:</strong> {selectedExpense.description}</div>
-                      {(selectedExpense.project_code || selectedExpense.project_name) && <div><strong>{tr('project')}:</strong> {[selectedExpense.project_code, selectedExpense.project_name].filter(Boolean).join(' / ')}</div>}
-                      {selectedExpense.contract_number && <div><strong>{tr('contractNumber')}:</strong> {selectedExpense.contract_number}</div>}
-                      {selectedExpense.category && <div><strong>{tr('category')}:</strong> {selectedExpense.category}</div>}
-                      {selectedExpense.bank_reference && <div><strong>{tr('paymentReference')}:</strong> {selectedExpense.bank_reference}</div>}
-                      <div><strong>{tr('amount')}:</strong> {fmt(selectedExpense.amount)}</div>
-                      {selectedExpense.note && <div><strong>{tr('note')}:</strong> {selectedExpense.note}</div>}
+                <div className="record-detail-card">
+                  <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectExpense')}</div>
+                  <SearchInput
+                    placeholder={tr('search')}
+                    value={expenseSearch}
+                    onChange={setExpenseSearch}
+                    style={{ width: '100%', marginBottom: '0.75rem' }}
+                  />
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {suggestedExpenseCandidates.length > 0 ? (
+                      <div>
+                        <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
+                        <div style={{ display: 'grid', gap: '0.75rem' }}>
+                          {suggestedExpenseCandidates.map(renderExpenseCandidateCard)}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div>
+                      <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
+                      <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
+                        {expenseCandidatesView.length === 0 ? (
+                          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+                        ) : (
+                          (suggestedExpenseCandidates.length > 0 ? allExpenseCandidates : expenseCandidatesView).map(renderExpenseCandidateCard)
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
