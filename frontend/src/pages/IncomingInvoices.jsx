@@ -425,7 +425,7 @@ export default function IncomingInvoices() {
         ) : null}
       </Modal>
 
-      {settleModal && <SettleModal data={settleModal} clients={clients} onClose={() => setSettleModal(null)} onDone={() => { const current = settleModal.invoice; setSettleModal(null); load(); openDetail(current.id) }} />}
+      {settleModal && <SettleModal data={settleModal} clients={clients} projects={projects} onClose={() => setSettleModal(null)} onDone={() => { const current = settleModal.invoice; setSettleModal(null); load(); openDetail(current.id) }} />}
 
       {linkModal && <LinkInvoiceModal data={linkModal} onClose={() => setLinkModal(null)} onDone={() => { const current = linkModal.invoice; setLinkModal(null); load(); openDetail(current.id) }} />}
 
@@ -556,12 +556,13 @@ export default function IncomingInvoices() {
   )
 }
 
-function SettleModal({ data, clients, onClose, onDone }) {
+function SettleModal({ data, clients, projects, onClose, onDone }) {
   const { invoice, type } = data
   const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: invoice.date || todayIso(), note: '', bank_transaction_id: '', income_id: '', expense_id: '' })
   const [bankTxs, setBankTxs] = useState([])
   const [openIncomes, setOpenIncomes] = useState([])
   const [expenseCandidates, setExpenseCandidates] = useState([])
+  const [bankSearch, setBankSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const selectedBankTx = bankTxs.find(i => i.id === Number(form.bank_transaction_id)) || null
   const selectedIncome = openIncomes.find(i => i.id === Number(form.income_id)) || null
@@ -605,13 +606,59 @@ function SettleModal({ data, clients, onClose, onDone }) {
   const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset'), expense: tr('attachExpense') }
   const invoiceProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
   const showInvoiceSummary = true
-  const formatBankTxLabel = tx => {
-    const parts = [fmtDate(tx.date), fmt(tx.amount)]
-    const title = compactText([tx.counterparty_name, tx.purpose].filter(Boolean).join(` ${UI_DASH} `), 72)
-    if (title) parts.push(title)
-    if (tx.bank_reference) parts.push(`${tr('paymentReference')}: ${tx.bank_reference}`)
-    return parts.filter(Boolean).join(' | ')
+  const getProjectNameById = projectId => projects.find(project => project.id === projectId)?.name || ''
+  const toDateOnly = value => {
+    if (!value) return null
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate())
   }
+  const getDateDelta = (left, right) => {
+    const leftDate = toDateOnly(left)
+    const rightDate = toDateOnly(right)
+    if (!leftDate || !rightDate) return Number.MAX_SAFE_INTEGER
+    return Math.abs(Math.round((leftDate - rightDate) / 86400000))
+  }
+  const normalizedInvoiceCounterparty = String(invoice.client_name || invoice.counterparty_name || '').toLowerCase().trim()
+  const invoiceCounterpartyTokens = normalizedInvoiceCounterparty.split(/\s+/).filter(token => token.length >= 4)
+  const targetAmount = Math.abs(Number(invoice.remaining_amount || invoice.amount || 0))
+  const bankTxCandidates = useMemo(() => {
+    const query = bankSearch.trim().toLowerCase()
+    return bankTxs
+      .map(tx => {
+        const amount = Math.abs(Number(tx.amount || 0))
+        const searchText = [
+          tx.counterparty_name,
+          tx.purpose,
+          tx.bank_reference,
+          tx.date,
+          tx.project_name,
+          getProjectNameById(tx.project_id),
+          String(tx.amount || ''),
+        ].filter(Boolean).join(' ').toLowerCase()
+        const amountDelta = Math.abs(amount - targetAmount)
+        const dateDelta = getDateDelta(tx.date, invoice.date)
+        const counterpartyMatch = invoiceCounterpartyTokens.length > 0
+          && invoiceCounterpartyTokens.some(token => searchText.includes(token))
+        return {
+          ...tx,
+          amountDelta,
+          dateDelta,
+          counterpartyMatch,
+          projectLabel: tx.project_name || getProjectNameById(tx.project_id) || '',
+          searchText,
+        }
+      })
+      .filter(tx => !query || tx.searchText.includes(query))
+      .sort((a, b) => {
+        if (a.amountDelta !== b.amountDelta) return a.amountDelta - b.amountDelta
+        if (a.dateDelta !== b.dateDelta) return a.dateDelta - b.dateDelta
+        if (a.counterpartyMatch !== b.counterpartyMatch) return a.counterpartyMatch ? -1 : 1
+        return String(a.date || '').localeCompare(String(b.date || '')) * -1
+      })
+  }, [bankSearch, bankTxs, invoice.date, invoiceCounterpartyTokens, projects, targetAmount])
+  const suggestedBankTxs = bankTxCandidates.filter(tx => tx.amountDelta < 0.01 || tx.counterpartyMatch).slice(0, 6)
+  const suggestedBankTxIds = new Set(suggestedBankTxs.map(tx => tx.id))
+  const allBankTxs = bankTxCandidates.filter(tx => !suggestedBankTxIds.has(tx.id))
   const formatOffsetIncomeLabel = income => {
     const parts = [income.invoice_number || '']
     if (income.date) parts.push(fmtDate(income.date))
@@ -630,6 +677,52 @@ function SettleModal({ data, clients, onClose, onDone }) {
     if (expense.bank_reference) parts.push(`${tr('paymentReference')}: ${expense.bank_reference}`)
     parts.push(fmt(expense.amount))
     return parts.filter(Boolean).join(' | ')
+  }
+  const renderBankTxCard = tx => {
+    const isSelected = selectedBankTx?.id === tx.id
+    return (
+      <div
+        key={tx.id}
+        className="record-detail-card"
+        role="button"
+        tabIndex={0}
+        onClick={() => setForm(previous => ({ ...previous, bank_transaction_id: String(tx.id), amount: Number(tx.amount || previous.amount) }))}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setForm(previous => ({ ...previous, bank_transaction_id: String(tx.id), amount: Number(tx.amount || previous.amount) }))
+          }
+        }}
+        style={{
+          margin: 0,
+          cursor: 'pointer',
+          borderColor: isSelected ? 'var(--color-primary)' : undefined,
+          boxShadow: isSelected ? '0 0 0 1px var(--color-primary) inset' : undefined,
+          background: isSelected ? 'rgba(78, 134, 255, 0.08)' : undefined,
+        }}
+      >
+        <div className="record-detail-grid" style={{ gridTemplateColumns: '1fr auto', gap: '1rem' }}>
+          <div className="record-field-text">
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong>{tx.counterparty_name || UI_DASH}</strong>
+              <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(tx.date)}</span>
+            </div>
+            {tx.purpose ? <div style={{ marginTop: 6 }}>{compactText(tx.purpose, 140)}</div> : null}
+            <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
+              {[tx.projectLabel, tx.bank_reference ? `${tr('paymentReference')}: ${tx.bank_reference}` : ''].filter(Boolean).join(` ${UI_DASH} `) || UI_DASH}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: '0.5rem', justifyItems: 'end', alignContent: 'start' }}>
+            <div style={{ fontWeight: 700 }}>{fmt(tx.amount)} {tx.currency || 'RSD'}</div>
+            {tx.amountDelta > 0.009 ? (
+              <div style={{ color: 'var(--color-warning)', fontSize: '0.82rem', textAlign: 'right' }}>
+                {tr('receiptAmountDelta')}: {fmt(tx.amountDelta)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -688,43 +781,34 @@ function SettleModal({ data, clients, onClose, onDone }) {
           )}
           {type === 'bank' && (
             <div className="form-group">
-              <label className="form-label">{tr('selectBankTx')}</label>
-              <div>
-                <select className="form-input" required value={form.bank_transaction_id} onChange={e => {
-                  const tx = bankTxs.find(item => item.id === Number(e.target.value))
-                  setForm({ ...form, bank_transaction_id: e.target.value, amount: tx ? Number(tx.amount) : form.amount })
-                }}>
-                  <option value="">-</option>
-                  {bankTxs.map(tx => <option key={tx.id} value={tx.id}>{formatBankTxLabel(tx)}</option>)}
-                </select>
-                {selectedBankTx && (
-                  <div className="record-detail-card" style={{ marginTop: 8 }}>
-                    <div className="record-field-grid">
-                      <div className="record-field">
-                        <span className="record-field-label">{tr('date')}</span>
-                        <span className="record-field-value">{fmtDate(selectedBankTx.date)}</span>
+              <div className="record-detail-card">
+                <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectBankTx')}</div>
+                <SearchInput
+                  placeholder={tr('bankTxSearchObligations')}
+                  value={bankSearch}
+                  onChange={setBankSearch}
+                  style={{ width: '100%', marginBottom: '0.75rem' }}
+                />
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {suggestedBankTxs.length > 0 ? (
+                    <div>
+                      <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
+                      <div style={{ display: 'grid', gap: '0.75rem' }}>
+                        {suggestedBankTxs.map(renderBankTxCard)}
                       </div>
-                      <div className="record-field">
-                        <span className="record-field-label">{tr('amount')}</span>
-                        <span className="record-field-value">{fmt(selectedBankTx.amount)} {selectedBankTx.currency || 'RSD'}</span>
-                      </div>
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('bankTxCounterparty')}</span>
-                        <span className="record-field-value">{selectedBankTx.counterparty_name || UI_DASH}</span>
-                      </div>
-                      <div className="record-field full">
-                        <span className="record-field-label">{tr('bankTxPurpose')}</span>
-                        <div className="record-field-text">{selectedBankTx.purpose || UI_DASH}</div>
-                      </div>
-                      {selectedBankTx.bank_reference ? (
-                        <div className="record-field full">
-                          <span className="record-field-label">{tr('bankTxReference')}</span>
-                          <span className="record-field-value">{selectedBankTx.bank_reference}</span>
-                        </div>
-                      ) : null}
+                    </div>
+                  ) : null}
+                  <div>
+                    <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
+                    <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
+                      {bankTxCandidates.length === 0 ? (
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+                      ) : (
+                        (suggestedBankTxs.length > 0 ? allBankTxs : bankTxCandidates).map(renderBankTxCard)
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -798,7 +882,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
           )}
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id)}>{tr('save')}</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id) || (type === 'bank' && !form.bank_transaction_id)}>{tr('save')}</button>
           </div>
         </form>
     </Modal>
