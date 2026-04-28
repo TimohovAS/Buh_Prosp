@@ -563,6 +563,7 @@ function SettleModal({ data, clients, onClose, onDone }) {
   const [openIncomes, setOpenIncomes] = useState([])
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [submitting, setSubmitting] = useState(false)
+  const selectedBankTx = bankTxs.find(i => i.id === Number(form.bank_transaction_id)) || null
   const selectedIncome = openIncomes.find(i => i.id === Number(form.income_id)) || null
   const selectedExpense = expenseCandidates.find(i => i.id === Number(form.expense_id)) || null
 
@@ -603,7 +604,14 @@ function SettleModal({ data, clients, onClose, onDone }) {
 
   const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset'), expense: tr('attachExpense') }
   const invoiceProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
-  const showInvoiceSummary = type === 'offset' || type === 'expense'
+  const showInvoiceSummary = true
+  const formatBankTxLabel = tx => {
+    const parts = [fmtDate(tx.date), fmt(tx.amount)]
+    const title = compactText([tx.counterparty_name, tx.purpose].filter(Boolean).join(` ${UI_DASH} `), 72)
+    if (title) parts.push(title)
+    if (tx.bank_reference) parts.push(`${tr('paymentReference')}: ${tx.bank_reference}`)
+    return parts.filter(Boolean).join(' | ')
+  }
   const formatOffsetIncomeLabel = income => {
     const parts = [income.invoice_number || '']
     if (income.date) parts.push(fmtDate(income.date))
@@ -634,27 +642,90 @@ function SettleModal({ data, clients, onClose, onDone }) {
         <form onSubmit={handleSubmit}>
           {showInvoiceSummary && (
             <div className="form-group">
-              <div style={{ marginBottom: 10, padding: '0.75rem', border: '1px solid var(--border-color, rgba(255,255,255,0.12))', borderRadius: 8, display: 'grid', gap: 4 }}>
-                <div><strong>{tr('invoiceNumber')}:</strong> {invoice.invoice_number}</div>
-                <div><strong>{tr('counterpartyName')}:</strong> {invoice.client_name || invoice.counterparty_name || '-'}</div>
-                <div><strong>{tr('date')}:</strong> {fmtDate(invoice.date)}</div>
-                {invoiceProjectLabel && <div><strong>{tr('project')}:</strong> {invoiceProjectLabel}</div>}
-                {invoice.description && <div><strong>{tr('description')}:</strong> {invoice.description}</div>}
-                {invoice.note && <div><strong>{tr('note')}:</strong> {invoice.note}</div>}
-                <div><strong>{tr('remainingAmount')}:</strong> {fmt(invoice.remaining_amount)}</div>
+              <div className="record-detail-card">
+                <div className="record-field-grid">
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('invoiceNumber')}</span>
+                    <span className="record-field-value">{invoice.invoice_number}</span>
+                  </div>
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('date')}</span>
+                    <span className="record-field-value">{fmtDate(invoice.date)}</span>
+                  </div>
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('amount')}</span>
+                    <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
+                  </div>
+                  <div className="record-field">
+                    <span className="record-field-label">{tr('remainingAmount')}</span>
+                    <span className="record-field-value">{fmt(invoice.remaining_amount)}</span>
+                  </div>
+                  <div className="record-field full">
+                    <span className="record-field-label">{tr('counterpartyName')}</span>
+                    <span className="record-field-value">{invoice.client_name || invoice.counterparty_name || UI_DASH}</span>
+                  </div>
+                  {invoiceProjectLabel ? (
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('project')}</span>
+                      <span className="record-field-value">{invoiceProjectLabel}</span>
+                    </div>
+                  ) : null}
+                  {invoice.description ? (
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('description')}</span>
+                      <div className="record-field-text">{invoice.description}</div>
+                    </div>
+                  ) : null}
+                  {invoice.note ? (
+                    <div className="record-field full">
+                      <span className="record-field-label">{tr('note')}</span>
+                      <div className="record-field-text">{invoice.note}</div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           )}
           {type === 'bank' && (
             <div className="form-group">
               <label className="form-label">{tr('selectBankTx')}</label>
-              <select className="form-input" required value={form.bank_transaction_id} onChange={e => {
-                const tx = bankTxs.find(item => item.id === Number(e.target.value))
-                setForm({ ...form, bank_transaction_id: e.target.value, amount: tx ? Number(tx.amount) : form.amount })
-              }}>
-                <option value="">-</option>
-                {bankTxs.map(tx => <option key={tx.id} value={tx.id}>{fmtDate(tx.date)} | {fmt(tx.amount)} | {tx.counterparty_name || tx.purpose || tx.bank_reference}</option>)}
-              </select>
+              <div>
+                <select className="form-input" required value={form.bank_transaction_id} onChange={e => {
+                  const tx = bankTxs.find(item => item.id === Number(e.target.value))
+                  setForm({ ...form, bank_transaction_id: e.target.value, amount: tx ? Number(tx.amount) : form.amount })
+                }}>
+                  <option value="">-</option>
+                  {bankTxs.map(tx => <option key={tx.id} value={tx.id}>{formatBankTxLabel(tx)}</option>)}
+                </select>
+                {selectedBankTx && (
+                  <div className="record-detail-card" style={{ marginTop: 8 }}>
+                    <div className="record-field-grid">
+                      <div className="record-field">
+                        <span className="record-field-label">{tr('date')}</span>
+                        <span className="record-field-value">{fmtDate(selectedBankTx.date)}</span>
+                      </div>
+                      <div className="record-field">
+                        <span className="record-field-label">{tr('amount')}</span>
+                        <span className="record-field-value">{fmt(selectedBankTx.amount)} {selectedBankTx.currency || 'RSD'}</span>
+                      </div>
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('bankTxCounterparty')}</span>
+                        <span className="record-field-value">{selectedBankTx.counterparty_name || UI_DASH}</span>
+                      </div>
+                      <div className="record-field full">
+                        <span className="record-field-label">{tr('bankTxPurpose')}</span>
+                        <div className="record-field-text">{selectedBankTx.purpose || UI_DASH}</div>
+                      </div>
+                      {selectedBankTx.bank_reference ? (
+                        <div className="record-field full">
+                          <span className="record-field-label">{tr('bankTxReference')}</span>
+                          <span className="record-field-value">{selectedBankTx.bank_reference}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {type === 'offset' && (
