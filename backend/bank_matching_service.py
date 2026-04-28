@@ -90,7 +90,9 @@ async def _suggest_receipt_expense_matches(db: AsyncSession, tx: BankTransaction
         if not money_eq(expense.amount or ZERO_DECIMAL, tx.amount or ZERO_DECIMAL):
             continue
         receipt_date = receipt.receipt_datetime.date() if getattr(receipt, "receipt_datetime", None) else expense.date
-        date_diff = abs((tx.date - receipt_date).days)
+        tx_date_val = tx.date.date() if hasattr(tx.date, "date") else tx.date
+        receipt_date_val = receipt_date.date() if hasattr(receipt_date, "date") else receipt_date
+        date_diff = abs((tx_date_val - receipt_date_val).days)
         counterparty_match = _matches_receipt_seller(tx, receipt)
         section = "all"
         score_value = None
@@ -196,8 +198,10 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
 
     for obligation in obligations:
         decision = getattr(obligation, "decision", None)
-        amount_diff = money_abs(to_decimal(obligation.amount or ZERO_DECIMAL) - to_decimal(tx.amount or ZERO_DECIMAL))
-        deadline_diff = abs((tx.date - obligation.deadline).days)
+        amount_diff = money_abs(money_abs(obligation.amount or ZERO_DECIMAL) - money_abs(tx.amount or ZERO_DECIMAL))
+        tx_date_val = tx.date.date() if hasattr(tx.date, "date") else tx.date
+        obl_date_val = obligation.deadline.date() if hasattr(obligation.deadline, "date") else obligation.deadline
+        deadline_diff = abs((tx_date_val - obl_date_val).days)
         reference_match = False
         for candidate in (
             getattr(decision, "poziv_na_broj", None),
@@ -229,8 +233,8 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
         scored.append((
             (
                 0 if section == "suggested" else 1,
-                amount_diff,
-                deadline_diff,
+                float(amount_diff),
+                int(obligation.id),
             ),
             {
                 "id": obligation.id,
@@ -566,8 +570,10 @@ async def _suggest_income_matches(
             if income_invoice in normalized_extracted:
                 invoice_score = 0
 
-        amount_diff = money_abs(remaining - to_decimal(tx.amount))
-        date_diff = abs((tx.date - income.issued_date).days)
+        amount_diff = money_abs(remaining - money_abs(tx.amount or ZERO_DECIMAL))
+        tx_date_val = tx.date.date() if hasattr(tx.date, "date") else tx.date
+        inc_date_val = income.issued_date.date() if hasattr(income.issued_date, "date") else income.issued_date
+        date_diff = abs((tx_date_val - inc_date_val).days)
         return (invoice_score, amount_diff, date_diff)
 
     def make_income_item(income: Income, remaining, score_value: int | None, section: str) -> dict:
