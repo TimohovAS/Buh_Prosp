@@ -1,8 +1,9 @@
 """Главный модуль приложения ProspEl."""
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from contextlib import suppress
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
@@ -33,6 +34,7 @@ from backend.routers.incoming_invoices_router import router as incoming_invoices
 from backend.routers.receipts_router import router as receipts_router
 
 settings = get_settings()
+logger = logging.getLogger("prospel")
 
 
 async def _bootstrap_users_and_payments() -> None:
@@ -92,6 +94,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_unhandled_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled exception during %s %s", request.method, request.url.path)
+        raise
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(income_router, prefix="/api")
