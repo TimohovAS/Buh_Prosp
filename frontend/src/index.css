@@ -1162,6 +1162,17 @@ tr.row-reversal {
   text-align: right;
 }
 
+.incoming-invoice-settle-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(480px, 1.35fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.incoming-invoice-settle-column {
+  min-width: 0;
+}
+
 .incoming-invoice-status-inline {
   margin-top: 0.45rem;
 }
@@ -1970,6 +1981,10 @@ tr:hover td {
 }
 
 @media (max-width: 900px) {
+  .incoming-invoice-settle-layout {
+    grid-template-columns: 1fr;
+  }
+
   .bank-match-summary {
     grid-template-columns: 1fr;
   }

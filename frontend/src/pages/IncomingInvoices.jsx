@@ -607,6 +607,7 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
   const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset'), expense: tr('attachExpense') }
   const invoiceProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
   const showInvoiceSummary = true
+  const isWideSideLayout = type === 'expense' || type === 'bank'
   const getProjectNameById = projectId => projects.find(project => project.id === projectId)?.name || ''
   const toDateOnly = value => {
     if (!value) return null
@@ -814,92 +815,175 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
       </div>
     )
   }
+  const renderInvoiceSummaryCard = () => (
+    <div className="record-detail-card">
+      <div className="record-field-grid">
+        <div className="record-field">
+          <span className="record-field-label">{tr('invoiceNumber')}</span>
+          <span className="record-field-value">{invoice.invoice_number}</span>
+        </div>
+        <div className="record-field">
+          <span className="record-field-label">{tr('date')}</span>
+          <span className="record-field-value">{fmtDate(invoice.date)}</span>
+        </div>
+        <div className="record-field">
+          <span className="record-field-label">{tr('amount')}</span>
+          <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
+        </div>
+        <div className="record-field">
+          <span className="record-field-label">{tr('remainingAmount')}</span>
+          <span className="record-field-value">{fmt(invoice.remaining_amount)}</span>
+        </div>
+        <div className="record-field full">
+          <span className="record-field-label">{tr('counterpartyName')}</span>
+          <span className="record-field-value">{invoice.client_name || invoice.counterparty_name || UI_DASH}</span>
+        </div>
+        {invoiceProjectLabel ? (
+          <div className="record-field full">
+            <span className="record-field-label">{tr('project')}</span>
+            <span className="record-field-value">{invoiceProjectLabel}</span>
+          </div>
+        ) : null}
+        {invoice.description ? (
+          <div className="record-field full">
+            <span className="record-field-label">{tr('description')}</span>
+            <div className="record-field-text">{invoice.description}</div>
+          </div>
+        ) : null}
+        {invoice.note ? (
+          <div className="record-field full">
+            <span className="record-field-label">{tr('note')}</span>
+            <div className="record-field-text">{invoice.note}</div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+  const renderExpenseSelectionPanel = () => (
+    expenseCandidates.length === 0 ? <p style={{ color: 'var(--color-text-muted)' }}>{tr('noExpenseCandidates')}</p> : (
+      <div className="record-detail-card">
+        <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectExpense')}</div>
+        <SearchInput
+          placeholder={tr('search')}
+          value={expenseSearch}
+          onChange={setExpenseSearch}
+          style={{ width: '100%', marginBottom: '0.75rem' }}
+        />
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          {suggestedExpenseCandidates.length > 0 ? (
+            <div>
+              <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {suggestedExpenseCandidates.map(renderExpenseCandidateCard)}
+              </div>
+            </div>
+          ) : null}
+          <div>
+            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
+            <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 420, overflowY: 'auto', paddingRight: '0.2rem' }}>
+              {expenseCandidatesView.length === 0 ? (
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              ) : (
+                (suggestedExpenseCandidates.length > 0 ? allExpenseCandidates : expenseCandidatesView).map(renderExpenseCandidateCard)
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  )
+  const renderBankSelectionPanel = () => (
+    <div className="record-detail-card">
+      <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectBankTx')}</div>
+      <SearchInput
+        placeholder={tr('bankTxSearchObligations')}
+        value={bankSearch}
+        onChange={setBankSearch}
+        style={{ width: '100%', marginBottom: '0.75rem' }}
+      />
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        {suggestedBankTxs.length > 0 ? (
+          <div>
+            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {suggestedBankTxs.map(renderBankTxCard)}
+            </div>
+          </div>
+        ) : null}
+        <div>
+          <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
+          <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
+            {bankTxCandidates.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+            ) : (
+              (suggestedBankTxs.length > 0 ? allBankTxs : bankTxCandidates).map(renderBankTxCard)
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+  const renderSettlementFields = () => (
+    <>
+      <div className="form-group">
+        <label className="form-label">{tr('settlementAmount')}</label>
+        <input className="form-input" type="number" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{tr('settlementDate')}</label>
+        <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{tr('note')}</label>
+        <input className="form-input" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+      </div>
+    </>
+  )
 
   return (
     <Modal
       isOpen
       onClose={onClose}
       title={`${titles[type]}: ${invoice.invoice_number}`}
+      maxWidth={isWideSideLayout ? '1280px' : undefined}
+      bodyClassName={isWideSideLayout ? 'incoming-invoice-settle-modal-body' : ''}
       closeOnOverlay
     >
         <form onSubmit={handleSubmit}>
-          {showInvoiceSummary && (
-            <div className="form-group">
-              <div className="record-detail-card">
-                <div className="record-field-grid">
-                  <div className="record-field">
-                    <span className="record-field-label">{tr('invoiceNumber')}</span>
-                    <span className="record-field-value">{invoice.invoice_number}</span>
+          {isWideSideLayout ? (
+            <div className="incoming-invoice-settle-layout">
+              <div className="incoming-invoice-settle-column">
+                {showInvoiceSummary && (
+                  <div className="form-group">
+                    {renderInvoiceSummaryCard()}
                   </div>
-                  <div className="record-field">
-                    <span className="record-field-label">{tr('date')}</span>
-                    <span className="record-field-value">{fmtDate(invoice.date)}</span>
+                )}
+              </div>
+              <div className="incoming-invoice-settle-column">
+                <div className="form-group">
+                  {type === 'expense' ? renderExpenseSelectionPanel() : renderBankSelectionPanel()}
+                </div>
+                {type === 'bank' ? (
+                  <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
+                    {renderSettlementFields()}
                   </div>
-                  <div className="record-field">
-                    <span className="record-field-label">{tr('amount')}</span>
-                    <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
-                  </div>
-                  <div className="record-field">
-                    <span className="record-field-label">{tr('remainingAmount')}</span>
-                    <span className="record-field-value">{fmt(invoice.remaining_amount)}</span>
-                  </div>
-                  <div className="record-field full">
-                    <span className="record-field-label">{tr('counterpartyName')}</span>
-                    <span className="record-field-value">{invoice.client_name || invoice.counterparty_name || UI_DASH}</span>
-                  </div>
-                  {invoiceProjectLabel ? (
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('project')}</span>
-                      <span className="record-field-value">{invoiceProjectLabel}</span>
-                    </div>
-                  ) : null}
-                  {invoice.description ? (
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('description')}</span>
-                      <div className="record-field-text">{invoice.description}</div>
-                    </div>
-                  ) : null}
-                  {invoice.note ? (
-                    <div className="record-field full">
-                      <span className="record-field-label">{tr('note')}</span>
-                      <div className="record-field-text">{invoice.note}</div>
-                    </div>
-                  ) : null}
+                ) : null}
+                <div className="modal-actions">
+                  <button type="button" className="btn" onClick={onClose}>{tr('cancel')}</button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id) || (type === 'bank' && !form.bank_transaction_id)}>{tr('save')}</button>
                 </div>
               </div>
+            </div>
+          ) : (
+            <>
+          {showInvoiceSummary && (
+            <div className="form-group">
+              {renderInvoiceSummaryCard()}
             </div>
           )}
           {type === 'bank' && (
             <div className="form-group">
-              <div className="record-detail-card">
-                <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectBankTx')}</div>
-                <SearchInput
-                  placeholder={tr('bankTxSearchObligations')}
-                  value={bankSearch}
-                  onChange={setBankSearch}
-                  style={{ width: '100%', marginBottom: '0.75rem' }}
-                />
-                <div style={{ display: 'grid', gap: '0.75rem' }}>
-                  {suggestedBankTxs.length > 0 ? (
-                    <div>
-                      <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
-                      <div style={{ display: 'grid', gap: '0.75rem' }}>
-                        {suggestedBankTxs.map(renderBankTxCard)}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div>
-                    <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
-                    <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
-                      {bankTxCandidates.length === 0 ? (
-                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
-                      ) : (
-                        (suggestedBankTxs.length > 0 ? allBankTxs : bankTxCandidates).map(renderBankTxCard)
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {renderBankSelectionPanel()}
             </div>
           )}
           {type === 'offset' && (
@@ -929,59 +1013,18 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           )}
           {type === 'expense' && (
             <div className="form-group">
-              {expenseCandidates.length === 0 ? <p style={{ color: 'var(--color-text-muted)' }}>{tr('noExpenseCandidates')}</p> : (
-                <div className="record-detail-card">
-                  <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectExpense')}</div>
-                  <SearchInput
-                    placeholder={tr('search')}
-                    value={expenseSearch}
-                    onChange={setExpenseSearch}
-                    style={{ width: '100%', marginBottom: '0.75rem' }}
-                  />
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    {suggestedExpenseCandidates.length > 0 ? (
-                      <div>
-                        <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
-                        <div style={{ display: 'grid', gap: '0.75rem' }}>
-                          {suggestedExpenseCandidates.map(renderExpenseCandidateCard)}
-                        </div>
-                      </div>
-                    ) : null}
-                    <div>
-                      <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
-                      <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
-                        {expenseCandidatesView.length === 0 ? (
-                          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
-                        ) : (
-                          (suggestedExpenseCandidates.length > 0 ? allExpenseCandidates : expenseCandidatesView).map(renderExpenseCandidateCard)
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {renderExpenseSelectionPanel()}
             </div>
           )}
           {type !== 'expense' && (
-            <>
-              <div className="form-group">
-                <label className="form-label">{tr('settlementAmount')}</label>
-                <input className="form-input" type="number" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('settlementDate')}</label>
-                <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('note')}</label>
-                <input className="form-input" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
-              </div>
-            </>
+            renderSettlementFields()
           )}
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>{tr('cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id) || (type === 'bank' && !form.bank_transaction_id)}>{tr('save')}</button>
           </div>
+            </>
+          )}
         </form>
     </Modal>
   )
