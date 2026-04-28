@@ -13,6 +13,7 @@ from backend.auth import get_current_user_required
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.config import get_settings
 from backend.database import get_db
+from backend.date_utils import coerce_date, days_between
 from backend.models import BankTransaction, BankTransactionIncomeAllocation, Expense, Income, IncomingInvoice, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
@@ -176,7 +177,10 @@ async def get_dashboard(
     approaching_days = 14
     upcoming_obligations = []
     for obligation in sorted(unpaid_obligations, key=lambda item: item.deadline):
-        days_until = (obligation.deadline - today).days
+        obligation_deadline = coerce_date(obligation.deadline)
+        if obligation_deadline is None:
+            continue
+        days_until = days_between(obligation_deadline, today, absolute=False)
         if days_until > approaching_days:
             continue
         payment_type = payment_type_map.get(obligation.payment_type_id)
@@ -185,8 +189,8 @@ async def get_dashboard(
                 id=obligation.id,
                 payment_type_name=payment_type.name_sr if payment_type else "Payment",
                 amount=obligation.amount,
-                deadline=obligation.deadline.isoformat(),
-                status="overdue" if obligation.deadline < today else "upcoming",
+                deadline=obligation_deadline.isoformat(),
+                status="overdue" if obligation_deadline < today else "upcoming",
                 days_until=days_until,
             )
         )
@@ -205,7 +209,7 @@ async def get_dashboard(
         for due_date in due_dates:
             if (planned_expense.id, due_date) in paid_pairs:
                 continue
-            days_until = (due_date - today).days
+            days_until = days_between(due_date, today, absolute=False)
             upcoming_planned.append(
                 UpcomingPlannedItem(
                     planned_expense_id=planned_expense.id,
@@ -274,4 +278,3 @@ async def get_income_limits(
     selected_year = year or date.today().year
     status = await get_income_limit_status(db, selected_year)
     return IncomeLimitStatus(**status)
-

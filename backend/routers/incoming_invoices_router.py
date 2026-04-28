@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
+from backend.date_utils import days_between
 from backend.decimal_utils import to_decimal
 from backend.incoming_invoice_service import (
     INCOMING_INVOICE_SOURCE,
@@ -321,8 +322,8 @@ async def expense_candidates(
     expenses.sort(
         key=lambda expense: (
             0 if expense.source == "bank_import" else 1,
-            abs(((expense.paid_date or expense.date) - invoice.date).days),
-            abs((expense.date - invoice.date).days),
+            days_between(expense.paid_date or expense.date, invoice.date, absolute=True),
+            days_between(expense.date, invoice.date, absolute=True),
             -int(expense.id),
         )
     )

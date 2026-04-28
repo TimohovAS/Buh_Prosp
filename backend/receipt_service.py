@@ -14,6 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.date_utils import coerce_date, days_between
 from backend.db_utils import (
     get_category_or_none,
     get_contract_or_404,
@@ -538,7 +539,7 @@ async def get_receipt_expense_candidates(
         )
     )
     occupied_expense_ids = {int(expense_id) for (expense_id,) in other_linked_result.fetchall() if expense_id is not None}
-    receipt_date = receipt.receipt_datetime.date() if receipt.receipt_datetime else None
+    receipt_date = coerce_date(receipt.receipt_datetime)
 
     query = (
         select(Expense)
@@ -563,7 +564,7 @@ async def get_receipt_expense_candidates(
         amount_delta = (receipt_amount - expense_amount).quantize(MONEY_PLACES)
         amount_delta_abs = money_abs(amount_delta)
         matches_amount = money_eq(expense_amount, receipt_amount)
-        date_diff = abs((expense.date - receipt_date).days) if receipt_date else 9999
+        date_diff = days_between(expense.date, receipt_date, absolute=True) if receipt_date else 9999
         if receipt_date and date_diff > 31:
             continue
         score = 40
@@ -774,7 +775,7 @@ async def create_expense_from_receipt(
         category = await get_category_or_none(db, resolved_category_id)
         category_name = category.name_ru if category else None
 
-    expense_date = receipt.receipt_datetime.date() if receipt.receipt_datetime else date.today()
+    expense_date = coerce_date(receipt.receipt_datetime) or date.today()
     expense = Expense(
         date=expense_date,
         description=(description or _build_receipt_expense_description(receipt)).strip()[:500],

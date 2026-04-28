@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
+from backend.date_utils import coerce_date, days_between
 from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction, BankTransactionIncomeAllocation
 
@@ -435,14 +436,15 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
         remaining = to_decimal(i.amount_rsd) - to_decimal(i.paid_amount or ZERO_DECIMAL)
         if remaining <= 0:
             continue
-        days_out = (today - i.issued_date).days
-        due_dt = i.due_date or (i.issued_date + timedelta(days=30))
-        days_overdue = (today - due_dt).days
+        issued_date = coerce_date(i.issued_date)
+        due_dt = coerce_date(i.due_date) or ((issued_date + timedelta(days=30)) if issued_date else today)
+        days_out = days_between(today, issued_date, absolute=False) if issued_date else 0
+        days_overdue = days_between(today, due_dt, absolute=False)
         items.append({
             "income_id": i.id,
             "invoice_number": i.invoice_number,
             "client_name": i.client_name or (i.client.name if i.client else None),
-            "issued_date": i.issued_date.isoformat(),
+            "issued_date": issued_date.isoformat() if issued_date else None,
             "due_date": due_dt.isoformat(),
             "amount": float(remaining),          # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
             "amount_full": float(to_decimal(i.amount_rsd)),
