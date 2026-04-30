@@ -70,6 +70,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [ProspEl] Running backend helper import guard...
+.\venv\Scripts\python.exe .\backend\scripts\check_helper_imports.py
+if errorlevel 1 (
+  echo [ERROR] Backend helper import guard failed.
+  exit /b 1
+)
+
 echo [ProspEl] DB migrations are not part of the regular update.
 echo [ProspEl] Run one-time migration scripts from .\manual_migrations\ when needed.
 rem One-time migration scripts:
