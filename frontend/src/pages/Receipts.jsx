@@ -135,8 +135,8 @@ export default function Receipts() {
   ]), [])
 
   const filteredContracts = useMemo(() => {
-    return filterContractsForProject(contracts, createForm.project_id)
-  }, [contracts, createForm.project_id])
+    return filterContractsForProject(contracts, assignProjectId)
+  }, [assignProjectId, contracts])
 
   const unassignedProject = useMemo(() => findUnassignedProject(projects), [projects])
 
@@ -543,6 +543,28 @@ export default function Receipts() {
     }
   }
 
+  const handleReceiptProjectChange = (value) => {
+    setAssignProjectId(value)
+    setCreateForm((prev) => ({
+      ...prev,
+      project_id: value,
+      contract_id: prev.project_id === value ? prev.contract_id : '',
+    }))
+  }
+
+  const handleCreateContractChange = (value) => {
+    const contract = contracts.find((item) => String(item.id) === String(value))
+    const contractProjectId = contract?.project_id ? String(contract.project_id) : ''
+    if (contractProjectId && contractProjectId !== assignProjectId) {
+      setAssignProjectId(contractProjectId)
+    }
+    setCreateForm((prev) => ({
+      ...prev,
+      contract_id: value,
+      project_id: contractProjectId || assignProjectId,
+    }))
+  }
+
   const openExpenseCandidates = async () => {
     if (!detailReceipt) return
     setDetailAction('link')
@@ -589,7 +611,7 @@ export default function Receipts() {
     setCreateExpenseSaving(true)
     try {
       const receipt = await api.receipts.createExpense(detailReceipt.id, {
-        project_id: createForm.project_id || null,
+        project_id: assignProjectId || createForm.project_id || null,
         category_id: createForm.category_id || null,
         contract_id: createForm.contract_id || null,
         description: createForm.description || null,
@@ -882,9 +904,9 @@ export default function Receipts() {
                 <ProjectSelect
                   projects={projects}
                   value={assignProjectId}
-                  onChange={setAssignProjectId}
+                  onChange={handleReceiptProjectChange}
                   allowEmpty
-                  emptyLabel={tr('receiptProjectFilterAll')}
+                  emptyLabel={UI_DASH}
                 />
               </div>
               <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
@@ -1082,16 +1104,6 @@ export default function Receipts() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">{tr('project')}</label>
-                    <ProjectSelect
-                      projects={projects}
-                      value={createForm.project_id}
-                      onChange={(value) => setCreateForm((prev) => ({ ...prev, project_id: value, contract_id: '' }))}
-                      allowEmpty
-                      emptyLabel={tr('receiptProjectFilterAll')}
-                    />
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">{tr('category')}</label>
                     <select
                       className="form-input"
@@ -1109,7 +1121,7 @@ export default function Receipts() {
                     <select
                       className="form-input"
                       value={createForm.contract_id}
-                      onChange={(event) => setCreateForm((prev) => ({ ...prev, contract_id: event.target.value }))}
+                      onChange={(event) => handleCreateContractChange(event.target.value)}
                     >
                       <option value="">{UI_DASH}</option>
                       {filteredContracts.map((contract) => (
