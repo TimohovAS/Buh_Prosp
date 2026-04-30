@@ -22,7 +22,7 @@ from backend.db_utils import (
     get_unassigned_project_id,
     resolve_category_expense_links,
 )
-from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, money_eq, to_decimal
+from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, money_abs, money_eq, to_decimal
 from backend.models import (
     BankTransaction,
     CashEntry,
