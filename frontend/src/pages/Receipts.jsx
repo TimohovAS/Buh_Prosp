@@ -135,8 +135,8 @@ export default function Receipts() {
   ]), [])
 
   const filteredContracts = useMemo(() => {
-    return filterContractsForProject(contracts, assignProjectId)
-  }, [assignProjectId, contracts])
+    return filterContractsForProject(contracts, createForm.project_id)
+  }, [contracts, createForm.project_id])
 
   const unassignedProject = useMemo(() => findUnassignedProject(projects), [projects])
 
@@ -545,23 +545,15 @@ export default function Receipts() {
 
   const handleReceiptProjectChange = (value) => {
     setAssignProjectId(value)
-    setCreateForm((prev) => ({
-      ...prev,
-      project_id: value,
-      contract_id: prev.project_id === value ? prev.contract_id : '',
-    }))
   }
 
   const handleCreateContractChange = (value) => {
     const contract = contracts.find((item) => String(item.id) === String(value))
     const contractProjectId = contract?.project_id ? String(contract.project_id) : ''
-    if (contractProjectId && contractProjectId !== assignProjectId) {
-      setAssignProjectId(contractProjectId)
-    }
     setCreateForm((prev) => ({
       ...prev,
       contract_id: value,
-      project_id: contractProjectId || assignProjectId,
+      project_id: contractProjectId || prev.project_id,
     }))
   }
 
@@ -611,7 +603,7 @@ export default function Receipts() {
     setCreateExpenseSaving(true)
     try {
       const receipt = await api.receipts.createExpense(detailReceipt.id, {
-        project_id: assignProjectId || createForm.project_id || null,
+        project_id: createForm.project_id || null,
         category_id: createForm.category_id || null,
         contract_id: createForm.contract_id || null,
         description: createForm.description || null,
@@ -899,19 +891,23 @@ export default function Receipts() {
                 </button>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={assignProjectId}
-                  onChange={handleReceiptProjectChange}
-                  allowEmpty
-                  emptyLabel={UI_DASH}
-                />
-              </div>
-              <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
-                {assigningProject ? tr('loading') : tr('receiptAssignProject')}
-              </button>
+              {detailAction !== 'create' ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">{tr('project')}</label>
+                    <ProjectSelect
+                      projects={projects}
+                      value={assignProjectId}
+                      onChange={handleReceiptProjectChange}
+                      allowEmpty
+                      emptyLabel={UI_DASH}
+                    />
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
+                    {assigningProject ? tr('loading') : tr('receiptAssignProject')}
+                  </button>
+                </>
+              ) : null}
 
               {detailReceipt.expense_id || detailReceipt.bank_transaction_id || detailReceipt.cash_entry_id ? (
                 <div className="receipt-linked-grid">
@@ -1102,6 +1098,16 @@ export default function Receipts() {
                       <option value="bank">{tr('receiptCreateModeBank')}</option>
                       <option value="cash">{tr('receiptCreateModeCash')}</option>
                     </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('project')}</label>
+                    <ProjectSelect
+                      projects={projects}
+                      value={createForm.project_id}
+                      onChange={(value) => setCreateForm((prev) => ({ ...prev, project_id: value, contract_id: '' }))}
+                      allowEmpty
+                      emptyLabel={UI_DASH}
+                    />
                   </div>
                   <div className="form-group">
                     <label className="form-label">{tr('category')}</label>
