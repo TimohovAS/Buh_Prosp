@@ -77,7 +77,6 @@ export default function Receipts() {
   const [contracts, setContracts] = useState([])
   const [expenseYears, setExpenseYears] = useState([])
   const [loading, setLoading] = useState(true)
-  const [lookupLoading, setLookupLoading] = useState(false)
   const [pageError, setPageError] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('')
@@ -95,8 +94,6 @@ export default function Receipts() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [detailAction, setDetailAction] = useState('')
-  const [assignProjectId, setAssignProjectId] = useState('')
-  const [assigningProject, setAssigningProject] = useState(false)
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [expenseCandidatesLoading, setExpenseCandidatesLoading] = useState(false)
   const [expenseLinkMode, setExpenseLinkMode] = useState('candidates')
@@ -213,7 +210,6 @@ export default function Receipts() {
   }
 
   const loadLookups = async () => {
-    setLookupLoading(true)
     try {
       const [projectList, categoryList, contractList, expenseYearList] = await Promise.all([
         api.projects.list({ show_archived: true }),
@@ -227,8 +223,6 @@ export default function Receipts() {
       setExpenseYears(expenseYearList || [])
     } catch (error) {
       setPageError((previous) => previous || error.message || tr('loadError'))
-    } finally {
-      setLookupLoading(false)
     }
   }
 
@@ -376,7 +370,6 @@ export default function Receipts() {
     setDetailError('')
     setDetailAction('')
     setExpenseLinkMode('candidates')
-    setAssignProjectId(receipt?.project_id ? String(receipt.project_id) : '')
     setExpenseCandidates([])
     setPeriodExpenseSearch('')
     setPeriodExpenses([])
@@ -525,26 +518,6 @@ export default function Receipts() {
     } finally {
       setImporting(false)
     }
-  }
-
-  const handleAssignProject = async () => {
-    if (!detailReceipt) return
-    setAssigningProject(true)
-    try {
-      const receipt = await api.receipts.assignProject(detailReceipt.id, {
-        project_id: assignProjectId || null,
-      })
-      hydrateDetailState(receipt)
-      await loadReceipts()
-    } catch (error) {
-      setDetailError(error.message || tr('loadError'))
-    } finally {
-      setAssigningProject(false)
-    }
-  }
-
-  const handleReceiptProjectChange = (value) => {
-    setAssignProjectId(value)
   }
 
   const handleCreateContractChange = (value) => {
@@ -886,28 +859,10 @@ export default function Receipts() {
                 >
                   {tr('receiptOpenBrowser')}
                 </button>
-                <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || assigningProject}>
+                <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving}>
                   {deletingReceipt ? tr('loading') : tr('receiptDelete')}
                 </button>
               </div>
-
-              {detailAction !== 'create' ? (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">{tr('project')}</label>
-                    <ProjectSelect
-                      projects={projects}
-                      value={assignProjectId}
-                      onChange={handleReceiptProjectChange}
-                      allowEmpty
-                      emptyLabel={UI_DASH}
-                    />
-                  </div>
-                  <button type="button" className="btn btn-secondary" onClick={handleAssignProject} disabled={assigningProject || lookupLoading}>
-                    {assigningProject ? tr('loading') : tr('receiptAssignProject')}
-                  </button>
-                </>
-              ) : null}
 
               {detailReceipt.expense_id || detailReceipt.bank_transaction_id || detailReceipt.cash_entry_id ? (
                 <div className="receipt-linked-grid">
