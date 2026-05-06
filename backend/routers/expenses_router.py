@@ -33,10 +33,11 @@ from backend.services import create_expense_reversal
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+RECEIPT_SOURCE = "receipt"
 
 
 def _visible_expense_condition():
-    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
+    return or_(Expense.status != "planned", Expense.source.in_([EFAKTURA_IMPORT_SOURCE, RECEIPT_SOURCE]))
 
 
 async def _resolve_expense_links(

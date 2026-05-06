@@ -464,6 +464,8 @@ async def import_receipt_from_qr(
     )
     existing = existing_result.scalar_one_or_none()
     if existing:
+        if not existing.expense_id:
+            existing = await create_expense_from_receipt(db, existing.id, current_user_id=current_user_id)
         return existing, False
 
     payload = await asyncio.to_thread(_download_receipt_payload_sync, normalized_url)
@@ -510,7 +512,8 @@ async def import_receipt_from_qr(
         )
 
     await db.flush()
-    return await get_receipt_or_error(db, receipt.id), True
+    receipt = await create_expense_from_receipt(db, receipt.id, current_user_id=current_user_id)
+    return receipt, True
 
 
 def _match_text_score(receipt: PurchaseReceipt, expense: Expense) -> int:
