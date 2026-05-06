@@ -1018,12 +1018,13 @@ export default function BankTransactions() {
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
     const filteredContracts = getContractsForProject(selectedProjectId)
     const suggested = suggestions.filter((item) => item.section === 'suggested')
-    const allObligations = suggestions.filter((item) => item.type === 'obligation' && (item.section === 'all' || !item.section))
+    const allLinkCandidates = suggestions.filter((item) => item.section === 'all' || !item.section)
     const query = allInvoiceSearch.trim().toLowerCase()
-    const filteredObligations = allObligations.filter((item) =>
+    const filteredLinkCandidates = allLinkCandidates.filter((item) =>
       !query ||
       String(item.description || '').toLowerCase().includes(query) ||
       String(item.client_name || '').toLowerCase().includes(query) ||
+      String(item.invoice_number || '').toLowerCase().includes(query) ||
       String(item.date || '').toLowerCase().includes(query) ||
       String(item.amount || '').includes(query)
     )
@@ -1040,21 +1041,21 @@ export default function BankTransactions() {
         ) : null}
 
         <div className="bank-match-panel">
-          <div className="bank-match-panel-title">{tr('bankTxOpenObligations')}</div>
+          <div className="bank-match-panel-title">{tr('bankTxExistingExpenses')} / {tr('bankTxOpenObligations')}</div>
           <SearchInput
-            placeholder={tr('bankTxSearchObligations')}
+            placeholder={tr('bankTxSearchInvoices')}
             value={allInvoiceSearch}
             onChange={setAllInvoiceSearch}
             style={{ width: '100%', marginBottom: '0.75rem' }}
           />
           <div className="bank-match-list">
-            {allObligations.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenObligations')}</p>
-            )}
-            {filteredObligations.length === 0 && allObligations.length > 0 && (
+            {allLinkCandidates.length === 0 && (
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
             )}
-            {filteredObligations.map(renderSuggestionCard)}
+            {filteredLinkCandidates.length === 0 && allLinkCandidates.length > 0 && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+            )}
+            {filteredLinkCandidates.map(renderSuggestionCard)}
           </div>
         </div>
       </div>
