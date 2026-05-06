@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { api, getUser } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
@@ -133,6 +133,8 @@ export default function Expenses() {
   }, [dismissedDuplicateGroups])
 
   const lang = getLang()
+  const currentUser = getUser()
+  const isAdmin = currentUser?.role === 'admin'
   const unassignedProject = findUnassignedProject(projects)
   const {
     getCategoryById,
@@ -210,6 +212,20 @@ export default function Expenses() {
       setModalAssign(false)
       setAssignProjectId('')
       setSelectedIds([])
+      load()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+      console.error(error)
+    }
+  }
+
+  const handleAdminHardDelete = async (ids) => {
+    if (!isAdmin || ids.length === 0) return
+    if (!confirm(tr('confirmAdminHardDeleteExpenses').replace('{count}', ids.length))) return
+    try {
+      await api.expenses.adminHardDelete({ ids })
+      setSelectedIds((previous) => previous.filter((id) => !ids.includes(id)))
+      setDetailModal((previous) => (previous && ids.includes(previous.id) ? null : previous))
       load()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
@@ -480,6 +496,15 @@ export default function Expenses() {
           >
             {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
+          {isAdmin ? (
+            <button
+              className="btn btn-danger"
+              disabled={selectedIds.length === 0}
+              onClick={() => handleAdminHardDelete(selectedIds)}
+            >
+              {tr('adminHardDeleteSelected')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
+            </button>
+          ) : null}
           <button className="btn btn-secondary" onClick={handleExportCsv} disabled={loading || filtered.length === 0}>
             {tr('download')} CSV
           </button>
@@ -693,6 +718,15 @@ export default function Expenses() {
             >
               {tr('delete')}
             </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => handleAdminHardDelete([detailModal.id])}
+              >
+                {tr('adminHardDeleteExpense')}
+              </button>
+            ) : null}
           </div>
         ) : null}
       />

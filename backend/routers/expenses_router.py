@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth import get_current_user_required, require_edit_access
+from backend.auth import get_current_user_required, require_admin, require_edit_access
 from backend.cash_service import CASH_TRANSFER_SOURCE, is_cash_transfer_expense
 from backend.database import get_db
 from backend.db_utils import (
@@ -17,12 +17,25 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
-from backend.models import BankTransaction, CashEntry, Contract, Expense, MonthlyObligation, PlannedExpensePayment, Project, TransactionCategory, User
+from backend.models import (
+    BankTransaction,
+    CashEntry,
+    Contract,
+    Expense,
+    IncomingInvoice,
+    MonthlyObligation,
+    PlannedExpensePayment,
+    Project,
+    PurchaseReceipt,
+    TransactionCategory,
+    User,
+)
 from backend.schemas import (
     BulkAssignProject,
     ExpenseCreate,
     ExpenseDuplicateGroup,
     ExpenseDuplicateItem,
+    ExpenseHardDeleteRequest,
     ExpenseMergeRequest,
     ExpenseResponse,
     ExpenseReverseRequest,
@@ -580,6 +593,71 @@ async def update_expense(
     await db.commit()
     await db.refresh(expense)
     return ExpenseResponse.model_validate(expense)
+
+
+async def _admin_clear_expense_links(db: AsyncSession, expense_ids: list[int]) -> None:
+    await db.execute(
+        update(Expense)
+        .where(Expense.reversed_expense_id.in_(expense_ids))
+        .values(reversed_expense_id=None)
+    )
+    await db.execute(
+        update(Expense)
+        .where(Expense.reversal_of_id.in_(expense_ids))
+        .values(reversal_of_id=None)
+    )
+    await db.execute(
+        update(BankTransaction)
+        .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id.in_(expense_ids))
+        .values(status="unmatched", matched_type=None, matched_id=None)
+    )
+    await db.execute(update(CashEntry).where(CashEntry.expense_id.in_(expense_ids)).values(expense_id=None))
+    await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id.in_(expense_ids)).values(expense_id=None))
+    await db.execute(update(PlannedExpensePayment).where(PlannedExpensePayment.expense_id.in_(expense_ids)).values(expense_id=None))
+
+    invoice_result = await db.execute(select(IncomingInvoice).where(IncomingInvoice.expense_id.in_(expense_ids)))
+    for invoice in invoice_result.scalars().all():
+        invoice.expense_id = None
+        if invoice.status != "cancelled":
+            invoice.settled_amount = ZERO_DECIMAL
+            invoice.status = "unpaid"
+
+    receipt_result = await db.execute(select(PurchaseReceipt).where(PurchaseReceipt.expense_id.in_(expense_ids)))
+    for receipt in receipt_result.scalars().all():
+        receipt.expense_id = None
+        if receipt.bank_transaction_id:
+            receipt.status = "matched_bank"
+        elif receipt.cash_entry_id:
+            receipt.status = "cash_expense"
+        else:
+            receipt.status = "new"
+
+
+@router.post("/admin-hard-delete")
+async def admin_hard_delete_expenses(
+    data: ExpenseHardDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    expense_ids = sorted({expense_id for expense_id in data.ids if expense_id > 0})
+    if not expense_ids:
+        return {"ok": True, "deleted": 0, "ids": []}
+
+    result = await db.execute(select(Expense).where(Expense.id.in_(expense_ids)))
+    expenses = result.scalars().all()
+    found_ids = {expense.id for expense in expenses}
+    missing_ids = [expense_id for expense_id in expense_ids if expense_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(404, f"Expense rows not found: {missing_ids}")
+    if any(is_cash_transfer_expense(expense) for expense in expenses):
+        raise HTTPException(400, "Cash transfer operations must be managed from bank or cash")
+
+    await _admin_clear_expense_links(db, expense_ids)
+    for expense in expenses:
+        await db.delete(expense)
+
+    await db.commit()
+    return {"ok": True, "deleted": len(expenses), "ids": expense_ids}
 
 
 @router.delete("/{expense_id}")

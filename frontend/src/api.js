@@ -340,6 +340,7 @@ export const api = {
     update: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     reverse: (id, data) => request(`/expenses/${id}/reverse`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     bulkAssignProject: (data) => request('/expenses/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
+    adminHardDelete: (data) => request('/expenses/admin-hard-delete', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
   },
 

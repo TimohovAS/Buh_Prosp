@@ -1,9 +1,12 @@
 """Delete the duplicated Zarade salary expenses created on 2026-05-02.
 
 This is a one-time manual migration. It intentionally refuses to run unless it
-finds exactly the two expected rows:
-- Zarade, +300000
-- Storno: Zarade, -300000 (including the old mojibake prefix)
+finds exactly two safe targets on the same date:
+- one row with amount +300000
+- one row with amount -300000
+
+The previous version matched the exact project name and exact mojibake text,
+which was too brittle for the production DB.
 """
 
 from __future__ import annotations
@@ -11,17 +14,12 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
-import sys
 from datetime import datetime
 from pathlib import Path
 
 
 TARGET_DATE = "2026-05-02"
-TARGET_PROJECT = "_Zarade/Izvodjaci"
 TARGET_AMOUNT = 300000.0
-NORMAL_DESCRIPTION = "Zarade"
-CORRECT_STORNO_DESCRIPTION = "Сторно: Zarade"
-MOJIBAKE_STORNO_DESCRIPTION = f"{'Сторно'.encode('utf-8').decode('cp1251')}: Zarade"
 
 
 def _read_env_database_url(root: Path) -> str | None:
@@ -96,30 +94,26 @@ def main() -> int:
                 LEFT JOIN transaction_categories tc ON tc.id = e.category_id
                 WHERE
                     (date(e.date) = ? OR date(e.paid_date) = ?)
-                    AND ABS(CAST(e.amount AS REAL)) = ?
-                    AND p.name = ?
+                    AND ROUND(ABS(CAST(e.amount AS REAL)), 2) = ?
+                    AND (
+                        e.description LIKE '%Zarade%'
+                        OR p.name LIKE '%Zarade%'
+                    )
                 ORDER BY e.id
                 """,
-                (TARGET_DATE, TARGET_DATE, TARGET_AMOUNT, TARGET_PROJECT),
+                (TARGET_DATE, TARGET_DATE, TARGET_AMOUNT),
             )
         )
-
-        expected_descriptions = {
-            NORMAL_DESCRIPTION,
-            CORRECT_STORNO_DESCRIPTION,
-            MOJIBAKE_STORNO_DESCRIPTION,
-        }
-        target_rows = [row for row in rows if (row["description"] or "").strip() in expected_descriptions]
 
         print(f"[ProspEl] Database: {db_path}")
         print("[ProspEl] Matching candidates:")
         print_rows(rows)
 
-        amounts = sorted(round(float(row["amount"]), 2) for row in target_rows)
-        if len(target_rows) != 2 or amounts != [-TARGET_AMOUNT, TARGET_AMOUNT]:
+        amounts = sorted(round(float(row["amount"]), 2) for row in rows)
+        if len(rows) != 2 or amounts != [-TARGET_AMOUNT, TARGET_AMOUNT]:
             print()
             print("[ERROR] Refusing to delete: expected exactly two target rows with amounts -300000 and 300000.")
-            print(f"[ERROR] Found target rows: {len(target_rows)}, amounts: {amounts}")
+            print(f"[ERROR] Found target rows: {len(rows)}, amounts: {amounts}")
             return 1
 
         backup_dir = root / "backups"
@@ -128,7 +122,7 @@ def main() -> int:
         shutil.copy2(db_path, backup_path)
         print(f"[ProspEl] Backup created: {backup_path}")
 
-        ids = [int(row["id"]) for row in target_rows]
+        ids = [int(row["id"]) for row in rows]
         placeholders = ",".join("?" for _ in ids)
 
         with con:
@@ -141,11 +135,20 @@ def main() -> int:
                 ids,
             )
             con.execute(
-                f"UPDATE incoming_invoices SET expense_id = NULL WHERE expense_id IN ({placeholders})",
+                f"UPDATE incoming_invoices SET expense_id = NULL, settled_amount = 0, status = 'unpaid' "
+                f"WHERE expense_id IN ({placeholders}) AND status != 'cancelled'",
+                ids,
+            )
+            con.execute(
+                f"UPDATE monthly_obligations SET expense_id = NULL WHERE expense_id IN ({placeholders})",
                 ids,
             )
             con.execute(
                 f"UPDATE planned_expense_payments SET expense_id = NULL WHERE expense_id IN ({placeholders})",
+                ids,
+            )
+            con.execute(
+                f"UPDATE cash_entries SET expense_id = NULL WHERE expense_id IN ({placeholders})",
                 ids,
             )
             con.execute(

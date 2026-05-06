@@ -924,6 +924,10 @@ class ExpenseReverseRequest(BaseModel):
     comment: Optional[str] = None
 
 
+class ExpenseHardDeleteRequest(BaseModel):
+    ids: list[int]
+
+
 class ExpenseUpdate(BaseModel):
     date: Optional[DateType] = None
     description: Optional[str] = None
