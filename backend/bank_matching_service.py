@@ -88,7 +88,7 @@ async def _suggest_receipt_expense_matches(db: AsyncSession, tx: BankTransaction
 
     suggestions: list[tuple[tuple[int, float, int], dict]] = []
     for expense, receipt in result.fetchall():
-        if not money_eq(expense.amount or ZERO_DECIMAL, tx.amount or ZERO_DECIMAL):
+        if not money_eq(money_abs(expense.amount or ZERO_DECIMAL), money_abs(tx.amount or ZERO_DECIMAL)):
             continue
         receipt_date = coerce_date(getattr(receipt, "receipt_datetime", None)) or coerce_date(expense.date)
         date_diff = days_between(tx.date, receipt_date, absolute=True)

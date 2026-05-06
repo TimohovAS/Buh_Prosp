@@ -31,7 +31,7 @@ from backend.db_utils import (
     get_unassigned_project_id,
     resolve_category_expense_links,
 )
-from backend.decimal_utils import ZERO_DECIMAL, money_eq, to_decimal
+from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
 from backend.models import BankTransaction, Contract, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
 from backend.receipt_service import sync_receipt_for_expense_match
 from backend.schemas import (
@@ -118,7 +118,7 @@ async def _find_reusable_bank_import_expense(db: AsyncSession, transaction: Bank
     for expense in result.scalars().all():
         if getattr(expense, "reversed_expense_id", None):
             continue
-        if not money_eq(expense.amount or ZERO_DECIMAL, transaction.amount or ZERO_DECIMAL):
+        if not money_eq(money_abs(expense.amount or ZERO_DECIMAL), money_abs(transaction.amount or ZERO_DECIMAL)):
             continue
         return expense
     return None
@@ -140,7 +140,7 @@ async def _find_reusable_receipt_expense(db: AsyncSession, transaction: BankTran
         .order_by(Expense.date.desc(), Expense.id.desc())
     )
     for expense, receipt in result.fetchall():
-        if not money_eq(expense.amount or ZERO_DECIMAL, transaction.amount or ZERO_DECIMAL):
+        if not money_eq(money_abs(expense.amount or ZERO_DECIMAL), money_abs(transaction.amount or ZERO_DECIMAL)):
             continue
         seller_text = " ".join(
             filter(
@@ -534,13 +534,15 @@ async def create_expense_from_transaction(
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
+    transaction_expense_amount = money_abs(transaction.amount or ZERO_DECIMAL)
+
     expense = await _find_reusable_receipt_expense(db, transaction)
     if expense is None:
         expense = await _find_reusable_bank_import_expense(db, transaction)
     if expense:
         expense.date = data.date or transaction.date
         expense.description = description[:500]
-        expense.amount = to_decimal(transaction.amount or ZERO_DECIMAL)
+        expense.amount = transaction_expense_amount
         expense.currency = transaction.currency or "RSD"
         expense.category = category_name
         expense.category_id = data.category_id
@@ -557,7 +559,7 @@ async def create_expense_from_transaction(
         expense = Expense(
             date=data.date or transaction.date,
             description=description[:500],
-            amount=to_decimal(transaction.amount or ZERO_DECIMAL),
+            amount=transaction_expense_amount,
             currency=transaction.currency or "RSD",
             category=category_name,
             category_id=data.category_id,
