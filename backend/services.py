@@ -192,13 +192,13 @@ async def create_expense_reversal(
     created_by: Optional[int] = None,
 ) -> "Expense":
     """
-    РЎРѕР·РґР°С‚СЊ СЃС‚РѕСЂРЅРѕ СЂР°СЃС…РѕРґР°. РћСЂРёРіРёРЅР°Р» РѕСЃС‚Р°С‘С‚СЃСЏ status=paid, РїРѕР»СѓС‡Р°РµС‚ reversed_expense_id.
-    РЎС‚РѕСЂРЅРѕ: amount=-original.amount, status=reversed, reversal_of_id=original.id.
+    Создать сторно расхода. Оригинал остаётся status=paid, получает reversed_expense_id.
+    Сторно: amount=-original.amount, status=reversed, reversal_of_id=original.id.
     """
     from backend.models import Expense
     ensure_expense_can_reverse(expense)
     rev_date = reverse_date or getattr(expense, "paid_date", None) or date.today()
-    desc = f"РЎС‚РѕСЂРЅРѕ: {(expense.description or '')[:450]}"
+    desc = f"Сторно: {(expense.description or '')[:450]}"
     if comment:
         desc += f" ({comment})"
     if len(desc) > 500:
