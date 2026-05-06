@@ -1,6 +1,6 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.decimal_utils import ZERO_DECIMAL, to_decimal
+from backend.decimal_utils import ZERO_DECIMAL, money_abs, to_decimal
 
 from backend.models import BankTransaction, CashEntry, Expense, Project
 from backend.state_machine import initialize_expense_status, initialize_project_status, transition_project_status
@@ -90,10 +90,12 @@ async def create_cash_transfer_from_transaction(
         raise ValueError("This bank transaction is already added to cash")
 
     cash_project_id = await get_or_create_cash_project_id(db)
+    transfer_amount = money_abs(transaction.amount or ZERO_DECIMAL)
+
     expense = Expense(
         date=transaction.date,
         description=build_cash_transfer_description(transaction, description),
-        amount=to_decimal(transaction.amount or ZERO_DECIMAL),
+        amount=transfer_amount,
         currency=transaction.currency or "RSD",
         category=CASH_CATEGORY,
         category_id=None,
@@ -111,7 +113,7 @@ async def create_cash_transfer_from_transaction(
     entry = CashEntry(
         date=transaction.date,
         direction="in",
-        amount=to_decimal(transaction.amount or ZERO_DECIMAL),
+        amount=transfer_amount,
         currency=transaction.currency or "RSD",
         description=expense.description,
         entry_type="withdrawal",

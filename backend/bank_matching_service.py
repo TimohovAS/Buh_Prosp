@@ -1032,7 +1032,7 @@ async def _sync_incoming_invoice_on_match(db: AsyncSession, expense: Expense, tx
     settlement = IncomingInvoiceSettlement(
         incoming_invoice_id=invoice.id,
         settlement_type="bank",
-        amount=to_decimal(tx.amount),
+        amount=money_abs(tx.amount),
         date=tx.date,
         bank_transaction_id=tx.id,
     )
