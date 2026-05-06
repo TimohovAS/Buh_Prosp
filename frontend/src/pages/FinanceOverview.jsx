@@ -96,11 +96,19 @@ export default function FinanceOverview() {
     .sort((a, b) => (b.days_overdue ?? 0) - (a.days_overdue ?? 0))
     .slice(0, 5)
 
-  const revenueKey = mode === 'cash' ? 'revenue_cash' : mode === 'accrual' ? 'revenue_accrual' : 'revenue_cash'
-  const expenseKey = mode === 'cash' ? 'expense_cash' : mode === 'accrual' ? 'expense_accrual' : 'expense_cash'
-
-  const revenueLabel = mode === 'both' ? `${tr('income')} (accrual/cash)` : `${tr('income')} (${mode})`
-  const expenseLabel = mode === 'both' ? `${tr('expenses')} (accrual/cash)` : `${tr('expenses')} (${mode})`
+  const getModeLabel = (value) => tr(`financeMode${value.charAt(0).toUpperCase() + value.slice(1)}`)
+  const getInlineModeLabel = (value) => {
+    const label = getModeLabel(value)
+    return label ? label.charAt(0).toLowerCase() + label.slice(1) : value
+  }
+  const accrualModeLabel = getInlineModeLabel('accrual')
+  const cashModeLabel = getInlineModeLabel('cash')
+  const chartSeriesNames = {
+    revenue_accrual: `${tr('income')} (${accrualModeLabel})`,
+    expense_accrual: `${tr('expenses')} (${accrualModeLabel})`,
+    revenue_cash: `${tr('income')} (${cashModeLabel})`,
+    expense_cash: `${tr('expenses')} (${cashModeLabel})`,
+  }
 
   const taxLoadPercent = totals.revenue_cash > 0 && totals.taxes_cash != null
     ? ((totals.taxes_cash / totals.revenue_cash) * 100).toFixed(1)
@@ -214,15 +222,15 @@ export default function FinanceOverview() {
           {(mode === 'accrual' || mode === 'both') && (
             <>
               <div className="card" style={{ borderLeft: '4px solid var(--color-success)' }}>
-                <div className="card-title">{tr('income')} (accrual)</div>
+                <div className="card-title">{tr('income')} ({accrualModeLabel})</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue_accrual)} RSD</div>
               </div>
               <div className="card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
-                <div className="card-title">{tr('expenses')} (accrual)</div>
+                <div className="card-title">{tr('expenses')} ({accrualModeLabel})</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.expense_accrual)} RSD</div>
               </div>
               <div className="card">
-                <div className="card-title">{tr('financeNetProfit')} (accrual)</div>
+                <div className="card-title">{tr('financeNetProfit')} ({accrualModeLabel})</div>
                 <div style={{
                   fontSize: '1.25rem',
                   fontWeight: 600,
@@ -236,15 +244,15 @@ export default function FinanceOverview() {
           {(mode === 'cash' || mode === 'both') && (
             <>
               <div className="card" style={{ borderLeft: '4px solid var(--color-success)' }}>
-                <div className="card-title">{tr('income')} (cash)</div>
+                <div className="card-title">{tr('income')} ({cashModeLabel})</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue_cash)} RSD</div>
               </div>
               <div className="card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
-                <div className="card-title">{tr('expenses')} (cash)</div>
+                <div className="card-title">{tr('expenses')} ({cashModeLabel})</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.expense_cash)} RSD</div>
               </div>
               <div className="card">
-                <div className="card-title">{tr('financeNetProfit')} (cash)</div>
+                <div className="card-title">{tr('financeNetProfit')} ({cashModeLabel})</div>
                 <div style={{
                   fontSize: '1.25rem',
                   fontWeight: 600,
@@ -308,13 +316,13 @@ export default function FinanceOverview() {
                 <XAxis dataKey="period" />
                 <YAxis tickFormatter={(v) => fmt(v)} />
                 <Tooltip formatter={(v) => fmt(v) + ' RSD'} />
-                <Legend formatter={(_, entry) => (entry.dataKey === 'revenue_accrual' ? tr('income') + ' (accrual)' : entry.dataKey === 'expense_accrual' ? tr('expenses') + ' (accrual)' : entry.dataKey)} />
+                <Legend formatter={(_, entry) => chartSeriesNames[entry?.dataKey] || entry?.value || ''} />
                 {mode === 'both' ? (
                   <>
-                    <Bar dataKey="revenue_accrual" fill="var(--color-success)" name={tr('income') + ' accrual'} />
-                    <Bar dataKey="expense_accrual" fill="var(--color-danger)" name={tr('expenses') + ' accrual'} />
-                    <Bar dataKey="revenue_cash" fill="rgba(76,175,80,0.6)" name={tr('income') + ' cash'} />
-                    <Bar dataKey="expense_cash" fill="rgba(244,67,54,0.6)" name={tr('expenses') + ' cash'} />
+                    <Bar dataKey="revenue_accrual" fill="var(--color-success)" name={chartSeriesNames.revenue_accrual} />
+                    <Bar dataKey="expense_accrual" fill="var(--color-danger)" name={chartSeriesNames.expense_accrual} />
+                    <Bar dataKey="revenue_cash" fill="rgba(76,175,80,0.6)" name={chartSeriesNames.revenue_cash} />
+                    <Bar dataKey="expense_cash" fill="rgba(244,67,54,0.6)" name={chartSeriesNames.expense_cash} />
                   </>
                 ) : (
                   <>

@@ -239,123 +239,103 @@ async def get_finance_summary(
         else:
             grp_bt = func.strftime("%Y", bt_date)
 
-        # Inflow - РІСЃРµ РїРѕСЃС‚СѓРїР»РµРЅРёСЏ (direction="in", status != "ignored")
-        if client_id is not None or contract_id is not None or project_id is not None:
-            q_rc_direct = (
-                select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
-                .join(Income, BankTransaction.matched_id == Income.id)
-                .where(
-                    bt_direction == "in",
-                    bt_status != "ignored",
-                    bt_date >= date_from,
-                    bt_date <= date_to,
-                    BankTransaction.matched_type == "income",
-                )
-            )
-            if client_id is not None:
-                q_rc_direct = q_rc_direct.where(Income.client_id == client_id)
-            if contract_id is not None:
-                q_rc_direct = q_rc_direct.where(Income.contract_id == contract_id)
-            if project_id is not None:
-                q_rc_direct = q_rc_direct.where(Income.project_id == project_id)
-            q_rc_direct = q_rc_direct.group_by(grp_bt)
-            r = await db.execute(q_rc_direct)
-            for row in r.fetchall():
-                _append_period_amount(periods_data, str(row.period), "revenue_cash", row.s)
-
-            q_rc_alloc = (
-                select(grp_bt.label("period"), func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0).label("s"))
-                .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
-                .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
-                .where(
-                    bt_direction == "in",
-                    bt_status != "ignored",
-                    bt_date >= date_from,
-                    bt_date <= date_to,
-                    BankTransaction.matched_type == "income_allocation",
-                )
-            )
-            if client_id is not None:
-                q_rc_alloc = q_rc_alloc.where(Income.client_id == client_id)
-            if contract_id is not None:
-                q_rc_alloc = q_rc_alloc.where(Income.contract_id == contract_id)
-            if project_id is not None:
-                q_rc_alloc = q_rc_alloc.where(Income.project_id == project_id)
-            q_rc_alloc = q_rc_alloc.group_by(grp_bt)
-            r = await db.execute(q_rc_alloc)
-            for row in r.fetchall():
-                _append_period_amount(periods_data, str(row.period), "revenue_cash", row.s)
-        else:
-            q_rc = (
-                select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
-                .where(
-                    bt_direction == "in",
-                    bt_status != "ignored",
-                    bt_date >= date_from,
-                    bt_date <= date_to,
-                )
-                .group_by(grp_bt)
-            )
-            r = await db.execute(q_rc)
-            for row in r.fetchall():
-                periods_data[str(row.period)]["revenue_cash"] = to_decimal(row.s)
-
-        # Outflow (expenses + obligations)
-        # Р•СЃР»Рё РЅРµС‚ С„РёР»СЊС‚СЂРѕРІ tax / category, РїСЂРѕСЃС‚Рѕ Р±РµСЂРµРј РІСЃРµ out != ignored
-        q_ec = (
+        q_rc_direct = (
             select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            .select_from(BankTransaction)
+            .join(Income, BankTransaction.matched_id == Income.id)
+            .where(
+                bt_direction == "in",
+                bt_status != "ignored",
+                bt_date >= date_from,
+                bt_date <= date_to,
+                BankTransaction.matched_type == "income",
+            )
+        )
+        if client_id is not None:
+            q_rc_direct = q_rc_direct.where(Income.client_id == client_id)
+        if contract_id is not None:
+            q_rc_direct = q_rc_direct.where(Income.contract_id == contract_id)
+        if project_id is not None:
+            q_rc_direct = q_rc_direct.where(Income.project_id == project_id)
+        q_rc_direct = q_rc_direct.group_by(grp_bt)
+        r = await db.execute(q_rc_direct)
+        for row in r.fetchall():
+            _append_period_amount(periods_data, str(row.period), "revenue_cash", row.s)
+
+        q_rc_alloc = (
+            select(grp_bt.label("period"), func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0).label("s"))
+            .select_from(BankTransaction)
+            .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
+            .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
+            .where(
+                bt_direction == "in",
+                bt_status != "ignored",
+                bt_date >= date_from,
+                bt_date <= date_to,
+                BankTransaction.matched_type == "income_allocation",
+            )
+        )
+        if client_id is not None:
+            q_rc_alloc = q_rc_alloc.where(Income.client_id == client_id)
+        if contract_id is not None:
+            q_rc_alloc = q_rc_alloc.where(Income.contract_id == contract_id)
+        if project_id is not None:
+            q_rc_alloc = q_rc_alloc.where(Income.project_id == project_id)
+        q_rc_alloc = q_rc_alloc.group_by(grp_bt)
+        r = await db.execute(q_rc_alloc)
+        for row in r.fetchall():
+            _append_period_amount(periods_data, str(row.period), "revenue_cash", row.s)
+
+        q_ec = (
+            select(grp_bt.label("period"), func.coalesce(func.sum(func.abs(bt_amount)), 0).label("s"))
+            .select_from(BankTransaction)
+            .join(Expense, BankTransaction.matched_id == Expense.id)
             .where(
                 bt_direction == "out",
                 bt_status != "ignored",
                 bt_date >= date_from,
                 bt_date <= date_to,
-            )
-        )
-
-        if category is not None or is_tax_related is not None:
-            # Р”Р»СЏ С„РёР»СЊС‚СЂРѕРІ РЅСѓР¶РЅРѕ РїРѕРґС‚СЏРЅСѓС‚СЊ Expense
-            q_ec = q_ec.join(Expense, BankTransaction.matched_id == Expense.id).where(
                 BankTransaction.matched_type == "expense",
                 Expense.source != CASH_TRANSFER_SOURCE,
             )
-            if category is not None:
-                q_ec = q_ec.where(Expense.category == category)
-            if is_tax_related is not None:
-                q_ec = q_ec.where(Expense.is_tax_related == (1 if is_tax_related else 0))
-
+        )
+        if category is not None:
+            q_ec = q_ec.where(Expense.category == category)
+        if is_tax_related is not None:
+            q_ec = q_ec.where(Expense.is_tax_related == (1 if is_tax_related else 0))
         q_ec = q_ec.group_by(grp_bt)
         r = await db.execute(q_ec)
         for row in r.fetchall():
-            p = str(row.period)
-            if p in periods_data:
-                periods_data[p]["expense_cash"] += to_decimal(row.s)
-                
-        # Р•СЃР»Рё РЅРµ Р±С‹Р»Рѕ С„РёР»СЊС‚СЂРѕРІ, РґРѕР±Р°РІРёРј Рё obligation outflow
-        if category is None and is_tax_related is None:
-            pass # obligations СѓР¶Рµ РїРѕСЃС‡РёС‚Р°РЅС‹ РІ РѕР±С‰РµРј bt_direction=="out"
-        elif is_tax_related:
-             # Р•СЃР»Рё РёСЃРєР°Р»Рё РЅР°Р»РѕРіРё, obligation (Р·Р°СЂРїР»Р°С‚РЅС‹Рµ РЅР°Р»РѕРіРё) С‚СѓРґР° С‚РѕР¶Рµ РїР»СЋСЃСѓРµРј
-             q_ob = (
-                select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            _append_period_amount(periods_data, str(row.period), "expense_cash", row.s)
+
+        q_cash_expense = (
+            select(grp_paid_e.label("period"), func.coalesce(func.sum(expense_amount), 0).label("s"))
+            .where(expense_cash_base, Expense.source == "cash")
+            .group_by(grp_paid_e)
+        )
+        r = await db.execute(q_cash_expense)
+        for row in r.fetchall():
+            _append_period_amount(periods_data, str(row.period), "expense_cash", row.s)
+
+        if category is None and (is_tax_related is None or is_tax_related):
+            q_ob = (
+                select(grp_bt.label("period"), func.coalesce(func.sum(func.abs(bt_amount)), 0).label("s"))
                 .where(
                     bt_direction == "out",
                     bt_status != "ignored",
                     bt_date >= date_from,
                     bt_date <= date_to,
-                    bt_type == "obligation"
+                    bt_type == "obligation",
                 )
-             )
-             q_ob = q_ob.group_by(grp_bt)
-             r = await db.execute(q_ob)
-             for row in r.fetchall():
-                p = str(row.period)
-                if p in periods_data:
-                    periods_data[p]["expense_cash"] += to_decimal(row.s)
+                .group_by(grp_bt)
+            )
+            r = await db.execute(q_ob)
+            for row in r.fetchall():
+                _append_period_amount(periods_data, str(row.period), "expense_cash", row.s)
 
-        # taxes_cash (is_tax_related == True РёР»Рё obligations)
-        # РЎСѓРјРјРёСЂСѓРµРј Expense is_tax=True Рё РІСЃРµ MonthlyObligation
         q_tc1 = (
-            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(func.abs(bt_amount)), 0).label("s"))
+            .select_from(BankTransaction)
             .join(Expense, BankTransaction.matched_id == Expense.id)
             .where(
                 bt_direction == "out",
@@ -370,12 +350,19 @@ async def get_finance_summary(
         )
         r = await db.execute(q_tc1)
         for row in r.fetchall():
-            p = str(row.period)
-            if p in periods_data:
-                periods_data[p]["taxes_cash"] += to_decimal(row.s)
+            _append_period_amount(periods_data, str(row.period), "taxes_cash", row.s)
+
+        q_cash_tax = (
+            select(grp_paid_e.label("period"), func.coalesce(func.sum(expense_amount), 0).label("s"))
+            .where(expense_tax_base, Expense.source == "cash")
+            .group_by(grp_paid_e)
+        )
+        r = await db.execute(q_cash_tax)
+        for row in r.fetchall():
+            _append_period_amount(periods_data, str(row.period), "taxes_cash", row.s)
 
         q_tc2 = (
-            select(grp_bt.label("period"), func.coalesce(func.sum(bt_amount), 0).label("s"))
+            select(grp_bt.label("period"), func.coalesce(func.sum(func.abs(bt_amount)), 0).label("s"))
             .where(
                 bt_direction == "out",
                 bt_status != "ignored",
@@ -387,9 +374,7 @@ async def get_finance_summary(
         )
         r = await db.execute(q_tc2)
         for row in r.fetchall():
-            p = str(row.period)
-            if p in periods_data:
-                periods_data[p]["taxes_cash"] += to_decimal(row.s)
+            _append_period_amount(periods_data, str(row.period), "taxes_cash", row.s)
 
     # net profit
     for p, data in periods_data.items():
@@ -489,7 +474,8 @@ async def get_cashflow(
             conditions.append(bt_date >= start)
         if end is not None:
             conditions.append(bt_date < end)
-        q = select(func.coalesce(func.sum(bt_amount), 0)).where(*conditions)
+        amount_expr = func.abs(bt_amount) if direction == "out" else bt_amount
+        q = select(func.coalesce(func.sum(amount_expr), 0)).where(*conditions)
         value = await db.scalar(q)
         return to_decimal(value or ZERO_DECIMAL)
 
@@ -648,7 +634,7 @@ async def get_finance_by_project(
 
             # cash: Expenses - sum of BankTransaction out, matched to expense with this project_id
             q_exp = (
-                select(func.coalesce(func.sum(BankTransaction.amount), 0))
+                select(func.coalesce(func.sum(func.abs(BankTransaction.amount)), 0))
                 .select_from(BankTransaction)
                 .join(Expense, BankTransaction.matched_id == Expense.id)
                 .where(
@@ -665,6 +651,16 @@ async def get_finance_by_project(
             )
             r = await db.execute(q_exp)
             expenses = to_decimal(r.scalar() or ZERO_DECIMAL)
+
+            q_cash_exp = select(func.coalesce(func.sum(expense_amount), 0)).where(
+                and_(
+                    expense_base,
+                    Expense.source == "cash",
+                    Expense.project_id == pid,
+                )
+            )
+            r = await db.execute(q_cash_exp)
+            expenses += to_decimal(r.scalar() or ZERO_DECIMAL)
 
         profit = revenue - expenses
         margin_percent = float(((profit / revenue) * Decimal("100")).quantize(Decimal("0.1"))) if revenue and revenue > ZERO_DECIMAL else 0.0
@@ -1000,7 +996,6 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
         ).where(
             _visible_expense_condition(),
-            Expense.status != "reversed",
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,
@@ -1016,7 +1011,6 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
         ).where(
             _visible_expense_condition(),
-            Expense.status != "reversed",
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,
@@ -1069,7 +1063,6 @@ async def get_finance_pnl_years(db: AsyncSession) -> list[int]:
         select(func.distinct(func.strftime("%Y", Expense.date)).label("year"))
         .where(
             _visible_expense_condition(),
-            Expense.status != "reversed",
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date.isnot(None),
         )

@@ -120,7 +120,7 @@ async def get_dashboard(
     cash_in_all_time = to_decimal(cash_in_all_time_result.scalar() or ZERO_DECIMAL)
 
     cash_out_all_time_result = await db.execute(
-        select(func.coalesce(func.sum(BankTransaction.amount), 0)).where(
+        select(func.coalesce(func.sum(func.abs(BankTransaction.amount)), 0)).where(
             BankTransaction.direction == "out",
             BankTransaction.status != "ignored",
         )
