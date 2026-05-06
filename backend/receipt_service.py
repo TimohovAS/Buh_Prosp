@@ -325,6 +325,7 @@ async def get_receipt_or_error(db: AsyncSession, receipt_id: int) -> PurchaseRec
     receipt = await _get_receipt_by_id(db, receipt_id)
     if not receipt:
         raise ReceiptImportError("Receipt not found")
+    await _sync_receipt_status_for_expense(db, receipt)
     return receipt
 
 
@@ -673,6 +674,8 @@ async def unlink_receipt_expense(
     receipt = await get_receipt_or_error(db, receipt_id)
     if not receipt.expense_id:
         return receipt
+    if receipt.bank_transaction_id:
+        raise ReceiptImportError("Unmatch the bank transaction first")
 
     expense_result = await db.execute(select(Expense).where(Expense.id == receipt.expense_id))
     expense = expense_result.scalar_one_or_none()
@@ -854,7 +857,10 @@ async def list_receipts(
             )
         )
     result = await db.execute(query)
-    return list(result.scalars().all())
+    receipts = list(result.scalars().all())
+    for receipt in receipts:
+        await _sync_receipt_status_for_expense(db, receipt)
+    return receipts
 
 
 async def get_project_receipt_purchases(

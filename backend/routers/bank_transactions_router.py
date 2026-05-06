@@ -24,6 +24,7 @@ from backend.cash_service import (
     is_cash_transfer_expense,
 )
 from backend.database import get_db
+from backend.date_utils import coerce_date
 from backend.db_utils import (
     get_category_or_404,
     get_contract_or_404,
@@ -139,6 +140,7 @@ async def _find_reusable_receipt_expense(db: AsyncSession, transaction: BankTran
         )
         .order_by(Expense.date.desc(), Expense.id.desc())
     )
+    candidates: list[tuple[int, int, int, Expense]] = []
     for expense, receipt in result.fetchall():
         if not money_eq(money_abs(expense.amount or ZERO_DECIMAL), money_abs(transaction.amount or ZERO_DECIMAL)):
             continue
@@ -160,10 +162,18 @@ async def _find_reusable_receipt_expense(db: AsyncSession, transaction: BankTran
                 ],
             )
         )
-        if seller_text and tx_text and not any(token and token in tx_text for token in seller_text.split()[:4]):
+        seller_matches = bool(
+            seller_text and tx_text and any(token and token in tx_text for token in seller_text.split()[:4])
+        )
+        receipt_date = coerce_date(receipt.receipt_datetime) or expense.date
+        date_diff = abs((transaction.date - receipt_date).days)
+        if not seller_matches and date_diff > 7:
             continue
-        return expense
-    return None
+        candidates.append((0 if seller_matches else 1, date_diff, -int(expense.id), expense))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[:3])
+    return candidates[0][3]
 
 
 def _serialize_bank_transaction(
