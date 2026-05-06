@@ -101,6 +101,9 @@ async def _suggest_receipt_expense_matches(db: AsyncSession, tx: BankTransaction
         elif date_diff <= 3:
             section = "suggested"
             score_value = max(70, 90 - date_diff)
+        elif date_diff <= 7:
+            section = "suggested"
+            score_value = max(72, 92 - date_diff)
 
         suggestions.append(
             (
