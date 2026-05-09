@@ -14,6 +14,7 @@ from backend.models import (
     BankTransactionIncomeAllocation,
     CashEntry,
     ContributionRates,
+    Contract,
     EfakturaImportRecord,
     Expense,
     Income,
@@ -21,6 +22,8 @@ from backend.models import (
     IncomingInvoiceSettlement,
     MonthlyObligation,
     Payment,
+    PlannedExpensePayment,
+    Project,
     PurchaseReceipt,
 )
 
@@ -132,11 +135,14 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
     incomes = await _rows_by_id(db, Income)
     expenses = await _rows_by_id(db, Expense)
     obligations = await _rows_by_id(db, MonthlyObligation)
+    planned_expense_payments = await _rows_by_id(db, PlannedExpensePayment)
     cash_entries = await _rows_by_id(db, CashEntry)
     incoming_invoices = await _rows_by_id(db, IncomingInvoice)
     settlements = await _rows_by_id(db, IncomingInvoiceSettlement)
     receipts = await _rows_by_id(db, PurchaseReceipt)
     allocations = await _rows_by_id(db, BankTransactionIncomeAllocation)
+    contracts = await _rows_by_id(db, Contract)
+    projects = await _rows_by_id(db, Project)
 
     allocation_ids_by_tx: dict[int, list[int]] = defaultdict(list)
     for allocation in allocations.values():
@@ -158,6 +164,11 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         for receipt in receipts.values()
         if receipt.expense_id is not None
     }
+    planned_payment_expense_ids = {
+        int(payment.expense_id)
+        for payment in planned_expense_payments.values()
+        if payment.expense_id is not None
+    }
 
     _check_bank_transactions(
         report,
@@ -169,6 +180,13 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         allocation_ids_by_tx=allocation_ids_by_tx,
     )
     _check_income_allocations(report, allocations=allocations, bank_transactions=bank_transactions, incomes=incomes)
+    _check_incomes(report, incomes=incomes, contracts=contracts, projects=projects)
+    _check_monthly_obligations(report, obligations=obligations, expenses=expenses)
+    _check_planned_expense_payments(
+        report,
+        planned_expense_payments=planned_expense_payments,
+        expenses=expenses,
+    )
     _check_incoming_invoice_settlements(
         report,
         settlements=settlements,
@@ -181,6 +199,7 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         report,
         incoming_invoices=incoming_invoices,
         expenses=expenses,
+        projects=projects,
         settlement_ids_by_invoice=settlement_ids_by_invoice,
         settlement_sum_by_invoice=settlement_sum_by_invoice,
     )
@@ -189,6 +208,7 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         expenses=expenses,
         incoming_expense_ids=incoming_expense_ids,
         receipt_expense_ids=receipt_expense_ids,
+        planned_payment_expense_ids=planned_payment_expense_ids,
     )
     _check_receipts(report, receipts=receipts, expenses=expenses, bank_transactions=bank_transactions, cash_entries=cash_entries)
     _check_cash_entries(report, cash_entries=cash_entries, expenses=expenses, bank_transactions=bank_transactions)
@@ -326,6 +346,104 @@ def _check_income_allocations(
             )
 
 
+def _check_incomes(
+    report: DiagnosticsReport,
+    *,
+    incomes: dict[int, Income],
+    contracts: dict[int, Contract],
+    projects: dict[int, Project],
+) -> None:
+    for income in incomes.values():
+        income_id = int(income.id)
+        if income.project_id is not None and int(income.project_id) not in projects:
+            report.add(
+                "error",
+                "income_missing_project",
+                "income",
+                income_id,
+                "Income points to a missing project.",
+                {"project_id": income.project_id},
+            )
+        if income.contract_id is None:
+            continue
+
+        contract = contracts.get(int(income.contract_id))
+        if contract is None:
+            report.add(
+                "error",
+                "income_missing_contract",
+                "income",
+                income_id,
+                "Income points to a missing contract.",
+                {"contract_id": income.contract_id},
+            )
+            continue
+        if income.project_id != contract.project_id:
+            report.add(
+                "warning",
+                "income_contract_project_mismatch",
+                "income",
+                income_id,
+                "Income project_id differs from linked contract project_id.",
+                {
+                    "income_project_id": income.project_id,
+                    "contract_id": income.contract_id,
+                    "contract_project_id": contract.project_id,
+                },
+            )
+
+
+def _check_monthly_obligations(
+    report: DiagnosticsReport,
+    *,
+    obligations: dict[int, MonthlyObligation],
+    expenses: dict[int, Expense],
+) -> None:
+    for obligation in obligations.values():
+        obligation_id = int(obligation.id)
+        if obligation.expense_id is not None and int(obligation.expense_id) not in expenses:
+            report.add(
+                "error",
+                "monthly_obligation_missing_expense",
+                "monthly_obligation",
+                obligation_id,
+                "Monthly obligation points to a missing expense.",
+                {"expense_id": obligation.expense_id, "status": obligation.status},
+            )
+        if obligation.status == "paid" and obligation.expense_id is None:
+            report.add(
+                "warning",
+                "monthly_obligation_paid_without_expense",
+                "monthly_obligation",
+                obligation_id,
+                "Paid monthly obligation has no linked expense.",
+                {"year": obligation.year, "month": obligation.month},
+            )
+
+
+def _check_planned_expense_payments(
+    report: DiagnosticsReport,
+    *,
+    planned_expense_payments: dict[int, PlannedExpensePayment],
+    expenses: dict[int, Expense],
+) -> None:
+    for payment in planned_expense_payments.values():
+        payment_id = int(payment.id)
+        if payment.expense_id is not None and int(payment.expense_id) not in expenses:
+            report.add(
+                "error",
+                "planned_expense_payment_missing_expense",
+                "planned_expense_payment",
+                payment_id,
+                "Planned expense payment points to a missing expense.",
+                {
+                    "planned_expense_id": payment.planned_expense_id,
+                    "due_date": payment.due_date,
+                    "expense_id": payment.expense_id,
+                },
+            )
+
+
 def _check_incoming_invoice_settlements(
     report: DiagnosticsReport,
     *,
@@ -402,6 +520,7 @@ def _check_incoming_invoices(
     *,
     incoming_invoices: dict[int, IncomingInvoice],
     expenses: dict[int, Expense],
+    projects: dict[int, Project],
     settlement_ids_by_invoice: dict[int, list[int]],
     settlement_sum_by_invoice: dict[int, Decimal],
 ) -> None:
@@ -411,6 +530,26 @@ def _check_incoming_invoices(
         settled = _decimal(invoice.settled_amount)
         settlements = settlement_ids_by_invoice.get(invoice_id, [])
 
+        if invoice.project_id is not None:
+            project = projects.get(int(invoice.project_id))
+            if project is None:
+                report.add(
+                    "error",
+                    "incoming_invoice_missing_project",
+                    "incoming_invoice",
+                    invoice_id,
+                    "Incoming invoice points to a missing project.",
+                    {"project_id": invoice.project_id},
+                )
+            elif project.status == "archived":
+                report.add(
+                    "warning",
+                    "incoming_invoice_archived_project",
+                    "incoming_invoice",
+                    invoice_id,
+                    "Incoming invoice points to an archived project.",
+                    {"project_id": invoice.project_id, "project_name": project.name},
+                )
         if invoice.status != "cancelled" and invoice.expense_id is None:
             report.add(
                 "error",
@@ -431,15 +570,40 @@ def _check_incoming_invoices(
                     "Incoming invoice points to a missing expense.",
                     {"expense_id": invoice.expense_id},
                 )
-            elif expense.source != "incoming_invoice":
-                report.add(
-                    "warning",
-                    "incoming_invoice_expense_wrong_source",
-                    "incoming_invoice",
-                    invoice_id,
-                    "Incoming invoice is linked to an expense with unexpected source.",
-                    {"expense_id": invoice.expense_id, "expense_source": expense.source},
-                )
+            else:
+                if expense.source != "incoming_invoice":
+                    report.add(
+                        "warning",
+                        "incoming_invoice_expense_wrong_source",
+                        "incoming_invoice",
+                        invoice_id,
+                        "Incoming invoice is linked to an expense with unexpected source.",
+                        {"expense_id": invoice.expense_id, "expense_source": expense.source},
+                    )
+                if expense.project_id is not None:
+                    expense_project = projects.get(int(expense.project_id))
+                    if expense_project is None:
+                        report.add(
+                            "error",
+                            "incoming_invoice_expense_missing_project",
+                            "incoming_invoice",
+                            invoice_id,
+                            "Linked incoming-invoice expense points to a missing project.",
+                            {"expense_id": invoice.expense_id, "expense_project_id": expense.project_id},
+                        )
+                    elif expense_project.status == "archived":
+                        report.add(
+                            "warning",
+                            "incoming_invoice_expense_archived_project",
+                            "incoming_invoice",
+                            invoice_id,
+                            "Linked incoming-invoice expense points to an archived project.",
+                            {
+                                "expense_id": invoice.expense_id,
+                                "expense_project_id": expense.project_id,
+                                "project_name": expense_project.name,
+                            },
+                        )
 
         expected_sum = settlement_sum_by_invoice.get(invoice_id, Decimal("0"))
         if _is_different(expected_sum, settled):
@@ -504,6 +668,7 @@ def _check_expenses(
     expenses: dict[int, Expense],
     incoming_expense_ids: set[int],
     receipt_expense_ids: set[int],
+    planned_payment_expense_ids: set[int],
 ) -> None:
     for expense in expenses.values():
         expense_id = int(expense.id)
@@ -522,6 +687,19 @@ def _check_expenses(
                 "expense",
                 expense_id,
                 "Expense source is receipt but no purchase receipt links to it.",
+            )
+        if (
+            expense.source == "planned"
+            and expense.status != "reversed"
+            and expense.reversal_of_id is None
+            and expense_id not in planned_payment_expense_ids
+        ):
+            report.add(
+                "warning",
+                "expense_planned_source_without_payment",
+                "expense",
+                expense_id,
+                "Expense source is planned but no planned expense payment links to it.",
             )
 
 
