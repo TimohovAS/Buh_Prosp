@@ -406,6 +406,26 @@ export default function Settings() {
     }
   }
 
+  const handleCreateAndDownloadBackup = async () => {
+    setServiceBusy('create-download')
+    setServiceMessage('')
+    try {
+      const response = await api.service.createBackup()
+      const backupName = response?.backup?.name
+      if (!backupName) throw new Error(tr('serviceBackupsCreateDownloadError'))
+      await api.service.downloadBackup(backupName)
+      setServiceMessageTone('success')
+      setServiceMessage(tr('serviceBackupsCreateDownloadSuccess'))
+      loadService()
+    } catch (err) {
+      console.error(err)
+      setServiceMessageTone('error')
+      setServiceMessage(err.message || tr('loadError'))
+    } finally {
+      setServiceBusy('')
+    }
+  }
+
   const handleServiceSave = async () => {
     setServiceBusy('save')
     setServiceMessage('')
@@ -515,6 +535,9 @@ export default function Settings() {
         <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
           {tr('serviceBackupsRefresh')}
         </button>
+        <button className="btn btn-primary" onClick={handleCreateAndDownloadBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
+          {tr('serviceBackupsCreateAndDownload')}
+        </button>
         <button className="btn btn-primary" onClick={handleCreateBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
           {tr('serviceBackupsCreate')}
         </button>
@@ -524,6 +547,9 @@ export default function Settings() {
       <>
         <button className="btn btn-secondary" onClick={loadService} disabled={serviceLoading || !!serviceBusy}>
           {tr('serviceBackupsRefresh')}
+        </button>
+        <button className="btn btn-primary" onClick={handleCreateAndDownloadBackup} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
+          {tr('serviceBackupsCreateAndDownload')}
         </button>
         <button className="btn btn-primary" onClick={handleServiceSave} disabled={serviceLoading || !!serviceBusy || !serviceData?.settings?.supported}>
           {tr('save')}
