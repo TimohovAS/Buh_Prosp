@@ -29,3 +29,6 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code worktree session artifacts
+.claude/worktrees/
