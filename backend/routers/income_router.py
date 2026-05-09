@@ -271,7 +271,7 @@ async def create_income(
     if status_val == "paid" and data.paid_date:
         pass # BankTransaction now handles cash flow
     await db.commit()
-    await db.refresh(income)
+    await db.refresh(income, ["contract"])
     return IncomeResponse.model_validate(income)
 
 

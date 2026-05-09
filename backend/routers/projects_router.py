@@ -68,7 +68,7 @@ async def create_project(
         raise HTTPException(400, str(exc)) from exc
     db.add(project)
     await db.commit()
-    await db.refresh(project)
+    await db.refresh(project, ["client"])
     return _project_response_with_meta(project)
 
 
@@ -109,7 +109,7 @@ async def update_project(
         except InvalidStatusTransition as exc:
             raise HTTPException(400, str(exc)) from exc
     await db.commit()
-    await db.refresh(project)
+    await db.refresh(project, ["client"])
     movement_bounds = await get_project_movement_bounds(db, [project.id])
     return _project_response_with_meta(project, movement_bounds)
 
