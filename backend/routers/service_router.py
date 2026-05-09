@@ -14,6 +14,7 @@ from backend.backup_service import (
 )
 from backend.config import get_settings
 from backend.database import get_db
+from backend.link_diagnostics import build_link_diagnostics
 from backend.models import Enterprise
 from backend.schemas import (
     ServiceBackupOperationResponse,
@@ -122,3 +123,13 @@ async def download_service_backup(
         filename=backup_path.name,
         media_type="application/zip",
     )
+
+
+@router.get("/diagnostics/links")
+async def get_link_diagnostics(
+    limit: int = 1000,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    del current_user
+    return await build_link_diagnostics(db, limit=limit)
