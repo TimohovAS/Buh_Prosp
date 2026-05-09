@@ -99,6 +99,56 @@ def _serialize_link_summary(invoice: IncomingInvoice | None) -> dict | None:
     ).model_dump()
 
 
+def _serialize_project(project) -> dict | None:
+    if not project:
+        return None
+    return {
+        "id": project.id,
+        "name": project.name,
+        "code": project.code,
+    }
+
+
+def _serialize_expense_payment(expense: Expense | None) -> dict | None:
+    if not expense:
+        return None
+    category_name = None
+    if getattr(expense, "category_ref", None):
+        category_name = expense.category_ref.name_ru or expense.category_ref.name_sr
+    return {
+        "id": expense.id,
+        "date": expense.date,
+        "paid_date": expense.paid_date,
+        "description": expense.description,
+        "amount": to_decimal(expense.amount or 0),
+        "currency": expense.currency or "RSD",
+        "status": expense.status,
+        "source": expense.source,
+        "bank_reference": expense.bank_reference,
+        "project": _serialize_project(expense.project),
+        "category": category_name or expense.category,
+        "note": expense.note,
+    }
+
+
+def _serialize_bank_payment(tx: BankTransaction | None) -> dict | None:
+    if not tx:
+        return None
+    return {
+        "id": tx.id,
+        "date": tx.date,
+        "amount": to_decimal(tx.amount or 0),
+        "currency": tx.currency or "RSD",
+        "status": tx.status,
+        "matched_type": tx.matched_type,
+        "matched_id": tx.matched_id,
+        "counterparty_name": tx.counterparty_name,
+        "purpose": tx.purpose,
+        "bank_reference": tx.bank_reference,
+        "project": _serialize_project(tx.project),
+    }
+
+
 async def _serialize_detail_with_links(db: AsyncSession, invoice: IncomingInvoice) -> dict:
     d = _serialize_detail(invoice)
     advance_invoice = None
@@ -118,7 +168,79 @@ async def _serialize_detail_with_links(db: AsyncSession, invoice: IncomingInvoic
     closing_invoice = closing_result.scalar_one_or_none()
     d["advance_invoice"] = _serialize_link_summary(advance_invoice)
     d["closing_invoice"] = _serialize_link_summary(closing_invoice)
+    d["payment_details"] = await _load_payment_details(db, invoice)
     return d
+
+
+async def _load_payment_details(db: AsyncSession, invoice: IncomingInvoice) -> dict:
+    expense = None
+    if invoice.expense_id:
+        expense_result = await db.execute(
+            select(Expense)
+            .options(
+                selectinload(Expense.project),
+                selectinload(Expense.category_ref),
+            )
+            .where(Expense.id == invoice.expense_id)
+        )
+        expense = expense_result.scalar_one_or_none()
+
+    linked_bank_tx = None
+    if invoice.expense_id:
+        tx_result = await db.execute(
+            select(BankTransaction)
+            .options(selectinload(BankTransaction.project))
+            .where(
+                BankTransaction.matched_type == "expense",
+                BankTransaction.matched_id == invoice.expense_id,
+            )
+            .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+            .limit(1)
+        )
+        linked_bank_tx = tx_result.scalar_one_or_none()
+
+    settlement_bank_ids = [
+        settlement.bank_transaction_id
+        for settlement in (invoice.settlements or [])
+        if settlement.bank_transaction_id
+    ]
+    settlement_bank_map = {}
+    if settlement_bank_ids:
+        settlement_txs_result = await db.execute(
+            select(BankTransaction)
+            .options(selectinload(BankTransaction.project))
+            .where(BankTransaction.id.in_(settlement_bank_ids))
+        )
+        settlement_bank_map = {tx.id: tx for tx in settlement_txs_result.scalars().all()}
+        linked_bank_tx = linked_bank_tx or next(iter(settlement_bank_map.values()), None)
+
+    settlements = []
+    for settlement in invoice.settlements or []:
+        item = IncomingInvoiceSettlementResponse.model_validate(settlement).model_dump()
+        item["bank_transaction"] = _serialize_bank_payment(
+            settlement_bank_map.get(settlement.bank_transaction_id)
+        )
+        settlements.append(item)
+    d_settlements = settlements
+
+    warning = None
+    if invoice.expense_id and not expense:
+        warning = "missing_linked_expense"
+    elif (
+        invoice.status == "paid"
+        and invoice.expense_id
+        and not linked_bank_tx
+        and not settlement_bank_ids
+    ):
+        warning = "linked_expense_without_bank_transaction"
+
+    return {
+        "expense_id": invoice.expense_id,
+        "expense": _serialize_expense_payment(expense),
+        "bank_transaction": _serialize_bank_payment(linked_bank_tx),
+        "settlements": d_settlements,
+        "warning": warning,
+    }
 
 
 def _serialize_expense_candidate(expense: Expense, bank_transaction: BankTransaction | None) -> dict:

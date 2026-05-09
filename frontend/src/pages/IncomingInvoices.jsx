@@ -45,6 +45,94 @@ function LinkedInvoiceSummary({ invoice }) {
   )
 }
 
+function paymentProjectLabel(project) {
+  if (!project) return ''
+  return [project.code, project.name].filter(Boolean).join(' / ')
+}
+
+function PaymentDetailsSummary({ details }) {
+  if (!details) return null
+
+  const expense = details.expense
+  const bankTransaction = details.bank_transaction
+  const missingExpenseId = details.expense_id
+  const hasPaymentDetails = expense || bankTransaction || details.warning
+  if (!hasPaymentDetails) return null
+
+  const renderMetaLine = parts => {
+    const text = parts.filter(Boolean).join(` ${UI_DASH} `)
+    return text ? <div style={{ color: 'var(--color-text-muted)' }}>{text}</div> : null
+  }
+
+  return (
+    <div className="record-field-text" style={{ display: 'grid', gap: '0.75rem' }}>
+      {details.warning === 'linked_expense_without_bank_transaction' ? (
+        <div
+          className="record-detail-card"
+          style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-warning)', color: 'var(--color-warning)' }}
+        >
+          {tr('incomingInvoicePaymentNoBankLink')}
+        </div>
+      ) : null}
+
+      {details.warning === 'missing_linked_expense' ? (
+        <div
+          className="record-detail-card"
+          style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+        >
+          <strong>{tr('incomingInvoiceMissingLinkedExpense')}</strong>
+          <div style={{ marginTop: '0.35rem' }}>
+            {tr('incomingInvoiceMissingLinkedExpenseHint').replace('{id}', missingExpenseId || UI_DASH)}
+          </div>
+        </div>
+      ) : null}
+
+      {expense ? (
+        <div className="record-detail-card" style={{ margin: 0, padding: '0.85rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <strong>{tr('incomingInvoiceLinkedExpense')} #{expense.id}</strong>
+            <strong>{fmt(expense.amount)} {expense.currency || 'RSD'}</strong>
+          </div>
+          {renderMetaLine([
+            expense.date ? `${tr('date')}: ${fmtDate(expense.date)}` : '',
+            expense.paid_date ? `${tr('dateOfPayment')}: ${fmtDate(expense.paid_date)}` : '',
+            expense.status ? `${tr('status')}: ${tr(expense.status)}` : '',
+          ])}
+          {renderMetaLine([
+            paymentProjectLabel(expense.project),
+            expense.category,
+          ])}
+          {expense.bank_reference ? (
+            <div>{tr('paymentReference')}: {expense.bank_reference}</div>
+          ) : null}
+          {expense.description ? <div>{compactText(expense.description, 180)}</div> : null}
+          {expense.note ? <div style={{ color: 'var(--color-text-muted)' }}>{compactText(expense.note, 180)}</div> : null}
+        </div>
+      ) : null}
+
+      {bankTransaction ? (
+        <div className="record-detail-card" style={{ margin: 0, padding: '0.85rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <strong>{tr('incomingInvoiceLinkedBank')} #{bankTransaction.id}</strong>
+            <strong>{fmt(bankTransaction.amount)} {bankTransaction.currency || 'RSD'}</strong>
+          </div>
+          {renderMetaLine([
+            bankTransaction.date ? `${tr('date')}: ${fmtDate(bankTransaction.date)}` : '',
+            bankTransaction.status ? `${tr('status')}: ${tr(bankTransaction.status)}` : '',
+            paymentProjectLabel(bankTransaction.project),
+          ])}
+          {bankTransaction.bank_reference ? (
+            <div>{tr('paymentReference')}: {bankTransaction.bank_reference}</div>
+          ) : null}
+          {bankTransaction.counterparty_name || bankTransaction.purpose ? (
+            <div>{compactText([bankTransaction.counterparty_name, bankTransaction.purpose].filter(Boolean).join(` ${UI_DASH} `), 180)}</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function IncomingInvoices() {
   const location = useLocation()
   const isActivePage = location.pathname === '/incoming-invoices'
@@ -238,6 +326,8 @@ export default function IncomingInvoices() {
   const canUnlinkClosingDetail = !!detailModal?.closing_invoice
   const canSettleDetail = canEditDetail && detailAmount > 0 && !detailModal?.advance_invoice
   const showDetailActions = canEditDetail || canRestoreDetail || canCancelDetail || canLinkAdvanceDetail || canLinkClosingDetail || canUnlinkAdvanceDetail || canUnlinkClosingDetail || canSettleDetail
+  const detailPaymentDetails = detailModal?.payment_details || null
+  const detailSettlements = detailPaymentDetails?.settlements || detailModal?.settlements || []
 
   return (
     <div className="page">
@@ -470,12 +560,17 @@ export default function IncomingInvoices() {
                 <span className="record-field-value">{detailModal.client_name}</span>
               </div>
             ) : null}
-            {detailModal.status === 'paid' && detailModal.expense_id && (!detailModal.settlements || detailModal.settlements.length === 0) && (
+            {detailPaymentDetails && (detailPaymentDetails.expense || detailPaymentDetails.bank_transaction || detailPaymentDetails.warning) ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('paymentDetails')}</span>
+                <PaymentDetailsSummary details={detailPaymentDetails} />
+              </div>
+            ) : detailModal.status === 'paid' && detailModal.expense_id && detailSettlements.length === 0 ? (
               <div className="record-field full">
                 <span className="record-field-label">{tr('linkedExpense')}</span>
                 <span className="record-field-value">#{detailModal.expense_id}</span>
               </div>
-            )}
+            ) : null}
             {detailModal.advance_invoice ? (
               <div className="record-field full">
                 <span className="record-field-label">{tr('advanceInvoice')}</span>
@@ -523,7 +618,7 @@ export default function IncomingInvoices() {
         {detailModal ? (
           <div className="record-detail-card">
             <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('settlementHistory')}</div>
-            {(!detailModal.settlements || detailModal.settlements.length === 0) ? <p>{tr('noSettlements')}</p> : (
+            {detailSettlements.length === 0 ? <p>{tr('noSettlements')}</p> : (
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -536,12 +631,24 @@ export default function IncomingInvoices() {
                     </tr>
                   </thead>
                   <tbody>
-                    {detailModal.settlements.map(settlement => (
+                    {detailSettlements.map(settlement => (
                       <tr key={settlement.id}>
                         <td>{fmtDate(settlement.date)}</td>
                         <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
-                        <td>{settlement.note || ''}</td>
+                        <td>
+                          <div>{settlement.note || ''}</div>
+                          {settlement.bank_transaction ? (
+                            <div style={{ marginTop: 4, color: 'var(--color-text-muted)' }}>
+                              {[
+                                `${tr('bank')} #${settlement.bank_transaction.id}`,
+                                settlement.bank_transaction.bank_reference ? `${tr('paymentReference')}: ${settlement.bank_transaction.bank_reference}` : '',
+                                settlement.bank_transaction.counterparty_name,
+                                compactText(settlement.bank_transaction.purpose, 80),
+                              ].filter(Boolean).join(` ${UI_DASH} `)}
+                            </div>
+                          ) : null}
+                        </td>
                         <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
                       </tr>
                     ))}
