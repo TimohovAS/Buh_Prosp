@@ -576,26 +576,25 @@ export default function Expenses() {
 
         <div className="card">
           <div className="table-wrap">
-            <table>
+            <table className="expenses-list-table">
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
                     <input type="checkbox" checked={filtered.length > 0 && selectedIds.length >= filtered.length} onChange={toggleSelectAll} />
                   </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('contract_id')}>{tr('contract')} <SortIndicator active={sortCol === 'contract_id'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIndicator active={sortCol === 'category'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
-                  <th>{tr('paymentRef')}</th>
+                  <th className="col-date" style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                  <th className="col-description" style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
+                  <th className="col-project" style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} /></th>
+                  <th className="col-category" style={{ cursor: 'pointer' }} onClick={() => toggleSort('category')}>{tr('category')} <SortIndicator active={sortCol === 'category'} asc={sortAsc} /></th>
+                  <th className="col-amount" style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
+                  <th className="col-payment">{tr('paymentRef')}</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
+                  <tr><td colSpan={7}>{tr('loading')}</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
                 ) : (
                   filtered.map((item) => (
                     <tr
@@ -619,22 +618,26 @@ export default function Expenses() {
                         />
                       </td>
                       <td className="date-cell">{item.date}</td>
-                      <td><span className="record-cell-ellipsis">{item.description || UI_DASH}</span></td>
-                      <td title={getProjectName(item.project_id) || ''}>
+                      <td className="col-description"><span className="record-cell-ellipsis" title={item.description || ''}>{item.description || UI_DASH}</span></td>
+                      <td className="col-project" title={[getProjectName(item.project_id), getContractLabel(item.contract_id)].filter(Boolean).join(' • ')}>
                         {item.project_id ? (
-                          <span title={projects.find((project) => project.id === item.project_id)?.code || ''}>
-                            {getProjectName(item.project_id) || UI_DASH}
-                          </span>
+                          <>
+                            <span className="record-cell-ellipsis" title={projects.find((project) => project.id === item.project_id)?.code || ''}>
+                              {getProjectName(item.project_id) || UI_DASH}
+                            </span>
+                            {item.contract_id && (
+                              <span className="record-cell-subtitle">{getContractLabel(item.contract_id)}</span>
+                            )}
+                          </>
                         ) : UI_DASH}
                       </td>
-                      <td title={getContractLabel(item.contract_id) || ''}>{item.contract_id ? getContractLabel(item.contract_id) : UI_DASH}</td>
-                      <td>{getCategoryLabel(item)}</td>
-                      <td>{item.amount.toLocaleString('sr-RS')}</td>
+                      <td className="col-category"><span className="record-cell-ellipsis">{getCategoryLabel(item)}</span></td>
+                      <td className="col-amount">{item.amount.toLocaleString('sr-RS')}</td>
                       <td
+                        className="col-payment"
                         title={(item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : '')) || ''}
-                        style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
-                        {item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : UI_DASH)}
+                        <span className="record-cell-ellipsis">{item.bank_reference || item.note || (item.source === 'cash' ? tr('cashRegister') : UI_DASH)}</span>
                       </td>
                     </tr>
                   ))

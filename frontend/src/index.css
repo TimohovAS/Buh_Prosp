@@ -959,6 +959,28 @@ tr.row-reversal {
   text-overflow: ellipsis;
 }
 
+.record-cell-subtitle {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expenses-list-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.expenses-list-table .col-date { width: 110px; }
+.expenses-list-table .col-description { width: auto; }
+.expenses-list-table .col-project { width: 18%; }
+.expenses-list-table .col-category { width: 14%; }
+.expenses-list-table .col-amount { width: 130px; text-align: right; white-space: nowrap; }
+.expenses-list-table .col-payment { width: 16%; font-size: 0.85rem; }
+
 .income-list-table {
   table-layout: fixed;
 }
