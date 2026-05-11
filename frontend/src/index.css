@@ -974,12 +974,32 @@ tr.row-reversal {
   width: 100%;
 }
 
-.expenses-list-table .col-date { width: 110px; }
-.expenses-list-table .col-description { width: auto; }
-.expenses-list-table .col-project { width: 18%; }
-.expenses-list-table .col-category { width: 14%; }
-.expenses-list-table .col-amount { width: 130px; text-align: right; white-space: nowrap; }
-.expenses-list-table .col-payment { width: 16%; font-size: 0.85rem; }
+.expenses-list-table .col-date {
+  width: 110px;
+}
+
+.expenses-list-table .col-description {
+  width: auto;
+}
+
+.expenses-list-table .col-project {
+  width: 18%;
+}
+
+.expenses-list-table .col-category {
+  width: 220px;
+}
+
+.expenses-list-table .col-amount {
+  width: 130px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.expenses-list-table .col-payment {
+  width: 10%;
+  font-size: 0.85rem;
+}
 
 .income-list-table {
   table-layout: fixed;
