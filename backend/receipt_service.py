@@ -10,7 +10,7 @@ from http.cookiejar import CookieJar
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -854,6 +854,7 @@ async def list_receipts(
                 PurchaseReceipt.seller_name.ilike(needle),
                 PurchaseReceipt.invoice_number.ilike(needle),
                 PurchaseReceipt.seller_tax_id.ilike(needle),
+                cast(PurchaseReceipt.total_amount, String).ilike(needle),
             )
         )
     result = await db.execute(query)
