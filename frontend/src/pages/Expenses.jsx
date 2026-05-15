@@ -15,7 +15,7 @@ import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
 import useProjectContractForm from '../hooks/useProjectContractForm'
 import { filterContractsForProject, findUnassignedProject, getContractLabelById, getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_CLOSE, UI_DASH, todayIso } from '../utils/formatters'
+import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
 import { downloadTextFile } from '../utils/download'
 
@@ -45,6 +45,10 @@ function csvEscape(value) {
   return text
 }
 
+function formatMoneyWithCurrency(value, currency = 'RSD') {
+  return `${fmtMoney(value)} ${currency || 'RSD'}`
+}
+
 export default function Expenses() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -65,6 +69,9 @@ export default function Expenses() {
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const [detailEditMode, setDetailEditMode] = useState(false)
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
@@ -178,7 +185,7 @@ export default function Expenses() {
     }
 
     if (reference) {
-      setDetailModal(null)
+      closeDetail()
       navigate('/bank', {
         state: {
           openBankReference: reference,
@@ -226,6 +233,7 @@ export default function Expenses() {
       await api.expenses.adminHardDelete({ ids })
       setSelectedIds((previous) => previous.filter((id) => !ids.includes(id)))
       setDetailModal((previous) => (previous && ids.includes(previous.id) ? null : previous))
+      setDetailEditMode((previous) => (detailModal && ids.includes(detailModal.id) ? false : previous))
       load()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
@@ -248,7 +256,7 @@ export default function Expenses() {
     setModal('add')
   }
 
-  const openEdit = (item) => {
+  const hydrateExpenseForm = (item) => {
     setForm({
       date: item.date,
       description: item.description || '',
@@ -259,21 +267,62 @@ export default function Expenses() {
       contract_id: item.contract_id ?? '',
       note: item.note || '',
     })
+  }
+
+  const buildExpensePayload = () => {
+    const categoryValue = form.category?.trim() || null
+    const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
+    return {
+      date: form.date,
+      description: form.description.trim(),
+      amount: parseFloat(form.amount) || 0,
+      category: categoryValue,
+      category_id: form.category_id ? parseInt(form.category_id, 10) : null,
+      project_id: categoryDefaultProjectId
+        ? parseInt(categoryDefaultProjectId, 10)
+        : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+      contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
+      note: form.note || null,
+    }
+  }
+
+  const openEdit = (item) => {
+    hydrateExpenseForm(item)
     setPageError('')
     setModal({ type: 'edit', id: item.id })
   }
 
-  const openDetail = (item) => {
+  const openDetail = async (item) => {
     setDetailModal(item)
+    setDetailEditMode(false)
+    setDetailError('')
+    setDetailLoading(true)
+    try {
+      const details = await api.expenses.get(item.id)
+      setDetailModal(details)
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
+      console.error(error)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const closeDetail = () => {
+    setDetailModal(null)
+    setDetailEditMode(false)
+    setDetailError('')
+    setDetailLoading(false)
   }
 
   const openEditFromDetail = (item) => {
-    setDetailModal(null)
-    openEdit(item)
+    hydrateExpenseForm(item)
+    setDetailError('')
+    setDetailEditMode(true)
   }
 
   const handleDeleteFromDetail = async (item) => {
-    setDetailModal(null)
+    closeDetail()
     await handleDelete(item)
   }
 
@@ -298,20 +347,7 @@ export default function Expenses() {
     event.preventDefault()
     setPageError('')
     try {
-      const categoryValue = form.category?.trim() || null
-      const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
-      const payload = {
-        date: form.date,
-        description: form.description.trim(),
-        amount: parseFloat(form.amount) || 0,
-        category: categoryValue,
-        category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: categoryDefaultProjectId
-          ? parseInt(categoryDefaultProjectId, 10)
-          : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
-        contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
-        note: form.note || null,
-      }
+      const payload = buildExpensePayload()
       if (modal === 'add') {
         await api.expenses.create(payload)
       } else {
@@ -321,6 +357,22 @@ export default function Expenses() {
       load()
     } catch (error) {
       setPageError(error.message || tr('loadError'))
+      console.error(error)
+    }
+  }
+
+  const handleDetailSubmit = async (event) => {
+    event.preventDefault()
+    if (!detailModal) return
+    setDetailError('')
+    try {
+      const updated = await api.expenses.update(detailModal.id, buildExpensePayload())
+      const details = await api.expenses.get(updated.id)
+      setDetailModal(details)
+      setDetailEditMode(false)
+      load()
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
       console.error(error)
     }
   }
@@ -649,27 +701,40 @@ export default function Expenses() {
       </div>
 
       <EntityDetailModal
-        isOpen={!!detailModal}
-        onClose={() => setDetailModal(null)}
-        title={detailModal ? `${tr('expenses')} ${UI_DASH} #${detailModal.id}` : ''}
-        maxWidth="860px"
-        details={detailModal ? (
-          <div className="record-field-grid">
+        isOpen={!!detailModal || detailLoading || !!detailError}
+        onClose={closeDetail}
+        title={detailModal ? `${tr('expenses')} ${UI_DASH} #${detailModal.id}` : tr('expenses')}
+        maxWidth="1200px"
+        className="expense-detail-modal"
+        details={detailLoading && !detailModal ? (
+          <div>{tr('loading')}</div>
+        ) : detailError && !detailModal ? (
+          <div className="alert alert-danger">{detailError}</div>
+        ) : detailModal ? (
+          <div className="expense-summary-grid">
             <div className="record-field">
               <span className="record-field-label">{tr('date')}</span>
               <span className="record-field-value">{detailModal.date || UI_DASH}</span>
             </div>
             <div className="record-field">
               <span className="record-field-label">{tr('amount')}</span>
-              <span className="record-field-value">{Number(detailModal.amount || 0).toLocaleString('sr-RS')} RSD</span>
+              <span className="record-field-value">{formatMoneyWithCurrency(detailModal.amount, detailModal.currency)}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
             </div>
             <div className="record-field">
               <span className="record-field-label">{tr('category')}</span>
               <span className="record-field-value">{getCategoryLabel(detailModal)}</span>
             </div>
             <div className="record-field">
-              <span className="record-field-label">{tr('project')}</span>
-              <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+              <span className="record-field-label">{tr('source')}</span>
+              <span className="record-field-value">{detailModal.source || UI_DASH}</span>
             </div>
             <div className="record-field full">
               <span className="record-field-label">{tr('contract')}</span>
@@ -683,10 +748,6 @@ export default function Expenses() {
               <span className="record-field-label">{tr('paymentRef')}</span>
               <span className="record-field-value">{detailModal.bank_reference || UI_DASH}</span>
             </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('status')}</span>
-              <span className="record-field-value">{detailModal.status || UI_DASH}</span>
-            </div>
             <div className="record-field full">
               <span className="record-field-label">{tr('note')}</span>
               <div className="record-field-text">{detailModal.note || UI_DASH}</div>
@@ -694,45 +755,227 @@ export default function Expenses() {
           </div>
         ) : null}
         actions={detailModal ? (
-          <div className="record-actions-grid">
-            {canOpenExpenseSource(detailModal) ? (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => openExpenseSource(detailModal)}
-              >
-                {tr('openSource')}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
-              onClick={() => openEditFromDetail(detailModal)}
-            >
-              {tr('edit')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => handleDeleteFromDetail(detailModal)}
-              disabled={detailModal.source === 'cash'}
-              title={detailModal.source === 'cash' ? tr('cashManagedInRegister') : ''}
-            >
-              {tr('delete')}
-            </button>
-            {isAdmin ? (
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => handleAdminHardDelete([detailModal.id])}
-              >
-                {tr('adminHardDeleteExpense')}
-              </button>
+          <div className="expense-side-card">
+            {detailError ? <div className="alert alert-danger">{detailError}</div> : null}
+            <div className="record-actions-grid">
+              {detailEditMode ? (
+                <>
+                  <button type="submit" form="expense-detail-edit-form" className="btn btn-primary">{tr('save')}</button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      hydrateExpenseForm(detailModal)
+                      setDetailEditMode(false)
+                      setDetailError('')
+                    }}
+                  >
+                    {tr('cancel')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {canOpenExpenseSource(detailModal) ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => openExpenseSource(detailModal)}
+                    >
+                      {tr('openSource')}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
+                    onClick={() => openEditFromDetail(detailModal)}
+                  >
+                    {tr('edit')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => handleDeleteFromDetail(detailModal)}
+                    disabled={detailModal.source === 'cash'}
+                    title={detailModal.source === 'cash' ? tr('cashManagedInRegister') : ''}
+                  >
+                    {tr('delete')}
+                  </button>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => handleAdminHardDelete([detailModal.id])}
+                    >
+                      {tr('adminHardDeleteExpense')}
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {detailModal.receipt ? (
+              <div className="expense-linked-card">
+                <span className="record-field-label">{tr('linkedReceipt')}</span>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('receiptSeller')}</span>
+                  <span className="record-field-value">{detailModal.receipt.seller_name || UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('invoiceNumber')}</span>
+                  <span className="record-field-value">{detailModal.receipt.invoice_number || UI_DASH}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('date')}</span>
+                  <span className="record-field-value">{fmtDateTime(detailModal.receipt.receipt_datetime)}</span>
+                </div>
+              </div>
             ) : null}
           </div>
         ) : null}
-      />
+      >
+        {detailModal ? (
+          <>
+            <div className="record-detail-card expense-lines-card">
+              <div className="receipt-items-header">
+                <span className="record-field-label">{tr('expenseLine')}</span>
+                {detailEditMode ? <span className="record-field-text">{tr('expenseEditHint')}</span> : null}
+              </div>
+              {detailEditMode ? (
+                <form id="expense-detail-edit-form" onSubmit={handleDetailSubmit}>
+                  <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
+                    <table className="expense-lines-table">
+                      <thead>
+                        <tr>
+                          <th>{tr('date')}</th>
+                          <th>{tr('description')}</th>
+                          <th>{tr('category')}</th>
+                          <th>{tr('project')}</th>
+                          <th>{tr('contract')}</th>
+                          <th>{tr('amount')}</th>
+                          <th>{tr('note')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required /></td>
+                          <td>
+                            <input
+                              type="text"
+                              className="form-input expense-description-input"
+                              value={form.description}
+                              onChange={(event) => setForm({ ...form, description: event.target.value })}
+                              required
+                            />
+                          </td>
+                          <td>
+                            <select className="form-input" value={form.category_id} onChange={(event) => updateCategory(event.target.value)}>
+                              <option value="">{`${UI_DASH} ${tr('allCategories')} ${UI_DASH}`}</option>
+                              {categories.map((category) => (
+                                <option key={category.id} value={category.id}>{lang === 'ru' ? category.name_ru : category.name_sr}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            {!usesDefaultCategoryProject ? (
+                              <ProjectSelect projects={projects} value={form.project_id} onChange={updateProject} required />
+                            ) : (
+                              <span className="record-field-value">{getProjectName(getCategoryDefaultProjectId(form.category_id)) || UI_DASH}</span>
+                            )}
+                          </td>
+                          <td>
+                            {filteredContracts.length > 0 ? (
+                              <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
+                                <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                                {filteredContracts.map((contract) => (
+                                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                                ))}
+                              </select>
+                            ) : UI_DASH}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="form-input"
+                              value={form.amount}
+                              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+                              required
+                            />
+                          </td>
+                          <td>
+                            <input type="text" className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </form>
+              ) : (
+                <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
+                  <table className="expense-lines-table">
+                    <thead>
+                      <tr>
+                        <th>{tr('date')}</th>
+                        <th>{tr('description')}</th>
+                        <th>{tr('category')}</th>
+                        <th>{tr('project')}</th>
+                        <th>{tr('contract')}</th>
+                        <th>{tr('amount')}</th>
+                        <th>{tr('paymentRef')}</th>
+                        <th>{tr('note')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{detailModal.date || UI_DASH}</td>
+                        <td>{detailModal.description || UI_DASH}</td>
+                        <td>{getCategoryLabel(detailModal)}</td>
+                        <td>{getProjectName(detailModal.project_id) || UI_DASH}</td>
+                        <td>{detailModal.contract_id ? getContractLabel(detailModal.contract_id) : UI_DASH}</td>
+                        <td>{formatMoneyWithCurrency(detailModal.amount, detailModal.currency)}</td>
+                        <td>{detailModal.bank_reference || UI_DASH}</td>
+                        <td>{detailModal.note || UI_DASH}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {detailModal.receipt?.items?.length ? (
+              <div className="record-detail-card receipt-items-card">
+                <div className="receipt-items-header">
+                  <span className="record-field-label">{tr('receiptItems')}</span>
+                  <span className="receipt-items-count">{detailModal.receipt.items.length}</span>
+                </div>
+                <div className="table-wrap table-wrap-scroll receipt-items-table-wrap">
+                  <table className="receipt-items-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>{tr('name')}</th>
+                        <th>{tr('receiptQuantity')}</th>
+                        <th>{tr('receiptUnitPrice')}</th>
+                        <th>{tr('amount')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailModal.receipt.items.map((line) => (
+                        <tr key={line.id || line.line_no}>
+                          <td>{line.line_no}</td>
+                          <td>{line.name}</td>
+                          <td>{fmtMoney(line.quantity)}</td>
+                          <td>{formatMoneyWithCurrency(line.unit_price, detailModal.receipt.currency)}</td>
+                          <td>{formatMoneyWithCurrency(line.total_amount, detailModal.receipt.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </EntityDetailModal>
 
       <Modal
         isOpen={!!modal}

@@ -6,6 +6,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_admin, require_edit_access
 from backend.cash_service import CASH_TRANSFER_SOURCE, is_cash_transfer_expense
@@ -33,6 +34,7 @@ from backend.models import (
 from backend.schemas import (
     BulkAssignProject,
     ExpenseCreate,
+    ExpenseDetailResponse,
     ExpenseDuplicateGroup,
     ExpenseDuplicateItem,
     ExpenseHardDeleteRequest,
@@ -40,6 +42,7 @@ from backend.schemas import (
     ExpenseResponse,
     ExpenseReverseRequest,
     ExpenseUpdate,
+    PurchaseReceiptDetailResponse,
 )
 from backend.state_machine import InvalidStatusTransition, initialize_expense_status, mark_expense_paid
 from backend.services import create_expense_reversal
@@ -500,17 +503,24 @@ async def get_expense_totals(
     return {"year_expenses": year_total, "month_expenses": month_total}
 
 
-@router.get("/{expense_id}", response_model=ExpenseResponse)
+@router.get("/{expense_id}", response_model=ExpenseDetailResponse)
 async def get_expense(
     expense_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    result = await db.execute(select(Expense).where(Expense.id == expense_id))
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.purchase_receipt).selectinload(PurchaseReceipt.items))
+        .where(Expense.id == expense_id)
+    )
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
-    return ExpenseResponse.model_validate(expense)
+    response = ExpenseDetailResponse.model_validate(expense)
+    if expense.purchase_receipt:
+        response.receipt = PurchaseReceiptDetailResponse.model_validate(expense.purchase_receipt)
+    return response
 
 
 @router.patch("/{expense_id}/reverse", response_model=ExpenseResponse)
@@ -705,5 +715,3 @@ async def delete_expense(
     )
     await db.commit()
     return {"ok": True, "reversal_id": reversal.id}
-
-

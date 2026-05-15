@@ -962,6 +962,10 @@ class ExpenseResponse(ExpenseBase):
         from_attributes = True
 
 
+class ExpenseDetailResponse(ExpenseResponse):
+    receipt: Optional[PurchaseReceiptDetailResponse] = None
+
+
 # --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
 
 class ExpenseDuplicateItem(BaseModel):
@@ -1567,5 +1571,4 @@ class CounterpartyBalanceResponse(BaseModel):
     total_receivables: Decimal = Decimal("0")
     total_payables: Decimal = Decimal("0")
     total_net_balance: Decimal = Decimal("0")
-
 

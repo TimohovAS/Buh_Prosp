@@ -1304,6 +1304,11 @@ tr.row-reversal {
   max-width: none;
 }
 
+.modal.expense-detail-modal {
+  width: min(96vw, 1320px);
+  max-width: none;
+}
+
 .receipt-detail-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.95fr);
@@ -1334,13 +1339,44 @@ tr.row-reversal {
   overflow-wrap: anywhere;
 }
 
+.expense-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+}
+
+.expense-summary-grid .record-field.full {
+  grid-column: 1 / -1;
+}
+
+.expense-summary-grid .record-field-value,
+.expense-summary-grid .record-field-text,
+.expense-linked-card .record-field-value {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 .receipt-side-card {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
+.expense-side-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
 .receipt-linked-grid {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.expense-linked-card {
   display: grid;
   gap: 0.85rem;
   padding-top: 1rem;
@@ -1367,6 +1403,10 @@ tr.row-reversal {
 }
 
 .receipt-items-card {
+  grid-column: 1 / -1;
+}
+
+.expense-lines-card {
   grid-column: 1 / -1;
 }
 
@@ -1399,6 +1439,28 @@ tr.row-reversal {
 .receipt-items-table td:nth-child(2),
 .receipt-items-table th:nth-child(2) {
   min-width: 320px;
+}
+
+.expense-lines-table-wrap {
+  max-height: min(34vh, 320px);
+}
+
+.expense-lines-table th,
+.expense-lines-table td {
+  vertical-align: top;
+}
+
+.expense-lines-table td:nth-child(2),
+.expense-lines-table th:nth-child(2) {
+  min-width: 320px;
+}
+
+.expense-lines-table .form-input {
+  min-width: 150px;
+}
+
+.expense-lines-table .expense-description-input {
+  min-width: 360px;
 }
 
 .receipt-import-layout {
@@ -2277,7 +2339,8 @@ tr:hover td {
   }
 
   .modal.receipt-import-modal,
-  .modal.receipt-detail-modal {
+  .modal.receipt-detail-modal,
+  .modal.expense-detail-modal {
     width: 100vw;
     max-width: none;
     height: 100dvh;
@@ -2307,7 +2370,13 @@ tr:hover td {
     gap: 0.85rem;
   }
 
-  .receipt-items-card {
+  .expense-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .receipt-items-card,
+  .expense-lines-card {
     grid-column: auto;
   }
 
