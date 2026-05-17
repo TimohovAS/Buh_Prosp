@@ -7,6 +7,7 @@ import traceback
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -41,7 +42,11 @@ def _load_backup_overrides_sync() -> dict[str, Any]:
         return {}
 
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        # NOTE: sqlite3.Connection's context manager only commits/rolls back
+        # the transaction; it does NOT close the connection. On Windows the
+        # leaked handle can keep the DB file locked. Use contextlib.closing
+        # to ensure .close() actually runs.
+        with closing(sqlite3.connect(str(db_path))) as conn:
             cursor = conn.cursor()
             cursor.execute("PRAGMA table_info(enterprise)")
             available = {str(row[1]).lower() for row in cursor.fetchall()}
@@ -208,7 +213,11 @@ def _create_backup_sync(kind: str) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="prospel-backup-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
         snapshot_path = temp_dir / BACKUP_DB_FILENAME
-        with sqlite3.connect(str(db_path)) as source_conn, sqlite3.connect(str(snapshot_path)) as snapshot_conn:
+        # NB: contextlib.closing wraps sqlite3.Connection so .close() actually
+        # runs. Without it the snapshot DB file stays locked on Windows and
+        # tempfile cleanup raises WinError 32.
+        with closing(sqlite3.connect(str(db_path))) as source_conn, \
+                closing(sqlite3.connect(str(snapshot_path))) as snapshot_conn:
             source_conn.backup(snapshot_conn)
 
         db_size_bytes = snapshot_path.stat().st_size
@@ -250,7 +259,8 @@ def _restore_backup_sync(backup_path: Path, db_path: Path) -> None:
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
         _cleanup_auxiliary_sqlite_files(db_path)
-        with sqlite3.connect(str(snapshot_path)) as source_conn, sqlite3.connect(str(db_path)) as target_conn:
+        with closing(sqlite3.connect(str(snapshot_path))) as source_conn, \
+                closing(sqlite3.connect(str(db_path))) as target_conn:
             source_conn.backup(target_conn)
         _cleanup_auxiliary_sqlite_files(db_path)
 
