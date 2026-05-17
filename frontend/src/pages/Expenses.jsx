@@ -648,7 +648,6 @@ export default function Expenses() {
               <th>{tr('receiptQuantity')}</th>
               <th>{tr('receiptUnitPrice')}</th>
               <th>{tr('amount')}</th>
-              <th>{tr('note')}</th>
               <th></th>
             </tr>
           </thead>
@@ -657,13 +656,22 @@ export default function Expenses() {
               <tr key={line.key}>
                 <td>{index + 1}</td>
                 <td>
-                  <input
-                    type="text"
-                    className="form-input expense-line-name-input"
-                    value={line.name}
-                    onChange={(event) => updateExpenseLine(line.key, 'name', event.target.value)}
-                    placeholder={tr('expenseLineName')}
-                  />
+                  <div className="expense-line-name-stack">
+                    <input
+                      type="text"
+                      className="form-input expense-line-name-input"
+                      value={line.name}
+                      onChange={(event) => updateExpenseLine(line.key, 'name', event.target.value)}
+                      placeholder={tr('expenseLineName')}
+                    />
+                    <input
+                      type="text"
+                      className="form-input expense-line-note-input"
+                      value={line.note}
+                      onChange={(event) => updateExpenseLine(line.key, 'note', event.target.value)}
+                      placeholder={tr('note')}
+                    />
+                  </div>
                 </td>
                 <td>
                   <input
@@ -692,14 +700,6 @@ export default function Expenses() {
                     onChange={(event) => updateExpenseLine(line.key, 'total_amount', event.target.value)}
                   />
                 </td>
-                <td>
-                  <input
-                    type="text"
-                    className="form-input expense-line-note-input"
-                    value={line.note}
-                    onChange={(event) => updateExpenseLine(line.key, 'note', event.target.value)}
-                  />
-                </td>
                 <td className="expense-line-actions-cell">
                   <button
                     type="button"
@@ -717,7 +717,7 @@ export default function Expenses() {
             <tr>
               <td colSpan={4}>{tr('expenseLinesTotal')}</td>
               <td>{formatMoneyWithCurrency(expenseLinesTotal, form.currency || 'RSD')}</td>
-              <td colSpan={2}></td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -737,18 +737,19 @@ export default function Expenses() {
               <th>{tr('receiptQuantity')}</th>
               <th>{tr('receiptUnitPrice')}</th>
               <th>{tr('amount')}</th>
-              <th>{tr('note')}</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line, index) => (
               <tr key={line.key}>
                 <td>{line.line_no || index + 1}</td>
-                <td>{line.name || UI_DASH}</td>
+                <td>
+                  <div>{line.name || UI_DASH}</div>
+                  {line.note ? <div className="record-cell-subtitle">{line.note}</div> : null}
+                </td>
                 <td>{line.quantity == null || line.quantity === '' ? UI_DASH : fmtMoney(line.quantity)}</td>
                 <td>{line.unit_price == null || line.unit_price === '' ? UI_DASH : formatMoneyWithCurrency(line.unit_price, expense.currency)}</td>
                 <td>{formatMoneyWithCurrency(line.total_amount, expense.currency)}</td>
-                <td>{line.note || UI_DASH}</td>
               </tr>
             ))}
           </tbody>
@@ -965,12 +966,27 @@ export default function Expenses() {
         isOpen={!!detailModal || detailLoading || !!detailError}
         onClose={closeDetail}
         title={detailModal ? `${tr('expenses')} ${UI_DASH} #${detailModal.id}` : tr('expenses')}
-        maxWidth="1200px"
+        maxWidth="1560px"
         className="expense-detail-modal"
         details={detailLoading && !detailModal ? (
           <div>{tr('loading')}</div>
         ) : detailError && !detailModal ? (
           <div className="alert alert-danger">{detailError}</div>
+        ) : detailModal && detailEditMode ? (
+          <div className="expense-summary-grid expense-summary-grid-compact">
+            <div className="record-field">
+              <span className="record-field-label">{tr('status')}</span>
+              <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('source')}</span>
+              <span className="record-field-value">{detailModal.source || UI_DASH}</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">{tr('paymentRef')}</span>
+              <span className="record-field-value">{detailModal.bank_reference || UI_DASH}</span>
+            </div>
+          </div>
         ) : detailModal ? (
           <div className="expense-summary-grid">
             <div className="record-field">
