@@ -65,13 +65,30 @@ function toNumberOrZero(value) {
   return Number.isFinite(number) ? number : 0
 }
 
+function hasExpenseLineUnitCalculation(line) {
+  return line.quantity !== '' && line.quantity != null && line.unit_price !== '' && line.unit_price != null
+}
+
+function getExpenseLineCalculatedTotal(line) {
+  if (!hasExpenseLineUnitCalculation(line)) return null
+  const quantity = toNumberOrZero(line.quantity)
+  const unitPrice = toNumberOrZero(line.unit_price)
+  return Number((quantity * unitPrice).toFixed(2))
+}
+
+function getExpenseLineTotalInputValue(line) {
+  const calculated = getExpenseLineCalculatedTotal(line)
+  if (calculated == null) return line.total_amount
+  return calculated.toFixed(2)
+}
+
 function normalizeExpenseLine(line) {
   const quantity = line.quantity === '' || line.quantity == null ? null : toNumberOrZero(line.quantity)
   const unitPrice = line.unit_price === '' || line.unit_price == null ? null : toNumberOrZero(line.unit_price)
-  let totalAmount = line.total_amount === '' || line.total_amount == null ? 0 : toNumberOrZero(line.total_amount)
-  if (!totalAmount && quantity != null && unitPrice != null) {
-    totalAmount = quantity * unitPrice
-  }
+  const calculatedTotal = getExpenseLineCalculatedTotal(line)
+  const totalAmount = calculatedTotal == null
+    ? (line.total_amount === '' || line.total_amount == null ? 0 : toNumberOrZero(line.total_amount))
+    : calculatedTotal
   return {
     name: String(line.name || '').trim(),
     quantity,
@@ -652,66 +669,71 @@ export default function Expenses() {
             </tr>
           </thead>
           <tbody>
-            {expenseLines.map((line, index) => (
-              <tr key={line.key}>
-                <td>{index + 1}</td>
-                <td>
-                  <div className="expense-line-name-stack">
+            {expenseLines.map((line, index) => {
+              const isLineTotalCalculated = hasExpenseLineUnitCalculation(line)
+              return (
+                <tr key={line.key}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <div className="expense-line-name-stack">
+                      <input
+                        type="text"
+                        className="form-input expense-line-name-input"
+                        value={line.name}
+                        onChange={(event) => updateExpenseLine(line.key, 'name', event.target.value)}
+                        placeholder={tr('expenseLineName')}
+                      />
+                      <input
+                        type="text"
+                        className="form-input expense-line-note-input"
+                        value={line.note}
+                        onChange={(event) => updateExpenseLine(line.key, 'note', event.target.value)}
+                        placeholder={tr('note')}
+                      />
+                    </div>
+                  </td>
+                  <td>
                     <input
-                      type="text"
-                      className="form-input expense-line-name-input"
-                      value={line.name}
-                      onChange={(event) => updateExpenseLine(line.key, 'name', event.target.value)}
-                      placeholder={tr('expenseLineName')}
+                      type="number"
+                      step="0.001"
+                      className="form-input expense-line-number-input"
+                      value={line.quantity}
+                      onChange={(event) => updateExpenseLine(line.key, 'quantity', event.target.value)}
                     />
+                  </td>
+                  <td>
                     <input
-                      type="text"
-                      className="form-input expense-line-note-input"
-                      value={line.note}
-                      onChange={(event) => updateExpenseLine(line.key, 'note', event.target.value)}
-                      placeholder={tr('note')}
+                      type="number"
+                      step="0.01"
+                      className="form-input expense-line-number-input"
+                      value={line.unit_price}
+                      onChange={(event) => updateExpenseLine(line.key, 'unit_price', event.target.value)}
                     />
-                  </div>
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    step="0.001"
-                    className="form-input expense-line-number-input"
-                    value={line.quantity}
-                    onChange={(event) => updateExpenseLine(line.key, 'quantity', event.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input expense-line-number-input"
-                    value={line.unit_price}
-                    onChange={(event) => updateExpenseLine(line.key, 'unit_price', event.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input expense-line-number-input"
-                    value={line.total_amount}
-                    onChange={(event) => updateExpenseLine(line.key, 'total_amount', event.target.value)}
-                  />
-                </td>
-                <td className="expense-line-actions-cell">
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-sm"
-                    onClick={() => removeExpenseLine(line.key)}
-                    title={tr('removeExpensePosition')}
-                  >
-                    {tr('removeExpensePosition')}
-                  </button>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-input expense-line-number-input"
+                      value={getExpenseLineTotalInputValue(line)}
+                      onChange={(event) => updateExpenseLine(line.key, 'total_amount', event.target.value)}
+                      readOnly={isLineTotalCalculated}
+                      title={isLineTotalCalculated ? tr('expenseLineTotalAuto') : ''}
+                    />
+                  </td>
+                  <td className="expense-line-actions-cell">
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      onClick={() => removeExpenseLine(line.key)}
+                      title={tr('removeExpensePosition')}
+                    >
+                      {tr('removeExpensePosition')}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
           <tfoot>
             <tr>

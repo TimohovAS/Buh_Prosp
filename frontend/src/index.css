@@ -1539,6 +1539,12 @@ tr.row-reversal {
   text-align: right;
 }
 
+.expense-lines-table .expense-line-number-input[readonly] {
+  color: var(--color-text-muted);
+  background: rgba(15, 20, 25, 0.72);
+  cursor: default;
+}
+
 .expense-lines-table .expense-line-note-input {
   min-width: 0;
   font-size: 0.86rem;

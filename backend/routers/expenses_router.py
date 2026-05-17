@@ -77,9 +77,10 @@ def _normalize_expense_items(items) -> list[dict]:
         unit_price = _to_optional_decimal(_item_field(item, "unit_price"))
         note = str(_item_field(item, "note") or "").strip() or None
         amount_value = _item_field(item, "total_amount")
-        amount = to_decimal(amount_value if amount_value not in (None, "") else ZERO_DECIMAL)
-        if amount == ZERO_DECIMAL and quantity is not None and unit_price is not None:
-            amount = quantity * unit_price
+        if quantity is not None and unit_price is not None:
+            amount = to_decimal(quantity * unit_price)
+        else:
+            amount = to_decimal(amount_value if amount_value not in (None, "") else ZERO_DECIMAL)
 
         has_payload = bool(name) or quantity is not None or unit_price is not None or amount != ZERO_DECIMAL or bool(note)
         if not has_payload:
