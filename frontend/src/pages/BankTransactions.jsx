@@ -453,7 +453,8 @@ export default function BankTransactions() {
     if (!matchTx) return
     try {
       await api.bankTransactions.match(matchTx.id, { type: targetType, id: targetId })
-      await refreshSelectedTransaction(matchTx.id, 'overview')
+      await loadData({ preserveScroll: true })
+      closeMatchModal()
     } catch (error) {
       setMatchError(error.message)
     }
@@ -511,7 +512,8 @@ export default function BankTransactions() {
           .filter((line) => line.amount > 0),
       }
       await api.bankTransactions.saveIncomeAllocation(matchTx.id, payload)
-      await refreshSelectedTransaction(matchTx.id, 'overview')
+      await loadData({ preserveScroll: true })
+      closeMatchModal()
     } catch (error) {
       setMatchError(error.message)
     } finally {
@@ -593,7 +595,8 @@ export default function BankTransactions() {
         contract_id: isCashCategorySelected ? null : (expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null),
         note: expenseForm.note?.trim() || null,
       })
-      await refreshSelectedTransaction(matchTx.id, 'overview')
+      await loadData({ preserveScroll: true })
+      closeMatchModal()
     } catch (error) {
       setMatchError(error.message)
     } finally {
