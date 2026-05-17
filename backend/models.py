@@ -538,6 +538,28 @@ class Expense(Base):
     reversal_of = relationship("Expense", remote_side=[id], foreign_keys=[reversal_of_id])
     reversed_by = relationship("Expense", remote_side=[id], foreign_keys=[reversed_expense_id])
     purchase_receipt = relationship("PurchaseReceipt", back_populates="expense", uselist=False)
+    items = relationship(
+        "ExpenseItem",
+        back_populates="expense",
+        cascade="all, delete-orphan",
+        order_by="ExpenseItem.line_no.asc()",
+    )
+
+
+class ExpenseItem(Base):
+    __tablename__ = "expense_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id", ondelete="CASCADE"), nullable=False, index=True)
+    line_no = Column(Integer, nullable=False, default=1)
+    name = Column(String(500), nullable=False)
+    quantity = Column(Numeric(14, 3), nullable=True)
+    unit_price = Column(Numeric(14, 2), nullable=True)
+    total_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    expense = relationship("Expense", back_populates="items", foreign_keys=[expense_id])
 
 
 class PurchaseReceipt(Base):
@@ -684,4 +706,3 @@ class AuditLog(Base):
     description = Column(Text)
     ip_address = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
-

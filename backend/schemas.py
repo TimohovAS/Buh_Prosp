@@ -915,8 +915,25 @@ class ExpenseBase(BaseModel):
         return value
 
 
+class ExpenseItemCreate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[Decimal] = None
+    unit_price: Optional[Decimal] = None
+    total_amount: Decimal = Decimal("0.00")
+    note: Optional[str] = None
+
+
+class ExpenseItemResponse(ExpenseItemCreate):
+    id: int
+    line_no: int
+
+    class Config:
+        from_attributes = True
+
+
 class ExpenseCreate(ExpenseBase):
     paid_date: Optional[DateType] = None
+    items: list[ExpenseItemCreate] = Field(default_factory=list)
 
 
 class ExpenseReverseRequest(BaseModel):
@@ -939,6 +956,7 @@ class ExpenseUpdate(BaseModel):
     contract_id: Optional[int] = None
     category_id: Optional[int] = None
     note: Optional[str] = None
+    items: Optional[list[ExpenseItemCreate]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -964,6 +982,7 @@ class ExpenseResponse(ExpenseBase):
 
 class ExpenseDetailResponse(ExpenseResponse):
     receipt: Optional[PurchaseReceiptDetailResponse] = None
+    items: list[ExpenseItemResponse] = Field(default_factory=list)
 
 
 # --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
@@ -1571,4 +1590,3 @@ class CounterpartyBalanceResponse(BaseModel):
     total_receivables: Decimal = Decimal("0")
     total_payables: Decimal = Decimal("0")
     total_net_balance: Decimal = Decimal("0")
-

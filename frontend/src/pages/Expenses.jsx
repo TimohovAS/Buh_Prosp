@@ -15,7 +15,7 @@ import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
 import useProjectContractForm from '../hooks/useProjectContractForm'
 import { filterContractsForProject, findUnassignedProject, getContractLabelById, getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters'
+import { UI_DASH, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
 import { downloadTextFile } from '../utils/download'
 
@@ -49,6 +49,77 @@ function formatMoneyWithCurrency(value, currency = 'RSD') {
   return `${fmtMoney(value)} ${currency || 'RSD'}`
 }
 
+function makeExpenseLine(overrides = {}) {
+  return {
+    key: overrides.key || `expense-line-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: overrides.name || '',
+    quantity: overrides.quantity ?? '',
+    unit_price: overrides.unit_price ?? '',
+    total_amount: overrides.total_amount ?? '',
+    note: overrides.note || '',
+  }
+}
+
+function toNumberOrZero(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function normalizeExpenseLine(line) {
+  const quantity = line.quantity === '' || line.quantity == null ? null : toNumberOrZero(line.quantity)
+  const unitPrice = line.unit_price === '' || line.unit_price == null ? null : toNumberOrZero(line.unit_price)
+  let totalAmount = line.total_amount === '' || line.total_amount == null ? 0 : toNumberOrZero(line.total_amount)
+  if (!totalAmount && quantity != null && unitPrice != null) {
+    totalAmount = quantity * unitPrice
+  }
+  return {
+    name: String(line.name || '').trim(),
+    quantity,
+    unit_price: unitPrice,
+    total_amount: totalAmount,
+    note: String(line.note || '').trim(),
+  }
+}
+
+function isExpenseLineActive(line) {
+  const normalized = normalizeExpenseLine(line)
+  return Boolean(
+    normalized.name ||
+    normalized.quantity != null ||
+    normalized.unit_price != null ||
+    normalized.total_amount ||
+    normalized.note
+  )
+}
+
+function buildExpenseDescriptionFromLines(lines) {
+  return lines.map((line) => normalizeExpenseLine(line).name).filter(Boolean).join('; ')
+}
+
+function getExpenseDisplayLines(expense) {
+  if (expense?.items?.length) {
+    return expense.items.map((line) => ({
+      key: line.id || line.line_no,
+      line_no: line.line_no,
+      name: line.name || '',
+      quantity: line.quantity,
+      unit_price: line.unit_price,
+      total_amount: line.total_amount,
+      note: line.note || '',
+    }))
+  }
+  if (!expense) return []
+  return [{
+    key: `fallback-${expense.id || 'expense'}`,
+    line_no: 1,
+    name: expense.description || expense.category || tr('expenses'),
+    quantity: null,
+    unit_price: null,
+    total_amount: expense.amount || 0,
+    note: expense.note || '',
+  }]
+}
+
 export default function Expenses() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -79,6 +150,7 @@ export default function Expenses() {
   const [pageError, setPageError] = useState('')
   const [mergeKeepId, setMergeKeepId] = useState(null)
   const [dismissedDuplicateGroups, setDismissedDuplicateGroups] = useState(() => loadDismissedDuplicateGroups())
+  const [expenseLines, setExpenseLines] = useState([makeExpenseLine()])
   const [form, setForm] = useState({
     date: todayIso(),
     description: '',
@@ -162,6 +234,16 @@ export default function Expenses() {
     return getResolvedCategoryLabel(item, item.category || UI_DASH)
   }
 
+  const activeExpenseLines = useMemo(
+    () => expenseLines.filter(isExpenseLineActive).map(normalizeExpenseLine),
+    [expenseLines],
+  )
+  const expenseLinesTotal = useMemo(
+    () => activeExpenseLines.reduce((sum, line) => sum + toNumberOrZero(line.total_amount), 0),
+    [activeExpenseLines],
+  )
+  const hasActiveExpenseLines = activeExpenseLines.length > 0
+
   const openExpenseSource = (item) => {
     const expenseDate = item?.date ? new Date(`${item.date}T12:00:00`) : null
     const expenseYear = expenseDate && !Number.isNaN(expenseDate.getTime()) ? expenseDate.getFullYear() : ''
@@ -199,6 +281,41 @@ export default function Expenses() {
   }
 
   const canOpenExpenseSource = (item) => Boolean(item?.bank_reference || item?.source === 'cash' || item?.source === 'obligation')
+
+  const openReceiptFromExpense = (receipt) => {
+    if (!receipt?.id) return
+    closeDetail()
+    navigate('/receipts', { state: { openReceiptId: receipt.id } })
+  }
+
+  const updateExpenseLine = (key, field, value) => {
+    setExpenseLines((previous) => previous.map((line) => (
+      line.key === key ? { ...line, [field]: value } : line
+    )))
+  }
+
+  const addExpenseLine = () => {
+    setExpenseLines((previous) => [...previous, makeExpenseLine()])
+  }
+
+  const removeExpenseLine = (key) => {
+    setExpenseLines((previous) => {
+      const next = previous.filter((line) => line.key !== key)
+      return next.length ? next : [makeExpenseLine()]
+    })
+  }
+
+  const hydrateExpenseLines = (expense) => {
+    const lines = (expense?.items || []).map((line) => makeExpenseLine({
+      key: `expense-line-${line.id || line.line_no}`,
+      name: line.name || '',
+      quantity: line.quantity ?? '',
+      unit_price: line.unit_price ?? '',
+      total_amount: line.total_amount ?? '',
+      note: line.note || '',
+    }))
+    setExpenseLines(lines.length ? lines : [makeExpenseLine()])
+  }
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]))
@@ -242,6 +359,7 @@ export default function Expenses() {
   }
 
   const openAdd = () => {
+    setExpenseLines([makeExpenseLine()])
     setForm({
       date: todayIso(),
       description: '',
@@ -257,6 +375,7 @@ export default function Expenses() {
   }
 
   const hydrateExpenseForm = (item) => {
+    hydrateExpenseLines(item)
     setForm({
       date: item.date,
       description: item.description || '',
@@ -272,10 +391,18 @@ export default function Expenses() {
   const buildExpensePayload = () => {
     const categoryValue = form.category?.trim() || null
     const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
+    const description = form.description.trim() || buildExpenseDescriptionFromLines(expenseLines)
+    const payloadItems = activeExpenseLines.map((line) => ({
+      name: line.name,
+      quantity: line.quantity,
+      unit_price: line.unit_price,
+      total_amount: line.total_amount,
+      note: line.note || null,
+    }))
     return {
       date: form.date,
-      description: form.description.trim(),
-      amount: parseFloat(form.amount) || 0,
+      description,
+      amount: hasActiveExpenseLines ? expenseLinesTotal : (parseFloat(form.amount) || 0),
       category: categoryValue,
       category_id: form.category_id ? parseInt(form.category_id, 10) : null,
       project_id: categoryDefaultProjectId
@@ -283,13 +410,21 @@ export default function Expenses() {
         : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
       contract_id: form.contract_id ? parseInt(form.contract_id, 10) : null,
       note: form.note || null,
+      items: payloadItems,
     }
   }
 
-  const openEdit = (item) => {
+  const openEdit = async (item) => {
     hydrateExpenseForm(item)
     setPageError('')
     setModal({ type: 'edit', id: item.id })
+    try {
+      const details = await api.expenses.get(item.id)
+      hydrateExpenseForm(details)
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+      console.error(error)
+    }
   }
 
   const openDetail = async (item) => {
@@ -494,6 +629,132 @@ export default function Expenses() {
     const content = `\ufeff${rows.map((row) => row.map(csvEscape).join(';')).join('\n')}`
     const filename = `expenses${year ? `_${year}` : ''}${month ? `_${String(month).padStart(2, '0')}` : ''}.csv`
     downloadTextFile(content, filename, 'text/csv;charset=utf-8;')
+  }
+
+  const renderExpenseLinesEditor = () => (
+    <div className="expense-lines-editor">
+      <div className="expense-lines-editor-header">
+        <span className="record-field-label">{tr('expensePositions')}</span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addExpenseLine}>
+          {tr('addExpensePosition')}
+        </button>
+      </div>
+      <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
+        <table className="expense-lines-table expense-lines-edit-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{tr('expenseLineName')}</th>
+              <th>{tr('receiptQuantity')}</th>
+              <th>{tr('receiptUnitPrice')}</th>
+              <th>{tr('amount')}</th>
+              <th>{tr('note')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {expenseLines.map((line, index) => (
+              <tr key={line.key}>
+                <td>{index + 1}</td>
+                <td>
+                  <input
+                    type="text"
+                    className="form-input expense-line-name-input"
+                    value={line.name}
+                    onChange={(event) => updateExpenseLine(line.key, 'name', event.target.value)}
+                    placeholder={tr('expenseLineName')}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="form-input expense-line-number-input"
+                    value={line.quantity}
+                    onChange={(event) => updateExpenseLine(line.key, 'quantity', event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="form-input expense-line-number-input"
+                    value={line.unit_price}
+                    onChange={(event) => updateExpenseLine(line.key, 'unit_price', event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="form-input expense-line-number-input"
+                    value={line.total_amount}
+                    onChange={(event) => updateExpenseLine(line.key, 'total_amount', event.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    className="form-input expense-line-note-input"
+                    value={line.note}
+                    onChange={(event) => updateExpenseLine(line.key, 'note', event.target.value)}
+                  />
+                </td>
+                <td className="expense-line-actions-cell">
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={() => removeExpenseLine(line.key)}
+                    title={tr('removeExpensePosition')}
+                  >
+                    {tr('removeExpensePosition')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={4}>{tr('expenseLinesTotal')}</td>
+              <td>{formatMoneyWithCurrency(expenseLinesTotal, form.currency || 'RSD')}</td>
+              <td colSpan={2}></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+
+  const renderExpenseLinesTable = (expense) => {
+    const lines = getExpenseDisplayLines(expense)
+    return (
+      <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
+        <table className="expense-lines-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{tr('expenseLineName')}</th>
+              <th>{tr('receiptQuantity')}</th>
+              <th>{tr('receiptUnitPrice')}</th>
+              <th>{tr('amount')}</th>
+              <th>{tr('note')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, index) => (
+              <tr key={line.key}>
+                <td>{line.line_no || index + 1}</td>
+                <td>{line.name || UI_DASH}</td>
+                <td>{line.quantity == null || line.quantity === '' ? UI_DASH : fmtMoney(line.quantity)}</td>
+                <td>{line.unit_price == null || line.unit_price === '' ? UI_DASH : formatMoneyWithCurrency(line.unit_price, expense.currency)}</td>
+                <td>{formatMoneyWithCurrency(line.total_amount, expense.currency)}</td>
+                <td>{line.note || UI_DASH}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
   }
 
   return (
@@ -784,6 +1045,15 @@ export default function Expenses() {
                       {tr('openSource')}
                     </button>
                   ) : null}
+                  {detailModal.receipt ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => openReceiptFromExpense(detailModal.receipt)}
+                    >
+                      {tr('openReceipt')}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -814,20 +1084,15 @@ export default function Expenses() {
               )}
             </div>
             {detailModal.receipt ? (
-              <div className="expense-linked-card">
+              <div className="expense-linked-card expense-linked-documents">
                 <span className="record-field-label">{tr('linkedReceipt')}</span>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('receiptSeller')}</span>
-                  <span className="record-field-value">{detailModal.receipt.seller_name || UI_DASH}</span>
-                </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('invoiceNumber')}</span>
-                  <span className="record-field-value">{detailModal.receipt.invoice_number || UI_DASH}</span>
-                </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('date')}</span>
-                  <span className="record-field-value">{fmtDateTime(detailModal.receipt.receipt_datetime)}</span>
-                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => openReceiptFromExpense(detailModal.receipt)}
+                >
+                  {tr('openReceipt')}
+                </button>
               </div>
             ) : null}
           </div>
@@ -837,142 +1102,75 @@ export default function Expenses() {
           <>
             <div className="record-detail-card expense-lines-card">
               <div className="receipt-items-header">
-                <span className="record-field-label">{tr('expenseLine')}</span>
+                <span className="record-field-label">{tr('expensePositions')}</span>
                 {detailEditMode ? <span className="record-field-text">{tr('expenseEditHint')}</span> : null}
               </div>
               {detailEditMode ? (
-                <form id="expense-detail-edit-form" onSubmit={handleDetailSubmit}>
-                  <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
-                    <table className="expense-lines-table">
-                      <thead>
-                        <tr>
-                          <th>{tr('date')}</th>
-                          <th>{tr('description')}</th>
-                          <th>{tr('category')}</th>
-                          <th>{tr('project')}</th>
-                          <th>{tr('contract')}</th>
-                          <th>{tr('amount')}</th>
-                          <th>{tr('note')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td><DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required /></td>
-                          <td>
-                            <input
-                              type="text"
-                              className="form-input expense-description-input"
-                              value={form.description}
-                              onChange={(event) => setForm({ ...form, description: event.target.value })}
-                              required
-                            />
-                          </td>
-                          <td>
-                            <select className="form-input" value={form.category_id} onChange={(event) => updateCategory(event.target.value)}>
-                              <option value="">{`${UI_DASH} ${tr('allCategories')} ${UI_DASH}`}</option>
-                              {categories.map((category) => (
-                                <option key={category.id} value={category.id}>{lang === 'ru' ? category.name_ru : category.name_sr}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            {!usesDefaultCategoryProject ? (
-                              <ProjectSelect projects={projects} value={form.project_id} onChange={updateProject} required />
-                            ) : (
-                              <span className="record-field-value">{getProjectName(getCategoryDefaultProjectId(form.category_id)) || UI_DASH}</span>
-                            )}
-                          </td>
-                          <td>
-                            {filteredContracts.length > 0 ? (
-                              <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
-                                <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
-                                {filteredContracts.map((contract) => (
-                                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
-                                ))}
-                              </select>
-                            ) : UI_DASH}
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className="form-input"
-                              value={form.amount}
-                              onChange={(event) => setForm({ ...form, amount: event.target.value })}
-                              required
-                            />
-                          </td>
-                          <td>
-                            <input type="text" className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                <form id="expense-detail-edit-form" onSubmit={handleDetailSubmit} className="expense-edit-form">
+                  <div className="expense-form-grid">
+                    <div className="form-group">
+                      <label className="form-label">{tr('date')}</label>
+                      <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('description')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={form.description}
+                        onChange={(event) => setForm({ ...form, description: event.target.value })}
+                        placeholder={buildExpenseDescriptionFromLines(expenseLines) || tr('expensePurposePlaceholder')}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('category')}</label>
+                      <select className="form-input" value={form.category_id} onChange={(event) => updateCategory(event.target.value)}>
+                        <option value="">{`${UI_DASH} ${tr('allCategories')} ${UI_DASH}`}</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>{lang === 'ru' ? category.name_ru : category.name_sr}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {!usesDefaultCategoryProject ? (
+                      <div className="form-group">
+                        <label className="form-label">{tr('project')}</label>
+                        <ProjectSelect projects={projects} value={form.project_id} onChange={updateProject} required />
+                      </div>
+                    ) : null}
+                    {filteredContracts.length > 0 ? (
+                      <div className="form-group">
+                        <label className="form-label">{tr('contract')}</label>
+                        <select className="form-input" value={form.contract_id} onChange={(event) => updateContract(event.target.value)}>
+                          <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
+                          {filteredContracts.map((contract) => (
+                            <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    <div className="form-group">
+                      <label className="form-label">{tr('amount')}</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="form-input"
+                        value={hasActiveExpenseLines ? expenseLinesTotal.toFixed(2) : form.amount}
+                        onChange={(event) => setForm({ ...form, amount: event.target.value })}
+                        readOnly={hasActiveExpenseLines}
+                        required
+                      />
+                    </div>
+                    <div className="form-group expense-form-grid-wide">
+                      <label className="form-label">{tr('note')}</label>
+                      <input type="text" className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
+                    </div>
                   </div>
+                  {renderExpenseLinesEditor()}
                 </form>
               ) : (
-                <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
-                  <table className="expense-lines-table">
-                    <thead>
-                      <tr>
-                        <th>{tr('date')}</th>
-                        <th>{tr('description')}</th>
-                        <th>{tr('category')}</th>
-                        <th>{tr('project')}</th>
-                        <th>{tr('contract')}</th>
-                        <th>{tr('amount')}</th>
-                        <th>{tr('paymentRef')}</th>
-                        <th>{tr('note')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>{detailModal.date || UI_DASH}</td>
-                        <td>{detailModal.description || UI_DASH}</td>
-                        <td>{getCategoryLabel(detailModal)}</td>
-                        <td>{getProjectName(detailModal.project_id) || UI_DASH}</td>
-                        <td>{detailModal.contract_id ? getContractLabel(detailModal.contract_id) : UI_DASH}</td>
-                        <td>{formatMoneyWithCurrency(detailModal.amount, detailModal.currency)}</td>
-                        <td>{detailModal.bank_reference || UI_DASH}</td>
-                        <td>{detailModal.note || UI_DASH}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                renderExpenseLinesTable(detailModal)
               )}
             </div>
-            {detailModal.receipt?.items?.length ? (
-              <div className="record-detail-card receipt-items-card">
-                <div className="receipt-items-header">
-                  <span className="record-field-label">{tr('receiptItems')}</span>
-                  <span className="receipt-items-count">{detailModal.receipt.items.length}</span>
-                </div>
-                <div className="table-wrap table-wrap-scroll receipt-items-table-wrap">
-                  <table className="receipt-items-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>{tr('name')}</th>
-                        <th>{tr('receiptQuantity')}</th>
-                        <th>{tr('receiptUnitPrice')}</th>
-                        <th>{tr('amount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailModal.receipt.items.map((line) => (
-                        <tr key={line.id || line.line_no}>
-                          <td>{line.line_no}</td>
-                          <td>{line.name}</td>
-                          <td>{fmtMoney(line.quantity)}</td>
-                          <td>{formatMoneyWithCurrency(line.unit_price, detailModal.receipt.currency)}</td>
-                          <td>{formatMoneyWithCurrency(line.total_amount, detailModal.receipt.currency)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
           </>
         ) : null}
       </EntityDetailModal>
@@ -981,6 +1179,7 @@ export default function Expenses() {
         isOpen={!!modal}
         onClose={() => setModal(null)}
         title={`${modal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('expenses')}`}
+        maxWidth="1100px"
         closeOnOverlay
       >
         {modal ? (
@@ -996,8 +1195,7 @@ export default function Expenses() {
                   className="form-input"
                   value={form.description}
                   onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  required
-                  placeholder={tr('expensePurposePlaceholder')}
+                  placeholder={buildExpenseDescriptionFromLines(expenseLines) || tr('expensePurposePlaceholder')}
                 />
               </div>
               <div className="form-group">
@@ -1041,11 +1239,13 @@ export default function Expenses() {
                   type="number"
                   step="0.01"
                   className="form-input"
-                  value={form.amount}
+                  value={hasActiveExpenseLines ? expenseLinesTotal.toFixed(2) : form.amount}
                   onChange={(event) => setForm({ ...form, amount: event.target.value })}
+                  readOnly={hasActiveExpenseLines}
                   required
                 />
               </div>
+              {renderExpenseLinesEditor()}
               <div className="form-group">
                 <label className="form-label">{tr('note')}</label>
                 <input type="text" className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />

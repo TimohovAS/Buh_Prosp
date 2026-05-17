@@ -1383,6 +1383,10 @@ tr.row-reversal {
   border-top: 1px solid var(--color-border);
 }
 
+.expense-linked-documents .btn {
+  width: 100%;
+}
+
 .receipt-detail-section {
   margin-top: 0;
   padding-top: 1rem;
@@ -1408,6 +1412,41 @@ tr.row-reversal {
 
 .expense-lines-card {
   grid-column: 1 / -1;
+}
+
+.expense-edit-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.expense-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.expense-form-grid .form-group {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.expense-form-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.expense-lines-editor {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.expense-lines-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .receipt-items-header {
@@ -1442,12 +1481,18 @@ tr.row-reversal {
 }
 
 .expense-lines-table-wrap {
-  max-height: min(34vh, 320px);
+  max-height: min(44vh, 420px);
 }
 
 .expense-lines-table th,
 .expense-lines-table td {
   vertical-align: top;
+}
+
+.expense-lines-table th:first-child,
+.expense-lines-table td:first-child {
+  width: 52px;
+  white-space: nowrap;
 }
 
 .expense-lines-table td:nth-child(2),
@@ -1456,11 +1501,34 @@ tr.row-reversal {
 }
 
 .expense-lines-table .form-input {
-  min-width: 150px;
+  min-width: 130px;
 }
 
-.expense-lines-table .expense-description-input {
-  min-width: 360px;
+.expense-lines-table .expense-line-name-input {
+  min-width: 320px;
+}
+
+.expense-lines-table .expense-line-number-input {
+  min-width: 130px;
+  text-align: right;
+}
+
+.expense-lines-table .expense-line-note-input {
+  min-width: 220px;
+}
+
+.expense-lines-table tfoot td {
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.expense-line-actions-cell {
+  width: 120px;
+  text-align: right;
+}
+
+.expense-line-actions-cell .btn {
+  white-space: nowrap;
 }
 
 .receipt-import-layout {
@@ -2373,6 +2441,10 @@ tr:hover td {
   .expense-summary-grid {
     grid-template-columns: 1fr;
     gap: 0.85rem;
+  }
+
+  .expense-form-grid {
+    grid-template-columns: 1fr;
   }
 
   .receipt-items-card,

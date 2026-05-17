@@ -4,7 +4,7 @@ from typing import Optional
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update, or_
+from sqlalchemy import delete, func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +23,7 @@ from backend.models import (
     CashEntry,
     Contract,
     Expense,
+    ExpenseItem,
     IncomingInvoice,
     MonthlyObligation,
     PlannedExpensePayment,
@@ -54,6 +55,80 @@ RECEIPT_SOURCE = "receipt"
 
 def _visible_expense_condition():
     return or_(Expense.status != "planned", Expense.source.in_([EFAKTURA_IMPORT_SOURCE, RECEIPT_SOURCE]))
+
+
+def _item_field(item, key: str):
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
+def _to_optional_decimal(value):
+    if value in (None, ""):
+        return None
+    return to_decimal(value)
+
+
+def _normalize_expense_items(items) -> list[dict]:
+    normalized = []
+    for item in items or []:
+        name = str(_item_field(item, "name") or "").strip()
+        quantity = _to_optional_decimal(_item_field(item, "quantity"))
+        unit_price = _to_optional_decimal(_item_field(item, "unit_price"))
+        note = str(_item_field(item, "note") or "").strip() or None
+        amount_value = _item_field(item, "total_amount")
+        amount = to_decimal(amount_value if amount_value not in (None, "") else ZERO_DECIMAL)
+        if amount == ZERO_DECIMAL and quantity is not None and unit_price is not None:
+            amount = quantity * unit_price
+
+        has_payload = bool(name) or quantity is not None or unit_price is not None or amount != ZERO_DECIMAL or bool(note)
+        if not has_payload:
+            continue
+        if not name:
+            raise HTTPException(400, "Expense item name is required")
+
+        normalized.append(
+            {
+                "name": name[:500],
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_amount": amount,
+                "note": note,
+            }
+        )
+    return normalized
+
+
+def _expense_amount_from_items(items: list[dict], fallback) -> object:
+    if not items:
+        return to_decimal(fallback or ZERO_DECIMAL)
+    total = ZERO_DECIMAL
+    for item in items:
+        total += to_decimal(item["total_amount"] or ZERO_DECIMAL)
+    return total
+
+
+def _expense_description_from_items(items: list[dict], fallback: str | None) -> str:
+    text = str(fallback or "").strip()
+    if text:
+        return text[:500]
+    if items:
+        return "; ".join(item["name"] for item in items)[:500]
+    return ""
+
+
+def _build_expense_item_models(items: list[dict]) -> list[ExpenseItem]:
+    return [
+        ExpenseItem(
+            line_no=index + 1,
+            name=item["name"],
+            quantity=item["quantity"],
+            unit_price=item["unit_price"],
+            total_amount=item["total_amount"],
+            note=item["note"],
+        )
+        for index, item in enumerate(items)
+    ]
 
 
 async def _resolve_expense_links(
@@ -389,6 +464,7 @@ async def merge_expense_duplicates(
                 raise HTTPException(400, str(exc)) from exc
         keep.note = _merge_notes(keep.note, duplicate.note)
 
+        await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id == duplicate.id))
         await db.delete(duplicate)
 
     if keep.project_id is not None:
@@ -417,10 +493,11 @@ async def create_expense(
         data.contract_id,
     )
     project_id, contract_id = await _resolve_expense_links(db, project_id, contract_id)
+    expense_items = _normalize_expense_items(data.items)
     expense = Expense(
         date=data.date,
-        description=data.description,
-        amount=data.amount,
+        description=_expense_description_from_items(expense_items, data.description),
+        amount=_expense_amount_from_items(expense_items, data.amount),
         currency=data.currency,
         category=data.category,
         category_id=data.category_id,
@@ -431,6 +508,7 @@ async def create_expense(
         source="manual",
         created_by=current_user.id,
     )
+    expense.items = _build_expense_item_models(expense_items)
     initialize_expense_status(expense, "paid", paid_date=data.paid_date or data.date)
     db.add(expense)
     await db.flush()
@@ -511,7 +589,10 @@ async def get_expense(
 ):
     result = await db.execute(
         select(Expense)
-        .options(selectinload(Expense.purchase_receipt).selectinload(PurchaseReceipt.items))
+        .options(
+            selectinload(Expense.items),
+            selectinload(Expense.purchase_receipt).selectinload(PurchaseReceipt.items),
+        )
         .where(Expense.id == expense_id)
     )
     expense = result.scalar_one_or_none()
@@ -530,7 +611,7 @@ async def reverse_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    result = await db.execute(select(Expense).where(Expense.id == expense_id))
+    result = await db.execute(select(Expense).options(selectinload(Expense.items)).where(Expense.id == expense_id))
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
@@ -562,7 +643,7 @@ async def update_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    result = await db.execute(select(Expense).where(Expense.id == expense_id))
+    result = await db.execute(select(Expense).options(selectinload(Expense.items)).where(Expense.id == expense_id))
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Expense not found")
@@ -570,6 +651,7 @@ async def update_expense(
         raise HTTPException(400, "Cash transfer operations must be managed from bank or cash")
 
     dump = data.model_dump(exclude_unset=True)
+    item_payload = dump.pop("items", None)
     desired_project_id = dump.get("project_id", expense.project_id)
     desired_contract_id = dump.get("contract_id", expense.contract_id)
     desired_project_id, desired_contract_id, is_tax_related = await resolve_category_expense_links(
@@ -592,6 +674,12 @@ async def update_expense(
     dump["contract_id"] = desired_contract_id
     dump["is_tax_related"] = is_tax_related
 
+    if item_payload is not None:
+        expense_items = _normalize_expense_items(item_payload)
+        dump["amount"] = _expense_amount_from_items(expense_items, dump.get("amount", expense.amount))
+        dump["description"] = _expense_description_from_items(expense_items, dump.get("description", expense.description))
+        expense.items = _build_expense_item_models(expense_items)
+
     for key, value in dump.items():
         setattr(expense, key, value)
 
@@ -606,6 +694,7 @@ async def update_expense(
 
 
 async def _admin_clear_expense_links(db: AsyncSession, expense_ids: list[int]) -> None:
+    await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id.in_(expense_ids)))
     await db.execute(
         update(Expense)
         .where(Expense.reversed_expense_id.in_(expense_ids))

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getMonthNamesFull, tr } from '../i18n'
 import EntityDetailModal from '../components/EntityDetailModal'
@@ -66,6 +66,7 @@ function normalizeSearchDigits(value) {
 
 export default function Receipts() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/receipts'
   const videoRef = useRef(null)
   const scanTimerRef = useRef(null)
@@ -503,6 +504,14 @@ export default function Receipts() {
       setDetailLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!isActivePage) return
+    const receiptId = location.state?.openReceiptId
+    if (!receiptId) return
+    openReceiptDetail(receiptId)
+    navigate(location.pathname, { replace: true, state: null })
+  }, [isActivePage, location.state?.openReceiptId])
 
   const handleImportReceipt = async () => {
     if (!importUrl.trim()) return

@@ -10,7 +10,7 @@ from http.cookiejar import CookieJar
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +28,7 @@ from backend.models import (
     CashEntry,
     Contract,
     Expense,
+    ExpenseItem,
     IncomingInvoice,
     MonthlyObligation,
     PlannedExpensePayment,
@@ -736,6 +737,7 @@ async def delete_receipt(
     if delete_cash_entry is not None:
         await db.delete(delete_cash_entry)
     if delete_expense is not None:
+        await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id == delete_expense.id))
         await db.delete(delete_expense)
     await db.flush()
 
@@ -796,6 +798,17 @@ async def create_expense_from_receipt(
         source="cash" if resolved_payment_mode == "cash" else "receipt",
         created_by=current_user_id,
     )
+    expense.items = [
+        ExpenseItem(
+            line_no=item.line_no,
+            name=item.name,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            total_amount=item.total_amount,
+            note=None,
+        )
+        for item in (receipt.items or [])
+    ]
     if resolved_payment_mode == "cash":
         initialize_expense_status(expense, "paid", paid_date=expense_date)
     else:
