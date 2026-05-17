@@ -13,6 +13,7 @@ from backend.db_utils import (
     get_unassigned_project_id,
 )
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, money_eq, to_decimal
+from backend.incoming_invoice_service import settle_via_bank
 from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
 from backend.models import (
     BankTransaction,
@@ -1019,37 +1020,43 @@ async def classify_transaction_as_owner_funds(
 
 
 async def _sync_incoming_invoice_on_match(db: AsyncSession, expense: Expense, tx: BankTransaction) -> None:
+    """When a bank tx is matched to an expense linked to an incoming invoice,
+    record the corresponding settlement.
+
+    Delegates to ``incoming_invoice_service.settle_via_bank`` so that bank-match
+    and UI-driven settlement go through the SAME validated path:
+      - tx.direction must be "out"
+      - tx.status must not be "matched" yet
+      - settlement amount must not exceed remaining
+      - settled_amount and invoice.status are recomputed via the canonical
+        helpers, and the linked Expense.status stays in sync with the invoice.
+
+    Previously this function inserted a settlement row directly with no
+    validation, which is how historical invoices ended up with
+    settled_amount > amount (repaired by migration v17).
+    """
     if getattr(expense, "source", None) != "incoming_invoice":
         return
     invoice = await _find_incoming_invoice_by_expense(db, expense.id)
     if not invoice or invoice.status in {"paid", "cancelled"}:
         return
+    # Idempotency guard: skip if a settlement for this tx already exists.
+    # match_transaction also refuses already-matched tx, so this is defensive.
     existing = await db.execute(
-        select(IncomingInvoiceSettlement).where(
+        select(IncomingInvoiceSettlement.id).where(
             IncomingInvoiceSettlement.incoming_invoice_id == invoice.id,
             IncomingInvoiceSettlement.bank_transaction_id == tx.id,
         )
     )
-    if existing.scalar_one_or_none():
+    if existing.scalar_one_or_none() is not None:
         return
-    settlement = IncomingInvoiceSettlement(
-        incoming_invoice_id=invoice.id,
-        settlement_type="bank",
-        amount=money_abs(tx.amount),
-        date=tx.date,
+    await settle_via_bank(
+        db,
+        invoice,
         bank_transaction_id=tx.id,
+        amount=money_abs(tx.amount),
+        settlement_date=tx.date,
     )
-    db.add(settlement)
-    await db.flush()
-    all_q = await db.execute(
-        select(IncomingInvoiceSettlement).where(
-            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id
-        )
-    )
-    all_settlements = list(all_q.scalars().all())
-    total = sum((to_decimal(s.amount) for s in all_settlements), ZERO_DECIMAL)
-    invoice.settled_amount = total
-    reconcile_incoming_invoice_status(invoice)
 
 
 async def _sync_incoming_invoice_on_unmatch(db: AsyncSession, expense: Expense, tx: BankTransaction) -> None:
