@@ -959,6 +959,23 @@ tr.row-reversal {
   text-overflow: ellipsis;
 }
 
+/* Project movements / purchases modals: fit table to modal width without
+   a horizontal scrollbar. Column widths come from <colgroup>; every cell
+   truncates with ellipsis when content exceeds its column. */
+.project-workflow-modal-body .table-wrap-scroll {
+  overflow-x: hidden;
+}
+.project-workflow-modal-body table {
+  table-layout: fixed;
+  width: 100%;
+}
+.project-workflow-modal-body table th,
+.project-workflow-modal-body table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .record-cell-subtitle {
   display: block;
   margin-top: 0.15rem;

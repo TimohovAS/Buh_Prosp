@@ -730,6 +730,15 @@ export default function Projects() {
               ) : movementModal.items?.length ? (
                 <div className="table-wrap table-wrap-scroll" style={{ flex: 1, maxHeight: 'none' }}>
                   <table>
+                    <colgroup>
+                      <col style={{ width: '6rem' }} />
+                      <col style={{ width: '5.5rem' }} />
+                      <col style={{ width: '7rem' }} />
+                      <col style={{ width: '11rem' }} />
+                      <col style={{ width: '12rem' }} />
+                      <col />
+                      <col style={{ width: '9rem' }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>{tr('date')}</th>
@@ -747,9 +756,9 @@ export default function Projects() {
                           <td>{item.date}</td>
                           <td>{getMovementTypeLabel(item)}</td>
                           <td>{getMovementSourceLabel(item)}</td>
-                          <td>{item.document_number || UI_DASH}</td>
-                          <td>{item.counterparty_name || UI_DASH}</td>
-                          <td><span className="record-cell-ellipsis">{item.description || UI_DASH}</span></td>
+                          <td title={item.document_number || ''}>{item.document_number || UI_DASH}</td>
+                          <td title={item.counterparty_name || ''}>{item.counterparty_name || UI_DASH}</td>
+                          <td title={item.description || ''}>{item.description || UI_DASH}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: item.direction === 'in' ? 'var(--color-success)' : 'var(--color-danger)' }}>
                             {item.direction === 'in' ? '+' : '-'}{formatMoney2(item.amount || 0)} RSD
                           </td>
@@ -814,6 +823,14 @@ export default function Projects() {
               ) : purchaseModal.items?.length ? (
                 <div className="table-wrap table-wrap-scroll" style={{ flex: 1, maxHeight: 'none' }}>
                   <table>
+                    <colgroup>
+                      <col style={{ width: '6rem' }} />
+                      <col style={{ width: '18rem' }} />
+                      <col />
+                      <col style={{ width: '6rem' }} />
+                      <col style={{ width: '8rem' }} />
+                      <col style={{ width: '9rem' }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>{tr('date')}</th>
@@ -828,11 +845,11 @@ export default function Projects() {
                       {purchaseModal.items.map((item) => (
                         <tr key={item.item_id}>
                           <td>{item.receipt_datetime ? String(item.receipt_datetime).slice(0, 10) : UI_DASH}</td>
-                          <td>
-                            <div>{item.seller_name || UI_DASH}</div>
-                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>{item.invoice_number || UI_DASH}</div>
+                          <td title={[item.seller_name, item.invoice_number].filter(Boolean).join(' · ')}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.seller_name || UI_DASH}</div>
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.invoice_number || UI_DASH}</div>
                           </td>
-                          <td>{item.item_name || UI_DASH}</td>
+                          <td title={item.item_name || ''}>{item.item_name || UI_DASH}</td>
                           <td style={{ textAlign: 'right' }}>{fmt(item.quantity || 0)}</td>
                           <td style={{ textAlign: 'right' }}>{formatMoney2(item.unit_price || 0)} RSD</td>
                           <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney2(item.total_amount || 0)} RSD</td>
