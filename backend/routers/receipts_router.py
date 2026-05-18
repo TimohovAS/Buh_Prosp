@@ -1,6 +1,11 @@
+import re
 from datetime import date
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
@@ -214,3 +219,69 @@ async def list_project_purchase_receipts(
         return ProjectPurchasesResponse.model_validate(payload)
     except ReceiptImportError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/by-project/{project_id}/export.xlsx")
+async def export_project_purchase_receipts_xlsx(
+    project_id: int,
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Export the project's purchase-by-receipts table as XLSX, matching
+    the columns shown in the UI modal."""
+    try:
+        payload = await get_project_receipt_purchases(
+            db, project_id=project_id, from_date=from_date, to_date=to_date
+        )
+    except ReceiptImportError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Покупки"
+
+    headers = [
+        "Дата",
+        "Продавец",
+        "Номер фактуры",
+        "Название",
+        "Количество",
+        "Цена за ед. (RSD)",
+        "Сумма (RSD)",
+    ]
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+
+    for item in payload.get("items", []):
+        receipt_dt = item.get("receipt_datetime")
+        date_str = str(receipt_dt)[:10] if receipt_dt else ""
+        sheet.append([
+            date_str,
+            item.get("seller_name") or "",
+            item.get("invoice_number") or "",
+            item.get("item_name") or "",
+            float(item.get("quantity") or 0),
+            float(item.get("unit_price") or 0),
+            float(item.get("total_amount") or 0),
+        ])
+
+    column_widths = [12, 36, 26, 48, 12, 18, 18]
+    for index, width in enumerate(column_widths, start=1):
+        sheet.column_dimensions[chr(64 + index)].width = width
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+
+    raw_project_name = payload.get("project_name") or f"project_{project_id}"
+    safe_project = re.sub(r"[^\w\-]+", "_", raw_project_name).strip("_") or f"project_{project_id}"
+    filename = f"purchases_{safe_project}_{from_date.isoformat()}_{to_date.isoformat()}.xlsx"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

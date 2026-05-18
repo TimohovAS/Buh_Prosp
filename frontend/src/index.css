@@ -975,6 +975,17 @@ tr.row-reversal {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Sticky header — re-assert sticky positioning in case the body's
+   ellipsis/overflow rules above interfere; match the standard
+   .table-wrap thead th look. */
+.project-workflow-modal-body table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-surface);
+  background-clip: padding-box;
+  box-shadow: inset 0 -1px 0 var(--color-border);
+}
 
 .record-cell-subtitle {
   display: block;

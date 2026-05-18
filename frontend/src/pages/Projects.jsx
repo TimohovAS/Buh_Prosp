@@ -272,6 +272,24 @@ export default function Projects() {
     }
   }
 
+  const handleExportPurchasesXlsx = async () => {
+    if (!purchaseModal?.project_id) return
+    const range = getPurchaseRange(purchaseModal)
+    const safeName = (purchaseModal.project_name || `project_${purchaseModal.project_id}`)
+      .replace(/[^\w\-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `project_${purchaseModal.project_id}`
+    const filename = `purchases_${safeName}_${range.from}_${range.to}.xlsx`
+    try {
+      await api.receipts.exportByProjectXlsx(purchaseModal.project_id, {
+        from: range.from,
+        to: range.to,
+      }, filename)
+    } catch (err) {
+      console.error(err)
+      setPurchaseError(err.message || tr('projectPurchasesExportError'))
+    }
+  }
+
   const loadPurchases = async (item) => {
     if (!item?.project_id) return
     const range = getPurchaseRange(item)
@@ -815,6 +833,16 @@ export default function Projects() {
                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
                   {purchaseModal.from_date} {UI_DASH} {purchaseModal.to_date}
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={handleExportPurchasesXlsx}
+                  disabled={purchaseLoading || !purchaseModal.items?.length}
+                  title={tr('projectPurchasesExportXlsx')}
+                >
+                  {tr('projectPurchasesExportXlsx')}
+                </button>
               </div>
               {purchaseError ? (
                 <div className="alert alert-danger">{purchaseError}</div>

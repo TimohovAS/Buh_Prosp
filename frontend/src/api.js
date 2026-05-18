@@ -289,6 +289,14 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/receipts/by-project/${projectId}${q ? `?${q}` : ''}`)
     },
+    exportByProjectXlsx: (projectId, params = {}, fallbackFilename = 'purchases.xlsx') => {
+      const q = new URLSearchParams(params).toString()
+      return downloadBlob(
+        `/receipts/by-project/${projectId}/export.xlsx${q ? `?${q}` : ''}`,
+        fallbackFilename,
+        'Export failed',
+      )
+    },
   },
 
   categories: {
