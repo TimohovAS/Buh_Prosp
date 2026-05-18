@@ -221,16 +221,46 @@ async def list_project_purchase_receipts(
         raise HTTPException(400, str(exc)) from exc
 
 
+PURCHASES_XLSX_LABELS = {
+    "sr": {
+        "title": "Куповине",
+        "headers": [
+            "Датум",
+            "Продавац",
+            "Број фактуре",
+            "Назив",
+            "Количина",
+            "Цена по јединици (RSD)",
+            "Износ (RSD)",
+        ],
+    },
+    "ru": {
+        "title": "Покупки",
+        "headers": [
+            "Дата",
+            "Продавец",
+            "Номер фактуры",
+            "Название",
+            "Количество",
+            "Цена за единицу (RSD)",
+            "Сумма (RSD)",
+        ],
+    },
+}
+
+
 @router.get("/by-project/{project_id}/export.xlsx")
 async def export_project_purchase_receipts_xlsx(
     project_id: int,
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
+    lang: str = Query("sr"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     """Export the project's purchase-by-receipts table as XLSX, matching
-    the columns shown in the UI modal."""
+    the columns shown in the UI modal. Labels follow the UI language
+    (sr default, ru also supported)."""
     try:
         payload = await get_project_receipt_purchases(
             db, project_id=project_id, from_date=from_date, to_date=to_date
@@ -238,20 +268,16 @@ async def export_project_purchase_receipts_xlsx(
     except ReceiptImportError as exc:
         raise HTTPException(400, str(exc)) from exc
 
+    locale = (lang or "sr").lower()
+    if locale not in PURCHASES_XLSX_LABELS:
+        locale = "sr"
+    labels = PURCHASES_XLSX_LABELS[locale]
+
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "Покупки"
+    sheet.title = labels["title"]
 
-    headers = [
-        "Дата",
-        "Продавец",
-        "Номер фактуры",
-        "Название",
-        "Количество",
-        "Цена за ед. (RSD)",
-        "Сумма (RSD)",
-    ]
-    sheet.append(headers)
+    sheet.append(labels["headers"])
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 

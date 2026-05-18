@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
-import { tr } from '../i18n'
+import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
@@ -283,6 +283,7 @@ export default function Projects() {
       await api.receipts.exportByProjectXlsx(purchaseModal.project_id, {
         from: range.from,
         to: range.to,
+        lang: getLang(),
       }, filename)
     } catch (err) {
       console.error(err)
