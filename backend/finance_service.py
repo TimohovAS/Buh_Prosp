@@ -721,8 +721,14 @@ async def get_project_movement_bounds(
         if max_date is not None and (entry["last_movement_date"] is None or max_date > entry["last_movement_date"]):
             entry["last_movement_date"] = max_date
 
+    # Bounds are about WHEN documents exist on a project, not about their
+    # cash-flow visibility, so we deliberately skip `_visible_expense_condition()`
+    # here. Planned expenses (receipts waiting for bank match, incoming
+    # invoices waiting for settlement) ARE real events and must extend
+    # the project's date window — otherwise "all time" period in the
+    # Projects page truncates and downstream filters (e.g. purchases-by-
+    # receipts modal) silently hide rows.
     expense_conditions = [
-        _visible_expense_condition(),
         Expense.source != CASH_TRANSFER_SOURCE,
         Expense.project_id.isnot(None),
     ]
