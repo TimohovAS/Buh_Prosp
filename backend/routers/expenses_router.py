@@ -18,6 +18,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
+from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import (
     BankTransaction,
     CashEntry,
@@ -540,6 +541,7 @@ async def bulk_assign_project_expenses(
         item.project_id = project_id
         await _clear_contract_if_project_mismatch(db, item, project_id)
         await _sync_bank_transactions_from_expense(db, item)
+        await sync_receipt_project_from_expense(db, item)
 
     await db.commit()
     return {"updated": len(items)}
@@ -687,6 +689,7 @@ async def update_expense(
     if getattr(expense, "source", None) == "cash":
         await _sync_cash_entry_from_expense(db, expense)
     await _sync_bank_transactions_from_expense(db, expense)
+    await sync_receipt_project_from_expense(db, expense)
 
     await db.flush()
     await db.commit()

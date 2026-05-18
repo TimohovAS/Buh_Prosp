@@ -443,6 +443,25 @@ async def sync_receipt_for_expense_match(db: AsyncSession, expense: Expense, tx:
     await db.flush()
 
 
+async def sync_receipt_project_from_expense(db: AsyncSession, expense: Expense) -> None:
+    """Propagate an expense's project_id to its linked PurchaseReceipt.
+
+    A receipt and its expense represent the same real-world purchase, so
+    they must share a project. Other sync helpers only fill the receipt's
+    project when it is None — when the user reassigns the expense's
+    project (PATCH /expenses or bulk-assign), we must overwrite the
+    receipt to keep them in sync. Without this, the receipts list shows
+    the stale project and "Покупки по чекам" for the new project misses
+    the receipt because its filter keys on receipt.project_id.
+    """
+    receipt = await _get_receipt_by_expense_id(db, expense.id)
+    if not receipt:
+        return
+    if receipt.project_id == expense.project_id:
+        return
+    receipt.project_id = expense.project_id
+
+
 async def sync_receipt_for_expense_unmatch(db: AsyncSession, expense: Expense) -> None:
     receipt = await _get_receipt_by_expense_id(db, expense.id)
     if not receipt:
