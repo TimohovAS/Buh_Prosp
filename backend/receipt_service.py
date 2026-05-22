@@ -81,11 +81,17 @@ def _normalize_receipt_url(value: str) -> str:
     if not raw:
         raise ReceiptImportError("Receipt QR URL is required")
     parsed = urlsplit(raw)
-    if (parsed.netloc or "").lower() != "suf.purs.gov.rs":
+    # Compare host via .hostname (port stripped) — phone scanners often
+    # emit the URL with an explicit ":443", which .netloc would keep,
+    # breaking a bare-host equality check.
+    host = (parsed.hostname or "").lower()
+    if host != "suf.purs.gov.rs":
         raise ReceiptImportError("Only official SUF receipt URLs are supported")
     if not parsed.path.startswith("/v"):
         raise ReceiptImportError("Unsupported receipt URL")
-    return urlunsplit((parsed.scheme or "https", parsed.netloc, parsed.path, parsed.query, ""))
+    # Rebuild with the bare host (no port) so the same receipt scanned with
+    # and without ":443" normalizes identically and dedupes via qr_hash.
+    return urlunsplit((parsed.scheme or "https", host, parsed.path, parsed.query, ""))
 
 
 def _hash_value(value: str) -> str:
