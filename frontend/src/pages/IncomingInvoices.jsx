@@ -416,9 +416,6 @@ export default function IncomingInvoices() {
                         </td>
                         <td className="incoming-invoice-document-cell">
                           <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
-                          <div className="incoming-invoice-document-meta">
-                            {inv.currency || 'RSD'}
-                          </div>
                         </td>
                         <td className="incoming-invoice-party-cell">
                           <div className="incoming-invoice-party-name" title={inv.counterparty_name || inv.client_name || UI_DASH}>
