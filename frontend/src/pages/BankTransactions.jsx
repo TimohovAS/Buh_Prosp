@@ -1236,7 +1236,7 @@ export default function BankTransactions() {
                   displayed.map((transaction) => (
                     <tr
                       key={transaction.id}
-                      className="bank-transaction-row"
+                      className="record-row"
                       onClick={() => openTransactionModal(transaction)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {

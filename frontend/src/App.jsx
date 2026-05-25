@@ -121,7 +121,7 @@ function App() {
       downY = event.clientY
     }
     const onClickCapture = (event) => {
-      const row = event.target?.closest?.('.record-row, .bank-transaction-row')
+      const row = event.target?.closest?.('.record-row')
       if (!row) return
       // Don't swallow clicks on form controls / links / explicit click targets
       // (checkboxes, buttons, anchors) inside the row.
