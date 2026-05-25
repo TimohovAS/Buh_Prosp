@@ -18,6 +18,7 @@ import { filterContractsForProject, findUnassignedProject, getContractLabelById,
 import { UI_DASH, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
 import { downloadTextFile } from '../utils/download'
+import { amountSearchHay } from '../utils/searchUtils'
 
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
 
@@ -587,7 +588,7 @@ export default function Expenses() {
       rows = items.filter((item) =>
         (item.description || '').toLowerCase().includes(normalizedSearch) ||
         getCategoryLabel(item).toLowerCase().includes(normalizedSearch) ||
-        String(item.amount || '').includes(normalizedSearch) ||
+        amountSearchHay(item.amount).includes(normalizedSearch) ||
         getProjectName(item.project_id).toLowerCase().includes(normalizedSearch) ||
         getContractLabel(item.contract_id).toLowerCase().includes(normalizedSearch) ||
         String(item.bank_reference || '').toLowerCase().includes(normalizedSearch)

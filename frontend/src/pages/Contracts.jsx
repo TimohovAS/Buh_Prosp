@@ -13,6 +13,7 @@ import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { getProjectName as resolveProjectName } from '../utils/entityLabels'
 import { UI_DASH, formatInteger, todayIso } from '../utils/formatters'
+import { amountSearchHay } from '../utils/searchUtils'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
@@ -227,7 +228,8 @@ export default function Contracts() {
         (contract.number || '').toLowerCase().includes(normalizedSearch) ||
         (contract.subject || '').toLowerCase().includes(normalizedSearch) ||
         (contract.client_name || '').toLowerCase().includes(normalizedSearch) ||
-        getProjectName(contract.project_id).toLowerCase().includes(normalizedSearch)
+        getProjectName(contract.project_id).toLowerCase().includes(normalizedSearch) ||
+        amountSearchHay(contract.amount).includes(normalizedSearch)
       )
     }
     return [...rows].sort((left, right) => {

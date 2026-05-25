@@ -10,6 +10,7 @@ import SharedStatusBadge from '../components/StatusBadge'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import { formatDateSr as formatDate, todayIso } from '../utils/formatters'
+import { amountSearchHay } from '../utils/searchUtils'
 
 function emptyValue() {
   const translated = tr('notSet')
@@ -128,7 +129,7 @@ export default function Obligations() {
     const haystack = [
       obligation.year,
       obligation.month,
-      obligation.amount,
+      amountSearchHay(obligation.amount),
       obligation.deadline,
       obligation.paid_date,
       obligation.payment_reference,

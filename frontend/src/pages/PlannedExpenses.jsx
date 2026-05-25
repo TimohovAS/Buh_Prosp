@@ -11,6 +11,7 @@ import SharedStatusBadge from '../components/StatusBadge'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import { findUnassignedProject } from '../utils/entityLabels'
 import { UI_DASH, formatDateSr as formatDate, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { amountSearchHay } from '../utils/searchUtils'
 
 const PERIODS = [
   { value: 'weekly', label: 'weekly' },
@@ -243,7 +244,8 @@ export default function PlannedExpenses() {
     if (!search) return true
     const s = search.toLowerCase()
     return (i.name || '').toLowerCase().includes(s) ||
-      (i.description || '').toLowerCase().includes(s)
+      (i.description || '').toLowerCase().includes(s) ||
+      amountSearchHay(i.amount).includes(s)
   })
 
   const totalMonthly = items

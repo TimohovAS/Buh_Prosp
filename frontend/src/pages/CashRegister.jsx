@@ -13,6 +13,7 @@ import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useProjectContractForm from '../hooks/useProjectContractForm'
 import { buildContractLabel, filterContractsForProject, findUnassignedProject, getContractLabelById } from '../utils/entityLabels'
 import { UI_DASH, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
 
 function buildBankLabel(item) {
@@ -208,6 +209,7 @@ export default function CashRegister() {
           getProjectName(entry.project_id),
           entry.expense_id ? String(entry.expense_id) : '',
           entry.bank_transaction_id ? String(entry.bank_transaction_id) : '',
+          amountSearchHay(entry.amount),
         ]
           .filter(Boolean)
           .join(' ')

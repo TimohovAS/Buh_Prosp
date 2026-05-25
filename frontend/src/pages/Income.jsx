@@ -16,6 +16,7 @@ import useProjectContractForm from '../hooks/useProjectContractForm'
 import { buildContractLabel, filterContractsForProject, findUnassignedProject, getProjectName as resolveProjectName } from '../utils/entityLabels'
 import { UI_CLOSE, UI_DASH, todayIso } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
+import { amountSearchHay } from '../utils/searchUtils'
 
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
 
@@ -430,7 +431,7 @@ export default function Income() {
         (item.client_name || '').toLowerCase().includes(normalizedSearch) ||
         (item.invoice_number || '').toLowerCase().includes(normalizedSearch) ||
         (item.description || '').toLowerCase().includes(normalizedSearch) ||
-        String(item.amount_rsd || '').includes(normalizedSearch) ||
+        amountSearchHay(item.amount_rsd).includes(normalizedSearch) ||
         getProjectName(item.project_id).toLowerCase().includes(normalizedSearch)
       )
     }

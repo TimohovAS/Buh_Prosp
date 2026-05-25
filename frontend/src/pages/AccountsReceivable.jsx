@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import { UI_DASH, formatDateSr as formatDate, formatInteger as fmt } from '../utils/formatters'
+import { amountSearchHay } from '../utils/searchUtils'
 
 export default function AccountsReceivable() {
   const location = useLocation()
@@ -46,7 +47,8 @@ export default function AccountsReceivable() {
     let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
     if (s) rows = rows.filter(i =>
       (i.invoice_number || '').toLowerCase().includes(s) ||
-      (i.client_name || UI_DASH).toLowerCase().includes(s)
+      (i.client_name || UI_DASH).toLowerCase().includes(s) ||
+      amountSearchHay(i.amount).includes(s)
     )
     return [...rows].sort((a, b) => {
       const valA = a[sortCol] ?? 0

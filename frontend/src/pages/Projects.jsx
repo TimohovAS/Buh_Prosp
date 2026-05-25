@@ -12,6 +12,7 @@ import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { UI_DASH, UI_CLOSE, formatInteger as fmt, formatMoney2, todayIso } from '../utils/formatters'
 import { getPeriodRange } from '../utils/periods'
+import { amountSearchHay } from '../utils/searchUtils'
 export default function Projects() {
   const location = useLocation()
   const isActivePage = location.pathname === '/projects'
@@ -414,11 +415,15 @@ export default function Projects() {
     if (projectFilter === 'internal') rows = rows.filter((project) => project.is_internal)
     if (projectFilter === 'commercial') rows = rows.filter((project) => !project.is_internal)
     if (normalizedSearch) {
-      rows = rows.filter((project) =>
-        (project.name || '').toLowerCase().includes(normalizedSearch) ||
-        (project.code || '').toLowerCase().includes(normalizedSearch) ||
-        (project.client_name || '').toLowerCase().includes(normalizedSearch)
-      )
+      rows = rows.filter((project) => {
+        const row = getRowData(project)
+        return (project.name || '').toLowerCase().includes(normalizedSearch) ||
+          (project.code || '').toLowerCase().includes(normalizedSearch) ||
+          (project.client_name || '').toLowerCase().includes(normalizedSearch) ||
+          amountSearchHay(row.revenue).includes(normalizedSearch) ||
+          amountSearchHay(row.expenses).includes(normalizedSearch) ||
+          amountSearchHay(row.profit).includes(normalizedSearch)
+      })
     }
     return [...rows].sort((left, right) => {
       let leftValue
