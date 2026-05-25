@@ -1194,7 +1194,7 @@ tr.row-reversal {
 .incoming-invoice-party-meta,
 .incoming-invoice-amount-meta,
 .incoming-invoice-note {
-  margin-top: 0.3rem;
+  margin-top: 0.18rem;
   font-size: 0.78rem;
   color: var(--color-text-muted);
 }
@@ -1215,18 +1215,18 @@ tr.row-reversal {
 .incoming-invoice-description {
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
 }
 
 .incoming-invoice-party-cell .income-meta-chips {
-  margin-top: 0.45rem;
+  margin-top: 0.25rem;
 }
 
 .incoming-invoice-description {
   color: var(--color-text);
-  line-height: 1.45;
-  -webkit-line-clamp: 3;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
 }
 
 .incoming-invoice-amount-cell {
@@ -1245,12 +1245,12 @@ tr.row-reversal {
 }
 
 .incoming-invoice-status-inline {
-  margin-top: 0.45rem;
+  margin-top: 0.25rem;
 }
 
 .incoming-invoices-list-table tbody td {
-  padding-top: 0.9rem;
-  padding-bottom: 0.9rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
 }
 
 .record-detail-grid {
