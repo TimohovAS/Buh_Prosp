@@ -107,6 +107,44 @@ function App() {
     }
   }, [])
 
+  // Allow users to copy text inside clickable rows (`.record-row`) without
+  // the row's onClick firing. Without this guard a drag-to-select or a
+  // double-click-to-select inside a table cell opens the row's detail
+  // modal as soon as the mouse releases, making it impossible to copy
+  // visible text. The handler runs in the capture phase so it can stop
+  // React's delegated onClick before it bubbles up.
+  useEffect(() => {
+    let downX = 0
+    let downY = 0
+    const onMouseDown = (event) => {
+      downX = event.clientX
+      downY = event.clientY
+    }
+    const onClickCapture = (event) => {
+      const row = event.target?.closest?.('.record-row')
+      if (!row) return
+      // Don't swallow clicks on form controls / links / explicit click targets
+      // (checkboxes, buttons, anchors) inside the row.
+      if (event.target.closest?.('input, button, a, select, textarea, label')) return
+      const dx = Math.abs(event.clientX - downX)
+      const dy = Math.abs(event.clientY - downY)
+      if (dx > 4 || dy > 4) {
+        event.stopImmediatePropagation()
+        return
+      }
+      const selection = window.getSelection?.()
+      if (selection && selection.rangeCount > 0 && selection.toString().trim()) {
+        event.stopImmediatePropagation()
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown, true)
+    document.addEventListener('click', onClickCapture, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown, true)
+      document.removeEventListener('click', onClickCapture, true)
+    }
+  }, [])
+
   const handleLoginSuccess = (data) => {
     const lang = data.user?.default_language || 'sr'
     setLang(lang)
