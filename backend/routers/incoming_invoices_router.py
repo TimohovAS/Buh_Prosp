@@ -355,7 +355,11 @@ async def counterparty_balance(
     total_p = sum((i["payables"] for i in items), to_decimal(0))
     return CounterpartyBalanceResponse(
         items=[CounterpartyBalanceItem(**i) for i in items],
+        total_document_receivables=sum((i["document_receivables"] for i in items), to_decimal(0)),
+        total_issued_loans=sum((i["issued_loans"] for i in items), to_decimal(0)),
         total_receivables=total_r,
+        total_document_payables=sum((i["document_payables"] for i in items), to_decimal(0)),
+        total_borrowed_loans=sum((i["borrowed_loans"] for i in items), to_decimal(0)),
         total_payables=total_p,
         total_net_balance=total_r - total_p,
     )

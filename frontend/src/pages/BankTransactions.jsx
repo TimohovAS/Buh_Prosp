@@ -73,6 +73,20 @@ export default function BankTransactions() {
     contract_id: '',
     note: '',
   })
+  const [loanModal, setLoanModal] = useState(null)
+  const [loanClients, setLoanClients] = useState([])
+  const [loanCandidates, setLoanCandidates] = useState([])
+  const [loanSaving, setLoanSaving] = useState(false)
+  const [loanError, setLoanError] = useState('')
+  const [loanForm, setLoanForm] = useState({
+    client_id: '',
+    counterparty_name: '',
+    agreement_number: '',
+    agreement_date: '',
+    due_date: '',
+    note: '',
+    loan_id: '',
+  })
 
 
   const unassignedProject = findUnassignedProject(projects)
@@ -344,11 +358,87 @@ export default function BankTransactions() {
     }
   }
 
+  const openLoanOperation = async (transaction, operation) => {
+    const isRepayment = operation === 'repayBorrowed' || operation === 'repayIssued'
+    const loanType = operation === 'receiveBorrowed' || operation === 'repayBorrowed' ? 'borrowed' : 'issued'
+    setLoanModal({ transaction, operation, loanType, isRepayment })
+    setLoanError('')
+    setLoanForm({
+      client_id: '',
+      counterparty_name: transaction.counterparty_name || '',
+      agreement_number: '',
+      agreement_date: '',
+      due_date: '',
+      note: '',
+      loan_id: '',
+    })
+    setLoanCandidates([])
+    try {
+      const [clients, loans] = await Promise.all([
+        api.clients.list({ archived: false }),
+        api.counterpartyLoans.list({ loan_type: loanType, status: 'open' }),
+      ])
+      setLoanClients(clients.filter((client) => !client.is_archived))
+      const matchingLoans = loans.filter((loan) => (loan.currency || 'RSD') === (transaction.currency || 'RSD'))
+      setLoanCandidates(matchingLoans)
+      if (isRepayment && matchingLoans.length === 1) setLoanForm((current) => ({ ...current, loan_id: String(matchingLoans[0].id) }))
+    } catch (error) {
+      setLoanError(error.message)
+    }
+  }
+
+  const closeLoanModal = () => {
+    if (loanSaving) return
+    setLoanModal(null)
+    setLoanError('')
+  }
+
+  const handleSaveLoanMovement = async (event) => {
+    event.preventDefault()
+    if (!loanModal) return
+    setLoanSaving(true)
+    setLoanError('')
+    try {
+      if (loanModal.isRepayment || loanForm.loan_id) {
+        if (loanModal.isRepayment && !loanForm.loan_id) throw new Error(tr('loanSelectOpen'))
+        await api.counterpartyLoans.addMovementFromBank(Number(loanForm.loan_id), loanModal.transaction.id, {
+          movement_type: loanModal.isRepayment ? 'repayment' : 'disbursement',
+          note: loanForm.note || null,
+        })
+      } else {
+        await api.counterpartyLoans.createFromBank(loanModal.transaction.id, {
+          loan_type: loanModal.loanType,
+          client_id: loanForm.client_id || null,
+          counterparty_name: loanForm.counterparty_name,
+          agreement_number: loanForm.agreement_number || null,
+          agreement_date: loanForm.agreement_date || null,
+          due_date: loanForm.due_date || null,
+          note: loanForm.note || null,
+        })
+      }
+      const txId = loanModal.transaction.id
+      setLoanModal(null)
+      await refreshSelectedTransaction(txId, 'overview')
+    } catch (error) {
+      setLoanError(error.message)
+    } finally {
+      setLoanSaving(false)
+    }
+  }
+
+  const getLoanMovementStatusLabel = (transaction) => {
+    if (transaction.loan_movement_type === 'disbursement') {
+      return transaction.loan_type === 'borrowed' ? tr('loanReceivedStatus') : tr('loanIssuedStatus')
+    }
+    return transaction.loan_type === 'borrowed' ? tr('loanRepaidStatus') : tr('loanReturnedStatus')
+  }
+
   const getMatchedTypeLabel = (type) => {
     if (type === 'cash') return tr('bankTxMatchedCash')
     if (type === 'income') return tr('income')
     if (type === 'income_allocation') return tr('bankTxDistributedLabel')
     if (type === 'owner_funds') return tr('bankTxOwnerFundsLabel')
+    if (type === 'loan_movement') return tr('loanMovementLabel')
     if (type === 'expense') return tr('expenses')
     if (type === 'obligation') return tr('payments')
     return type || ''
@@ -362,6 +452,10 @@ export default function BankTransactions() {
 
   const isOwnerFundsTransaction = (transaction) => (
     transaction?.status === 'matched' && transaction?.matched_type === 'owner_funds'
+  )
+
+  const isLoanTransaction = (transaction) => (
+    transaction?.status === 'matched' && transaction?.matched_type === 'loan_movement'
   )
 
   const canConvertExpenseToOwnerFunds = (transaction) => (
@@ -719,6 +813,9 @@ export default function BankTransactions() {
       if (transaction.matched_type === 'owner_funds') {
         return <span className="badge badge-success">{getOwnerFundsStatusLabel(transaction)}</span>
       }
+      if (transaction.matched_type === 'loan_movement') {
+        return <span className="badge badge-success">{getLoanMovementStatusLabel(transaction)}</span>
+      }
       return <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
     }
     return <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
@@ -733,12 +830,16 @@ export default function BankTransactions() {
         actions.push(
           { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
           { key: 'allocate', label: tr('bankTxAllocateMode'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'allocate') },
+          { key: 'loan-receive', label: tr('loanReceive'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'receiveBorrowed') },
+          { key: 'loan-repayment-in', label: tr('loanReceiveRepayment'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'repayIssued') },
           { key: 'owner-funds-in', label: tr('bankTxOwnerFundsMarkIn'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
         )
       } else {
         actions.push(
           { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
           { key: 'create', label: tr('bankTxCreateExpense'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'create') },
+          { key: 'loan-issue', label: tr('loanIssue'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'issueLoan') },
+          { key: 'loan-repayment-out', label: tr('loanRepayBorrowed'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'repayBorrowed') },
           { key: 'owner-funds-out', label: tr('bankTxOwnerFundsMarkOut'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
         )
       }
@@ -751,6 +852,9 @@ export default function BankTransactions() {
       }
       if (isOwnerFundsTransaction(transaction)) {
         actions.push({ key: 'document', label: tr('bankTxOwnerFundsDocument'), className: 'btn btn-secondary', onClick: () => handleDownloadOwnerFundsDocument(transaction.id) })
+      }
+      if (isLoanTransaction(transaction) && transaction.loan_id) {
+        actions.push({ key: 'open-loan', label: tr('openLoan'), className: 'btn btn-secondary', onClick: () => navigate(`/counterparty-loans?open=${transaction.loan_id}`) })
       }
       actions.push({ key: 'unmatch', label: tr('bankTxUnmatchBtn'), className: 'btn btn-danger', onClick: () => handleUnmatch(transaction.id) })
     }
@@ -794,7 +898,11 @@ export default function BankTransactions() {
                 <div className="bank-transaction-field full">
                   <span className="bank-transaction-field-label">{tr('bankTxMatched')}</span>
                   <span className="bank-transaction-field-value">
-                    {transaction.matched_type === 'owner_funds' ? getOwnerFundsStatusLabel(transaction) : getMatchedTypeLabel(transaction.matched_type)}
+                    {transaction.matched_type === 'owner_funds'
+                      ? getOwnerFundsStatusLabel(transaction)
+                      : transaction.matched_type === 'loan_movement'
+                        ? getLoanMovementStatusLabel(transaction)
+                        : getMatchedTypeLabel(transaction.matched_type)}
                   </span>
                 </div>
               ) : null}
@@ -1164,6 +1272,13 @@ export default function BankTransactions() {
     )
   }
 
+  const selectedLoanCandidate = loanCandidates.find((loan) => String(loan.id) === String(loanForm.loan_id))
+  const loanOperationAmount = Number(loanModal?.transaction?.amount || 0)
+  const loanBalanceAfter = selectedLoanCandidate
+    ? Number(selectedLoanCandidate.outstanding_amount || 0) + (loanModal?.isRepayment ? -loanOperationAmount : loanOperationAmount)
+    : null
+  const loanRepaymentExceeds = !!loanModal?.isRepayment && loanBalanceAfter != null && loanBalanceAfter < 0
+
   return (
     <>
       <PageHeader
@@ -1276,6 +1391,8 @@ export default function BankTransactions() {
                             </span>
                           ) : transaction.matched_type === 'owner_funds' ? (
                             <span className="badge badge-success">{getOwnerFundsStatusLabel(transaction)}</span>
+                          ) : transaction.matched_type === 'loan_movement' ? (
+                            <span className="badge badge-success">{getLoanMovementStatusLabel(transaction)}</span>
                           ) : (
                             <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
                           )
@@ -1325,6 +1442,113 @@ export default function BankTransactions() {
             {matchError ? <div style={{ color: 'var(--color-danger)' }}>{matchError}</div> : null}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={!!loanModal}
+        onClose={closeLoanModal}
+        title={loanModal?.isRepayment
+          ? (loanModal.loanType === 'borrowed' ? tr('loanRepayBorrowed') : tr('loanReceiveRepayment'))
+          : (loanModal?.loanType === 'borrowed' ? tr('loanReceive') : tr('loanIssue'))}
+        className="loan-operation-modal"
+        maxWidth="760px"
+      >
+        {loanModal ? (
+          <form className="loan-operation-form" onSubmit={handleSaveLoanMovement}>
+            <div className="loan-operation-summary">
+              <div>
+                <span>{tr('amount')}</span>
+                <strong>{formatMoney(loanOperationAmount)} {loanModal.transaction.currency || 'RSD'}</strong>
+              </div>
+              {selectedLoanCandidate ? (
+                <>
+                  <div>
+                    <span>{tr('loanOutstanding')}</span>
+                    <strong>{formatMoney(selectedLoanCandidate.outstanding_amount)} {selectedLoanCandidate.currency}</strong>
+                  </div>
+                  <div>
+                    <span>{tr('loanAfterMovement')}</span>
+                    <strong className={loanRepaymentExceeds ? 'negative' : ''}>{formatMoney(loanBalanceAfter)} {selectedLoanCandidate.currency}</strong>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            {loanModal.isRepayment ? (
+              <div className="form-group">
+                <label className="form-label">{tr('loanSelectOpen')}</label>
+                <select className="form-input" value={loanForm.loan_id} onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })} required>
+                  <option value="">{UI_DASH}</option>
+                  {loanCandidates.map((loan) => (
+                    <option key={loan.id} value={loan.id}>
+                      {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} / {formatMoney(loan.outstanding_amount)} {loan.currency}
+                    </option>
+                  ))}
+                </select>
+                {loanCandidates.length === 0 ? <p className="bank-match-form-note">{tr('loanNoOpen')}</p> : null}
+              </div>
+            ) : (
+              <>
+              {loanCandidates.length > 0 ? (
+                <div className="form-group">
+                  <label className="form-label">{tr('loanSelectExisting')}</label>
+                  <select className="form-input" value={loanForm.loan_id} onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })}>
+                    <option value="">{tr('loanNew')}</option>
+                    {loanCandidates.map((loan) => (
+                      <option key={loan.id} value={loan.id}>
+                        {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} / {formatMoney(loan.outstanding_amount)} {loan.currency}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {!loanForm.loan_id ? <div className="loan-operation-fields">
+                <div className="form-group">
+                  <label className="form-label">{tr('counterpartyName')}</label>
+                  <input className="form-input" value={loanForm.counterparty_name} onChange={(event) => setLoanForm({ ...loanForm, counterparty_name: event.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('client')}</label>
+                  <select
+                    className="form-input"
+                    value={loanForm.client_id}
+                    onChange={(event) => {
+                      const client = loanClients.find((item) => String(item.id) === event.target.value)
+                      setLoanForm({ ...loanForm, client_id: event.target.value, counterparty_name: client?.name || loanForm.counterparty_name })
+                    }}
+                  >
+                    <option value="">{UI_DASH}</option>
+                    {loanClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('loanAgreementNumber')}</label>
+                  <input className="form-input" value={loanForm.agreement_number} onChange={(event) => setLoanForm({ ...loanForm, agreement_number: event.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('loanAgreementDate')}</label>
+                  <DatePicker value={loanForm.agreement_date} onChange={(value) => setLoanForm({ ...loanForm, agreement_date: value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('loanDueDate')}</label>
+                  <DatePicker value={loanForm.due_date} onChange={(value) => setLoanForm({ ...loanForm, due_date: value })} />
+                </div>
+              </div> : null}
+              </>
+            )}
+            <div className="form-group">
+              <label className="form-label">{tr('note')}</label>
+              <textarea className="form-input" value={loanForm.note} onChange={(event) => setLoanForm({ ...loanForm, note: event.target.value })} />
+            </div>
+            {loanRepaymentExceeds ? <div style={{ color: 'var(--color-danger)' }}>{tr('loanRepaymentExceeds')}</div> : null}
+            {loanError ? <div style={{ color: 'var(--color-danger)' }}>{loanError}</div> : null}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={closeLoanModal}>{tr('cancel')}</button>
+              <button type="submit" className="btn btn-primary" disabled={loanSaving || loanRepaymentExceeds || (loanModal.isRepayment && !loanForm.loan_id)}>
+                {loanSaving ? tr('loading') : tr('save')}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </Modal>
 
       <Modal isOpen={modalAssign} onClose={() => { setModalAssign(false); setAssignProjectId('') }} title={tr('assignProject')}>

@@ -1139,6 +1139,11 @@ class BankTransactionResponse(BankTransactionBase):
     allocation_count: int = 0
     allocated_amount: Decimal = Decimal("0.00")
     allocation_remaining: Decimal = Decimal("0.00")
+    loan_id: Optional[int] = None
+    loan_type: Optional[str] = None
+    loan_movement_type: Optional[str] = None
+    loan_outstanding_amount: Optional[Decimal] = None
+    loan_counterparty_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -1580,13 +1585,101 @@ class IncomingInvoiceDetailResponse(IncomingInvoiceResponse):
 class CounterpartyBalanceItem(BaseModel):
     client_id: Optional[int] = None
     client_name: str
+    document_receivables: Decimal = Decimal("0")
+    issued_loans: Decimal = Decimal("0")
     receivables: Decimal = Decimal("0")
+    document_payables: Decimal = Decimal("0")
+    borrowed_loans: Decimal = Decimal("0")
     payables: Decimal = Decimal("0")
     net_balance: Decimal = Decimal("0")
 
 
 class CounterpartyBalanceResponse(BaseModel):
     items: list[CounterpartyBalanceItem] = Field(default_factory=list)
+    total_document_receivables: Decimal = Decimal("0")
+    total_issued_loans: Decimal = Decimal("0")
     total_receivables: Decimal = Decimal("0")
+    total_document_payables: Decimal = Decimal("0")
+    total_borrowed_loans: Decimal = Decimal("0")
     total_payables: Decimal = Decimal("0")
     total_net_balance: Decimal = Decimal("0")
+
+
+# --- Counterparty loans ---
+
+class CounterpartyLoanCreateFromBank(BaseModel):
+    loan_type: str  # borrowed | issued
+    client_id: Optional[int] = None
+    counterparty_name: Optional[str] = None
+    agreement_number: Optional[str] = None
+    agreement_date: Optional[DateType] = None
+    due_date: Optional[DateType] = None
+    note: Optional[str] = None
+
+    @field_validator("client_id", mode="before")
+    @classmethod
+    def loan_empty_client_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
+
+
+class CounterpartyLoanUpdate(BaseModel):
+    client_id: Optional[int] = None
+    counterparty_name: Optional[str] = None
+    agreement_number: Optional[str] = None
+    agreement_date: Optional[DateType] = None
+    due_date: Optional[DateType] = None
+    note: Optional[str] = None
+
+    @field_validator("client_id", mode="before")
+    @classmethod
+    def loan_update_empty_client_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
+
+
+class CounterpartyLoanMovementFromBank(BaseModel):
+    movement_type: str  # disbursement | repayment
+    note: Optional[str] = None
+
+
+class CounterpartyLoanMovementResponse(BaseModel):
+    id: int
+    loan_id: int
+    movement_type: str
+    date: DateType
+    amount: Decimal
+    currency: str = "RSD"
+    bank_transaction_id: Optional[int] = None
+    note: Optional[str] = None
+    created_at: Optional[datetime] = None
+    bank_reference: Optional[str] = None
+    bank_purpose: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CounterpartyLoanResponse(BaseModel):
+    id: int
+    loan_type: str
+    client_id: Optional[int] = None
+    client_name: Optional[str] = None
+    counterparty_name: str
+    agreement_number: Optional[str] = None
+    agreement_date: Optional[DateType] = None
+    start_date: DateType
+    due_date: Optional[DateType] = None
+    currency: str = "RSD"
+    note: Optional[str] = None
+    status: str
+    created_at: Optional[datetime] = None
+    disbursed_amount: Decimal = Decimal("0")
+    repaid_amount: Decimal = Decimal("0")
+    outstanding_amount: Decimal = Decimal("0")
+    movements: list[CounterpartyLoanMovementResponse] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True

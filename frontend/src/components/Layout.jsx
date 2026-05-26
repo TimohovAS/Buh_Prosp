@@ -138,6 +138,7 @@ export default function Layout({ lang, toggleLang, children }) {
               <li><NavLink to="/finance/cashflow"><Wallet size={18} /> {tr('cashflowTitle')}</NavLink></li>
               <li><NavLink to="/finance/ar"><AlertCircle size={18} /> {tr('financeAR')}</NavLink></li>
               <li><NavLink to="/counterparty-balance"><Scale size={18} /> {tr('counterpartyBalance')}</NavLink></li>
+              <li><NavLink to="/counterparty-loans"><Landmark size={18} /> {tr('counterpartyLoans')}</NavLink></li>
             </ul>
           </div>
 

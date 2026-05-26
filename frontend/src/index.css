@@ -2225,6 +2225,77 @@ tr:hover td {
   grid-column: 1 / -1;
 }
 
+.modal.loan-operation-modal {
+  width: min(94vw, 760px);
+  max-width: none;
+}
+
+.loan-operation-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.loan-operation-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.loan-operation-summary > div,
+.loan-detail-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.loan-operation-summary span,
+.loan-detail-summary span,
+.balance-summary-breakdown {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.loan-operation-summary strong.negative {
+  color: var(--color-danger);
+}
+
+.loan-operation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.loan-operation-fields .form-group {
+  margin: 0;
+}
+
+.loan-detail-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.loan-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.loan-list-table th {
+  cursor: pointer;
+}
+
+.loan-movement-table {
+  table-layout: fixed;
+}
+
+.balance-summary-breakdown {
+  margin-top: 0.45rem;
+}
+
 @media (max-width: 900px) {
   .incoming-invoice-settle-layout {
     grid-template-columns: 1fr;
@@ -2250,6 +2321,10 @@ tr:hover td {
   .bank-transaction-action-grid {
     grid-template-columns: 1fr;
   }
+
+  .loan-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -2266,6 +2341,11 @@ tr:hover td {
   }
 
   .bank-transaction-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .loan-operation-fields,
+  .loan-detail-summary {
     grid-template-columns: 1fr;
   }
 }

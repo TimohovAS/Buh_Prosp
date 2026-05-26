@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import (
@@ -23,6 +24,7 @@ from backend.cash_service import (
     get_or_create_cash_project_id,
     is_cash_transfer_expense,
 )
+from backend.counterparty_loan_service import MATCH_TYPE_LOAN_MOVEMENT, loan_totals
 from backend.database import get_db
 from backend.date_utils import coerce_date
 from backend.db_utils import (
@@ -33,7 +35,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
-from backend.models import BankTransaction, Contract, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
+from backend.models import BankTransaction, Contract, CounterpartyLoan, CounterpartyLoanMovement, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
 from backend.receipt_service import sync_receipt_for_expense_match
 from backend.schemas import (
     BankTransactionBulkAssignProject,
@@ -180,6 +182,7 @@ def _serialize_bank_transaction(
     transaction: BankTransaction,
     project_id: object = _PROJECT_OVERRIDE_UNSET,
     allocation_stats: dict | None = None,
+    loan_summary: dict | None = None,
 ) -> BankTransactionResponse:
     payload = BankTransactionResponse.model_validate(transaction).model_dump()
     if project_id is not _PROJECT_OVERRIDE_UNSET:
@@ -189,6 +192,8 @@ def _serialize_bank_transaction(
     payload["allocated_amount"] = to_decimal(stats.get("allocated_amount", ZERO_DECIMAL))
     remaining_amount = to_decimal(transaction.amount or ZERO_DECIMAL) - payload["allocated_amount"]
     payload["allocation_remaining"] = remaining_amount if remaining_amount > ZERO_DECIMAL else ZERO_DECIMAL
+    if loan_summary:
+        payload.update(loan_summary)
     return BankTransactionResponse.model_validate(payload)
 
 
@@ -221,8 +226,40 @@ async def _resolve_effective_project_ids(
             project_id = income_projects.get(int(tx.matched_id), project_id)
         elif tx.matched_type == MATCH_TYPE_INCOME_ALLOCATION:
             project_id = allocation_stats.get(int(tx.id), {}).get("resolved_project_id", project_id)
+        elif tx.matched_type == MATCH_TYPE_LOAN_MOVEMENT:
+            project_id = None
         resolved[int(tx.id)] = project_id
     return resolved, allocation_stats
+
+
+async def _resolve_loan_summaries(db: AsyncSession, transactions: list[BankTransaction]) -> dict[int, dict]:
+    movement_ids = [
+        int(tx.matched_id)
+        for tx in transactions
+        if tx.matched_type == MATCH_TYPE_LOAN_MOVEMENT and tx.matched_id
+    ]
+    if not movement_ids:
+        return {}
+    result = await db.execute(
+        select(CounterpartyLoanMovement)
+        .options(selectinload(CounterpartyLoanMovement.loan).selectinload(CounterpartyLoan.movements))
+        .where(CounterpartyLoanMovement.id.in_(movement_ids))
+    )
+    movement_map = {int(item.id): item for item in result.scalars().all()}
+    summaries: dict[int, dict] = {}
+    for tx in transactions:
+        movement = movement_map.get(int(tx.matched_id or 0))
+        if not movement:
+            continue
+        _, _, outstanding = loan_totals(movement.loan)
+        summaries[int(tx.id)] = {
+            "loan_id": movement.loan_id,
+            "loan_type": movement.loan.loan_type,
+            "loan_movement_type": movement.movement_type,
+            "loan_outstanding_amount": outstanding,
+            "loan_counterparty_name": movement.loan.counterparty_name,
+        }
+    return summaries
 
 
 async def _serialize_bank_transactions(
@@ -230,11 +267,13 @@ async def _serialize_bank_transactions(
     transactions: list[BankTransaction],
 ) -> list[BankTransactionResponse]:
     resolved_projects, allocation_stats = await _resolve_effective_project_ids(db, transactions)
+    loan_summaries = await _resolve_loan_summaries(db, transactions)
     return [
         _serialize_bank_transaction(
             transaction,
             resolved_projects.get(int(transaction.id), transaction.project_id),
             allocation_stats.get(int(transaction.id)),
+            loan_summaries.get(int(transaction.id)),
         )
         for transaction in transactions
     ]
@@ -245,10 +284,12 @@ async def _serialize_single_bank_transaction(
     transaction: BankTransaction,
 ) -> BankTransactionResponse:
     resolved_projects, allocation_stats = await _resolve_effective_project_ids(db, [transaction])
+    loan_summaries = await _resolve_loan_summaries(db, [transaction])
     return _serialize_bank_transaction(
         transaction,
         resolved_projects.get(int(transaction.id), transaction.project_id),
         allocation_stats.get(int(transaction.id)),
+        loan_summaries.get(int(transaction.id)),
     )
 
 
@@ -654,10 +695,11 @@ async def bulk_assign_project(
                 await _sync_income_project(db, income, project_id)
         elif item.matched_type == MATCH_TYPE_OWNER_FUNDS:
             item.project_id = None
+        elif item.matched_type == MATCH_TYPE_LOAN_MOVEMENT:
+            item.project_id = None
         else:
             item.project_id = project_id
 
     await db.commit()
     return {"message": f"Project assigned to {len(items)} transactions"}
-
 

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
+from backend.counterparty_loan_service import MATCH_TYPE_LOAN_MOVEMENT, unmatch_loan_movement
 from backend.date_utils import coerce_date, days_between
 from backend.db_utils import (
     get_contract_or_404,
@@ -1194,6 +1195,9 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
     elif tx.matched_type == MATCH_TYPE_OWNER_FUNDS:
         pass
 
+    elif tx.matched_type == MATCH_TYPE_LOAN_MOVEMENT:
+        await unmatch_loan_movement(db, tx)
+
     elif tx.matched_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))
         obligation = obligation_response.scalar_one_or_none()
@@ -1217,5 +1221,4 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
     if affected_income_ids:
         await reconcile_income_payment_links(db, affected_income_ids)
     return tx
-
 

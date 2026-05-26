@@ -25,6 +25,7 @@ import Efaktura from './pages/Efaktura'
 import IncomingInvoices from './pages/IncomingInvoices'
 import CounterpartyBalance from './pages/CounterpartyBalance'
 import Receipts from './pages/Receipts'
+import CounterpartyLoans from './pages/CounterpartyLoans'
 
 const APP_PAGE_ROUTES = [
   { id: 'dashboard', path: '/', Component: Dashboard },
@@ -32,6 +33,7 @@ const APP_PAGE_ROUTES = [
   { id: 'efaktura', path: '/efaktura', Component: Efaktura },
   { id: 'incoming-invoices', path: '/incoming-invoices', Component: IncomingInvoices },
   { id: 'counterparty-balance', path: '/counterparty-balance', Component: CounterpartyBalance },
+  { id: 'counterparty-loans', path: '/counterparty-loans', Component: CounterpartyLoans },
   { id: 'clients', path: '/clients', Component: Clients },
   { id: 'finance', path: '/finance', Component: FinanceOverview },
   { id: 'finance-pnl', path: '/finance/pnl', Component: ProfitAndLoss },

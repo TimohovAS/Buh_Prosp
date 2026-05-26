@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.db_utils import get_unassigned_project_id
+from backend.counterparty_loan_service import loan_totals
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
     BankTransaction,
     CashEntry,
     Client,
+    CounterpartyLoan,
     EfakturaImportRecord,
     Expense,
     Income,
@@ -634,6 +636,12 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
     )
     payables_result = await db.execute(payables_q)
     payables_rows = payables_result.all()
+    loans_result = await db.execute(
+        select(CounterpartyLoan)
+        .options(selectinload(CounterpartyLoan.movements))
+        .where(CounterpartyLoan.status != "cancelled")
+    )
+    loans = list(loans_result.scalars().all())
 
     client_ids = set()
     for row in receivables_rows:
@@ -642,6 +650,9 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
     for row in payables_rows:
         if row.client_id:
             client_ids.add(row.client_id)
+    for loan in loans:
+        if loan.client_id:
+            client_ids.add(loan.client_id)
 
     client_names: dict[int, str] = {}
     if client_ids:
@@ -653,30 +664,44 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
 
     balances: dict[int | str, dict] = {}
 
-    for row in receivables_rows:
-        key = row.client_id or f"_unknown_{row.client_name_fallback}"
-        name = client_names.get(row.client_id, row.client_name_fallback) if row.client_id else row.client_name_fallback
-        entry = balances.setdefault(key, {
-            "client_id": row.client_id,
+    def balance_entry(client_id, name):
+        key = client_id or f"_unknown_{name}"
+        return balances.setdefault(key, {
+            "client_id": client_id,
             "client_name": name or "—",
+            "document_receivables": ZERO_DECIMAL,
+            "issued_loans": ZERO_DECIMAL,
             "receivables": ZERO_DECIMAL,
+            "document_payables": ZERO_DECIMAL,
+            "borrowed_loans": ZERO_DECIMAL,
             "payables": ZERO_DECIMAL,
         })
-        entry["receivables"] += to_decimal(row.receivable or ZERO_DECIMAL)
+
+    for row in receivables_rows:
+        name = client_names.get(row.client_id, row.client_name_fallback) if row.client_id else row.client_name_fallback
+        entry = balance_entry(row.client_id, name)
+        entry["document_receivables"] += to_decimal(row.receivable or ZERO_DECIMAL)
 
     for row in payables_rows:
-        key = row.client_id or f"_unknown_{row.counterparty_name}"
         name = client_names.get(row.client_id, row.counterparty_name) if row.client_id else row.counterparty_name
-        entry = balances.setdefault(key, {
-            "client_id": row.client_id,
-            "client_name": name or "—",
-            "receivables": ZERO_DECIMAL,
-            "payables": ZERO_DECIMAL,
-        })
-        entry["payables"] += to_decimal(row.payable or ZERO_DECIMAL)
+        entry = balance_entry(row.client_id, name)
+        entry["document_payables"] += to_decimal(row.payable or ZERO_DECIMAL)
+
+    for loan in loans:
+        _, _, outstanding = loan_totals(loan)
+        if outstanding <= ZERO_DECIMAL:
+            continue
+        name = client_names.get(loan.client_id, loan.counterparty_name) if loan.client_id else loan.counterparty_name
+        entry = balance_entry(loan.client_id, name)
+        if loan.loan_type == "issued":
+            entry["issued_loans"] += outstanding
+        else:
+            entry["borrowed_loans"] += outstanding
 
     result = []
     for entry in balances.values():
+        entry["receivables"] = entry["document_receivables"] + entry["issued_loans"]
+        entry["payables"] = entry["document_payables"] + entry["borrowed_loans"]
         entry["net_balance"] = entry["receivables"] - entry["payables"]
         result.append(entry)
 

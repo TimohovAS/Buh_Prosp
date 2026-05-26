@@ -13,6 +13,7 @@ from backend.models import (
     BankTransaction,
     BankTransactionIncomeAllocation,
     CashEntry,
+    CounterpartyLoanMovement,
     ContributionRates,
     Contract,
     EfakturaImportRecord,
@@ -28,7 +29,7 @@ from backend.models import (
 )
 
 
-BANK_MATCH_TYPES_WITH_TARGET = {"income", "expense", "obligation", "cash"}
+BANK_MATCH_TYPES_WITH_TARGET = {"income", "expense", "obligation", "cash", "loan_movement"}
 BANK_MATCH_TYPES_WITHOUT_TARGET = {"income_allocation", "owner_funds"}
 BANK_MATCH_TYPES = BANK_MATCH_TYPES_WITH_TARGET | BANK_MATCH_TYPES_WITHOUT_TARGET
 SETTLEMENT_LINK_BY_TYPE = {
@@ -141,6 +142,7 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
     settlements = await _rows_by_id(db, IncomingInvoiceSettlement)
     receipts = await _rows_by_id(db, PurchaseReceipt)
     allocations = await _rows_by_id(db, BankTransactionIncomeAllocation)
+    loan_movements = await _rows_by_id(db, CounterpartyLoanMovement)
     contracts = await _rows_by_id(db, Contract)
     projects = await _rows_by_id(db, Project)
 
@@ -177,8 +179,10 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         expenses=expenses,
         obligations=obligations,
         cash_entries=cash_entries,
+        loan_movements=loan_movements,
         allocation_ids_by_tx=allocation_ids_by_tx,
     )
+    _check_loan_movements(report, movements=loan_movements, bank_transactions=bank_transactions)
     _check_income_allocations(report, allocations=allocations, bank_transactions=bank_transactions, incomes=incomes)
     _check_incomes(report, incomes=incomes, contracts=contracts, projects=projects)
     _check_monthly_obligations(report, obligations=obligations, expenses=expenses)
@@ -226,6 +230,7 @@ def _check_bank_transactions(
     expenses: dict[int, Expense],
     obligations: dict[int, MonthlyObligation],
     cash_entries: dict[int, CashEntry],
+    loan_movements: dict[int, CounterpartyLoanMovement],
     allocation_ids_by_tx: dict[int, list[int]],
 ) -> None:
     target_maps = {
@@ -233,6 +238,7 @@ def _check_bank_transactions(
         "expense": expenses,
         "obligation": obligations,
         "cash": cash_entries,
+        "loan_movement": loan_movements,
     }
     for tx in bank_transactions.values():
         tx_id = int(tx.id)
@@ -270,6 +276,17 @@ def _check_bank_transactions(
                         "Bank transaction points to a missing matched target.",
                         {"matched_type": tx.matched_type, "matched_id": tx.matched_id},
                     )
+                elif tx.matched_type == "loan_movement":
+                    movement = loan_movements[int(tx.matched_id)]
+                    if int(movement.bank_transaction_id or 0) != tx_id:
+                        report.add(
+                            "error",
+                            "bank_loan_movement_link_mismatch",
+                            "bank_transaction",
+                            tx_id,
+                            "Bank transaction and loan movement links do not match.",
+                            {"movement_id": movement.id, "movement_bank_transaction_id": movement.bank_transaction_id},
+                        )
             elif tx.matched_type == "income_allocation":
                 if tx.matched_id is not None:
                     report.add(
@@ -343,6 +360,38 @@ def _check_income_allocations(
                 allocation_id,
                 "Income allocation amount should be positive.",
                 {"amount": _money(allocation.amount)},
+            )
+
+
+def _check_loan_movements(
+    report: DiagnosticsReport,
+    *,
+    movements: dict[int, CounterpartyLoanMovement],
+    bank_transactions: dict[int, BankTransaction],
+) -> None:
+    for movement in movements.values():
+        movement_id = int(movement.id)
+        if movement.bank_transaction_id is None:
+            continue
+        transaction = bank_transactions.get(int(movement.bank_transaction_id))
+        if not transaction:
+            report.add(
+                "error",
+                "loan_movement_missing_bank_transaction",
+                "counterparty_loan_movement",
+                movement_id,
+                "Loan movement points to a missing bank transaction.",
+                {"bank_transaction_id": movement.bank_transaction_id},
+            )
+            continue
+        if transaction.matched_type != "loan_movement" or int(transaction.matched_id or 0) != movement_id:
+            report.add(
+                "error",
+                "loan_movement_bank_link_mismatch",
+                "counterparty_loan_movement",
+                movement_id,
+                "Loan movement is not linked back from its bank transaction.",
+                {"bank_transaction_id": movement.bank_transaction_id, "matched_type": transaction.matched_type, "matched_id": transaction.matched_id},
             )
 
 

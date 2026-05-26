@@ -313,7 +313,7 @@ class BankTransaction(Base):
     purpose = Column(Text)
     bank_reference = Column(String(100), unique=True, nullable=True)
     status = Column(String(20), default="unmatched", index=True)  # unmatched | matched | ignored
-    matched_type = Column(String(50))  # income | expense | obligation | cash
+    matched_type = Column(String(50))  # income | expense | obligation | cash | owner_funds | loan_movement
     matched_id = Column(Integer)
     project_id = Column(Integer, ForeignKey("projects.id"))
     raw_json = Column(Text)
@@ -325,6 +325,57 @@ class BankTransaction(Base):
         back_populates="bank_transaction",
         cascade="all, delete-orphan",
     )
+    loan_movement = relationship(
+        "CounterpartyLoanMovement",
+        back_populates="bank_transaction",
+        uselist=False,
+    )
+
+
+class CounterpartyLoan(Base):
+    """Principal-only loan received from or issued to a counterparty."""
+    __tablename__ = "counterparty_loans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    loan_type = Column(String(20), nullable=False, index=True)  # borrowed | issued
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True, index=True)
+    counterparty_name = Column(String(200), nullable=False)
+    agreement_number = Column(String(100))
+    agreement_date = Column(Date)
+    start_date = Column(Date, nullable=False, index=True)
+    due_date = Column(Date)
+    currency = Column(String(5), nullable=False, default="RSD")
+    note = Column(Text)
+    status = Column(String(20), nullable=False, default="open", index=True)  # open | repaid | cancelled
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    client = relationship("Client")
+    movements = relationship(
+        "CounterpartyLoanMovement",
+        back_populates="loan",
+        cascade="all, delete-orphan",
+        order_by="CounterpartyLoanMovement.date.asc(), CounterpartyLoanMovement.id.asc()",
+    )
+
+
+class CounterpartyLoanMovement(Base):
+    """A principal drawdown or repayment tied to one bank transaction."""
+    __tablename__ = "counterparty_loan_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    loan_id = Column(Integer, ForeignKey("counterparty_loans.id", ondelete="CASCADE"), nullable=False, index=True)
+    movement_type = Column(String(20), nullable=False, index=True)  # disbursement | repayment
+    date = Column(Date, nullable=False, index=True)
+    amount = Column(Numeric(14, 2), nullable=False)
+    currency = Column(String(5), nullable=False, default="RSD")
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=True, unique=True, index=True)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    loan = relationship("CounterpartyLoan", back_populates="movements")
+    bank_transaction = relationship("BankTransaction", back_populates="loan_movement", foreign_keys=[bank_transaction_id])
 
 
 class BankImportFile(Base):

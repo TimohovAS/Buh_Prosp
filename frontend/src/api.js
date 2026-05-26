@@ -9,6 +9,7 @@ function shouldBroadcastPendingLinksUpdate(endpoint, options = {}) {
   if (method === 'GET') return false;
   return (
     endpoint.startsWith('/bank-transactions') ||
+    endpoint.startsWith('/counterparty-loans') ||
     endpoint.startsWith('/incoming-invoices') ||
     endpoint.startsWith('/bank-import') ||
     endpoint.startsWith('/efaktura')
@@ -409,6 +410,17 @@ export const api = {
     suggest: (id) => request(`/bank-transactions/${id}/suggest`),
     bulkAssignProject: (payload) => request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),
   },
+  counterpartyLoans: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/counterparty-loans${q ? `?${q}` : ''}`)
+    },
+    get: (id) => request(`/counterparty-loans/${id}`),
+    createFromBank: (txId, payload) => request(`/counterparty-loans/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
+    addMovementFromBank: (loanId, txId, payload) => request(`/counterparty-loans/${loanId}/movements/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/counterparty-loans/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    cancel: (id) => request(`/counterparty-loans/${id}/cancel`, { method: 'POST' }),
+  },
   cash: {
     summary: (params = {}) => {
       const q = new URLSearchParams(params).toString()
@@ -491,4 +503,3 @@ export const api = {
     ),
   },
 };
-
