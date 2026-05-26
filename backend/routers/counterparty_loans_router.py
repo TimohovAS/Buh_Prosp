@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/counterparty-loans", tags=["counterparty-loans"])
 def _serialize(loan: CounterpartyLoan) -> CounterpartyLoanResponse:
     disbursed, repaid, outstanding = loan_totals(loan)
     movements = []
-    for movement in sorted(loan.movements or [], key=lambda item: (item.date, item.id)):
+    for movement in loan.movements or []:
         bank_transaction = movement.bank_transaction
         movements.append({
             "id": movement.id,
@@ -120,6 +121,9 @@ async def create_from_bank(
         return _serialize(await get_loan(db, loan.id))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Bank transaction is already linked to a loan movement")
 
 
 @router.get("/{loan_id}", response_model=CounterpartyLoanResponse)
@@ -155,6 +159,9 @@ async def add_movement_from_bank(
         return _serialize(await get_loan(db, loan.id))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Bank transaction is already linked to a loan movement")
 
 
 @router.patch("/{loan_id}", response_model=CounterpartyLoanResponse)
@@ -169,17 +176,27 @@ async def update_loan(
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     payload = data.model_dump(exclude_unset=True)
-    if payload.get("client_id") is not None:
+    new_client_id = payload.get("client_id", loan.client_id)
+    new_counterparty_name = payload.get("counterparty_name", loan.counterparty_name)
+    if "client_id" in payload and payload["client_id"] is not None:
         client_result = await db.execute(select(Client).where(Client.id == payload["client_id"]))
         client = client_result.scalar_one_or_none()
         if not client:
             raise HTTPException(400, "Counterparty not found")
-        if not payload.get("counterparty_name"):
-            payload["counterparty_name"] = client.name
+        if "counterparty_name" not in payload and payload["client_id"] != loan.client_id:
+            new_counterparty_name = client.name
+            payload["counterparty_name"] = new_counterparty_name
     if "counterparty_name" in payload and not (payload["counterparty_name"] or "").strip():
         raise HTTPException(400, "Counterparty name is required")
+    if "counterparty_name" in payload:
+        new_counterparty_name = payload["counterparty_name"].strip()
+        payload["counterparty_name"] = new_counterparty_name
+    if loan.movements and (
+        new_client_id != loan.client_id or new_counterparty_name != loan.counterparty_name
+    ):
+        raise HTTPException(400, "Counterparty cannot be changed after loan movements exist")
     for field, value in payload.items():
-        setattr(loan, field, value.strip() if field == "counterparty_name" and value else value)
+        setattr(loan, field, value)
     await db.commit()
     return _serialize(await get_loan(db, loan.id))
 
@@ -194,6 +211,8 @@ async def cancel_loan(
         loan = await get_loan(db, loan_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+    if loan.status == "cancelled":
+        raise HTTPException(400, "Loan is already cancelled")
     if loan.movements:
         raise HTTPException(400, "Loan with movements cannot be cancelled")
     loan.status = "cancelled"

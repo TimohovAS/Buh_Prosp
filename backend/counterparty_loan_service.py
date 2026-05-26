@@ -88,13 +88,15 @@ async def _resolve_counterparty_name(
 
 async def reconcile_loan_status(db: AsyncSession, loan: CounterpartyLoan, *, exclude_movement_id: int | None = None) -> None:
     _, _, outstanding = loan_totals(loan, exclude_movement_id=exclude_movement_id)
+    # Final invariant: no mutation path may leave a loan over-repaid.
     if outstanding < ZERO_DECIMAL:
         raise ValueError("Repayment cannot exceed outstanding loan amount")
     if loan.status != "cancelled":
-        loan.status = "repaid" if outstanding == ZERO_DECIMAL and any(
-            int(item.id) != int(exclude_movement_id) if exclude_movement_id is not None else True
-            for item in (loan.movements or [])
-        ) else "open"
+        remaining_movements = [
+            movement for movement in (loan.movements or [])
+            if exclude_movement_id is None or int(movement.id) != int(exclude_movement_id)
+        ]
+        loan.status = "repaid" if outstanding == ZERO_DECIMAL and remaining_movements else "open"
     await db.flush()
 
 
@@ -107,8 +109,8 @@ async def _add_movement(
     note: str | None,
     created_by: int | None,
 ) -> CounterpartyLoanMovement:
-    if loan.status == "cancelled":
-        raise ValueError("Cancelled loan cannot receive movements")
+    if loan.status != "open":
+        raise ValueError("Only open loans can receive movements")
     expected_direction = _expected_direction(loan.loan_type, movement_type)
     if transaction.direction != expected_direction:
         raise ValueError("Bank transaction direction does not match this loan movement")

@@ -64,7 +64,7 @@ def run_migration(conn: sqlite3.Connection) -> None:
             date DATE NOT NULL,
             amount NUMERIC(14, 2) NOT NULL,
             currency VARCHAR(5) NOT NULL DEFAULT 'RSD',
-            bank_transaction_id INTEGER UNIQUE,
+            bank_transaction_id INTEGER,
             note TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             created_by INTEGER,
@@ -84,7 +84,7 @@ def run_migration(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS ix_counterparty_loan_movements_loan_id ON counterparty_loan_movements(loan_id)",
         "CREATE INDEX IF NOT EXISTS ix_counterparty_loan_movements_movement_type ON counterparty_loan_movements(movement_type)",
         "CREATE INDEX IF NOT EXISTS ix_counterparty_loan_movements_date ON counterparty_loan_movements(date)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS ix_counterparty_loan_movements_bank_transaction_id ON counterparty_loan_movements(bank_transaction_id) WHERE bank_transaction_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_counterparty_loan_movements_bank_transaction_id_not_null ON counterparty_loan_movements(bank_transaction_id) WHERE bank_transaction_id IS NOT NULL",
     ):
         cursor.execute(statement)
 

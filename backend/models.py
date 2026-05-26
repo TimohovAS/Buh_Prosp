@@ -2,7 +2,7 @@
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, Float, Numeric, Boolean, Date, DateTime, ForeignKey, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Float, Numeric, Boolean, Date, DateTime, ForeignKey, Enum, Index, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import enum
@@ -362,6 +362,15 @@ class CounterpartyLoan(Base):
 class CounterpartyLoanMovement(Base):
     """A principal drawdown or repayment tied to one bank transaction."""
     __tablename__ = "counterparty_loan_movements"
+    __table_args__ = (
+        Index(
+            "ux_counterparty_loan_movements_bank_transaction_id_not_null",
+            "bank_transaction_id",
+            unique=True,
+            sqlite_where=text("bank_transaction_id IS NOT NULL"),
+            postgresql_where=text("bank_transaction_id IS NOT NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     loan_id = Column(Integer, ForeignKey("counterparty_loans.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -369,7 +378,7 @@ class CounterpartyLoanMovement(Base):
     date = Column(Date, nullable=False, index=True)
     amount = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), nullable=False, default="RSD")
-    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=True, unique=True, index=True)
+    bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=True)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)

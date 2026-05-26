@@ -12,6 +12,7 @@ from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction, BankTransactionIncomeAllocation
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+MATCH_TYPE_LOAN_MOVEMENT = "loan_movement"
 
 
 def _visible_expense_condition():
@@ -454,8 +455,9 @@ async def get_cashflow(
     group_by: Literal["day", "month", "year"],
 ) -> dict:
     """
-    Cash flow: opening + inflow - outflow = closing (cumulative).
-    inflow = revenue_cash, outflow = expense_cash.
+    Cash flow: opening + operating inflow - operating outflow
+    + financing inflow - financing outflow = closing (cumulative).
+    Loan principal is shown as financing and never as revenue or expense.
     opening for the first point is the balance at the selected range start.
     """
     r = await db.execute(select(Enterprise).limit(1))
@@ -492,19 +494,56 @@ async def get_cashflow(
     summary = await get_finance_summary(db, date_from, date_to, group_by, "cash", None)
     series = summary.get("series", [])
 
+    if group_by == "day":
+        grp_bt = func.strftime("%Y-%m-%d", bt_date)
+    elif group_by == "month":
+        grp_bt = func.strftime("%Y-%m", bt_date)
+    else:
+        grp_bt = func.strftime("%Y", bt_date)
+
+    financing_by_period = {
+        str(item["period"]): {
+            "financing_inflow": ZERO_DECIMAL,
+            "financing_outflow": ZERO_DECIMAL,
+        }
+        for item in series
+    }
+    for direction, key in (("in", "financing_inflow"), ("out", "financing_outflow")):
+        amount_expr = bt_amount if direction == "in" else func.abs(bt_amount)
+        financing_result = await db.execute(
+            select(grp_bt.label("period"), func.coalesce(func.sum(amount_expr), 0).label("amount"))
+            .where(
+                bt_direction == direction,
+                bt_status != "ignored",
+                BankTransaction.matched_type == MATCH_TYPE_LOAN_MOVEMENT,
+                bt_date >= date_from,
+                bt_date <= date_to,
+            )
+            .group_by(grp_bt)
+        )
+        for row in financing_result.fetchall():
+            period_values = financing_by_period.get(str(row.period))
+            if period_values is not None:
+                period_values[key] = to_decimal(row.amount or ZERO_DECIMAL)
+
     result_series = []
     prev_closing = opening_balance_at_range_start
     for s in series:
         inflow = to_decimal(s.get("revenue_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
         outflow = to_decimal(s.get("expense_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
+        financing = financing_by_period.get(str(s["period"]), {})
+        financing_inflow = to_decimal(financing.get("financing_inflow", ZERO_DECIMAL))
+        financing_outflow = to_decimal(financing.get("financing_outflow", ZERO_DECIMAL))
         opening = prev_closing
-        closing = opening + inflow - outflow
+        closing = opening + inflow - outflow + financing_inflow - financing_outflow
         prev_closing = closing
         result_series.append({
             "period": s["period"],
             "opening": opening,
             "inflow": inflow,
             "outflow": outflow,
+            "financing_inflow": financing_inflow,
+            "financing_outflow": financing_outflow,
             "closing": closing,
         })
 

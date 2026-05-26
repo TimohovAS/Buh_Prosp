@@ -99,13 +99,15 @@ export default function CashFlow() {
                     <th>{tr('cashflowOpening')}</th>
                     <th>{tr('cashflowInflow')}</th>
                     <th>{tr('cashflowOutflow')}</th>
+                    <th>{tr('cashflowFinancingInflow')}</th>
+                    <th>{tr('cashflowFinancingOutflow')}</th>
                     <th>{tr('cashflowClosing')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {series.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                         {tr('noData')}
                       </td>
                     </tr>
@@ -116,6 +118,8 @@ export default function CashFlow() {
                         <td>{fmt(s.opening)} RSD</td>
                         <td style={{ color: 'var(--color-success)' }}>{fmt(s.inflow)} RSD</td>
                         <td style={{ color: 'var(--color-danger)' }}>{fmt(s.outflow)} RSD</td>
+                        <td style={{ color: 'var(--color-accent)' }}>{fmt(s.financing_inflow || 0)} RSD</td>
+                        <td style={{ color: 'var(--color-accent)' }}>{fmt(s.financing_outflow || 0)} RSD</td>
                         <td style={{ fontWeight: 600 }}>{fmt(s.closing)} RSD</td>
                       </tr>
                     ))
