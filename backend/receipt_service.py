@@ -37,7 +37,7 @@ from backend.models import (
     PurchaseReceiptItem,
     TransactionCategory,
 )
-from backend.state_machine import initialize_expense_status
+from backend.state_machine import initialize_expense_status, mark_expense_paid, reopen_expense_for_unmatch
 
 RECEIPT_STATUS_NEW = "new"
 RECEIPT_STATUS_LINKED = "linked_expense"
@@ -157,7 +157,38 @@ def _parse_receipt_datetime(value: str | None) -> datetime | None:
     return None
 
 
+def _detect_payment_kind(payment_type: str | None) -> str:
+    normalized = (payment_type or "").strip().lower()
+    if not normalized:
+        return PAYMENT_KIND_UNKNOWN
+    if any(token in normalized for token in ("gotovina", "cash", "готов")):
+        return PAYMENT_KIND_CASH
+    if any(token in normalized for token in ("kartic", "card", "bezgot", "prenos")):
+        return PAYMENT_KIND_CASHLESS
+    return PAYMENT_KIND_UNKNOWN
+
+
+def _extract_journal_payment_type(page_html: str) -> str | None:
+    text = _strip_tags(page_html)
+    if not text:
+        return None
+    normalized = text.lower()
+    payment_patterns = (
+        ("Готовина", (r"\bgotovina\b", r"готовина")),
+        ("Картица", (r"\bkartic", r"\bcard\b", r"платн[а-я\s]*картиц")),
+        ("Безготовински", (r"\bbezgot", r"безготов", r"\bprenos\b")),
+    )
+    for label, patterns in payment_patterns:
+        for pattern in patterns:
+            if re.search(pattern, normalized, re.IGNORECASE):
+                return label
+    return None
+
+
 def _extract_payment_type(page_html: str) -> str | None:
+    journal_payment = _extract_journal_payment_type(page_html)
+    if journal_payment:
+        return journal_payment
     for element_id in ("transactionTypeLabel", "transactionTypeId", "paymentTypeLabel"):
         value = _extract_label_value(page_html, element_id)
         if value:
@@ -165,15 +196,13 @@ def _extract_payment_type(page_html: str) -> str | None:
     return _extract_view_model_value(page_html, "TransactionType")
 
 
-def _detect_payment_kind(payment_type: str | None) -> str:
-    normalized = (payment_type or "").strip().lower()
-    if not normalized:
-        return PAYMENT_KIND_UNKNOWN
-    if any(token in normalized for token in ("gotovina", "cash", "готов")):
-        return PAYMENT_KIND_CASH
-    if any(token in normalized for token in ("kartic", "card", "bezgot", "račun", "racun", "prenos")):
-        return PAYMENT_KIND_CASHLESS
-    return PAYMENT_KIND_UNKNOWN
+def _refresh_receipt_payment_metadata(receipt: PurchaseReceipt) -> None:
+    payment_type = _extract_payment_type(receipt.raw_html or "")
+    payment_kind = _detect_payment_kind(payment_type)
+    if payment_kind == PAYMENT_KIND_UNKNOWN:
+        return
+    receipt.payment_type = payment_type
+    receipt.payment_kind = payment_kind
 
 
 def _load_json_from_response(opener, request: Request) -> dict:
@@ -237,6 +266,7 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
             }
         )
 
+    payment_type = _extract_payment_type(page_html)
     return ImportedReceiptPayload(
         verification_url=verification_url,
         qr_hash=_hash_value(verification_url),
@@ -247,8 +277,8 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
         seller_address=_extract_label_value(page_html, "addressLabel"),
         seller_city=_extract_label_value(page_html, "cityLabel"),
         receipt_datetime=_parse_receipt_datetime(_extract_label_value(page_html, "sdcDateTimeLabel")),
-        payment_type=_extract_payment_type(page_html),
-        payment_kind=_detect_payment_kind(_extract_payment_type(page_html)),
+        payment_type=payment_type,
+        payment_kind=_detect_payment_kind(payment_type),
         total_amount=_parse_decimal(_extract_label_value(page_html, "totalAmountLabel")),
         currency="RSD",
         is_valid=True,
@@ -332,6 +362,7 @@ async def get_receipt_or_error(db: AsyncSession, receipt_id: int) -> PurchaseRec
     receipt = await _get_receipt_by_id(db, receipt_id)
     if not receipt:
         raise ReceiptImportError("Receipt not found")
+    _refresh_receipt_payment_metadata(receipt)
     await _sync_receipt_status_for_expense(db, receipt)
     return receipt
 
@@ -491,6 +522,7 @@ async def import_receipt_from_qr(
     )
     existing = existing_result.scalar_one_or_none()
     if existing:
+        _refresh_receipt_payment_metadata(existing)
         if not existing.expense_id:
             existing = await create_expense_from_receipt(db, existing.id, current_user_id=current_user_id)
         return existing, False
@@ -720,6 +752,102 @@ async def unlink_receipt_expense(
     return receipt
 
 
+async def mark_receipt_paid_cash(
+    db: AsyncSession,
+    receipt_id: int,
+    *,
+    current_user_id: int | None = None,
+) -> PurchaseReceipt:
+    receipt = await get_receipt_or_error(db, receipt_id)
+    if receipt.bank_transaction_id:
+        raise ReceiptImportError("Unmatch the bank transaction first")
+
+    if not receipt.expense_id:
+        return await create_expense_from_receipt(
+            db,
+            receipt_id,
+            payment_mode="cash",
+            current_user_id=current_user_id,
+        )
+
+    expense_result = await db.execute(select(Expense).where(Expense.id == receipt.expense_id))
+    expense = expense_result.scalar_one_or_none()
+    if not expense:
+        raise ReceiptImportError("Linked expense not found")
+
+    bank_tx = await _get_any_bank_transaction_for_expense(db, expense.id)
+    if bank_tx:
+        raise ReceiptImportError("Unmatch the bank transaction first")
+
+    if expense.source == "cash":
+        await _sync_receipt_status_for_expense(db, receipt, expense)
+        await db.flush()
+        return receipt
+    if expense.source != "receipt":
+        raise ReceiptImportError("Only receipt expenses can be converted to cash payment")
+    if expense.status != "planned":
+        raise ReceiptImportError("Only expenses waiting for bank payment can be converted to cash")
+
+    paid_date = coerce_date(receipt.receipt_datetime) or expense.date or date.today()
+    expense.source = "cash"
+    mark_expense_paid(expense, paid_date=paid_date, allow_same=True)
+
+    cash_entry = CashEntry(
+        date=paid_date,
+        direction="out",
+        amount=to_decimal(expense.amount or ZERO_DECIMAL),
+        currency=expense.currency or "RSD",
+        description=(expense.description or _build_receipt_expense_description(receipt))[:500],
+        entry_type="expense",
+        note=expense.note,
+        expense_id=expense.id,
+        created_by=current_user_id,
+    )
+    db.add(cash_entry)
+    await db.flush()
+
+    receipt.cash_entry_id = cash_entry.id
+    receipt.bank_transaction_id = None
+    await _sync_receipt_status_for_expense(db, receipt, expense)
+    await db.flush()
+    return receipt
+
+
+async def mark_receipt_waiting_bank(
+    db: AsyncSession,
+    receipt_id: int,
+) -> PurchaseReceipt:
+    receipt = await get_receipt_or_error(db, receipt_id)
+    if receipt.bank_transaction_id:
+        raise ReceiptImportError("Unmatch the bank transaction first")
+    if not receipt.expense_id:
+        raise ReceiptImportError("Receipt is not linked to an expense")
+
+    expense_result = await db.execute(select(Expense).where(Expense.id == receipt.expense_id))
+    expense = expense_result.scalar_one_or_none()
+    if not expense:
+        raise ReceiptImportError("Linked expense not found")
+    if expense.source != "cash":
+        raise ReceiptImportError("Receipt is not marked as a cash expense")
+
+    cash_entry = await _get_cash_entry_by_id(db, receipt.cash_entry_id) if receipt.cash_entry_id else None
+    if cash_entry is None:
+        cash_entry = await db.scalar(select(CashEntry).where(CashEntry.expense_id == expense.id))
+    if cash_entry is None:
+        raise ReceiptImportError("Cash entry not found")
+    if cash_entry.bank_transaction_id:
+        raise ReceiptImportError("Cash withdrawal entries must be managed from the cash register")
+
+    await db.delete(cash_entry)
+    expense.source = "receipt"
+    reopen_expense_for_unmatch(expense)
+    receipt.cash_entry_id = None
+    receipt.bank_transaction_id = None
+    await _sync_receipt_status_for_expense(db, receipt, expense)
+    await db.flush()
+    return receipt
+
+
 async def delete_receipt(
     db: AsyncSession,
     receipt_id: int,
@@ -898,6 +1026,7 @@ async def list_receipts(
     result = await db.execute(query)
     receipts = list(result.scalars().all())
     for receipt in receipts:
+        _refresh_receipt_payment_metadata(receipt)
         await _sync_receipt_status_for_expense(db, receipt)
     return receipts
 

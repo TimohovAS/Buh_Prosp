@@ -105,6 +105,7 @@ export default function Receipts() {
   const [periodExpensesLoading, setPeriodExpensesLoading] = useState(false)
   const [createExpenseSaving, setCreateExpenseSaving] = useState(false)
   const [unlinkingExpense, setUnlinkingExpense] = useState(false)
+  const [updatingCashPayment, setUpdatingCashPayment] = useState(false)
   const [deletingReceipt, setDeletingReceipt] = useState(false)
   const [createForm, setCreateForm] = useState({
     project_id: '',
@@ -615,6 +616,35 @@ export default function Receipts() {
     }
   }
 
+  const handleMarkCashPaid = async () => {
+    if (!detailReceipt) return
+    setUpdatingCashPayment(true)
+    try {
+      const receipt = await api.receipts.markCashPaid(detailReceipt.id)
+      hydrateDetailState(receipt)
+      await loadReceipts()
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
+    } finally {
+      setUpdatingCashPayment(false)
+    }
+  }
+
+  const handleMarkWaitingBank = async () => {
+    if (!detailReceipt) return
+    if (typeof window !== 'undefined' && !window.confirm(tr('receiptMarkWaitingBankConfirm'))) return
+    setUpdatingCashPayment(true)
+    try {
+      const receipt = await api.receipts.markWaitingBank(detailReceipt.id)
+      hydrateDetailState(receipt)
+      await loadReceipts()
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
+    } finally {
+      setUpdatingCashPayment(false)
+    }
+  }
+
   const handleDeleteReceipt = async () => {
     if (!detailReceipt || deletingReceipt) return
     if (typeof window !== 'undefined' && !window.confirm(tr('receiptDeleteConfirm'))) return
@@ -640,6 +670,21 @@ export default function Receipts() {
     if (typeof window === 'undefined') return
     window.open(detailReceipt.verification_url, '_blank', 'noopener,noreferrer')
   }
+
+  const canMarkCashPaid = detailReceipt && (
+    !detailReceipt.expense_id ||
+    (
+      detailReceipt.status === 'waiting_bank' &&
+      detailReceipt.expense_source === 'receipt' &&
+      detailReceipt.expense_status === 'planned' &&
+      !detailReceipt.bank_transaction_id
+    )
+  )
+  const canMarkWaitingBank = detailReceipt &&
+    detailReceipt.status === 'cash_expense' &&
+    detailReceipt.expense_source === 'cash' &&
+    !!detailReceipt.cash_entry_id &&
+    !detailReceipt.bank_transaction_id
 
   return (
     <div className="page">
@@ -859,6 +904,16 @@ export default function Receipts() {
                     {unlinkingExpense ? tr('loading') : tr('receiptUnlinkExpense')}
                   </button>
                 )}
+                {canMarkCashPaid ? (
+                  <button type="button" className="btn btn-secondary" onClick={handleMarkCashPaid} disabled={updatingCashPayment}>
+                    {updatingCashPayment ? tr('loading') : tr('receiptMarkCashPaid')}
+                  </button>
+                ) : null}
+                {canMarkWaitingBank ? (
+                  <button type="button" className="btn btn-secondary" onClick={handleMarkWaitingBank} disabled={updatingCashPayment}>
+                    {updatingCashPayment ? tr('loading') : tr('receiptMarkWaitingBank')}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -868,7 +923,7 @@ export default function Receipts() {
                 >
                   {tr('receiptOpenBrowser')}
                 </button>
-                <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving}>
+                <button type="button" className="btn btn-danger" onClick={handleDeleteReceipt} disabled={deletingReceipt || unlinkingExpense || createExpenseSaving || updatingCashPayment}>
                   {deletingReceipt ? tr('loading') : tr('receiptDelete')}
                 </button>
               </div>

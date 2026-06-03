@@ -22,6 +22,8 @@ from backend.receipt_service import (
     import_receipt_from_qr,
     link_receipt_to_expense,
     list_receipts,
+    mark_receipt_paid_cash,
+    mark_receipt_waiting_bank,
     unlink_receipt_expense,
 )
 from backend.schemas import (
@@ -185,6 +187,36 @@ async def unlink_purchase_receipt(
 ):
     try:
         receipt = await unlink_receipt_expense(db, receipt_id)
+        await db.commit()
+        receipt = await get_receipt_or_error(db, receipt.id)
+        return _serialize_receipt_detail(receipt)
+    except ReceiptImportError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/{receipt_id}/mark-cash-paid", response_model=PurchaseReceiptDetailResponse)
+async def mark_purchase_receipt_cash_paid(
+    receipt_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    try:
+        receipt = await mark_receipt_paid_cash(db, receipt_id, current_user_id=current_user.id)
+        await db.commit()
+        receipt = await get_receipt_or_error(db, receipt.id)
+        return _serialize_receipt_detail(receipt)
+    except ReceiptImportError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/{receipt_id}/mark-waiting-bank", response_model=PurchaseReceiptDetailResponse)
+async def mark_purchase_receipt_waiting_bank(
+    receipt_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    try:
+        receipt = await mark_receipt_waiting_bank(db, receipt_id)
         await db.commit()
         receipt = await get_receipt_or_error(db, receipt.id)
         return _serialize_receipt_detail(receipt)
