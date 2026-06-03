@@ -1683,3 +1683,18 @@ class CounterpartyLoanResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OwnerFundsMovementResponse(BaseModel):
+    id: int
+    date: DateType
+    direction: str
+    amount: Decimal
+    currency: str = "RSD"
+    counterparty_name: Optional[str] = None
+    purpose: Optional[str] = None
+    bank_reference: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

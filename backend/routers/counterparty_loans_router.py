@@ -14,15 +14,19 @@ from backend.counterparty_loan_service import (
     loan_totals,
 )
 from backend.database import get_db
-from backend.models import Client, CounterpartyLoan, CounterpartyLoanMovement, User
+from backend.decimal_utils import money_abs
+from backend.models import BankTransaction, Client, CounterpartyLoan, CounterpartyLoanMovement, User
 from backend.schemas import (
     CounterpartyLoanCreateFromBank,
     CounterpartyLoanMovementFromBank,
     CounterpartyLoanResponse,
     CounterpartyLoanUpdate,
+    OwnerFundsMovementResponse,
 )
 
 router = APIRouter(prefix="/counterparty-loans", tags=["counterparty-loans"])
+
+MATCH_TYPE_OWNER_FUNDS = "owner_funds"
 
 
 def _serialize(loan: CounterpartyLoan) -> CounterpartyLoanResponse:
@@ -124,6 +128,51 @@ async def create_from_bank(
     except IntegrityError:
         await db.rollback()
         raise HTTPException(409, "Bank transaction is already linked to a loan movement")
+
+
+@router.get("/owner-funds", response_model=list[OwnerFundsMovementResponse])
+async def list_owner_funds_movements(
+    direction: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    query = (
+        select(BankTransaction)
+        .where(
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == MATCH_TYPE_OWNER_FUNDS,
+        )
+        .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
+        .limit(limit)
+    )
+    if direction:
+        query = query.where(BankTransaction.direction == direction)
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                BankTransaction.counterparty_name.ilike(term),
+                BankTransaction.purpose.ilike(term),
+                BankTransaction.bank_reference.ilike(term),
+            )
+        )
+    result = await db.execute(query)
+    return [
+        OwnerFundsMovementResponse(
+            id=transaction.id,
+            date=transaction.date,
+            direction=transaction.direction,
+            amount=money_abs(transaction.amount),
+            currency=transaction.currency or "RSD",
+            counterparty_name=transaction.counterparty_name,
+            purpose=transaction.purpose,
+            bank_reference=transaction.bank_reference,
+            created_at=transaction.created_at,
+        )
+        for transaction in result.scalars().all()
+    ]
 
 
 @router.get("/{loan_id}", response_model=CounterpartyLoanResponse)

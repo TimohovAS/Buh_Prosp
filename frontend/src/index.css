@@ -2284,11 +2284,42 @@ tr:hover td {
   gap: 0.75rem;
 }
 
+.loan-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.85rem;
+}
+
+.loan-section-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.loan-detail-summary .loan-detail-note {
+  grid-column: 1 / -1;
+}
+
+.loan-note-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.loan-movement-note {
+  margin-top: 0.3rem;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .loan-list-table th {
   cursor: pointer;
 }
 
-.loan-movement-table {
+.loan-movement-table,
+.loan-owner-funds-table {
   table-layout: fixed;
 }
 

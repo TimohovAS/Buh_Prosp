@@ -417,6 +417,10 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/counterparty-loans${q ? `?${q}` : ''}`)
     },
+    ownerFunds: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/counterparty-loans/owner-funds${q ? `?${q}` : ''}`)
+    },
     get: (id) => request(`/counterparty-loans/${id}`),
     createFromBank: (txId, payload) => request(`/counterparty-loans/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
     addMovementFromBank: (loanId, txId, payload) => request(`/counterparty-loans/${loanId}/movements/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),

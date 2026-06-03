@@ -1492,6 +1492,8 @@ Object.assign(t.sr, {
   loanRepaid: 'Враћено',
   loanOpen: 'Отворена',
   loanRepaidComplete: 'Враћена',
+  ownerFundsIn: 'Уложено',
+  ownerFundsOut: 'Враћено',
 })
 
 Object.assign(t.ru, {
@@ -1555,6 +1557,8 @@ Object.assign(t.ru, {
   loanRepaid: 'Возвращено',
   loanOpen: 'Открыт',
   loanRepaidComplete: 'Погашен',
+  ownerFundsIn: 'Внесено',
+  ownerFundsOut: 'Возвращено',
 })
 
 Object.assign(t.sr, {

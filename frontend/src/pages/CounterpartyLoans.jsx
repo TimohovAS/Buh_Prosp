@@ -16,7 +16,12 @@ function LoanStatus({ status }) {
 }
 
 function typeLabel(type) {
+  if (type === 'owner_funds') return tr('bankTxOwnerFundsLabel')
   return type === 'borrowed' ? tr('loanBorrowed') : tr('loanIssued')
+}
+
+function ownerFundsLabel(movement) {
+  return movement.direction === 'in' ? tr('bankTxOwnerFundsInStatus') : tr('bankTxOwnerFundsOutStatus')
 }
 
 function movementLabel(loan, movement) {
@@ -30,6 +35,7 @@ export default function CounterpartyLoans() {
   const location = useLocation()
   const isActivePage = location.pathname === '/counterparty-loans'
   const [items, setItems] = useState([])
+  const [ownerFundsItems, setOwnerFundsItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -37,19 +43,33 @@ export default function CounterpartyLoans() {
   const [sortCol, setSortCol] = useState('start_date')
   const [sortAsc, setSortAsc] = useState(false)
   const [detail, setDetail] = useState(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [ownerFundsDetail, setOwnerFundsDetail] = useState(null)
+
+  const openLoanDetail = (loan) => {
+    setDetail(loan)
+    setNoteDraft(loan?.note || '')
+  }
 
   const load = async () => {
     setLoading(true)
     try {
+      const includeLoans = typeFilter !== 'owner_funds'
+      const includeOwnerFunds = typeFilter === '' || typeFilter === 'owner_funds'
       const params = {}
-      if (typeFilter) params.loan_type = typeFilter
+      if (typeFilter && includeLoans) params.loan_type = typeFilter
       if (statusFilter) params.status = statusFilter
-      const loans = await api.counterpartyLoans.list(params)
+      const [loans, ownerFunds] = await Promise.all([
+        includeLoans ? api.counterpartyLoans.list(params) : Promise.resolve([]),
+        includeOwnerFunds ? api.counterpartyLoans.ownerFunds({ limit: 500 }) : Promise.resolve([]),
+      ])
       setItems(loans)
+      setOwnerFundsItems(ownerFunds)
       const openId = new URLSearchParams(location.search).get('open')
-      if (openId) {
+      if (openId && includeLoans) {
         const selected = loans.find((loan) => String(loan.id) === openId) || await api.counterpartyLoans.get(openId)
-        setDetail(selected)
+        openLoanDetail(selected)
       }
     } finally {
       setLoading(false)
@@ -58,7 +78,10 @@ export default function CounterpartyLoans() {
 
   useEffect(() => {
     if (!isActivePage) return
-    load().catch(() => setItems([]))
+    load().catch(() => {
+      setItems([])
+      setOwnerFundsItems([])
+    })
   }, [isActivePage, typeFilter, statusFilter, location.search])
 
   const filtered = useMemo(() => {
@@ -76,11 +99,33 @@ export default function CounterpartyLoans() {
     })
   }, [items, search, sortAsc, sortCol])
 
+  const filteredOwnerFunds = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return ownerFundsItems
+    return ownerFundsItems.filter((movement) =>
+      (movement.counterparty_name || '').toLowerCase().includes(q) ||
+      (movement.purpose || '').toLowerCase().includes(q) ||
+      (movement.bank_reference || '').toLowerCase().includes(q))
+  }, [ownerFundsItems, search])
+
   const toggleSort = (column) => {
     if (column === sortCol) setSortAsc((current) => !current)
     else {
       setSortCol(column)
       setSortAsc(false)
+    }
+  }
+
+  const saveLoanNote = async () => {
+    if (!detail) return
+    setSavingNote(true)
+    try {
+      const updated = await api.counterpartyLoans.update(detail.id, { note: noteDraft })
+      setDetail(updated)
+      setNoteDraft(updated.note || '')
+      setItems((current) => current.map((loan) => (loan.id === updated.id ? updated : loan)))
+    } finally {
+      setSavingNote(false)
     }
   }
 
@@ -94,8 +139,9 @@ export default function CounterpartyLoans() {
               <option value="">{tr('filterAll')}</option>
               <option value="borrowed">{tr('loanBorrowed')}</option>
               <option value="issued">{tr('loanIssued')}</option>
+              <option value="owner_funds">{tr('bankTxOwnerFundsLabel')}</option>
             </select>
-            <select className="form-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ width: 145 }}>
+            <select className="form-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ width: 145 }} disabled={typeFilter === 'owner_funds'}>
               <option value="">{tr('filterAll')}</option>
               <option value="open">{tr('loanOpen')}</option>
               <option value="repaid">{tr('loanRepaidComplete')}</option>
@@ -105,6 +151,7 @@ export default function CounterpartyLoans() {
         )}
       />
       <div className="page-body">
+        {typeFilter !== 'owner_funds' ? (
         <div className="card">
           <div className="table-wrap">
             <table className="loan-list-table">
@@ -124,10 +171,10 @@ export default function CounterpartyLoans() {
                 {loading ? <tr><td colSpan={8}>{tr('loading')}</td></tr>
                   : filtered.length === 0 ? <tr><td colSpan={8}>{tr('noRecords')}</td></tr>
                     : filtered.map((loan) => (
-                      <tr key={loan.id} className="record-row" tabIndex={0} onClick={() => setDetail(loan)} onKeyDown={(event) => {
+                      <tr key={loan.id} className="record-row" tabIndex={0} onClick={() => openLoanDetail(loan)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
-                          setDetail(loan)
+                          openLoanDetail(loan)
                         }
                       }}>
                         <td>{fmtDate(loan.start_date)}</td>
@@ -144,6 +191,53 @@ export default function CounterpartyLoans() {
             </table>
           </div>
         </div>
+        ) : null}
+        {typeFilter === '' || typeFilter === 'owner_funds' ? (
+        <div className="card loan-owner-funds-card">
+          <div className="loan-section-header">
+            <h3>{tr('bankTxOwnerFundsLabel')}</h3>
+          </div>
+          <div className="table-wrap">
+            <table className="loan-owner-funds-table">
+              <thead>
+                <tr>
+                  <th>{tr('date')}</th>
+                  <th>{tr('counterpartyName')}</th>
+                  <th>{tr('type')}</th>
+                  <th>{tr('bankTxReference')}</th>
+                  <th>{tr('description')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? <tr><td colSpan={7}>{tr('loading')}</td></tr>
+                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={7}>{tr('noRecords')}</td></tr>
+                    : filteredOwnerFunds.map((movement) => (
+                      <tr key={movement.id} className="record-row" tabIndex={0} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setOwnerFundsDetail(movement)
+                        }
+                      }}>
+                        <td>{fmtDate(movement.date)}</td>
+                        <td>{movement.counterparty_name || UI_DASH}</td>
+                        <td>{ownerFundsLabel(movement)}</td>
+                        <td>{movement.bank_reference || UI_DASH}</td>
+                        <td>{movement.purpose || UI_DASH}</td>
+                        <td style={{ textAlign: 'right', color: movement.direction === 'in' ? 'var(--color-success)' : undefined }}>
+                          {movement.direction === 'in' ? `${fmt(movement.amount)} ${movement.currency}` : UI_DASH}
+                        </td>
+                        <td style={{ textAlign: 'right', color: movement.direction === 'out' ? 'var(--color-danger)' : undefined }}>
+                          {movement.direction === 'out' ? `${fmt(movement.amount)} ${movement.currency}` : UI_DASH}
+                        </td>
+                      </tr>
+                    ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        ) : null}
       </div>
       <Modal
         isOpen={!!detail}
@@ -161,6 +255,25 @@ export default function CounterpartyLoans() {
               <div><span>{tr('loanDueDate')}</span><strong>{fmtDate(detail.due_date)}</strong></div>
               <div><span>{tr('loanOutstanding')}</span><strong>{fmt(detail.outstanding_amount)} {detail.currency}</strong></div>
               <div><span>{tr('status')}</span><LoanStatus status={detail.status} /></div>
+              <div className="loan-detail-note">
+                <span>{tr('note')}</span>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                />
+                <div className="loan-note-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={savingNote || noteDraft === (detail.note || '')}
+                    onClick={saveLoanNote}
+                  >
+                    {savingNote ? tr('loading') : tr('save')}
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="table-wrap">
               <table className="loan-movement-table">
@@ -176,13 +289,44 @@ export default function CounterpartyLoans() {
                   {detail.movements.map((movement) => (
                     <tr key={movement.id}>
                       <td>{fmtDate(movement.date)}</td>
-                      <td>{movementLabel(detail, movement)}</td>
-                      <td>{movement.bank_reference || UI_DASH}</td>
+                      <td>
+                        {movementLabel(detail, movement)}
+                        {movement.note ? <div className="loan-movement-note">{movement.note}</div> : null}
+                      </td>
+                      <td>
+                        {movement.bank_reference || UI_DASH}
+                        {movement.bank_purpose ? <div className="loan-movement-note">{movement.bank_purpose}</div> : null}
+                      </td>
                       <td style={{ textAlign: 'right' }}>{fmt(movement.amount)} {movement.currency}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+      <Modal
+        isOpen={!!ownerFundsDetail}
+        onClose={() => setOwnerFundsDetail(null)}
+        title={ownerFundsDetail ? `${tr('bankTxOwnerFundsLabel')} #${ownerFundsDetail.id}` : tr('bankTxOwnerFundsLabel')}
+        className="loan-detail-modal"
+        maxWidth="900px"
+      >
+        {ownerFundsDetail ? (
+          <div className="loan-detail-layout">
+            <div className="loan-detail-summary">
+              <div><span>{tr('counterpartyName')}</span><strong>{ownerFundsDetail.counterparty_name || UI_DASH}</strong></div>
+              <div><span>{tr('type')}</span><strong>{ownerFundsLabel(ownerFundsDetail)}</strong></div>
+              <div><span>{tr('date')}</span><strong>{fmtDate(ownerFundsDetail.date)}</strong></div>
+              <div><span>{tr('amount')}</span><strong>{fmt(ownerFundsDetail.amount)} {ownerFundsDetail.currency}</strong></div>
+              <div><span>{tr('bankTxReference')}</span><strong>{ownerFundsDetail.bank_reference || UI_DASH}</strong></div>
+              <div className="loan-detail-note"><span>{tr('description')}</span><div className="record-field-text">{ownerFundsDetail.purpose || UI_DASH}</div></div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => api.reports.downloadOwnerFundsPdf(ownerFundsDetail.id)}>
+                {tr('bankTxOwnerFundsDocument')}
+              </button>
             </div>
           </div>
         ) : null}
