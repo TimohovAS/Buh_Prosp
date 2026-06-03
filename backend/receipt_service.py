@@ -1017,10 +1017,70 @@ async def list_receipts(
         needle = f"%{search.strip()}%"
         query = query.where(
             or_(
+                cast(PurchaseReceipt.id, String).ilike(needle),
+                PurchaseReceipt.verification_url.ilike(needle),
+                PurchaseReceipt.qr_hash.ilike(needle),
+                PurchaseReceipt.token.ilike(needle),
                 PurchaseReceipt.seller_name.ilike(needle),
                 PurchaseReceipt.invoice_number.ilike(needle),
                 PurchaseReceipt.seller_tax_id.ilike(needle),
+                PurchaseReceipt.seller_address.ilike(needle),
+                PurchaseReceipt.seller_city.ilike(needle),
+                PurchaseReceipt.payment_type.ilike(needle),
+                PurchaseReceipt.payment_kind.ilike(needle),
+                PurchaseReceipt.currency.ilike(needle),
+                PurchaseReceipt.status.ilike(needle),
+                cast(PurchaseReceipt.receipt_datetime, String).ilike(needle),
                 cast(PurchaseReceipt.total_amount, String).ilike(needle),
+                cast(PurchaseReceipt.project_id, String).ilike(needle),
+                cast(PurchaseReceipt.category_id, String).ilike(needle),
+                cast(PurchaseReceipt.expense_id, String).ilike(needle),
+                cast(PurchaseReceipt.bank_transaction_id, String).ilike(needle),
+                cast(PurchaseReceipt.cash_entry_id, String).ilike(needle),
+                PurchaseReceipt.project.has(
+                    or_(
+                        Project.name.ilike(needle),
+                        Project.code.ilike(needle),
+                    )
+                ),
+                PurchaseReceipt.category_ref.has(
+                    or_(
+                        TransactionCategory.name_ru.ilike(needle),
+                        TransactionCategory.name_sr.ilike(needle),
+                    )
+                ),
+                PurchaseReceipt.expense.has(
+                    or_(
+                        cast(Expense.id, String).ilike(needle),
+                        Expense.description.ilike(needle),
+                        Expense.bank_reference.ilike(needle),
+                        Expense.note.ilike(needle),
+                        Expense.status.ilike(needle),
+                        Expense.source.ilike(needle),
+                        cast(Expense.amount, String).ilike(needle),
+                    )
+                ),
+                PurchaseReceipt.bank_transaction.has(
+                    or_(
+                        BankTransaction.counterparty_name.ilike(needle),
+                        BankTransaction.purpose.ilike(needle),
+                        BankTransaction.bank_reference.ilike(needle),
+                        BankTransaction.status.ilike(needle),
+                        BankTransaction.matched_type.ilike(needle),
+                        cast(BankTransaction.amount, String).ilike(needle),
+                    )
+                ),
+                PurchaseReceipt.cash_entry.has(
+                    or_(
+                        CashEntry.description.ilike(needle),
+                        CashEntry.entry_type.ilike(needle),
+                        CashEntry.note.ilike(needle),
+                        CashEntry.bank_reference.ilike(needle),
+                        CashEntry.counterparty_name.ilike(needle),
+                        CashEntry.purpose.ilike(needle),
+                        cast(CashEntry.amount, String).ilike(needle),
+                    )
+                ),
             )
         )
     result = await db.execute(query)

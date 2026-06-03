@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
+import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import { buildContractLabel, filterContractsForProject, findUnassignedProject } from '../utils/entityLabels'
 import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney } from '../utils/formatters'
@@ -82,6 +83,8 @@ export default function Receipts() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [sortCol, setSortCol] = useState('receipt_datetime')
+  const [sortAsc, setSortAsc] = useState(false)
 
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importUrl, setImportUrl] = useState('')
@@ -157,10 +160,87 @@ export default function Receipts() {
     return years.sort((left, right) => right - left)
   }, [detailReceipt, expenseYears])
 
-  const receiptRows = useMemo(
-    () => receipts.map((receipt) => ({ ...receipt, statusMeta: getReceiptStatusMeta(receipt.status) })),
-    [receipts],
-  )
+  const receiptRows = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    const queryDigits = normalizeSearchDigits(query)
+    const rows = receipts
+      .map((receipt) => ({ ...receipt, statusMeta: getReceiptStatusMeta(receipt.status) }))
+      .filter((receipt) => {
+        if (!query) return true
+        const textHaystack = [
+          receipt.id,
+          receipt.receipt_datetime,
+          fmtDateTime(receipt.receipt_datetime),
+          receipt.seller_name,
+          receipt.seller_tax_id,
+          receipt.seller_address,
+          receipt.seller_city,
+          receipt.invoice_number,
+          receipt.verification_url,
+          receipt.qr_hash,
+          receipt.token,
+          receipt.payment_type,
+          receipt.payment_kind,
+          receipt.project_name,
+          receipt.project_code,
+          receipt.status,
+          receipt.statusMeta?.label,
+          receipt.currency,
+          receipt.category_id,
+          receipt.expense_id,
+          receipt.expense_status,
+          receipt.expense_source,
+          receipt.bank_transaction_id,
+          receipt.cash_entry_id,
+          receipt.item_count,
+        ]
+          .filter((value) => value !== null && value !== undefined && value !== '')
+          .join(' ')
+          .toLowerCase()
+        if (textHaystack.includes(query)) return true
+        if (!queryDigits) return false
+        const amountDigits = normalizeSearchDigits([
+          receipt.total_amount,
+          Number(receipt.total_amount || 0).toFixed(2),
+          fmtMoney(receipt.total_amount),
+          formatMoneyWithCurrency(receipt.total_amount, receipt.currency || 'RSD'),
+          receipt.amount_delta,
+          receipt.amount_delta_abs,
+        ].join(' '))
+        return amountDigits.includes(queryDigits)
+      })
+
+    const getSortValue = (receipt) => {
+      switch (sortCol) {
+        case 'seller_name':
+          return receipt.seller_name || ''
+        case 'invoice_number':
+          return receipt.invoice_number || ''
+        case 'payment_type':
+          return receipt.payment_type || receipt.payment_kind || ''
+        case 'project_name':
+          return receipt.project_name || receipt.project_code || ''
+        case 'total_amount':
+          return Number(receipt.total_amount || 0)
+        case 'status':
+          return receipt.statusMeta?.label || receipt.status || ''
+        case 'receipt_datetime':
+        default:
+          return receipt.receipt_datetime || ''
+      }
+    }
+
+    return [...rows].sort((left, right) => {
+      const leftValue = getSortValue(left)
+      const rightValue = getSortValue(right)
+      if (typeof leftValue === 'number' || typeof rightValue === 'number') {
+        return sortAsc ? Number(leftValue) - Number(rightValue) : Number(rightValue) - Number(leftValue)
+      }
+      if (leftValue < rightValue) return sortAsc ? -1 : 1
+      if (leftValue > rightValue) return sortAsc ? 1 : -1
+      return 0
+    })
+  }, [receipts, search, sortAsc, sortCol])
 
   const getCategoryLabel = (categoryId) => {
     const category = categories.find((item) => String(item.id) === String(categoryId))
@@ -200,7 +280,6 @@ export default function Receipts() {
       const payload = await api.receipts.list({
         ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
         ...(projectFilter ? { project_id: projectFilter } : {}),
-        ...(search.trim() ? { search: search.trim() } : {}),
       })
       setReceipts(payload || [])
     } catch (error) {
@@ -231,7 +310,7 @@ export default function Receipts() {
   useEffect(() => {
     if (!isActivePage) return
     loadReceipts()
-  }, [isActivePage, statusFilter, projectFilter, search])
+  }, [isActivePage, statusFilter, projectFilter])
 
   useEffect(() => {
     if (!isActivePage) return
@@ -671,6 +750,15 @@ export default function Receipts() {
     window.open(detailReceipt.verification_url, '_blank', 'noopener,noreferrer')
   }
 
+  const toggleSort = (column) => {
+    if (sortCol === column) {
+      setSortAsc((value) => !value)
+    } else {
+      setSortCol(column)
+      setSortAsc(false)
+    }
+  }
+
   const canMarkCashPaid = detailReceipt && (
     !detailReceipt.expense_id ||
     (
@@ -719,13 +807,13 @@ export default function Receipts() {
           <table>
             <thead>
               <tr>
-                <th>{tr('date')}</th>
-                <th>{tr('receiptSeller')}</th>
-                <th>{tr('invoiceNumber')}</th>
-                <th>{tr('receiptPaymentType')}</th>
-                <th>{tr('project')}</th>
-                <th>{tr('amount')}</th>
-                <th>{tr('status')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('receipt_datetime')}>{tr('date')} <SortIndicator active={sortCol === 'receipt_datetime'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('seller_name')}>{tr('receiptSeller')} <SortIndicator active={sortCol === 'seller_name'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('payment_type')}>{tr('receiptPaymentType')} <SortIndicator active={sortCol === 'payment_type'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_name')}>{tr('project')} <SortIndicator active={sortCol === 'project_name'} asc={sortAsc} /></th>
+                <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('total_amount')}>{tr('amount')} <SortIndicator active={sortCol === 'total_amount'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIndicator active={sortCol === 'status'} asc={sortAsc} /></th>
               </tr>
             </thead>
             <tbody>
