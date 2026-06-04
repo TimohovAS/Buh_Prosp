@@ -2318,6 +2318,45 @@ tr:hover td {
   cursor: pointer;
 }
 
+.loan-owner-funds-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.loan-owner-funds-summary > div {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-soft);
+}
+
+.loan-owner-funds-summary span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.loan-owner-funds-summary strong {
+  font-size: 1rem;
+}
+
+.amount-positive {
+  color: var(--color-success);
+}
+
+.amount-negative {
+  color: var(--color-danger);
+}
+
+.loan-owner-funds-total-row td {
+  border-top: 1px solid var(--color-border-strong);
+  background: var(--color-bg-soft);
+  font-weight: 700;
+}
+
 .loan-movement-table,
 .loan-owner-funds-table {
   table-layout: fixed;
@@ -2355,6 +2394,10 @@ tr:hover td {
 
   .loan-detail-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loan-owner-funds-summary {
+    grid-template-columns: 1fr;
   }
 }
 

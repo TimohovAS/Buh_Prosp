@@ -24,6 +24,10 @@ function ownerFundsLabel(movement) {
   return movement.direction === 'in' ? tr('bankTxOwnerFundsInStatus') : tr('bankTxOwnerFundsOutStatus')
 }
 
+function ownerFundsAmount(value, currency = 'RSD') {
+  return `${fmt(value)} ${currency}`
+}
+
 function movementLabel(loan, movement) {
   if (movement.movement_type === 'disbursement') {
     return loan.loan_type === 'borrowed' ? tr('loanReceivedStatus') : tr('loanIssuedStatus')
@@ -107,6 +111,16 @@ export default function CounterpartyLoans() {
       (movement.purpose || '').toLowerCase().includes(q) ||
       (movement.bank_reference || '').toLowerCase().includes(q))
   }, [ownerFundsItems, search])
+
+  const ownerFundsTotals = useMemo(() => {
+    const totals = filteredOwnerFunds.reduce((acc, movement) => {
+      const amount = Number(movement.amount || 0)
+      if (movement.direction === 'in') acc.in += amount
+      if (movement.direction === 'out') acc.out += amount
+      return acc
+    }, { in: 0, out: 0 })
+    return { ...totals, balance: totals.in - totals.out }
+  }, [filteredOwnerFunds])
 
   const toggleSort = (column) => {
     if (column === sortCol) setSortAsc((current) => !current)
@@ -197,6 +211,24 @@ export default function CounterpartyLoans() {
           <div className="loan-section-header">
             <h3>{tr('bankTxOwnerFundsLabel')}</h3>
           </div>
+          {!loading && filteredOwnerFunds.length > 0 ? (
+            <div className="loan-owner-funds-summary">
+              <div>
+                <span>{tr('ownerFundsIn')}</span>
+                <strong className="amount-positive">{ownerFundsAmount(ownerFundsTotals.in)}</strong>
+              </div>
+              <div>
+                <span>{tr('ownerFundsOut')}</span>
+                <strong className="amount-negative">{ownerFundsAmount(ownerFundsTotals.out)}</strong>
+              </div>
+              <div>
+                <span>{tr('ownerFundsCompanyOwes')}</span>
+                <strong className={ownerFundsTotals.balance >= 0 ? 'amount-positive' : 'amount-negative'}>
+                  {ownerFundsAmount(ownerFundsTotals.balance)}
+                </strong>
+              </div>
+            </div>
+          ) : null}
           <div className="table-wrap">
             <table className="loan-owner-funds-table">
               <thead>
@@ -226,14 +258,23 @@ export default function CounterpartyLoans() {
                         <td>{movement.bank_reference || UI_DASH}</td>
                         <td>{movement.purpose || UI_DASH}</td>
                         <td style={{ textAlign: 'right', color: movement.direction === 'in' ? 'var(--color-success)' : undefined }}>
-                          {movement.direction === 'in' ? `${fmt(movement.amount)} ${movement.currency}` : UI_DASH}
+                          {movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
                         </td>
                         <td style={{ textAlign: 'right', color: movement.direction === 'out' ? 'var(--color-danger)' : undefined }}>
-                          {movement.direction === 'out' ? `${fmt(movement.amount)} ${movement.currency}` : UI_DASH}
+                          {movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
                         </td>
                       </tr>
                     ))}
               </tbody>
+              {!loading && filteredOwnerFunds.length > 0 ? (
+                <tfoot>
+                  <tr className="loan-owner-funds-total-row">
+                    <td colSpan={5}>{tr('total')}</td>
+                    <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.in)}</td>
+                    <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.out)}</td>
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
         </div>

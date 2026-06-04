@@ -1494,6 +1494,7 @@ Object.assign(t.sr, {
   loanRepaidComplete: 'Враћена',
   ownerFundsIn: 'Уложено',
   ownerFundsOut: 'Враћено',
+  ownerFundsCompanyOwes: 'Фирма дугује власнику',
 })
 
 Object.assign(t.ru, {
@@ -1559,6 +1560,7 @@ Object.assign(t.ru, {
   loanRepaidComplete: 'Погашен',
   ownerFundsIn: 'Внесено',
   ownerFundsOut: 'Возвращено',
+  ownerFundsCompanyOwes: 'Фирма должна владельцу',
 })
 
 Object.assign(t.sr, {
