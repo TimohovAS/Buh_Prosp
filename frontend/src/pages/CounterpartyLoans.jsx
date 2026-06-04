@@ -15,6 +15,21 @@ function LoanStatus({ status }) {
   return <StatusBadge tone={tone}>{label}</StatusBadge>
 }
 
+function LoanTableColGroup() {
+  return (
+    <colgroup>
+      <col style={{ width: '11%' }} />
+      <col style={{ width: '15%' }} />
+      <col style={{ width: '13%' }} />
+      <col style={{ width: '15%' }} />
+      <col style={{ width: '12%' }} />
+      <col style={{ width: '12%' }} />
+      <col style={{ width: '13%' }} />
+      <col style={{ width: '9%' }} />
+    </colgroup>
+  )
+}
+
 function typeLabel(type) {
   if (type === 'owner_funds') return tr('bankTxOwnerFundsLabel')
   return type === 'borrowed' ? tr('loanBorrowed') : tr('loanIssued')
@@ -227,6 +242,7 @@ export default function CounterpartyLoans() {
         <div className="card">
           <div className="table-wrap">
             <table className="loan-list-table">
+              <LoanTableColGroup />
               <thead>
                 <tr>
                   <th onClick={() => toggleSort('start_date')}>{tr('date')} <SortIndicator active={sortCol === 'start_date'} asc={sortAsc} /></th>
@@ -271,11 +287,13 @@ export default function CounterpartyLoans() {
           </div>
           <div className="table-wrap">
             <table className="loan-list-table loan-owner-funds-table">
+              <LoanTableColGroup />
               <thead>
                 <tr>
                   <th>{tr('date')}</th>
                   <th>{tr('counterpartyName')}</th>
                   <th>{tr('loanType')}</th>
+                  <th>{tr('loanAgreementNumber')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
@@ -283,8 +301,8 @@ export default function CounterpartyLoans() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={7}>{tr('loading')}</td></tr>
-                  : !ownerFundsSummary ? <tr><td colSpan={7}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={8}>{tr('loading')}</td></tr>
+                  : !ownerFundsSummary ? <tr><td colSpan={8}>{tr('noRecords')}</td></tr>
                     : (
                       <tr className="record-row" tabIndex={0} onClick={() => setOwnerFundsSummaryOpen(true)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
@@ -297,6 +315,7 @@ export default function CounterpartyLoans() {
                           {ownerFundsSummary.counterparty_name}
                         </td>
                         <td>{tr('bankTxOwnerFundsLabel')}</td>
+                        <td>{UI_DASH}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.disbursed_amount)}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.repaid_amount)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(ownerFundsSummary.outstanding_amount)}</td>

@@ -2331,30 +2331,6 @@ tr:hover td {
   table-layout: fixed;
 }
 
-.loan-owner-funds-table th:nth-child(1),
-.loan-owner-funds-table td:nth-child(1) {
-  width: 9rem;
-}
-
-.loan-owner-funds-table th:nth-child(2),
-.loan-owner-funds-table td:nth-child(2) {
-  width: 20rem;
-}
-
-.loan-owner-funds-table th:nth-child(3),
-.loan-owner-funds-table td:nth-child(3) {
-  width: 15rem;
-}
-
-.loan-owner-funds-table th:nth-child(4),
-.loan-owner-funds-table td:nth-child(4),
-.loan-owner-funds-table th:nth-child(5),
-.loan-owner-funds-table td:nth-child(5),
-.loan-owner-funds-table th:nth-child(6),
-.loan-owner-funds-table td:nth-child(6) {
-  width: 12rem;
-}
-
 .loan-owner-funds-table td {
   white-space: nowrap;
   overflow: hidden;
