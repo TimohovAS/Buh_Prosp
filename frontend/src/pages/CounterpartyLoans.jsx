@@ -231,11 +231,11 @@ export default function CounterpartyLoans() {
             <div className="loan-owner-funds-summary">
               <div>
                 <span>{tr('ownerFundsIn')}</span>
-                <strong className="amount-positive">{ownerFundsAmount(ownerFundsTotals.in)}</strong>
+                <strong>{ownerFundsAmount(ownerFundsTotals.in)}</strong>
               </div>
               <div>
                 <span>{tr('ownerFundsOut')}</span>
-                <strong className="amount-negative">{ownerFundsAmount(ownerFundsTotals.out)}</strong>
+                <strong>{ownerFundsAmount(ownerFundsTotals.out)}</strong>
               </div>
               <div>
                 <span>{tr('ownerFundsCompanyOwes')}</span>
@@ -252,13 +252,12 @@ export default function CounterpartyLoans() {
                   <th>{tr('date')}</th>
                   <th>{tr('type')}</th>
                   <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={5}>{tr('loading')}</td></tr>
-                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={5}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={4}>{tr('loading')}</td></tr>
+                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={4}>{tr('noRecords')}</td></tr>
                     : filteredOwnerFunds.map((movement) => (
                       <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
@@ -269,24 +268,12 @@ export default function CounterpartyLoans() {
                         <td>{fmtDate(movement.date)}</td>
                         <td>{ownerFundsLabel(movement)}</td>
                         <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
-                        <td style={{ textAlign: 'right', color: movement.direction === 'in' ? 'var(--color-success)' : undefined }}>
-                          {movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
-                        </td>
-                        <td style={{ textAlign: 'right', color: movement.direction === 'out' ? 'var(--color-danger)' : undefined }}>
-                          {movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
+                        <td style={{ textAlign: 'right' }}>
+                          {ownerFundsAmount(movement.amount, movement.currency)}
                         </td>
                       </tr>
                     ))}
               </tbody>
-              {!loading && filteredOwnerFunds.length > 0 ? (
-                <tfoot>
-                  <tr className="loan-owner-funds-total-row">
-                    <td colSpan={3}>{tr('total')}</td>
-                    <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.in)}</td>
-                    <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.out)}</td>
-                  </tr>
-                </tfoot>
-              ) : null}
             </table>
           </div>
         </div>
