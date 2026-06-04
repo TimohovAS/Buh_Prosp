@@ -138,6 +138,21 @@ export default function CounterpartyLoans() {
     return { ...totals, balance: totals.in - totals.out }
   }, [filteredOwnerFunds])
 
+  const ownerFundsBalanceById = useMemo(() => {
+    let balance = 0
+    return [...ownerFundsItems]
+      .sort((left, right) => {
+        const byDate = String(left.date || '').localeCompare(String(right.date || ''))
+        return byDate || Number(left.id || 0) - Number(right.id || 0)
+      })
+      .reduce((acc, movement) => {
+        const amount = Number(movement.amount || 0)
+        balance += movement.direction === 'in' ? amount : -amount
+        acc[movement.id] = balance
+        return acc
+      }, {})
+  }, [ownerFundsItems])
+
   const toggleSort = (column) => {
     if (column === sortCol) setSortAsc((current) => !current)
     else {
@@ -252,12 +267,14 @@ export default function CounterpartyLoans() {
                   <th>{tr('date')}</th>
                   <th>{tr('type')}</th>
                   <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={4}>{tr('loading')}</td></tr>
-                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={4}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={6}>{tr('loading')}</td></tr>
+                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={6}>{tr('noRecords')}</td></tr>
                     : filteredOwnerFunds.map((movement) => (
                       <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
@@ -269,7 +286,13 @@ export default function CounterpartyLoans() {
                         <td>{ownerFundsLabel(movement)}</td>
                         <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
                         <td style={{ textAlign: 'right' }}>
-                          {ownerFundsAmount(movement.amount, movement.currency)}
+                          {movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                          {ownerFundsAmount(ownerFundsBalanceById[movement.id] || 0, movement.currency)}
                         </td>
                       </tr>
                     ))}

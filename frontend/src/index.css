@@ -2373,8 +2373,12 @@ tr:hover td {
 }
 
 .loan-owner-funds-table th:nth-child(4),
-.loan-owner-funds-table td:nth-child(4) {
-  width: 13rem;
+.loan-owner-funds-table td:nth-child(4),
+.loan-owner-funds-table th:nth-child(5),
+.loan-owner-funds-table td:nth-child(5),
+.loan-owner-funds-table th:nth-child(6),
+.loan-owner-funds-table td:nth-child(6) {
+  width: 12rem;
 }
 
 .loan-owner-funds-table td {
