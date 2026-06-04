@@ -28,6 +28,22 @@ function ownerFundsAmount(value, currency = 'RSD') {
   return `${fmt(value)} ${currency}`
 }
 
+function ownerFundsDescription(movement) {
+  const cleaned = String(movement.purpose || '')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned || ownerFundsLabel(movement)
+}
+
+function ownerFundsTooltip(movement) {
+  return [
+    `${tr('counterpartyName')}: ${movement.counterparty_name || UI_DASH}`,
+    `${tr('bankTxReference')}: ${movement.bank_reference || UI_DASH}`,
+    movement.purpose ? `${tr('description')}: ${movement.purpose}` : null,
+  ].filter(Boolean).join('\n')
+}
+
 function movementLabel(loan, movement) {
   if (movement.movement_type === 'disbursement') {
     return loan.loan_type === 'borrowed' ? tr('loanReceivedStatus') : tr('loanIssuedStatus')
@@ -234,29 +250,25 @@ export default function CounterpartyLoans() {
               <thead>
                 <tr>
                   <th>{tr('date')}</th>
-                  <th>{tr('counterpartyName')}</th>
                   <th>{tr('type')}</th>
-                  <th>{tr('bankTxReference')}</th>
                   <th>{tr('description')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={7}>{tr('loading')}</td></tr>
-                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={7}>{tr('noRecords')}</td></tr>
+                {loading ? <tr><td colSpan={5}>{tr('loading')}</td></tr>
+                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={5}>{tr('noRecords')}</td></tr>
                     : filteredOwnerFunds.map((movement) => (
-                      <tr key={movement.id} className="record-row" tabIndex={0} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
+                      <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
                           setOwnerFundsDetail(movement)
                         }
                       }}>
                         <td>{fmtDate(movement.date)}</td>
-                        <td>{movement.counterparty_name || UI_DASH}</td>
                         <td>{ownerFundsLabel(movement)}</td>
-                        <td>{movement.bank_reference || UI_DASH}</td>
-                        <td>{movement.purpose || UI_DASH}</td>
+                        <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
                         <td style={{ textAlign: 'right', color: movement.direction === 'in' ? 'var(--color-success)' : undefined }}>
                           {movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
                         </td>
@@ -269,7 +281,7 @@ export default function CounterpartyLoans() {
               {!loading && filteredOwnerFunds.length > 0 ? (
                 <tfoot>
                   <tr className="loan-owner-funds-total-row">
-                    <td colSpan={5}>{tr('total')}</td>
+                    <td colSpan={3}>{tr('total')}</td>
                     <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.in)}</td>
                     <td style={{ textAlign: 'right' }}>{ownerFundsAmount(ownerFundsTotals.out)}</td>
                   </tr>

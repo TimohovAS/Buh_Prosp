@@ -2362,6 +2362,32 @@ tr:hover td {
   table-layout: fixed;
 }
 
+.loan-owner-funds-table th:nth-child(1),
+.loan-owner-funds-table td:nth-child(1) {
+  width: 9rem;
+}
+
+.loan-owner-funds-table th:nth-child(2),
+.loan-owner-funds-table td:nth-child(2) {
+  width: 17rem;
+}
+
+.loan-owner-funds-table th:nth-child(4),
+.loan-owner-funds-table td:nth-child(4),
+.loan-owner-funds-table th:nth-child(5),
+.loan-owner-funds-table td:nth-child(5) {
+  width: 13rem;
+}
+
+.loan-owner-funds-table td {
+  white-space: nowrap;
+}
+
+.loan-owner-funds-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .balance-summary-breakdown {
   margin-top: 0.45rem;
 }
