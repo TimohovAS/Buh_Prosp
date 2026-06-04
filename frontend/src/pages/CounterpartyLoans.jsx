@@ -44,6 +44,11 @@ function ownerFundsTooltip(movement) {
   ].filter(Boolean).join('\n')
 }
 
+function ownerFundsCounterpartyName(movements) {
+  const rawName = movements.find((movement) => movement.counterparty_name)?.counterparty_name || ''
+  return rawName.replace(/\b\d{10,}\b/g, '').replace(/\s+/g, ' ').trim() || tr('bankTxOwnerFundsLabel')
+}
+
 function movementLabel(loan, movement) {
   if (movement.movement_type === 'disbursement') {
     return loan.loan_type === 'borrowed' ? tr('loanReceivedStatus') : tr('loanIssuedStatus')
@@ -66,6 +71,7 @@ export default function CounterpartyLoans() {
   const [noteDraft, setNoteDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [ownerFundsDetail, setOwnerFundsDetail] = useState(null)
+  const [ownerFundsSummaryOpen, setOwnerFundsSummaryOpen] = useState(false)
 
   const openLoanDetail = (loan) => {
     setDetail(loan)
@@ -152,6 +158,24 @@ export default function CounterpartyLoans() {
         return acc
       }, {})
   }, [ownerFundsItems])
+
+  const ownerFundsSummary = useMemo(() => {
+    if (filteredOwnerFunds.length === 0) return null
+    const sorted = [...filteredOwnerFunds].sort((left, right) => {
+      const byDate = String(left.date || '').localeCompare(String(right.date || ''))
+      return byDate || Number(left.id || 0) - Number(right.id || 0)
+    })
+    const firstMovement = sorted[0]
+    return {
+      start_date: firstMovement?.date,
+      counterparty_name: ownerFundsCounterpartyName(filteredOwnerFunds),
+      disbursed_amount: ownerFundsTotals.in,
+      repaid_amount: ownerFundsTotals.out,
+      outstanding_amount: ownerFundsTotals.balance,
+      currency: firstMovement?.currency || 'RSD',
+      status: ownerFundsTotals.balance === 0 ? 'repaid' : 'open',
+    }
+  }, [filteredOwnerFunds, ownerFundsTotals])
 
   const toggleSort = (column) => {
     if (column === sortCol) setSortAsc((current) => !current)
@@ -242,60 +266,38 @@ export default function CounterpartyLoans() {
           <div className="loan-section-header">
             <h3>{tr('bankTxOwnerFundsLabel')}</h3>
           </div>
-          {!loading && filteredOwnerFunds.length > 0 ? (
-            <div className="loan-owner-funds-summary">
-              <div>
-                <span>{tr('ownerFundsIn')}</span>
-                <strong>{ownerFundsAmount(ownerFundsTotals.in)}</strong>
-              </div>
-              <div>
-                <span>{tr('ownerFundsOut')}</span>
-                <strong>{ownerFundsAmount(ownerFundsTotals.out)}</strong>
-              </div>
-              <div>
-                <span>{tr('ownerFundsCompanyOwes')}</span>
-                <strong className={ownerFundsTotals.balance >= 0 ? 'amount-positive' : 'amount-negative'}>
-                  {ownerFundsAmount(ownerFundsTotals.balance)}
-                </strong>
-              </div>
-            </div>
-          ) : null}
           <div className="table-wrap">
-            <table className="loan-owner-funds-table">
+            <table className="loan-list-table loan-owner-funds-table">
               <thead>
                 <tr>
                   <th>{tr('date')}</th>
-                  <th>{tr('type')}</th>
-                  <th>{tr('description')}</th>
+                  <th>{tr('counterpartyName')}</th>
+                  <th>{tr('loanType')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
+                  <th>{tr('status')}</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={6}>{tr('loading')}</td></tr>
-                  : filteredOwnerFunds.length === 0 ? <tr><td colSpan={6}>{tr('noRecords')}</td></tr>
-                    : filteredOwnerFunds.map((movement) => (
-                      <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
+                {loading ? <tr><td colSpan={7}>{tr('loading')}</td></tr>
+                  : !ownerFundsSummary ? <tr><td colSpan={7}>{tr('noRecords')}</td></tr>
+                    : (
+                      <tr className="record-row" tabIndex={0} onClick={() => setOwnerFundsSummaryOpen(true)} onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
-                          setOwnerFundsDetail(movement)
+                          setOwnerFundsSummaryOpen(true)
                         }
                       }}>
-                        <td>{fmtDate(movement.date)}</td>
-                        <td>{ownerFundsLabel(movement)}</td>
-                        <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          {movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                          {ownerFundsAmount(ownerFundsBalanceById[movement.id] || 0, movement.currency)}
-                        </td>
+                        <td>{fmtDate(ownerFundsSummary.start_date)}</td>
+                        <td>{ownerFundsSummary.counterparty_name}</td>
+                        <td>{tr('bankTxOwnerFundsLabel')}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.disbursed_amount)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.repaid_amount)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(ownerFundsSummary.outstanding_amount)}</td>
+                        <td><LoanStatus status={ownerFundsSummary.status} /></td>
                       </tr>
-                    ))}
+                    )}
               </tbody>
             </table>
           </div>
@@ -361,6 +363,57 @@ export default function CounterpartyLoans() {
                         {movement.bank_purpose ? <div className="loan-movement-note">{movement.bank_purpose}</div> : null}
                       </td>
                       <td style={{ textAlign: 'right' }}>{fmt(movement.amount)} {movement.currency}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+      <Modal
+        isOpen={ownerFundsSummaryOpen}
+        onClose={() => setOwnerFundsSummaryOpen(false)}
+        title={tr('bankTxOwnerFundsLabel')}
+        className="loan-detail-modal"
+        maxWidth="1040px"
+      >
+        {ownerFundsSummary ? (
+          <div className="loan-detail-layout">
+            <div className="loan-detail-summary">
+              <div><span>{tr('counterpartyName')}</span><strong>{ownerFundsSummary.counterparty_name}</strong></div>
+              <div><span>{tr('loanType')}</span><strong>{tr('bankTxOwnerFundsLabel')}</strong></div>
+              <div><span>{tr('date')}</span><strong>{fmtDate(ownerFundsSummary.start_date)}</strong></div>
+              <div><span>{tr('ownerFundsIn')}</span><strong>{ownerFundsAmount(ownerFundsSummary.disbursed_amount, ownerFundsSummary.currency)}</strong></div>
+              <div><span>{tr('ownerFundsOut')}</span><strong>{ownerFundsAmount(ownerFundsSummary.repaid_amount, ownerFundsSummary.currency)}</strong></div>
+              <div><span>{tr('ownerFundsCompanyOwes')}</span><strong className={ownerFundsSummary.outstanding_amount >= 0 ? 'amount-positive' : 'amount-negative'}>{ownerFundsAmount(ownerFundsSummary.outstanding_amount, ownerFundsSummary.currency)}</strong></div>
+            </div>
+            <div className="table-wrap">
+              <table className="loan-movement-table">
+                <thead>
+                  <tr>
+                    <th>{tr('date')}</th>
+                    <th>{tr('type')}</th>
+                    <th>{tr('description')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOwnerFunds.map((movement) => (
+                    <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setOwnerFundsDetail(movement)
+                      }
+                    }}>
+                      <td>{fmtDate(movement.date)}</td>
+                      <td>{ownerFundsLabel(movement)}</td>
+                      <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
+                      <td style={{ textAlign: 'right' }}>{movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}</td>
+                      <td style={{ textAlign: 'right' }}>{movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{ownerFundsAmount(ownerFundsBalanceById[movement.id] || 0, movement.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
