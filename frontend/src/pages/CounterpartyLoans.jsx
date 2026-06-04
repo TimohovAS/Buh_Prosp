@@ -46,7 +46,10 @@ function ownerFundsTooltip(movement) {
 
 function ownerFundsCounterpartyName(movements) {
   const rawName = movements.find((movement) => movement.counterparty_name)?.counterparty_name || ''
-  return rawName.replace(/\b\d{10,}\b/g, '').replace(/\s+/g, ' ').trim() || tr('bankTxOwnerFundsLabel')
+  const withoutAccount = rawName.replace(/\b\d{10,}\b/g, ' ').replace(/\s+/g, ' ').trim()
+  const addressStart = withoutAccount.search(/\s(?:VOJVOĐANSKIH|VOJVODANSKIH|VOJVODJANSKIH|ВОЈВОЂАНСКИХ|BULEVAR|RITSKA|УЛ\.|UL\.|\d{1,4}\b)/i)
+  const displayName = addressStart > 0 ? withoutAccount.slice(0, addressStart).trim() : withoutAccount
+  return displayName || tr('bankTxOwnerFundsLabel')
 }
 
 function movementLabel(loan, movement) {
@@ -290,7 +293,9 @@ export default function CounterpartyLoans() {
                         }
                       }}>
                         <td>{fmtDate(ownerFundsSummary.start_date)}</td>
-                        <td>{ownerFundsSummary.counterparty_name}</td>
+                        <td title={filteredOwnerFunds.find((movement) => movement.counterparty_name)?.counterparty_name || ownerFundsSummary.counterparty_name}>
+                          {ownerFundsSummary.counterparty_name}
+                        </td>
                         <td>{tr('bankTxOwnerFundsLabel')}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.disbursed_amount)}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.repaid_amount)}</td>

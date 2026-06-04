@@ -2338,7 +2338,12 @@ tr:hover td {
 
 .loan-owner-funds-table th:nth-child(2),
 .loan-owner-funds-table td:nth-child(2) {
-  width: 17rem;
+  width: 20rem;
+}
+
+.loan-owner-funds-table th:nth-child(3),
+.loan-owner-funds-table td:nth-child(3) {
+  width: 15rem;
 }
 
 .loan-owner-funds-table th:nth-child(4),
@@ -2352,6 +2357,8 @@ tr:hover td {
 
 .loan-owner-funds-table td {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .loan-owner-funds-table th {
