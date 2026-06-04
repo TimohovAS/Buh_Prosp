@@ -151,7 +151,7 @@ async def list_income(
     month: Optional[int] = Query(None),
     client_id: Optional[int] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: Optional[int] = Query(None, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
@@ -165,7 +165,10 @@ async def list_income(
         q = q.where(Income.issued_date >= date(year, month, 1), Income.issued_date <= date(year, month, last))
     if client_id:
         q = q.where(Income.client_id == client_id)
-    q = q.offset(skip).limit(limit)
+    if skip:
+        q = q.offset(skip)
+    if limit is not None:
+        q = q.limit(limit)
     result = await db.execute(q)
     items = result.scalars().all()
     out = []
@@ -497,5 +500,4 @@ async def delete_income(
     income.bank_reference = None
     await db.commit()
     return {"ok": True, "cancelled": True}
-
 

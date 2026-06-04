@@ -211,7 +211,7 @@ async def _build_cash_summary(
     db: AsyncSession,
     year: Optional[int] = None,
     month: Optional[int] = None,
-    limit: int = 200,
+    limit: Optional[int] = None,
 ) -> CashSummaryResponse:
     current_balance, _, _ = await _get_cash_totals(db)
     entry_filters = _build_cash_period_filters(year=year, month=month)
@@ -230,7 +230,7 @@ async def _build_cash_summary(
 
     entries_result = await db.execute(entries_query)
     entries = list(entries_result.scalars().all())
-    if limit:
+    if limit is not None:
         entries = entries[-limit:]
 
     running_balance = await _get_balance_before_entry(db, entries[0]) if entries else ZERO_DECIMAL
@@ -283,7 +283,7 @@ async def list_cash_entry_years(
 async def get_cash_summary(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
-    limit: int = Query(200, ge=1, le=500),
+    limit: Optional[int] = Query(None, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
@@ -524,5 +524,4 @@ async def create_cash_expense(
     db.add(entry)
     await db.commit()
     return await _serialize_refreshed_entry(db, entry.id)
-
 

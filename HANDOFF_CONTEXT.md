@@ -2,7 +2,7 @@
 
 Дата подготовки: 2026-06-03  
 Текущая ветка: `main`  
-Последний известный коммит: `b593b32 refactor(loans): tighten invariants and show loans as financing in cashflow`  
+Последний известный коммит: `0a7519f Add receipt search and sorting`
 Рабочая папка: `D:\Work\Programming\Buh_Prosp`
 
 Этот файл нужен, чтобы проверить контекст, при необходимости отредактировать его и начать следующую ветку без потери решений и договорённостей.
@@ -59,6 +59,9 @@ git pull origin main
 - Новые наличные чеки в режиме создания расхода `auto` создают `Expense(source="cash", status="paid")` и `CashEntry(direction="out", entry_type="expense")`.
 - Для старых чеков со статусом `Ждет банк` добавлено ручное действие `Оплачено наличкой`.
 - Для ошибочно отмеченного наличного чека добавлено действие `Вернуть в ожидание банка`, которое удаляет связанную наличную запись и возвращает расход в `planned`.
+- В списке кассовых чеков добавлена сортировка по видимым колонкам: дата, продавец, номер фактуры, способ оплаты, проект, сумма, статус.
+- Поиск на странице чеков ищет по полям списка и связям: сумма в разных форматах, проект, продавец, ПИБ, адрес, номер, способ оплаты, статус, id связанных расхода/банка/налички. Поиск по позициям товаров намеренно не включён.
+- Проверен класс проблем со скрытым `limit` на страницах с фильтрами год/месяц: `Расходы`, `Доходы (КПО)` и `Наличка` теперь без явного `limit` отдают весь выбранный период. `Банк` и `Входящие фактуры` уже не имели такого лимита.
 
 Ключевые файлы:
 
@@ -156,6 +159,9 @@ manual_migrations\v18_expense_items.cmd
 - нельзя менять контрагента у займа после появления движений;
 - нельзя добавлять движения к погашенному/отменённому займу;
 - race-condition при двойном связывании банковской операции возвращает `409`.
+- У займа есть поле `note`; карточка займа показывает и позволяет редактировать общий комментарий через существующий `PATCH /counterparty-loans/{id}`.
+- Комментарии движений займа и назначение банковской транзакции показываются в таблице движений.
+- Страница `Займы` показывает `Внесение собственных средств`/`Возврат собственных средств` отдельной read-only секцией из уже существующих `BankTransaction` с `matched_type = "owner_funds"`; схема БД для этого не менялась.
 
 Ключевые файлы:
 
@@ -488,6 +494,9 @@ manual_migrations\v19_counterparty_loans.cmd
 ## 10. Последние коммиты на момент handoff
 
 ```text
+0a7519f Add receipt search and sorting
+3bfb6f0 Show loan comments and owner funds
+07aa7ac Handle cash-paid receipts
 b593b32 refactor(loans): tighten invariants and show loans as financing in cashflow
 1e7ab85 Add counterparty loan tracking
 3cb288a style(incoming-invoices): tighten table row height
@@ -497,9 +506,6 @@ dc410d9 refactor(rows): unify bank rows under .record-row + global hover accent
 1f51c96 fix(ux): extend row-selection guard to bank transactions
 20f7d49 fix(ux): don't open row detail when selecting text inside a row
 979bcd2 fix(receipts): accept SUF receipt URLs with an explicit :443 port
-77e5c2f fix(receipts): localize XLSX export labels (sr default, ru optional)
-3d6f1b5 feat(projects): sticky header and XLSX export in purchases modal
-7656724 Remove completed expense items plan
 ```
 
 ## 11. Что не делать
@@ -509,3 +515,4 @@ dc410d9 refactor(rows): unify bank rows under .record-row + global hover accent
 - Не делать универсальную полиморфную `operation_links` таблицу без явной причины: текущие типизированные связи лучше усиливать CHECK/FK-ограничениями.
 - Не сравнивать банковские списания и расходы по знаку суммы: для расходов нужен `abs(bank.amount) == expense.amount`.
 - Не создавать второй расход, если чек уже создал `Expense(source="receipt")`.
+- Не добавлять скрытый default `limit` на основных списках с фильтрами год/месяц. Если нужен лимит для вспомогательного picker/log, frontend должен передавать его явно.
