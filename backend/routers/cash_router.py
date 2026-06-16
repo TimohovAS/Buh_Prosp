@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,19 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import BankTransaction, CashEntry, Contract, Expense, Project, TransactionCategory, User
+from backend.models import (
+    BankTransaction,
+    CashEntry,
+    Contract,
+    Expense,
+    ExpenseItem,
+    IncomingInvoice,
+    IncomingInvoiceSettlement,
+    Project,
+    PurchaseReceipt,
+    TransactionCategory,
+    User,
+)
 from backend.state_machine import initialize_expense_status
 from backend.schemas import (
     CashAdjustmentCreate,
@@ -413,6 +425,51 @@ async def update_cash_entry(
     return await _serialize_refreshed_entry(db, entry_id)
 
 
+@router.delete("/{entry_id}")
+async def delete_cash_expense_entry(
+    entry_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    entry = await _get_entry_with_links(db, entry_id)
+    if entry.entry_type != "expense":
+        raise HTTPException(400, "Only cash expense entries can be deleted here")
+    if entry.bank_transaction_id:
+        raise HTTPException(400, "Bank withdrawals must be managed from bank or cash transfer workflow")
+
+    expense = entry.expense
+    if not expense or entry.expense_id is None:
+        raise HTTPException(404, "Expense not found for this cash entry")
+    if getattr(expense, "source", None) != "cash":
+        raise HTTPException(400, "Only expenses created from the cash register can be deleted here")
+    if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
+        raise HTTPException(400, "Reversed expenses cannot be deleted from the cash register")
+
+    invoice_result = await db.execute(select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1))
+    if invoice_result.scalar_one_or_none():
+        raise HTTPException(400, "This cash expense is linked to an incoming invoice")
+
+    settlement_result = await db.execute(
+        select(IncomingInvoiceSettlement.id).where(IncomingInvoiceSettlement.cash_entry_id == entry.id).limit(1)
+    )
+    if settlement_result.scalar_one_or_none():
+        raise HTTPException(400, "This cash expense is linked to an incoming invoice settlement")
+
+    receipt_result = await db.execute(
+        select(PurchaseReceipt.id)
+        .where(or_(PurchaseReceipt.cash_entry_id == entry.id, PurchaseReceipt.expense_id == expense.id))
+        .limit(1)
+    )
+    if receipt_result.scalar_one_or_none():
+        raise HTTPException(400, "This cash expense is linked to a receipt")
+
+    await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id == expense.id))
+    await db.delete(entry)
+    await db.delete(expense)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/withdrawals", response_model=CashEntryResponse)
 async def create_cash_withdrawal(
     data: CashWithdrawalCreate,
@@ -524,4 +581,3 @@ async def create_cash_expense(
     db.add(entry)
     await db.commit()
     return await _serialize_refreshed_entry(db, entry.id)
-

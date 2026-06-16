@@ -434,6 +434,7 @@ export const api = {
     },
     years: () => request('/cash/years'),
     updateEntry: (id, data) => request(`/cash/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteEntry: (id) => request(`/cash/${id}`, { method: 'DELETE' }),
     createWithdrawal: (data) => request('/cash/withdrawals', { method: 'POST', body: JSON.stringify(data) }),
     createExpense: (data) => request('/cash/expenses', { method: 'POST', body: JSON.stringify(data) }),
     createAdjustment: (data) => request('/cash/adjustments', { method: 'POST', body: JSON.stringify(data) }),

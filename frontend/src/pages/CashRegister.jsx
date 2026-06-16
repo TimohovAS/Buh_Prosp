@@ -474,6 +474,22 @@ export default function CashRegister() {
     openEditEntry(entry)
   }
 
+  const handleDeleteCashExpense = async (entry) => {
+    if (!entry || entry.entry_type !== 'expense') return
+    if (!confirm(tr('cashDeleteExpenseConfirm'))) return
+    setSaving(true)
+    setPageError('')
+    try {
+      await api.cash.deleteEntry(entry.id)
+      setDetailModal(null)
+      await loadData()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <>
       <div className="page-header">
@@ -659,6 +675,11 @@ export default function CashRegister() {
                 <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => openEditFromDetail(detailModal)}>
                   {tr('edit')}
                 </button>
+                {detailModal.entry_type === 'expense' ? (
+                  <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashExpense(detailModal)}>
+                    {tr('cashDeleteExpense')}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
