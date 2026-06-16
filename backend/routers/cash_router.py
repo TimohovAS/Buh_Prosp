@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
-from backend.cash_service import create_cash_transfer_from_transaction
+from backend.cash_service import create_cash_transfer_from_pending_entry, create_cash_transfer_from_transaction
 from backend.database import get_db
 from backend.db_utils import (
     get_contract_or_404,
@@ -36,6 +36,8 @@ from backend.schemas import (
     CashEntryResponse,
     CashExpenseCreate,
     CashEntryUpdate,
+    CashPendingWithdrawalCreate,
+    CashPendingWithdrawalLink,
     CashSummaryResponse,
     CashWithdrawalCreate,
 )
@@ -389,6 +391,27 @@ async def update_cash_entry(
         entry.description = expense.description
         entry.note = note
 
+    elif entry.entry_type == "pending_withdrawal":
+        if entry.bank_transaction_id or entry.expense_id:
+            raise HTTPException(400, "Linked pending withdrawals must be edited as bank withdrawals")
+
+        forbidden_fields = {"direction", "category_id", "project_id", "contract_id"}
+        invalid = sorted(field for field in forbidden_fields if field in payload)
+        if invalid:
+            raise HTTPException(400, "Pending cash withdrawals only support date, amount, currency, description and note")
+
+        amount = to_decimal(payload.get("amount", entry.amount) or ZERO_DECIMAL)
+        description = payload.get("description", entry.description)
+        if not (description or "").strip():
+            raise HTTPException(400, "Description is required")
+
+        entry.date = payload.get("date", entry.date)
+        entry.direction = "in"
+        entry.amount = amount
+        entry.currency = payload.get("currency", entry.currency) or "RSD"
+        entry.description = description.strip()[:500]
+        entry.note = payload.get("note", entry.note)
+
     elif entry.entry_type == "withdrawal":
         forbidden_fields = {"date", "direction", "amount", "currency", "category_id"}
         invalid = sorted(field for field in forbidden_fields if field in payload)
@@ -432,8 +455,15 @@ async def delete_cash_expense_entry(
     current_user: User = Depends(require_edit_access),
 ):
     entry = await _get_entry_with_links(db, entry_id)
+    if entry.entry_type == "pending_withdrawal":
+        if entry.bank_transaction_id or entry.expense_id:
+            raise HTTPException(400, "Linked pending withdrawals must be managed from bank or cash transfer workflow")
+        await db.delete(entry)
+        await db.commit()
+        return {"ok": True}
+
     if entry.entry_type != "expense":
-        raise HTTPException(400, "Only cash expense entries can be deleted here")
+        raise HTTPException(400, "Only cash expense and pending withdrawal entries can be deleted here")
     if entry.bank_transaction_id:
         raise HTTPException(400, "Bank withdrawals must be managed from bank or cash transfer workflow")
 
@@ -468,6 +498,59 @@ async def delete_cash_expense_entry(
     await db.delete(expense)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/pending-withdrawals", response_model=CashEntryResponse)
+async def create_pending_cash_withdrawal(
+    data: CashPendingWithdrawalCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    description = (data.description or "").strip()
+    if not description:
+        raise HTTPException(400, "Description is required")
+
+    entry = CashEntry(
+        date=data.date,
+        direction="in",
+        amount=to_decimal(data.amount or ZERO_DECIMAL),
+        currency=data.currency or "RSD",
+        description=description[:500],
+        entry_type="pending_withdrawal",
+        note=data.note,
+        created_by=current_user.id,
+    )
+    db.add(entry)
+    await db.commit()
+    return await _serialize_refreshed_entry(db, entry.id)
+
+
+@router.post("/pending-withdrawals/{entry_id}/link-bank", response_model=CashEntryResponse)
+async def link_pending_cash_withdrawal(
+    entry_id: int,
+    data: CashPendingWithdrawalLink,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    entry = await _get_entry_with_links(db, entry_id)
+    result = await db.execute(select(BankTransaction).where(BankTransaction.id == data.bank_transaction_id))
+    transaction = result.scalar_one_or_none()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+
+    try:
+        _, linked_entry = await create_cash_transfer_from_pending_entry(
+            db,
+            transaction,
+            entry,
+            description=_build_withdrawal_description(transaction),
+            note=data.note,
+            created_by=current_user.id,
+        )
+        await db.commit()
+        return await _serialize_refreshed_entry(db, linked_entry.id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.post("/withdrawals", response_model=CashEntryResponse)

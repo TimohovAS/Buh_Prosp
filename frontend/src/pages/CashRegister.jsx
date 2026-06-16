@@ -46,6 +46,8 @@ export default function CashRegister() {
   const [expenseModal, setExpenseModal] = useState(null)
   const [adjustmentModal, setAdjustmentModal] = useState(null)
   const [withdrawalModal, setWithdrawalModal] = useState(null)
+  const [pendingWithdrawalModal, setPendingWithdrawalModal] = useState(null)
+  const [pendingLinkModal, setPendingLinkModal] = useState(null)
   const [detailModal, setDetailModal] = useState(null)
   const [expenseForm, setExpenseForm] = useState({
     date: todayIso(),
@@ -67,6 +69,13 @@ export default function CashRegister() {
     description: '',
     project_id: '',
     contract_id: '',
+    note: '',
+  })
+  const [pendingWithdrawalForm, setPendingWithdrawalForm] = useState({
+    date: todayIso(),
+    amount: '',
+    currency: 'RSD',
+    description: '',
     note: '',
   })
 
@@ -147,6 +156,7 @@ export default function CashRegister() {
 
   const getEntryTypeLabel = (entry) => {
     if (entry.entry_type === 'withdrawal') return tr('cashEntryTypeWithdrawal')
+    if (entry.entry_type === 'pending_withdrawal') return tr('cashEntryTypePendingWithdrawal')
     if (entry.entry_type === 'expense') return tr('cashEntryTypeExpense')
     return tr('cashEntryTypeAdjustment')
   }
@@ -190,6 +200,24 @@ export default function CashRegister() {
     const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
     return getContractsForProject(selectedProjectId)
   }, [contracts, withdrawalForm.project_id])
+
+  const pendingWithdrawalTotal = useMemo(
+    () => (summary.entries || [])
+      .filter((entry) => entry.entry_type === 'pending_withdrawal')
+      .reduce((total, entry) => total + Number(entry.amount || 0), 0),
+    [summary.entries]
+  )
+
+  const pendingLinkCandidates = useMemo(() => {
+    if (!pendingLinkModal?.entry) return []
+    const entryAmount = Number(pendingLinkModal.entry.amount || 0)
+    const entryCurrency = pendingLinkModal.entry.currency || 'RSD'
+    return (summary.available_withdrawals || []).filter((transaction) => {
+      const txAmount = Number(transaction.amount || 0)
+      const txCurrency = transaction.currency || 'RSD'
+      return Math.abs(txAmount - entryAmount) < 0.005 && txCurrency === entryCurrency
+    })
+  }, [pendingLinkModal, summary.available_withdrawals])
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -328,6 +356,28 @@ export default function CashRegister() {
     setWithdrawalModal({ entryId: entry.id })
   }
 
+  const openPendingWithdrawalCreate = () => {
+    setPendingWithdrawalForm({
+      date: todayIso(),
+      amount: '',
+      currency: 'RSD',
+      description: tr('cashPendingWithdrawalDefaultDescription'),
+      note: '',
+    })
+    setPendingWithdrawalModal({ entryId: null })
+  }
+
+  const openPendingWithdrawalEdit = (entry) => {
+    setPendingWithdrawalForm({
+      date: entry.date,
+      amount: entry.amount || '',
+      currency: entry.currency || 'RSD',
+      description: entry.description || '',
+      note: entry.note || '',
+    })
+    setPendingWithdrawalModal({ entryId: entry.id })
+  }
+
   const updateExpenseProject = (projectId) => updateExpenseProjectBase(projectId)
 
   const updateExpenseContract = (contractId) => {
@@ -453,6 +503,48 @@ export default function CashRegister() {
     }
   }
 
+  const handleSavePendingWithdrawal = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    setPageError('')
+    try {
+      const payload = {
+        date: pendingWithdrawalForm.date,
+        amount: parseFloat(pendingWithdrawalForm.amount) || 0,
+        currency: pendingWithdrawalForm.currency || 'RSD',
+        description: pendingWithdrawalForm.description.trim(),
+        note: pendingWithdrawalForm.note?.trim() || null,
+      }
+      if (pendingWithdrawalModal?.entryId) {
+        await api.cash.updateEntry(pendingWithdrawalModal.entryId, payload)
+      } else {
+        await api.cash.createPendingWithdrawal(payload)
+      }
+      setPendingWithdrawalModal(null)
+      await loadData()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLinkPendingWithdrawal = async (transaction) => {
+    if (!pendingLinkModal?.entry) return
+    setSaving(true)
+    setPageError('')
+    try {
+      await api.cash.linkPendingWithdrawal(pendingLinkModal.entry.id, { bank_transaction_id: transaction.id })
+      setPendingLinkModal(null)
+      setDetailModal(null)
+      await loadData()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const openEditEntry = (entry) => {
     if (entry.entry_type === 'expense') {
       openExpenseEdit(entry)
@@ -460,6 +552,10 @@ export default function CashRegister() {
     }
     if (entry.entry_type === 'adjustment') {
       openAdjustmentEdit(entry)
+      return
+    }
+    if (entry.entry_type === 'pending_withdrawal') {
+      openPendingWithdrawalEdit(entry)
       return
     }
     openWithdrawalEdit(entry)
@@ -474,9 +570,12 @@ export default function CashRegister() {
     openEditEntry(entry)
   }
 
-  const handleDeleteCashExpense = async (entry) => {
-    if (!entry || entry.entry_type !== 'expense') return
-    if (!confirm(tr('cashDeleteExpenseConfirm'))) return
+  const handleDeleteCashEntry = async (entry) => {
+    if (!entry || !['expense', 'pending_withdrawal'].includes(entry.entry_type)) return
+    const confirmMessage = entry.entry_type === 'pending_withdrawal'
+      ? tr('cashDeletePendingWithdrawalConfirm')
+      : tr('cashDeleteExpenseConfirm')
+    if (!confirm(confirmMessage)) return
     setSaving(true)
     setPageError('')
     try {
@@ -519,6 +618,7 @@ export default function CashRegister() {
             style={{ width: 220 }}
           />
           <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
+          <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>{tr('cashAddPendingWithdrawal')}</button>
           <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
           <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
         </div>
@@ -539,6 +639,11 @@ export default function CashRegister() {
               <div className="card">
                 <div className="card-title">{tr('cashCurrentBalance')}</div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{fmtAmount(summary.current_balance)} RSD</div>
+                {pendingWithdrawalTotal > 0 ? (
+                  <div style={{ marginTop: '0.35rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    {tr('cashPendingWithdrawalTotal')}: +{fmtAmount(pendingWithdrawalTotal)} RSD
+                  </div>
+                ) : null}
               </div>
               <div className="card">
                 <div className="card-title">{tr('cashTotalIn')}</div>
@@ -676,9 +781,19 @@ export default function CashRegister() {
                   {tr('edit')}
                 </button>
                 {detailModal.entry_type === 'expense' ? (
-                  <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashExpense(detailModal)}>
+                  <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashEntry(detailModal)}>
                     {tr('cashDeleteExpense')}
                   </button>
+                ) : null}
+                {detailModal.entry_type === 'pending_withdrawal' ? (
+                  <>
+                    <button type="button" className="btn btn-primary" disabled={saving} onClick={() => setPendingLinkModal({ entry: detailModal })}>
+                      {tr('cashLinkPendingWithdrawal')}
+                    </button>
+                    <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashEntry(detailModal)}>
+                      {tr('cashDeletePendingWithdrawal')}
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -718,6 +833,46 @@ export default function CashRegister() {
                     <td style={{ textAlign: 'right' }}>
                       <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleTransferToCash(transaction)}>
                         {tr('cashTransferToCash')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!pendingLinkModal} onClose={() => setPendingLinkModal(null)} title={tr('cashLinkPendingWithdrawalTitle')}>
+        <div className="card" style={{ padding: '1rem' }}>
+          {pendingLinkModal?.entry ? (
+            <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+              {pendingLinkModal.entry.date} · {fmtAmount(pendingLinkModal.entry.amount)} {pendingLinkModal.entry.currency || 'RSD'} · {pendingLinkModal.entry.description}
+            </div>
+          ) : null}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tr('date')}</th>
+                  <th>{tr('description')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingLinkCandidates.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoMatchingWithdrawals')}</td>
+                  </tr>
+                ) : pendingLinkCandidates.map((transaction) => (
+                  <tr key={transaction.id}>
+                    <td>{transaction.date}</td>
+                    <td>{buildBankLabel(transaction)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleLinkPendingWithdrawal(transaction)}>
+                        {tr('cashLinkPendingWithdrawal')}
                       </button>
                     </td>
                   </tr>
@@ -788,6 +943,38 @@ export default function CashRegister() {
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setExpenseModal(null)}>{tr('cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!pendingWithdrawalModal} onClose={() => setPendingWithdrawalModal(null)} title={pendingWithdrawalModal?.entryId ? tr('cashEditOperation') : tr('cashAddPendingWithdrawal')}>
+        <form onSubmit={handleSavePendingWithdrawal} className="card" style={{ padding: '1rem' }}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+            {tr('cashPendingWithdrawalHint')}
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('date')}</label>
+            <DatePicker value={pendingWithdrawalForm.date} onChange={(value) => setPendingWithdrawalForm((previous) => ({ ...previous, date: value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('amount')}</label>
+            <input className="form-input" type="number" min="0" step="0.01" value={pendingWithdrawalForm.amount} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, amount: event.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('valuta')}</label>
+            <input className="form-input" value={pendingWithdrawalForm.currency} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, currency: event.target.value.toUpperCase() }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('description')}</label>
+            <input className="form-input" value={pendingWithdrawalForm.description} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('note')}</label>
+            <input className="form-input" value={pendingWithdrawalForm.note} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setPendingWithdrawalModal(null)}>{tr('cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
           </div>
         </form>

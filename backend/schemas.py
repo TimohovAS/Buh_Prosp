@@ -1203,6 +1203,19 @@ class CashWithdrawalCreate(BaseModel):
     note: Optional[str] = None
 
 
+class CashPendingWithdrawalCreate(BaseModel):
+    date: DateType
+    amount: Decimal = Field(gt=0)
+    currency: str = "RSD"
+    description: str
+    note: Optional[str] = None
+
+
+class CashPendingWithdrawalLink(BaseModel):
+    bank_transaction_id: int
+    note: Optional[str] = None
+
+
 class CashAdjustmentCreate(BaseModel):
     date: DateType
     direction: str
