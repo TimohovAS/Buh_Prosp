@@ -18,6 +18,15 @@ import { MONTHS } from '../utils/constants'
 
 const CASH_CATEGORY_VALUE = '__cash__'
 
+function escapeExcelHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function parseMoneyInput(value) {
   if (value == null) return 0
   const normalized = String(value).replace(/\s+/g, '').replace(',', '.')
@@ -256,6 +265,16 @@ export default function BankTransactions() {
     })
   }, [data, search, sortAsc, sortCol, projects])
 
+  const selectedTransactions = useMemo(() => {
+    if (selectedIds.length === 0) return []
+    const selectedIdSet = new Set(selectedIds)
+    const displayedIdSet = new Set(displayed.map((transaction) => transaction.id))
+    return [
+      ...displayed.filter((transaction) => selectedIdSet.has(transaction.id)),
+      ...data.filter((transaction) => selectedIdSet.has(transaction.id) && !displayedIdSet.has(transaction.id)),
+    ]
+  }, [data, displayed, selectedIds])
+
   const buildExpenseForm = (transaction) => ({
     date: transaction?.date || todayIso(),
     description: transaction?.purpose || transaction?.counterparty_name || '',
@@ -308,6 +327,98 @@ export default function BankTransactions() {
   const toggleSelectAll = () => {
     if (selectedIds.length >= displayed.length) setSelectedIds([])
     else setSelectedIds(displayed.map((item) => item.id))
+  }
+
+  const getTransactionDirectionLabel = (transaction) => {
+    if (transaction?.direction === 'in') return tr('bankTxDirectionIn')
+    if (transaction?.direction === 'out') return tr('bankTxDirectionOut')
+    return transaction?.direction || ''
+  }
+
+  const getTransactionStatusLabel = (transaction) => {
+    if (transaction?.status === 'matched') {
+      if (transaction.matched_type === 'income_allocation') {
+        const label = transaction.allocation_remaining > 0
+          ? tr('bankTxAllocationPartialStatus')
+          : tr('bankTxAllocationFullStatus')
+        const count = transaction.allocation_count ? ` (${transaction.allocation_count})` : ''
+        const remaining = transaction.allocation_remaining > 0
+          ? ` - ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}`
+          : ''
+        return `${label}${count}${remaining}`
+      }
+      if (transaction.matched_type === 'owner_funds') return getOwnerFundsStatusLabel(transaction)
+      if (transaction.matched_type === 'loan_movement') return getLoanMovementStatusLabel(transaction)
+      return `${tr('bankTxMatched')} (${getMatchedTypeLabel(transaction.matched_type)})`
+    }
+    if (transaction?.status === 'ignored') return tr('bankTxIgnored')
+    return tr('bankTxUnmatched')
+  }
+
+  const handleExportSelectedExcel = () => {
+    if (selectedTransactions.length === 0) return
+
+    const columns = [
+      { label: tr('date'), type: 'text', value: (transaction) => transaction.date || '' },
+      { label: tr('bankTxCounterparty'), type: 'text', value: (transaction) => transaction.counterparty_name || '' },
+      { label: tr('bankTxPurpose'), type: 'text', value: (transaction) => transaction.purpose || '' },
+      { label: tr('bankTxReference'), type: 'text', value: (transaction) => transaction.bank_reference || '' },
+      { label: tr('project'), type: 'text', value: (transaction) => getProjectName(transaction.project_id) },
+      { label: tr('cashDirection'), type: 'text', value: getTransactionDirectionLabel },
+      {
+        label: tr('amount'),
+        type: 'number',
+        value: (transaction) => {
+          const amount = Number(transaction.amount || 0)
+          return transaction.direction === 'out' ? -Math.abs(amount) : Math.abs(amount)
+        },
+      },
+      { label: tr('valuta'), type: 'text', value: (transaction) => transaction.currency || 'RSD' },
+      { label: tr('status'), type: 'text', value: getTransactionStatusLabel },
+    ]
+
+    const header = columns
+      .map((column) => `<th>${escapeExcelHtml(column.label)}</th>`)
+      .join('')
+    const body = selectedTransactions
+      .map((transaction) => {
+        const cells = columns.map((column) => {
+          const value = column.value(transaction)
+          if (column.type === 'number') return `<td class="number">${Number(value || 0)}</td>`
+          return `<td class="text">${escapeExcelHtml(value || UI_DASH)}</td>`
+        })
+        return `<tr>${cells.join('')}</tr>`
+      })
+      .join('')
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #d9d9d9; padding: 6px; }
+    th { font-weight: 700; background: #eef2f7; }
+    td.text { mso-number-format: "\\@"; }
+    td.number { mso-number-format: "0.00"; }
+  </style>
+</head>
+<body>
+  <table>
+    <thead><tr>${header}</tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+</body>
+</html>`
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.href = url
+    link.download = `bank_transactions_${new Date().toISOString().slice(0, 10)}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
 
@@ -1317,9 +1428,14 @@ export default function BankTransactions() {
             style={{ minWidth: 180 }}
           />
           {selectedIds.length > 0 && (
-            <button className="btn btn-secondary" onClick={openAssignModal}>
-              {tr('assignProject')} ({selectedIds.length})
-            </button>
+            <>
+              <button className="btn btn-secondary" onClick={handleExportSelectedExcel}>
+                {tr('bankTxExportSelectedExcel')} ({selectedIds.length})
+              </button>
+              <button className="btn btn-secondary" onClick={openAssignModal}>
+                {tr('assignProject')} ({selectedIds.length})
+              </button>
+            </>
           )}
           </>
         )}
