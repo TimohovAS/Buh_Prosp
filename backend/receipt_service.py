@@ -31,7 +31,6 @@ from backend.models import (
     ExpenseItem,
     IncomingInvoice,
     MonthlyObligation,
-    PlannedExpensePayment,
     Project,
     PurchaseReceipt,
     PurchaseReceiptItem,
@@ -416,12 +415,6 @@ async def _ensure_receipt_generated_expense_can_delete(db: AsyncSession, expense
     obligation_result = await db.execute(select(MonthlyObligation.id).where(MonthlyObligation.expense_id == expense.id).limit(1))
     if obligation_result.scalar_one_or_none():
         raise ReceiptImportError("This receipt expense is linked to a tax or obligation payment")
-
-    planned_payment_result = await db.execute(
-        select(func.count()).select_from(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id)
-    )
-    if int(planned_payment_result.scalar() or 0) > 0:
-        raise ReceiptImportError("This receipt expense is linked to recurring expense payments")
 
     bank_tx = await _get_any_bank_transaction_for_expense(db, expense.id)
     if bank_tx:

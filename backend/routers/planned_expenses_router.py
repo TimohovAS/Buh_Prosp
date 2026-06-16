@@ -7,9 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.db_utils import get_category_or_none, get_unassigned_project_id
-from backend.services import create_expense_reversal
-from backend.models import PlannedExpense, PlannedExpensePayment, Expense, TransactionCategory, User, Project
-from backend.planned_expenses_service import next_payment_dates, payment_dates_in_range
+from backend.models import PlannedExpense, PlannedExpensePayment, User
+from backend.planned_expenses_service import payment_dates_in_range
 from backend.schemas import (
     PlannedExpenseCreate,
     PlannedExpenseUpdate,
@@ -115,43 +114,15 @@ async def mark_planned_expense_paid(
     )
     if r_exist.scalar_one_or_none():
         raise HTTPException(400, "Р­С‚РѕС‚ РїР»Р°С‚С‘Р¶ СѓР¶Рµ РѕС‚РјРµС‡РµРЅ РєР°Рє РѕРїР»Р°С‡РµРЅРЅС‹Р№")
-    desc = f"{pe.name}" + (f" ({pe.description})" if pe.description else "")
-    if len(desc) > 500:
-        desc = desc[:497] + "..."
-    category = await get_category_or_none(db, getattr(pe, "category_id", None))
-    resolved_project_id = await _resolve_category_project_id(
-        db,
-        getattr(pe, "category_id", None),
-        getattr(pe, "project_id", None),
-    )
-    if not resolved_project_id:
-        resolved_project_id = await get_unassigned_project_id(db)
-    expense = Expense(
-        date=paid_d,
-        description=desc,
-        amount=pe.amount,
-        currency=pe.currency or "RSD",
-        category=pe.category or "other",
-        category_id=getattr(pe, "category_id", None),
-        is_tax_related=bool(category and category.category_group == "tax"),
-        note=data.note,
-        paid_date=paid_d,
-        project_id=resolved_project_id,
-        source="planned",
-        created_by=current_user.id,
-    )
-    db.add(expense)
-    await db.flush()
     pep = PlannedExpensePayment(
         planned_expense_id=pe.id,
         due_date=due_d,
         paid_date=paid_d,
-        expense_id=expense.id,
         note=data.note,
     )
     db.add(pep)
     await db.commit()
-    return {"ok": True, "expense_id": expense.id}
+    return {"ok": True}
 
 
 @router.post("/mark-unpaid")
@@ -171,17 +142,6 @@ async def mark_planned_expense_unpaid(
     pep = r.scalar_one_or_none()
     if not pep:
         raise HTTPException(404, "РћРїР»Р°С‚Р° РЅРµ РЅР°Р№РґРµРЅР°")
-    expense_id = pep.expense_id
-    if expense_id:
-        r_exp = await db.execute(select(Expense).where(Expense.id == expense_id))
-        exp = r_exp.scalar_one_or_none()
-        if exp and getattr(exp, "status", "paid") != "reversed" and not getattr(exp, "reversed_expense_id", None):
-            await create_expense_reversal(
-                db, exp,
-                reverse_date=getattr(exp, "paid_date", None) or exp.date,
-                source="planned",
-                created_by=current_user.id,
-            )
     await db.delete(pep)
     await db.commit()
     return {"ok": True}

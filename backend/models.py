@@ -735,7 +735,6 @@ class PlannedExpensePayment(Base):
     planned_expense_id = Column(Integer, ForeignKey("planned_expenses.id"), nullable=False)
     due_date = Column(Date, nullable=False)
     paid_date = Column(Date, nullable=False)
-    expense_id = Column(Integer, ForeignKey("expenses.id"))  # Созданный расход
     note = Column(String(200))
     created_at = Column(DateTime, default=datetime.utcnow)
 

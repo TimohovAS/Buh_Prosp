@@ -26,7 +26,6 @@ from backend.models import (
     IncomingInvoice,
     IncomingInvoiceSettlement,
     MonthlyObligation,
-    PlannedExpensePayment,
     Project,
     PurchaseReceipt,
 )
@@ -968,12 +967,6 @@ async def _ensure_expense_can_reclassify_to_owner_funds(
     if cash_entry_count > 0:
         raise ValueError("This expense is linked to cash register entries")
 
-    planned_payment_result = await db.execute(
-        select(func.count()).select_from(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id)
-    )
-    if int(planned_payment_result.scalar() or 0) > 0:
-        raise ValueError("This expense is linked to recurring expense payments")
-
     recurring_payment_result = await db.execute(
         select(func.count()).select_from(BankTransaction).where(
             BankTransaction.matched_type == "expense",
@@ -1221,4 +1214,3 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
     if affected_income_ids:
         await reconcile_income_payment_links(db, affected_income_ids)
     return tx
-

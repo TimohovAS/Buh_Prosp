@@ -23,7 +23,6 @@ from backend.models import (
     IncomingInvoiceSettlement,
     MonthlyObligation,
     Payment,
-    PlannedExpensePayment,
     Project,
     PurchaseReceipt,
 )
@@ -136,7 +135,6 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
     incomes = await _rows_by_id(db, Income)
     expenses = await _rows_by_id(db, Expense)
     obligations = await _rows_by_id(db, MonthlyObligation)
-    planned_expense_payments = await _rows_by_id(db, PlannedExpensePayment)
     cash_entries = await _rows_by_id(db, CashEntry)
     incoming_invoices = await _rows_by_id(db, IncomingInvoice)
     settlements = await _rows_by_id(db, IncomingInvoiceSettlement)
@@ -166,12 +164,6 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         for receipt in receipts.values()
         if receipt.expense_id is not None
     }
-    planned_payment_expense_ids = {
-        int(payment.expense_id)
-        for payment in planned_expense_payments.values()
-        if payment.expense_id is not None
-    }
-
     _check_bank_transactions(
         report,
         bank_transactions=bank_transactions,
@@ -186,11 +178,6 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
     _check_income_allocations(report, allocations=allocations, bank_transactions=bank_transactions, incomes=incomes)
     _check_incomes(report, incomes=incomes, contracts=contracts, projects=projects)
     _check_monthly_obligations(report, obligations=obligations, expenses=expenses)
-    _check_planned_expense_payments(
-        report,
-        planned_expense_payments=planned_expense_payments,
-        expenses=expenses,
-    )
     _check_incoming_invoice_settlements(
         report,
         settlements=settlements,
@@ -212,7 +199,6 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         expenses=expenses,
         incoming_expense_ids=incoming_expense_ids,
         receipt_expense_ids=receipt_expense_ids,
-        planned_payment_expense_ids=planned_payment_expense_ids,
     )
     _check_receipts(report, receipts=receipts, expenses=expenses, bank_transactions=bank_transactions, cash_entries=cash_entries)
     _check_cash_entries(report, cash_entries=cash_entries, expenses=expenses, bank_transactions=bank_transactions)
@@ -470,29 +456,6 @@ def _check_monthly_obligations(
             )
 
 
-def _check_planned_expense_payments(
-    report: DiagnosticsReport,
-    *,
-    planned_expense_payments: dict[int, PlannedExpensePayment],
-    expenses: dict[int, Expense],
-) -> None:
-    for payment in planned_expense_payments.values():
-        payment_id = int(payment.id)
-        if payment.expense_id is not None and int(payment.expense_id) not in expenses:
-            report.add(
-                "error",
-                "planned_expense_payment_missing_expense",
-                "planned_expense_payment",
-                payment_id,
-                "Planned expense payment points to a missing expense.",
-                {
-                    "planned_expense_id": payment.planned_expense_id,
-                    "due_date": payment.due_date,
-                    "expense_id": payment.expense_id,
-                },
-            )
-
-
 def _check_incoming_invoice_settlements(
     report: DiagnosticsReport,
     *,
@@ -717,7 +680,6 @@ def _check_expenses(
     expenses: dict[int, Expense],
     incoming_expense_ids: set[int],
     receipt_expense_ids: set[int],
-    planned_payment_expense_ids: set[int],
 ) -> None:
     for expense in expenses.values():
         expense_id = int(expense.id)
@@ -736,19 +698,6 @@ def _check_expenses(
                 "expense",
                 expense_id,
                 "Expense source is receipt but no purchase receipt links to it.",
-            )
-        if (
-            expense.source == "planned"
-            and expense.status != "reversed"
-            and expense.reversal_of_id is None
-            and expense_id not in planned_payment_expense_ids
-        ):
-            report.add(
-                "warning",
-                "expense_planned_source_without_payment",
-                "expense",
-                expense_id,
-                "Expense source is planned but no planned expense payment links to it.",
             )
 
 

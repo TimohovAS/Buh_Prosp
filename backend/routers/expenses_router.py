@@ -27,7 +27,6 @@ from backend.models import (
     ExpenseItem,
     IncomingInvoice,
     MonthlyObligation,
-    PlannedExpensePayment,
     Project,
     PurchaseReceipt,
     TransactionCategory,
@@ -340,11 +339,6 @@ async def _merge_expense_links(
     await db.execute(
         update(MonthlyObligation)
         .where(MonthlyObligation.expense_id == duplicate.id)
-        .values(expense_id=keep.id)
-    )
-    await db.execute(
-        update(PlannedExpensePayment)
-        .where(PlannedExpensePayment.expense_id == duplicate.id)
         .values(expense_id=keep.id)
     )
 
@@ -719,7 +713,6 @@ async def _admin_clear_expense_links(db: AsyncSession, expense_ids: list[int]) -
     )
     await db.execute(update(CashEntry).where(CashEntry.expense_id.in_(expense_ids)).values(expense_id=None))
     await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id.in_(expense_ids)).values(expense_id=None))
-    await db.execute(update(PlannedExpensePayment).where(PlannedExpensePayment.expense_id.in_(expense_ids)).values(expense_id=None))
 
     invoice_result = await db.execute(select(IncomingInvoice).where(IncomingInvoice.expense_id.in_(expense_ids)))
     for invoice in invoice_result.scalars().all():
@@ -795,7 +788,6 @@ async def delete_expense(
             .values(status="unmatched", matched_type=None, matched_id=None)
         )
         await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id == expense.id).values(expense_id=None))
-        await db.execute(update(PlannedExpensePayment).where(PlannedExpensePayment.expense_id == expense.id).values(expense_id=None))
         await db.delete(expense)
         await db.commit()
         return {"ok": True, "deleted": True, "restored_expense_id": original_expense.id if original_expense else None}

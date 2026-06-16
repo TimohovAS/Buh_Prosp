@@ -144,10 +144,6 @@ def main() -> int:
                 ids,
             )
             con.execute(
-                f"UPDATE planned_expense_payments SET expense_id = NULL WHERE expense_id IN ({placeholders})",
-                ids,
-            )
-            con.execute(
                 f"UPDATE cash_entries SET expense_id = NULL WHERE expense_id IN ({placeholders})",
                 ids,
             )
