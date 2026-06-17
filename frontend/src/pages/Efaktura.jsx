@@ -4,10 +4,10 @@ import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
-  DEFAULT_EFAKTURA_DOWNLOAD_DIR,
   isEfakturaApiConfigured,
   usesEfakturaDefaultRoutes,
 } from '../efakturaDefaults'
+import { downloadBlobFile } from '../utils/download'
 
 function formatAmount(value) {
   if (typeof value === 'number') return `${value.toLocaleString('sr-RS')} RSD`
@@ -50,10 +50,10 @@ function ResultSummary({ result }) {
             <div className="stat-value">{result.fetched_count || 0}</div>
           </div>
         ) : null}
-        {'saved_file_count' in result ? (
+        {'pdf_download_count' in result ? (
           <div className="stat-card">
-            <div className="stat-label">{tr('efakturaSavedFiles')}</div>
-            <div className="stat-value">{result.saved_file_count || 0}</div>
+            <div className="stat-label">{tr('efakturaPdfDownloads')}</div>
+            <div className="stat-value">{result.pdf_download_count || 0}</div>
           </div>
         ) : null}
         {'download_error_count' in result ? (
@@ -110,6 +110,18 @@ export default function Efaktura() {
   const [settingsInfo, setSettingsInfo] = useState(null)
   const [pageError, setPageError] = useState('')
 
+  const downloadPdfFiles = (downloads = []) => {
+    downloads.forEach((item) => {
+      if (!item?.content_base64 || !item?.file_name) return
+      const binary = atob(item.content_base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index)
+      }
+      downloadBlobFile(new Blob([bytes], { type: item.content_type || 'application/pdf' }), item.file_name)
+    })
+  }
+
   const loadHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -158,6 +170,7 @@ export default function Efaktura() {
     try {
       const result = await api.efaktura.sync()
       setLastResult(result)
+      downloadPdfFiles(result?.pdf_downloads || [])
       await loadHistory()
     } catch (err) {
       setPageError(err.message || tr('efakturaSyncError'))
@@ -228,10 +241,7 @@ export default function Efaktura() {
                   <div>{tr('efakturaIncomingLabel')}: {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaOutgoingLabel')}: {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}</div>
-                  <div>{tr('efakturaFileSavingLabel')}: {settingsInfo.efaktura_download_files_enabled ? tr('yes') : tr('no')}</div>
-                  {settingsInfo.efaktura_download_files_enabled ? (
-                    <div>{tr('efakturaDownloadDir')}: {settingsInfo.efaktura_download_dir || DEFAULT_EFAKTURA_DOWNLOAD_DIR}</div>
-                  ) : null}
+                  <div>{tr('efakturaSavePdf')}: {settingsInfo.efaktura_save_pdf ? tr('yes') : tr('no')}</div>
                 </div>
               ) : null}
             </div>
@@ -262,7 +272,7 @@ export default function Efaktura() {
                     <th>{tr('efakturaDocument')}</th>
                     <th>{tr('efakturaCounterparty')}</th>
                     <th>{tr('amount')}</th>
-                    <th>{tr('efakturaSavedFiles')}</th>
+                    <th>{tr('efakturaPdfDownloads')}</th>
                     <th>{tr('efakturaImportedAs')}</th>
                     <th>{tr('efakturaRecord')}</th>
                     <th>{tr('efakturaSource')}</th>
@@ -280,9 +290,7 @@ export default function Efaktura() {
                       <td>{item.direction === 'incoming' ? (item.supplier_name || '—') : (item.customer_name || '—')}</td>
                       <td>{formatAmount(item.amount_rsd)}</td>
                       <td>
-                        {item.local_xml_path ? <div>XML: {item.local_xml_path}</div> : null}
-                        {item.local_pdf_path ? <div>PDF: {item.local_pdf_path}</div> : null}
-                        {!item.local_xml_path && !item.local_pdf_path ? 'вЂ”' : null}
+                        -
                       </td>
                       <td>{item.imported_as === 'expense' ? tr('efakturaImportedAsExpense') : tr('efakturaImportedAsIncome')}</td>
                       <td>{item.imported_record_id || '—'}</td>

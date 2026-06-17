@@ -50,23 +50,15 @@ def run_migration(conn: sqlite3.Connection) -> bool:
     cursor = conn.cursor()
     changed = False
 
-    changed |= ensure_column(cursor, "enterprise", "efaktura_download_files_enabled", "BOOLEAN DEFAULT 1")
-    changed |= ensure_column(cursor, "enterprise", "efaktura_download_dir", "VARCHAR(500)")
-    changed |= ensure_column(cursor, "enterprise", "efaktura_file_name_template", "VARCHAR(500)")
-    changed |= ensure_column(cursor, "enterprise", "efaktura_save_xml", "BOOLEAN DEFAULT 1")
     changed |= ensure_column(cursor, "enterprise", "efaktura_save_pdf", "BOOLEAN DEFAULT 0")
     changed |= ensure_column(cursor, "enterprise", "efaktura_incoming_pdf_path", "VARCHAR(500)")
     changed |= ensure_column(cursor, "enterprise", "efaktura_outgoing_pdf_path", "VARCHAR(500)")
-
-    changed |= ensure_column(cursor, "efaktura_import_records", "local_xml_path", "VARCHAR(1000)")
-    changed |= ensure_column(cursor, "efaktura_import_records", "local_pdf_path", "VARCHAR(1000)")
-    changed |= ensure_column(cursor, "efaktura_import_records", "file_saved_at", "DATETIME")
 
     return changed
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Migration v21: add eFaktura downloaded file settings and paths.")
+    parser = argparse.ArgumentParser(description="Migration v21: add eFaktura PDF download settings.")
     parser.add_argument("--dry-run", action="store_true", help="Run migration in a transaction and roll it back.")
     args = parser.parse_args()
 

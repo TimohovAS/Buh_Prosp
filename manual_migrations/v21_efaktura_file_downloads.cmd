@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0\.."
 
 echo.
-echo [ProspEl] Running DB migration v21: eFaktura downloaded file settings and paths...
+echo [ProspEl] Running DB migration v21: eFaktura PDF download settings...
 echo [ProspEl] Working dir: %CD%
 echo.
 

@@ -80,10 +80,6 @@ class Enterprise(Base):
     efaktura_incoming_document_path = Column(String(500))
     efaktura_outgoing_list_path = Column(String(500))
     efaktura_outgoing_document_path = Column(String(500))
-    efaktura_download_files_enabled = Column(Boolean, default=True)
-    efaktura_download_dir = Column(String(500))
-    efaktura_file_name_template = Column(String(500))
-    efaktura_save_xml = Column(Boolean, default=True)
     efaktura_save_pdf = Column(Boolean, default=False)
     efaktura_incoming_pdf_path = Column(String(500))
     efaktura_outgoing_pdf_path = Column(String(500))
@@ -116,9 +112,6 @@ class EfakturaImportRecord(Base):
     imported_record_id = Column(Integer, nullable=False)
     source = Column(String(20), nullable=False, default="xml")
     file_name = Column(String(255))
-    local_xml_path = Column(String(1000))
-    local_pdf_path = Column(String(1000))
-    file_saved_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
