@@ -4,6 +4,7 @@ import { api, getUser } from '../api'
 import { tr } from '../i18n'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
+  DEFAULT_EFAKTURA_DOWNLOAD_DIR,
   isEfakturaApiConfigured,
   usesEfakturaDefaultRoutes,
 } from '../efakturaDefaults'
@@ -229,7 +230,7 @@ export default function Efaktura() {
                   <div>{tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}</div>
                   <div>{tr('efakturaFileSavingLabel')}: {settingsInfo.efaktura_download_files_enabled ? tr('yes') : tr('no')}</div>
                   {settingsInfo.efaktura_download_files_enabled ? (
-                    <div>{tr('efakturaDownloadDir')}: {settingsInfo.efaktura_download_dir || './efaktura_documents'}</div>
+                    <div>{tr('efakturaDownloadDir')}: {settingsInfo.efaktura_download_dir || DEFAULT_EFAKTURA_DOWNLOAD_DIR}</div>
                   ) : null}
                 </div>
               ) : null}

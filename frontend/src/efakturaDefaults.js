@@ -3,7 +3,7 @@ export const DEFAULT_EFAKTURA_INCOMING_LIST_PATH = '/api/publicApi/purchase-invo
 export const DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = '/api/publicApi/purchase-invoice/xml?invoiceId={id}'
 export const DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = '/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}'
 export const DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = '/api/publicApi/sales-invoice/xml?invoiceId={id}'
-export const DEFAULT_EFAKTURA_DOWNLOAD_DIR = './efaktura_documents'
+export const DEFAULT_EFAKTURA_DOWNLOAD_DIR = '~/Downloads'
 export const DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE = '{direction}/{year}/{invoice_number}_{external_id}'
 
 export function isEfakturaApiConfigured(settings) {

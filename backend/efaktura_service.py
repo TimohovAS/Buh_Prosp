@@ -38,7 +38,7 @@ DEFAULT_EFAKTURA_INCOMING_LIST_PATH = "/api/publicApi/purchase-invoice/ids?dateF
 DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = "/api/publicApi/purchase-invoice/xml?invoiceId={id}"
 DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = "/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}"
 DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invoiceId={id}"
-DEFAULT_EFAKTURA_DOWNLOAD_DIR = "./efaktura_documents"
+DEFAULT_EFAKTURA_DOWNLOAD_DIR = "~/Downloads"
 DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE = "{direction}/{year}/{invoice_number}_{external_id}"
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -305,7 +305,7 @@ def _safe_path_part(value: Any, fallback: str = "unknown") -> str:
 
 def _resolve_download_dir(value: str | None) -> Path:
     raw = (value or DEFAULT_EFAKTURA_DOWNLOAD_DIR).strip() or DEFAULT_EFAKTURA_DOWNLOAD_DIR
-    path = Path(raw)
+    path = Path(raw).expanduser()
     if not path.is_absolute():
         path = ROOT_DIR / path
     return path.resolve()
