@@ -49,6 +49,20 @@ function ResultSummary({ result }) {
             <div className="stat-value">{result.fetched_count || 0}</div>
           </div>
         ) : null}
+        {'saved_file_count' in result ? (
+          <div className="stat-card">
+            <div className="stat-label">{tr('efakturaSavedFiles')}</div>
+            <div className="stat-value">{result.saved_file_count || 0}</div>
+          </div>
+        ) : null}
+        {'download_error_count' in result ? (
+          <div className="stat-card">
+            <div className="stat-label">{tr('efakturaDownloadErrors')}</div>
+            <div className="stat-value" style={{ color: result.download_error_count ? 'var(--color-danger)' : undefined }}>
+              {result.download_error_count || 0}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {(result.errors || []).length > 0 ? (
@@ -57,6 +71,19 @@ function ResultSummary({ result }) {
           <ul style={{ margin: '0.5rem 0 0 1rem' }}>
             {result.errors.slice(0, 10).map((item, index) => (
               <li key={`${item.file_name || item.invoice_number || 'error'}-${index}`}>
+                {item.file_name || item.invoice_number || tr('efakturaDocument')}: {item.error || tr('efakturaUnknownError')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {(result.download_errors || []).length > 0 ? (
+        <div className="settings-callout" style={{ borderColor: 'rgba(245, 158, 11, 0.45)' }}>
+          <strong>{tr('efakturaDownloadErrorsTitle')}</strong>
+          <ul style={{ margin: '0.5rem 0 0 1rem' }}>
+            {result.download_errors.slice(0, 10).map((item, index) => (
+              <li key={`${item.file_name || item.invoice_number || 'download'}-${index}`}>
                 {item.file_name || item.invoice_number || tr('efakturaDocument')}: {item.error || tr('efakturaUnknownError')}
               </li>
             ))}
@@ -200,6 +227,10 @@ export default function Efaktura() {
                   <div>{tr('efakturaIncomingLabel')}: {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaOutgoingLabel')}: {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}</div>
                   <div>{tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}</div>
+                  <div>{tr('efakturaFileSavingLabel')}: {settingsInfo.efaktura_download_files_enabled ? tr('yes') : tr('no')}</div>
+                  {settingsInfo.efaktura_download_files_enabled ? (
+                    <div>{tr('efakturaDownloadDir')}: {settingsInfo.efaktura_download_dir || './efaktura_documents'}</div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -230,6 +261,7 @@ export default function Efaktura() {
                     <th>{tr('efakturaDocument')}</th>
                     <th>{tr('efakturaCounterparty')}</th>
                     <th>{tr('amount')}</th>
+                    <th>{tr('efakturaSavedFiles')}</th>
                     <th>{tr('efakturaImportedAs')}</th>
                     <th>{tr('efakturaRecord')}</th>
                     <th>{tr('efakturaSource')}</th>
@@ -246,6 +278,11 @@ export default function Efaktura() {
                       </td>
                       <td>{item.direction === 'incoming' ? (item.supplier_name || '—') : (item.customer_name || '—')}</td>
                       <td>{formatAmount(item.amount_rsd)}</td>
+                      <td>
+                        {item.local_xml_path ? <div>XML: {item.local_xml_path}</div> : null}
+                        {item.local_pdf_path ? <div>PDF: {item.local_pdf_path}</div> : null}
+                        {!item.local_xml_path && !item.local_pdf_path ? 'вЂ”' : null}
+                      </td>
                       <td>{item.imported_as === 'expense' ? tr('efakturaImportedAsExpense') : tr('efakturaImportedAsIncome')}</td>
                       <td>{item.imported_record_id || '—'}</td>
                       <td>{item.source || '—'}</td>

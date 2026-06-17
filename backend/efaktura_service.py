@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
@@ -36,6 +38,9 @@ DEFAULT_EFAKTURA_INCOMING_LIST_PATH = "/api/publicApi/purchase-invoice/ids?dateF
 DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = "/api/publicApi/purchase-invoice/xml?invoiceId={id}"
 DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = "/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}"
 DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invoiceId={id}"
+DEFAULT_EFAKTURA_DOWNLOAD_DIR = "./efaktura_documents"
+DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE = "{direction}/{year}/{invoice_number}_{external_id}"
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
 async def get_efaktura_enterprise(db: AsyncSession) -> Enterprise | None:
@@ -150,6 +155,13 @@ async def has_import_record(db: AsyncSession, document_key: str) -> bool:
     return result.scalar_one_or_none() is not None
 
 
+async def get_import_record_by_key(db: AsyncSession, document_key: str) -> EfakturaImportRecord | None:
+    result = await db.execute(
+        select(EfakturaImportRecord).where(EfakturaImportRecord.document_key == document_key).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def register_import_record(
     db: AsyncSession,
     *,
@@ -161,6 +173,8 @@ async def register_import_record(
     imported_record_id: int,
     source: str,
     file_name: str | None,
+    local_xml_path: str | None = None,
+    local_pdf_path: str | None = None,
 ) -> EfakturaImportRecord:
     record = EfakturaImportRecord(
         document_key=document_key,
@@ -177,6 +191,9 @@ async def register_import_record(
         imported_record_id=imported_record_id,
         source=source,
         file_name=file_name,
+        local_xml_path=local_xml_path,
+        local_pdf_path=local_pdf_path,
+        file_saved_at=datetime.utcnow() if local_xml_path or local_pdf_path else None,
     )
     db.add(record)
     await db.flush()
@@ -277,6 +294,114 @@ async def migrate_legacy_efaktura_incoming_records(
     return summary
 
 
+def _safe_path_part(value: Any, fallback: str = "unknown") -> str:
+    text = str(value or "").strip()
+    if not text:
+        text = fallback
+    text = re.sub(r"[<>:\"|?*\x00-\x1f]", "_", text)
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    return text[:140] or fallback
+
+
+def _resolve_download_dir(value: str | None) -> Path:
+    raw = (value or DEFAULT_EFAKTURA_DOWNLOAD_DIR).strip() or DEFAULT_EFAKTURA_DOWNLOAD_DIR
+    path = Path(raw)
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+    return path.resolve()
+
+
+def _build_file_base_path(
+    *,
+    download_dir: str | None,
+    template: str | None,
+    parsed: dict[str, Any],
+    direction: str,
+    external_id: str | None,
+) -> Path:
+    issued_date = parsed["issued_date"]
+    counterparty = parsed.get("supplier_name") if direction == "incoming" else parsed.get("customer_name")
+    values = {
+        "direction": direction,
+        "year": issued_date.year,
+        "date": issued_date.isoformat(),
+        "invoice_number": to_number_year_format(parsed["invoice_number"], issued_date.year),
+        "external_id": external_id or "no-id",
+        "counterparty": counterparty or "unknown",
+        "amount": parsed.get("amount_rsd") or "0",
+    }
+    raw_template = (template or DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE).strip() or DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE
+    try:
+        rendered = raw_template.format(**values)
+    except Exception:
+        rendered = DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE.format(**values)
+
+    rendered = rendered.replace("\\", "/").lstrip("/")
+    parts = [_safe_path_part(part) for part in rendered.split("/") if part.strip()]
+    if not parts:
+        parts = [_safe_path_part(values["invoice_number"])]
+    return _resolve_download_dir(download_dir).joinpath(*parts)
+
+
+def _write_file_if_changed(path: Path, content: bytes) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_bytes() == content:
+        return False
+    path.write_bytes(content)
+    return True
+
+
+def _maybe_pdf_bytes(raw: bytes | None, content_type: str | None) -> bytes | None:
+    if not raw:
+        return None
+    lowered = (content_type or "").lower()
+    if "pdf" in lowered or raw.startswith(b"%PDF"):
+        return raw
+    return None
+
+
+def _save_synced_document_files(
+    enterprise: Enterprise | None,
+    *,
+    parsed: dict[str, Any],
+    direction: str,
+    external_id: str | None,
+    xml_content: bytes,
+    pdf_content: bytes | None,
+) -> dict[str, Any]:
+    if not enterprise or not bool(getattr(enterprise, "efaktura_download_files_enabled", True)):
+        return {"saved_count": 0, "local_xml_path": None, "local_pdf_path": None}
+
+    base_path = _build_file_base_path(
+        download_dir=getattr(enterprise, "efaktura_download_dir", None),
+        template=getattr(enterprise, "efaktura_file_name_template", None),
+        parsed=parsed,
+        direction=direction,
+        external_id=external_id,
+    )
+    saved_count = 0
+    local_xml_path = None
+    local_pdf_path = None
+
+    if bool(getattr(enterprise, "efaktura_save_xml", True)):
+        xml_path = base_path.with_suffix(".xml")
+        if _write_file_if_changed(xml_path, xml_content):
+            saved_count += 1
+        local_xml_path = str(xml_path)
+
+    if bool(getattr(enterprise, "efaktura_save_pdf", False)) and pdf_content:
+        pdf_path = base_path.with_suffix(".pdf")
+        if _write_file_if_changed(pdf_path, pdf_content):
+            saved_count += 1
+        local_pdf_path = str(pdf_path)
+
+    return {
+        "saved_count": saved_count,
+        "local_xml_path": local_xml_path,
+        "local_pdf_path": local_pdf_path,
+    }
+
+
 async def import_efaktura_documents(
     db: AsyncSession,
     *,
@@ -299,12 +424,18 @@ async def import_efaktura_documents(
     errors: list[dict[str, Any]] = []
     created_income_count = 0
     created_expense_count = 0
+    saved_file_count = 0
+    download_errors: list[dict[str, Any]] = []
 
     for document in documents:
         file_name = document.get("file_name") or "unknown.xml"
         external_id = document.get("external_id")
         direction_hint = document.get("direction_hint")
         content = document.get("content")
+        pdf_content = document.get("pdf_content")
+        document_download_errors = document.get("download_errors") or []
+        if document_download_errors:
+            download_errors.extend(document_download_errors)
 
         if not content:
             errors.append({"file_name": file_name, "error": "Empty XML content"})
@@ -338,11 +469,42 @@ async def import_efaktura_documents(
 
         # Первичная дедупликация: тот же документ (ключ) уже импортирован — не создаём вторую запись.
         document_key = build_document_key(parsed, direction)
-        if await has_import_record(db, document_key):
+        file_save = {"saved_count": 0, "local_xml_path": None, "local_pdf_path": None}
+        if source == "api":
+            try:
+                file_save = _save_synced_document_files(
+                    enterprise,
+                    parsed=parsed,
+                    direction=direction,
+                    external_id=external_id,
+                    xml_content=content,
+                    pdf_content=pdf_content,
+                )
+                saved_file_count += int(file_save.get("saved_count") or 0)
+            except Exception as exc:
+                download_errors.append({
+                    "file_name": file_name,
+                    "invoice_number": normalized_invoice_number,
+                    "error": f"Could not save eFaktura file: {exc}",
+                })
+
+        existing_record = await get_import_record_by_key(db, document_key)
+        if existing_record:
+            updated_saved_paths = False
+            if file_save.get("local_xml_path") and not existing_record.local_xml_path:
+                existing_record.local_xml_path = file_save["local_xml_path"]
+                updated_saved_paths = True
+            if file_save.get("local_pdf_path") and not existing_record.local_pdf_path:
+                existing_record.local_pdf_path = file_save["local_pdf_path"]
+                updated_saved_paths = True
+            if updated_saved_paths:
+                existing_record.file_saved_at = datetime.utcnow()
             skipped.append({
                 "file_name": file_name,
                 "invoice_number": normalized_invoice_number,
                 "reason": "Document already imported",
+                "local_xml_path": file_save.get("local_xml_path") or existing_record.local_xml_path,
+                "local_pdf_path": file_save.get("local_pdf_path") or existing_record.local_pdf_path,
             })
             continue
 
@@ -387,6 +549,8 @@ async def import_efaktura_documents(
                         imported_record_id=0,
                         source=source,
                         file_name=file_name,
+                        local_xml_path=file_save.get("local_xml_path"),
+                        local_pdf_path=file_save.get("local_pdf_path"),
                     )
 
                     invoice = await create_incoming_invoice(
@@ -421,6 +585,8 @@ async def import_efaktura_documents(
                         "expense_id": invoice.expense_id,
                         "invoice_number": normalized_invoice_number,
                         "counterparty_name": parsed.get("supplier_name"),
+                        "local_xml_path": file_save.get("local_xml_path"),
+                        "local_pdf_path": file_save.get("local_pdf_path"),
                     })
                     created_expense_count += 1
                     continue
@@ -461,6 +627,8 @@ async def import_efaktura_documents(
                     imported_record_id=income.id,
                     source=source,
                     file_name=file_name,
+                    local_xml_path=file_save.get("local_xml_path"),
+                    local_pdf_path=file_save.get("local_pdf_path"),
                 )
                 created.append({
                     "file_name": file_name,
@@ -468,6 +636,8 @@ async def import_efaktura_documents(
                     "income_id": income.id,
                     "invoice_number": income.invoice_number,
                     "counterparty_name": income.client_name,
+                    "local_xml_path": file_save.get("local_xml_path"),
+                    "local_pdf_path": file_save.get("local_pdf_path"),
                 })
                 created_income_count += 1
         except Exception as exc:
@@ -485,9 +655,12 @@ async def import_efaktura_documents(
         "created_expense_count": created_expense_count,
         "skipped_count": len(skipped),
         "error_count": len(errors),
+        "saved_file_count": saved_file_count,
+        "download_error_count": len(download_errors),
         "created": created,
         "skipped": skipped,
         "errors": errors,
+        "download_errors": download_errors,
     }
 
 
@@ -512,9 +685,16 @@ def _format_sync_boundary(value: date, *, end_of_day: bool) -> str:
     return moment.isoformat()
 
 
-def _http_request(url: str, *, method: str, header_name: str, header_value: str) -> tuple[bytes, str]:
+def _http_request(
+    url: str,
+    *,
+    method: str,
+    header_name: str,
+    header_value: str,
+    accept: str = "application/json, application/xml, text/xml;q=0.9, */*;q=0.8",
+) -> tuple[bytes, str]:
     request = Request(url, method=method, headers={
-        "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.8",
+        "Accept": accept,
         header_name: header_value,
     })
     with urlopen(request, timeout=60) as response:
@@ -575,6 +755,8 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
     incoming_document_path = get_effective_efaktura_setting(enterprise.efaktura_incoming_document_path, DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH)
     outgoing_list_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH)
     outgoing_document_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH)
+    incoming_pdf_path = (getattr(enterprise, "efaktura_incoming_pdf_path", None) or "").strip()
+    outgoing_pdf_path = (getattr(enterprise, "efaktura_outgoing_pdf_path", None) or "").strip()
 
     header_name = (enterprise.efaktura_api_key_header or "ApiKey").strip() or "ApiKey"
     header_prefix = enterprise.efaktura_api_key_prefix or ""
@@ -587,7 +769,7 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
 
     documents: list[dict[str, Any]] = []
 
-    async def fetch_direction(direction: str, list_path: str, document_path: str) -> None:
+    async def fetch_direction(direction: str, list_path: str, document_path: str, pdf_path: str | None) -> None:
         list_url = _format_url(
             base_url,
             list_path,
@@ -625,17 +807,49 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 header_name=header_name,
                 header_value=header_value,
             )
+            pdf_content = None
+            download_errors = []
+            if bool(getattr(enterprise, "efaktura_save_pdf", False)) and pdf_path:
+                pdf_url = _format_url(
+                    base_url,
+                    pdf_path,
+                    id=external_id,
+                    external_id=external_id,
+                )
+                if pdf_url:
+                    try:
+                        raw_pdf, pdf_content_type = await asyncio.to_thread(
+                            _http_request,
+                            pdf_url,
+                            method="GET",
+                            header_name=header_name,
+                            header_value=header_value,
+                            accept="application/pdf,*/*",
+                        )
+                        pdf_content = _maybe_pdf_bytes(raw_pdf, pdf_content_type)
+                        if not pdf_content:
+                            download_errors.append({
+                                "file_name": f"{direction}-{external_id}.pdf",
+                                "error": f"PDF endpoint did not return a PDF ({pdf_content_type or 'unknown content type'})",
+                            })
+                    except Exception as exc:
+                        download_errors.append({
+                            "file_name": f"{direction}-{external_id}.pdf",
+                            "error": str(exc),
+                        })
             documents.append({
                 "file_name": f"{direction}-{external_id}.xml",
                 "content": _extract_xml_bytes(raw_xml, content_type),
+                "pdf_content": pdf_content,
+                "download_errors": download_errors,
                 "external_id": external_id,
                 "direction_hint": direction,
             })
 
     if enterprise.efaktura_sync_incoming:
-        await fetch_direction("incoming", incoming_list_path, incoming_document_path)
+        await fetch_direction("incoming", incoming_list_path, incoming_document_path, incoming_pdf_path)
     if enterprise.efaktura_sync_outgoing:
-        await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path)
+        await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path, outgoing_pdf_path)
 
     result = await import_efaktura_documents(db, user_id=user_id, documents=documents, source="api")
     result["fetched_count"] = len(documents)

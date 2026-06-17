@@ -8,6 +8,8 @@ import ProjectSelect from '../components/ProjectSelect'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
+  DEFAULT_EFAKTURA_DOWNLOAD_DIR,
+  DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE,
   DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH,
   DEFAULT_EFAKTURA_INCOMING_LIST_PATH,
   DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH,
@@ -144,6 +146,13 @@ export default function Settings() {
     efaktura_incoming_document_path: '',
     efaktura_outgoing_list_path: '',
     efaktura_outgoing_document_path: '',
+    efaktura_download_files_enabled: true,
+    efaktura_download_dir: '',
+    efaktura_file_name_template: '',
+    efaktura_save_xml: true,
+    efaktura_save_pdf: false,
+    efaktura_incoming_pdf_path: '',
+    efaktura_outgoing_pdf_path: '',
   })
   const [efakturaLoading, setEfakturaLoading] = useState(false)
   const [efakturaSaving, setEfakturaSaving] = useState(false)
@@ -203,6 +212,13 @@ export default function Settings() {
           efaktura_incoming_document_path: response?.efaktura_incoming_document_path || '',
           efaktura_outgoing_list_path: response?.efaktura_outgoing_list_path || '',
           efaktura_outgoing_document_path: response?.efaktura_outgoing_document_path || '',
+          efaktura_download_files_enabled: response?.efaktura_download_files_enabled ?? true,
+          efaktura_download_dir: response?.efaktura_download_dir || '',
+          efaktura_file_name_template: response?.efaktura_file_name_template || '',
+          efaktura_save_xml: response?.efaktura_save_xml ?? true,
+          efaktura_save_pdf: response?.efaktura_save_pdf ?? false,
+          efaktura_incoming_pdf_path: response?.efaktura_incoming_pdf_path || '',
+          efaktura_outgoing_pdf_path: response?.efaktura_outgoing_pdf_path || '',
         })
       })
       .catch((err) => console.error(err))
@@ -472,6 +488,13 @@ export default function Settings() {
         efaktura_incoming_document_path: efakturaForm.efaktura_incoming_document_path || null,
         efaktura_outgoing_list_path: efakturaForm.efaktura_outgoing_list_path || null,
         efaktura_outgoing_document_path: efakturaForm.efaktura_outgoing_document_path || null,
+        efaktura_download_files_enabled: !!efakturaForm.efaktura_download_files_enabled,
+        efaktura_download_dir: efakturaForm.efaktura_download_dir || null,
+        efaktura_file_name_template: efakturaForm.efaktura_file_name_template || null,
+        efaktura_save_xml: !!efakturaForm.efaktura_save_xml,
+        efaktura_save_pdf: !!efakturaForm.efaktura_save_pdf,
+        efaktura_incoming_pdf_path: efakturaForm.efaktura_incoming_pdf_path || null,
+        efaktura_outgoing_pdf_path: efakturaForm.efaktura_outgoing_pdf_path || null,
       })
       setEfakturaMessage(tr('efakturaSettingsSaved'))
       loadEfakturaSettings()
@@ -814,6 +837,61 @@ export default function Settings() {
                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
               </div>
+              <div className="settings-callout" style={{ gridColumn: '1 / -1', margin: '0.25rem 0' }}>
+                <strong>{tr('efakturaFileDownloadSettings')}</strong>
+                <div style={{ marginTop: '0.35rem' }}>{tr('efakturaFileDownloadHint')}</div>
+              </div>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaDownloadFilesEnabled')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_download_files_enabled}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_download_files_enabled: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaSaveXml')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_save_xml}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_save_xml: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <label className="settings-info-item" style={{ cursor: 'pointer' }}>
+                <div className="settings-field-label">{tr('efakturaSavePdf')}</div>
+                <div className="settings-field-value">
+                  <input
+                    type="checkbox"
+                    checked={efakturaForm.efaktura_save_pdf}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_save_pdf: event.target.checked }))}
+                  />
+                </div>
+              </label>
+              <div className="settings-info-item">
+                <div className="settings-field-label">{tr('efakturaDownloadDir')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_download_dir}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_download_dir: event.target.value }))}
+                  placeholder={DEFAULT_EFAKTURA_DOWNLOAD_DIR}
+                />
+              </div>
+              <div className="settings-info-item" style={{ gridColumn: '1 / -1' }}>
+                <div className="settings-field-label">{tr('efakturaFileNameTemplate')}</div>
+                <input
+                  className="form-input"
+                  value={efakturaForm.efaktura_file_name_template}
+                  onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_file_name_template: event.target.value }))}
+                  placeholder={DEFAULT_EFAKTURA_FILE_NAME_TEMPLATE}
+                />
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+                  {tr('efakturaFileNameTemplateHint')}
+                </div>
+              </div>
                 <div className="settings-info-item">
                   <div className="settings-field-label">{tr('efakturaIncomingListPath')}</div>
                   <input
@@ -848,6 +926,24 @@ export default function Settings() {
                     value={efakturaForm.efaktura_outgoing_document_path}
                     onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_document_path: event.target.value }))}
                     placeholder={DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH}
+                  />
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaIncomingPdfPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_incoming_pdf_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_incoming_pdf_path: event.target.value }))}
+                    placeholder={tr('efakturaPdfPathPlaceholder')}
+                  />
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('efakturaOutgoingPdfPath')}</div>
+                  <input
+                    className="form-input"
+                    value={efakturaForm.efaktura_outgoing_pdf_path}
+                    onChange={(event) => setEfakturaForm((current) => ({ ...current, efaktura_outgoing_pdf_path: event.target.value }))}
+                    placeholder={tr('efakturaPdfPathPlaceholder')}
                   />
                 </div>
               </div>

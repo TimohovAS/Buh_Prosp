@@ -592,6 +592,13 @@ class EfakturaSettingsBase(BaseModel):
     efaktura_incoming_document_path: Optional[str] = None
     efaktura_outgoing_list_path: Optional[str] = None
     efaktura_outgoing_document_path: Optional[str] = None
+    efaktura_download_files_enabled: bool = True
+    efaktura_download_dir: Optional[str] = None
+    efaktura_file_name_template: Optional[str] = None
+    efaktura_save_xml: bool = True
+    efaktura_save_pdf: bool = False
+    efaktura_incoming_pdf_path: Optional[str] = None
+    efaktura_outgoing_pdf_path: Optional[str] = None
 
 
 class EfakturaSettingsUpdate(EfakturaSettingsBase):
@@ -618,6 +625,9 @@ class EfakturaImportHistoryItem(BaseModel):
     imported_record_id: int
     source: str
     file_name: Optional[str] = None
+    local_xml_path: Optional[str] = None
+    local_pdf_path: Optional[str] = None
+    file_saved_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
@@ -633,6 +643,8 @@ class EfakturaImportSummary(BaseModel):
     counterparty_name: Optional[str] = None
     reason: Optional[str] = None
     error: Optional[str] = None
+    local_xml_path: Optional[str] = None
+    local_pdf_path: Optional[str] = None
 
 
 class EfakturaImportResult(BaseModel):
@@ -641,9 +653,12 @@ class EfakturaImportResult(BaseModel):
     created_expense_count: int = 0
     skipped_count: int = 0
     error_count: int = 0
+    saved_file_count: int = 0
+    download_error_count: int = 0
     created: list[EfakturaImportSummary] = Field(default_factory=list)
     skipped: list[EfakturaImportSummary] = Field(default_factory=list)
     errors: list[EfakturaImportSummary] = Field(default_factory=list)
+    download_errors: list[EfakturaImportSummary] = Field(default_factory=list)
 
 
 class EfakturaSyncResponse(EfakturaImportResult):
