@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from datetime import timedelta
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
 
@@ -8,6 +10,8 @@ from backend.state_machine import initialize_expense_status, initialize_project_
 CASH_CATEGORY = "cash"
 CASH_TRANSFER_SOURCE = "cash_transfer"
 CASH_PROJECT_CODE = "INT-CASH"
+AUTO_LINK_PENDING_WITHDRAWAL_DAYS = 14
+_CASH_WITHDRAWAL_TEXT_MARKERS = ("atm", "bankomat", "gotovin", "cash", "isplata", "podiz")
 CASH_PROJECT_NAME = "Наличка / Касса"
 
 
@@ -201,6 +205,125 @@ async def create_cash_transfer_from_pending_entry(
     return expense, pending_entry
 
 
+def _looks_like_cash_withdrawal_transaction(transaction: BankTransaction) -> bool:
+    text = " ".join(
+        str(value or "").lower()
+        for value in (
+            transaction.purpose,
+            transaction.counterparty_name,
+            transaction.bank_reference,
+        )
+    )
+    return any(marker in text for marker in _CASH_WITHDRAWAL_TEXT_MARKERS)
+
+
+def _pending_entry_matches_transaction(
+    entry: CashEntry,
+    transaction: BankTransaction,
+    max_days: int,
+) -> bool:
+    if entry.entry_type != "pending_withdrawal" or entry.direction != "in":
+        return False
+    if entry.bank_transaction_id or entry.expense_id:
+        return False
+    if transaction.direction != "out" or transaction.status not in {"unmatched", "ignored"}:
+        return False
+    if not _looks_like_cash_withdrawal_transaction(transaction):
+        return False
+    if (entry.currency or "RSD") != (transaction.currency or "RSD"):
+        return False
+    if not money_eq(entry.amount or ZERO_DECIMAL, money_abs(transaction.amount or ZERO_DECIMAL)):
+        return False
+    if transaction.date < entry.date:
+        return False
+    return transaction.date <= entry.date + timedelta(days=max_days)
+
+
+async def auto_link_pending_cash_withdrawals(
+    db: AsyncSession,
+    *,
+    created_by: int | None = None,
+    max_days: int = AUTO_LINK_PENDING_WITHDRAWAL_DAYS,
+) -> int:
+    pending_result = await db.execute(
+        select(CashEntry)
+        .where(
+            CashEntry.entry_type == "pending_withdrawal",
+            CashEntry.direction == "in",
+            CashEntry.bank_transaction_id.is_(None),
+            CashEntry.expense_id.is_(None),
+        )
+        .order_by(CashEntry.date.asc(), CashEntry.id.asc())
+    )
+    pending_entries = list(pending_result.scalars().all())
+    if not pending_entries:
+        return 0
+
+    first_pending_date = min(entry.date for entry in pending_entries)
+    last_pending_date = max(entry.date for entry in pending_entries)
+    pending_amounts = {entry.amount for entry in pending_entries}
+    pending_currencies = {entry.currency or "RSD" for entry in pending_entries}
+    currency_filter = BankTransaction.currency.in_(pending_currencies)
+    if "RSD" in pending_currencies:
+        currency_filter = or_(currency_filter, BankTransaction.currency.is_(None))
+
+    transactions_result = await db.execute(
+        select(BankTransaction)
+        .where(
+            BankTransaction.direction == "out",
+            BankTransaction.status.in_(["unmatched", "ignored"]),
+            BankTransaction.date >= first_pending_date,
+            BankTransaction.date <= last_pending_date + timedelta(days=max_days),
+            currency_filter,
+            func.abs(BankTransaction.amount).in_(pending_amounts),
+        )
+        .order_by(BankTransaction.date.asc(), BankTransaction.id.asc())
+    )
+    transactions = [
+        transaction
+        for transaction in transactions_result.scalars().all()
+        if _looks_like_cash_withdrawal_transaction(transaction)
+    ]
+    if not transactions:
+        return 0
+
+    pending_to_transactions: dict[int, list[BankTransaction]] = {}
+    transaction_to_pending: dict[int, list[CashEntry]] = {}
+    for entry in pending_entries:
+        for transaction in transactions:
+            if _pending_entry_matches_transaction(entry, transaction, max_days):
+                pending_to_transactions.setdefault(int(entry.id), []).append(transaction)
+                transaction_to_pending.setdefault(int(transaction.id), []).append(entry)
+
+    linked_count = 0
+    used_transaction_ids: set[int] = set()
+    for entry in pending_entries:
+        candidates = pending_to_transactions.get(int(entry.id), [])
+        if len(candidates) != 1:
+            continue
+        transaction = candidates[0]
+        if int(transaction.id) in used_transaction_ids:
+            continue
+        if len(transaction_to_pending.get(int(transaction.id), [])) != 1:
+            continue
+
+        try:
+            await create_cash_transfer_from_pending_entry(
+                db,
+                transaction,
+                entry,
+                description=build_cash_transfer_description(transaction),
+                note=entry.note,
+                created_by=created_by,
+            )
+        except ValueError:
+            continue
+        used_transaction_ids.add(int(transaction.id))
+        linked_count += 1
+
+    return linked_count
+
+
 async def revert_cash_transfer(
     db: AsyncSession,
     transaction: BankTransaction,
@@ -222,4 +345,3 @@ async def revert_cash_transfer(
     transaction.status = "unmatched"
     transaction.matched_type = None
     transaction.matched_id = None
-

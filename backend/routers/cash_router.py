@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.auth import get_current_user_required, require_edit_access
-from backend.cash_service import create_cash_transfer_from_pending_entry, create_cash_transfer_from_transaction
+from backend.cash_service import (
+    auto_link_pending_cash_withdrawals,
+    create_cash_transfer_from_pending_entry,
+    create_cash_transfer_from_transaction,
+)
 from backend.database import get_db
 from backend.db_utils import (
     get_contract_or_404,
@@ -301,6 +305,9 @@ async def get_cash_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
+    linked_count = await auto_link_pending_cash_withdrawals(db, created_by=current_user.id)
+    if linked_count:
+        await db.commit()
     return await _build_cash_summary(db, year=year, month=month, limit=limit)
 
 

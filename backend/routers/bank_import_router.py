@@ -12,6 +12,7 @@ from backend.database import get_db
 from backend.models import User, BankImportFile, BankTransaction
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_parser import parse_izvod_xls
+from backend.cash_service import auto_link_pending_cash_withdrawals
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 
 router = APIRouter(prefix="/bank-import", tags=["bank-import"])
@@ -282,6 +283,7 @@ async def apply_import(
             )
             db.add(file_entry)
 
+    auto_linked_cash_withdrawals = await auto_link_pending_cash_withdrawals(db, created_by=current_user.id)
 
     await db.commit()
 
@@ -293,8 +295,7 @@ async def apply_import(
         "created_income": total_income,
         "created_expense": total_expense,
         "skipped_duplicates": skipped_duplicates,
+        "auto_linked_cash_withdrawals": auto_linked_cash_withdrawals,
         "errors": errors,
         "recent_files": await _recent_files(db, 10),
     }
-
-
