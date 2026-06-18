@@ -287,25 +287,18 @@ async def auto_link_pending_cash_withdrawals(
     if not transactions:
         return 0
 
-    pending_to_transactions: dict[int, list[BankTransaction]] = {}
-    transaction_to_pending: dict[int, list[CashEntry]] = {}
-    for entry in pending_entries:
-        for transaction in transactions:
-            if _pending_entry_matches_transaction(entry, transaction, max_days):
-                pending_to_transactions.setdefault(int(entry.id), []).append(transaction)
-                transaction_to_pending.setdefault(int(transaction.id), []).append(entry)
-
     linked_count = 0
-    used_transaction_ids: set[int] = set()
-    for entry in pending_entries:
-        candidates = pending_to_transactions.get(int(entry.id), [])
-        if len(candidates) != 1:
+    used_pending_ids: set[int] = set()
+    for transaction in transactions:
+        candidates = [
+            entry
+            for entry in pending_entries
+            if int(entry.id) not in used_pending_ids
+            and _pending_entry_matches_transaction(entry, transaction, max_days)
+        ]
+        if not candidates:
             continue
-        transaction = candidates[0]
-        if int(transaction.id) in used_transaction_ids:
-            continue
-        if len(transaction_to_pending.get(int(transaction.id), [])) != 1:
-            continue
+        entry = sorted(candidates, key=lambda item: (item.date, item.id or 0))[0]
 
         try:
             await create_cash_transfer_from_pending_entry(
@@ -318,7 +311,7 @@ async def auto_link_pending_cash_withdrawals(
             )
         except ValueError:
             continue
-        used_transaction_ids.add(int(transaction.id))
+        used_pending_ids.add(int(entry.id))
         linked_count += 1
 
     return linked_count
