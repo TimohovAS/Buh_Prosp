@@ -104,10 +104,20 @@ def _payout_type_label(payout_type: str) -> str:
     }.get(payout_type, "Выплата")
 
 
+def _inclusive_period_days(data: WorkerPayoutCreate) -> Decimal | None:
+    if not data.period_start or not data.period_end or data.period_end < data.period_start:
+        return None
+    return Decimal((data.period_end - data.period_start).days + 1)
+
+
 def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Decimal]:
     payout_type = data.payout_type or "regular"
     work_days = _dec(data.work_days)
     trip_days = _dec(data.trip_days)
+    if payout_type.startswith("trip") and trip_days <= ZERO_DECIMAL:
+        period_days = _inclusive_period_days(data)
+        if period_days is not None:
+            trip_days = period_days
     regular_day_rate = _dec(data.regular_day_rate if data.regular_day_rate is not None else worker.regular_day_rate)
     weekly_rate = _dec(data.weekly_rate if data.weekly_rate is not None else worker.weekly_rate)
     monthly_rate = _dec(data.monthly_rate if data.monthly_rate is not None else worker.monthly_rate)

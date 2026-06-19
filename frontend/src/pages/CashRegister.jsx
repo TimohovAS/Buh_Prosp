@@ -47,6 +47,33 @@ const emptyWorkerPayoutForm = {
 }
 
 const toNumber = (value) => Number(value || 0)
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function calculateTripDuration(periodStart, periodEnd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart || '') || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd || '')) {
+    return null
+  }
+  const [startYear, startMonth, startDay] = periodStart.split('-').map(Number)
+  const [endYear, endMonth, endDay] = periodEnd.split('-').map(Number)
+  const start = Date.UTC(startYear, startMonth - 1, startDay)
+  const end = Date.UTC(endYear, endMonth - 1, endDay)
+  const days = Math.floor((end - start) / DAY_MS) + 1
+  if (days <= 0) return null
+  return {
+    tripDays: String(days),
+    lodgingNights: String(Math.max(days - 1, 0)),
+  }
+}
+
+function applyTripDuration(form) {
+  const duration = calculateTripDuration(form.period_start, form.period_end)
+  if (!duration) return form
+  return {
+    ...form,
+    trip_days: duration.tripDays,
+    lodging_nights: duration.lodgingNights,
+  }
+}
 
 export default function CashRegister() {
   const location = useLocation()
@@ -560,6 +587,20 @@ export default function CashRegister() {
       project_id: projectId,
       contract_id: '',
     }))
+  }
+
+  const updateWorkerPayoutType = (payoutType) => {
+    setWorkerPayoutForm((previous) => {
+      const next = { ...previous, payout_type: payoutType }
+      return payoutType.startsWith('trip') ? applyTripDuration(next) : next
+    })
+  }
+
+  const updateWorkerPayoutPeriod = (field, value) => {
+    setWorkerPayoutForm((previous) => {
+      const next = { ...previous, [field]: value }
+      return next.payout_type.startsWith('trip') ? applyTripDuration(next) : next
+    })
   }
 
   const handleSaveWorkerPayout = async (event) => {
@@ -1103,7 +1144,7 @@ export default function CashRegister() {
             </div>
             <div className="form-group">
               <label className="form-label">Тип выплаты</label>
-              <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, payout_type: event.target.value }))}>
+              <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => updateWorkerPayoutType(event.target.value)}>
                 <option value="regular">Выходы</option>
                 <option value="weekly">Неделя</option>
                 <option value="monthly">Месяц</option>
@@ -1120,11 +1161,11 @@ export default function CashRegister() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group">
               <label className="form-label">Период с</label>
-              <DatePicker value={workerPayoutForm.period_start} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, period_start: value }))} />
+              <DatePicker value={workerPayoutForm.period_start} onChange={(value) => updateWorkerPayoutPeriod('period_start', value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Период по</label>
-              <DatePicker value={workerPayoutForm.period_end} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, period_end: value }))} />
+              <DatePicker value={workerPayoutForm.period_end} onChange={(value) => updateWorkerPayoutPeriod('period_end', value)} />
             </div>
             {workerPayoutForm.payout_type === 'regular' ? (
               <div className="form-group">
