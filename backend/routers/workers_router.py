@@ -114,9 +114,11 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
     payout_type = data.payout_type or "regular"
     work_days = _dec(data.work_days)
     trip_days = _dec(data.trip_days)
-    if payout_type.startswith("trip") and trip_days <= ZERO_DECIMAL:
-        period_days = _inclusive_period_days(data)
-        if period_days is not None:
+    period_days = _inclusive_period_days(data)
+    if period_days is not None:
+        if payout_type == "regular":
+            work_days = period_days
+        elif payout_type.startswith("trip"):
             trip_days = period_days
     regular_day_rate = _dec(data.regular_day_rate if data.regular_day_rate is not None else worker.regular_day_rate)
     weekly_rate = _dec(data.weekly_rate if data.weekly_rate is not None else worker.weekly_rate)
@@ -133,7 +135,9 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         trip_food_rate = _dec(data.trip_food_rate if data.trip_food_rate is not None else worker.trip_food_rate)
     trip_advance_day_rate = _dec(data.trip_advance_day_rate if data.trip_advance_day_rate is not None else worker.trip_advance_day_rate)
 
-    if data.lodging_nights is not None:
+    if payout_type.startswith("trip") and period_days is not None:
+        lodging_nights = max(period_days - Decimal(1), ZERO_DECIMAL)
+    elif data.lodging_nights is not None:
         lodging_nights = _dec(data.lodging_nights)
     else:
         lodging_nights = max(trip_days + Decimal(int(worker.lodging_nights_offset or 0)), ZERO_DECIMAL)

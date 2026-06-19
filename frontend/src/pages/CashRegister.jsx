@@ -60,16 +60,18 @@ function calculateTripDuration(periodStart, periodEnd) {
   const days = Math.floor((end - start) / DAY_MS) + 1
   if (days <= 0) return null
   return {
+    days,
     tripDays: String(days),
     lodgingNights: String(Math.max(days - 1, 0)),
   }
 }
 
-function applyTripDuration(form) {
+function applyPayoutDuration(form) {
   const duration = calculateTripDuration(form.period_start, form.period_end)
   if (!duration) return form
   return {
     ...form,
+    work_days: duration.tripDays,
     trip_days: duration.tripDays,
     lodging_nights: duration.lodgingNights,
   }
@@ -285,12 +287,29 @@ export default function CashRegister() {
   }, [contracts, workerPayoutProjectId])
 
   const workerPayoutPreview = useMemo(() => {
+    const duration = calculateTripDuration(workerPayoutForm.period_start, workerPayoutForm.period_end)
+    const calculatedDays = duration ? duration.days : null
+    const fallbackWorkDays = calculatedDays ?? toNumber(workerPayoutForm.work_days)
+    const fallbackTripDays = calculatedDays ?? toNumber(workerPayoutForm.trip_days)
+    const fallbackLodgingNights = calculatedDays !== null
+      ? Math.max(calculatedDays - 1, 0)
+      : workerPayoutForm.lodging_nights !== ''
+      ? toNumber(workerPayoutForm.lodging_nights)
+      : Math.max(fallbackTripDays - 1, 0)
     if (!selectedWorker) {
-      return { gross: 0, cash: 0, remaining: 0, lodgingNights: 0, lodgingAmount: 0 }
+      return {
+        gross: 0,
+        cash: 0,
+        remaining: 0,
+        workDays: fallbackWorkDays,
+        tripDays: fallbackTripDays,
+        lodgingNights: fallbackLodgingNights,
+        lodgingAmount: 0,
+      }
     }
     const payoutType = workerPayoutForm.payout_type
-    const workDays = toNumber(workerPayoutForm.work_days)
-    const tripDays = toNumber(workerPayoutForm.trip_days)
+    const workDays = fallbackWorkDays
+    const tripDays = fallbackTripDays
     const regularDayRate = toNumber(selectedWorker.regular_day_rate)
     const weeklyRate = toNumber(selectedWorker.weekly_rate)
     const monthlyRate = toNumber(selectedWorker.monthly_rate)
@@ -299,8 +318,10 @@ export default function CashRegister() {
     const perDiemRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_per_diem_rate)
     const foodRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_food_rate)
     const advanceDayRate = toNumber(selectedWorker.trip_advance_day_rate)
-    const lodgingNights = workerPayoutForm.lodging_nights !== ''
-      ? toNumber(workerPayoutForm.lodging_nights)
+    const lodgingNights = calculatedDays !== null
+      ? fallbackLodgingNights
+      : workerPayoutForm.lodging_nights !== ''
+      ? fallbackLodgingNights
       : Math.max(tripDays + Number(selectedWorker.lodging_nights_offset || 0), 0)
     const lodgingAmount = workerPayoutForm.lodging_amount !== ''
       ? toNumber(workerPayoutForm.lodging_amount)
@@ -319,7 +340,7 @@ export default function CashRegister() {
         : gross
     const cash = workerPayoutForm.cash_paid_amount !== '' ? toNumber(workerPayoutForm.cash_paid_amount) : defaultCash
     const remaining = Math.max(gross - toNumber(workerPayoutForm.advance_paid) - cash, 0)
-    return { gross, cash, remaining, lodgingNights, lodgingAmount }
+    return { gross, cash, remaining, workDays, tripDays, lodgingNights, lodgingAmount }
   }, [selectedWorker, workerPayoutForm])
 
   const filteredEntries = useMemo(() => {
@@ -592,14 +613,14 @@ export default function CashRegister() {
   const updateWorkerPayoutType = (payoutType) => {
     setWorkerPayoutForm((previous) => {
       const next = { ...previous, payout_type: payoutType }
-      return payoutType.startsWith('trip') ? applyTripDuration(next) : next
+      return ['regular', 'trip_advance', 'trip_final'].includes(payoutType) ? applyPayoutDuration(next) : next
     })
   }
 
   const updateWorkerPayoutPeriod = (field, value) => {
     setWorkerPayoutForm((previous) => {
       const next = { ...previous, [field]: value }
-      return next.payout_type.startsWith('trip') ? applyTripDuration(next) : next
+      return applyPayoutDuration(next)
     })
   }
 
@@ -614,9 +635,9 @@ export default function CashRegister() {
         date: workerPayoutForm.date,
         period_start: workerPayoutForm.period_start || null,
         period_end: workerPayoutForm.period_end || null,
-        work_days: toNumber(workerPayoutForm.work_days),
-        trip_days: toNumber(workerPayoutForm.trip_days),
-        lodging_nights: workerPayoutForm.lodging_nights === '' ? null : toNumber(workerPayoutForm.lodging_nights),
+        work_days: workerPayoutPreview.workDays,
+        trip_days: workerPayoutPreview.tripDays,
+        lodging_nights: workerPayoutPreview.lodgingNights,
         lodging_amount: workerPayoutForm.lodging_amount === '' ? null : toNumber(workerPayoutForm.lodging_amount),
         advance_paid: toNumber(workerPayoutForm.advance_paid),
         cash_paid_amount: workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
@@ -1168,20 +1189,20 @@ export default function CashRegister() {
               <DatePicker value={workerPayoutForm.period_end} onChange={(value) => updateWorkerPayoutPeriod('period_end', value)} />
             </div>
             {workerPayoutForm.payout_type === 'regular' ? (
-              <div className="form-group">
-                <label className="form-label">Выходов</label>
-                <input className="form-input" type="number" min="0" step="0.5" value={workerPayoutForm.work_days} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, work_days: event.target.value }))} />
+              <div className="record-field">
+                <span className="record-field-label">Выходов</span>
+                <span className="record-field-value">{workerPayoutPreview.workDays}</span>
               </div>
             ) : null}
             {workerPayoutForm.payout_type.startsWith('trip') ? (
               <>
-                <div className="form-group">
-                  <label className="form-label">Дней командировки</label>
-                  <input className="form-input" type="number" min="0" step="0.5" value={workerPayoutForm.trip_days} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, trip_days: event.target.value }))} />
+                <div className="record-field">
+                  <span className="record-field-label">Дней командировки</span>
+                  <span className="record-field-value">{workerPayoutPreview.tripDays}</span>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Ночей</label>
-                  <input className="form-input" type="number" min="0" step="0.5" placeholder={String(workerPayoutPreview.lodgingNights)} value={workerPayoutForm.lodging_nights} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_nights: event.target.value }))} />
+                <div className="record-field">
+                  <span className="record-field-label">Ночей</span>
+                  <span className="record-field-value">{workerPayoutPreview.lodgingNights}</span>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Гостиница</label>
