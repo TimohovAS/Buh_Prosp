@@ -209,6 +209,23 @@ export default function CashRegister() {
     if (isSalaryCategory(category) && salaryProject) return String(salaryProject.id)
     return ''
   }
+  const getWorkerPayoutTypeLabel = (payoutType) => {
+    const labels = {
+      regular: tr('workerPayoutRegular'),
+      weekly: tr('workerPayoutWeekly'),
+      monthly: tr('workerPayoutMonthly'),
+      trip_advance: tr('workerPayoutTripAdvance'),
+      trip_final: tr('workerPayoutTripFinal'),
+    }
+    return labels[payoutType] || tr('workerPayoutCreateTitle')
+  }
+  const buildWorkerPayoutDescription = () => {
+    const workerName = selectedWorker?.name || ''
+    const period = workerPayoutForm.period_start && workerPayoutForm.period_end
+      ? ` ${workerPayoutForm.period_start}-${workerPayoutForm.period_end}`
+      : ''
+    return `${getWorkerPayoutTypeLabel(workerPayoutForm.payout_type)}: ${workerName}${period}`.trim()
+  }
 
   const getEntryTypeLabel = (entry) => {
     if (entry.entry_type === 'withdrawal') return tr('cashEntryTypeWithdrawal')
@@ -222,7 +239,7 @@ export default function CashRegister() {
       return `${tr('cashSourceBank')}: ${entry.bank_reference || entry.counterparty_name || `#${entry.bank_transaction_id}`}`
     }
     if (entry.worker_payout_id) {
-      return `Выплата работнику: #${entry.worker_payout_id}`
+      return `${tr('cashSourceWorkerPayout')}: #${entry.worker_payout_id}`
     }
     if (entry.expense_id) {
       return `${tr('cashSourceExpense')}: #${entry.expense_id}`
@@ -682,6 +699,7 @@ export default function CashRegister() {
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
         project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
+        description: buildWorkerPayoutDescription(),
         note: workerPayoutForm.note?.trim() || null,
       }
       if (workerPayoutModal?.payoutId) {
@@ -866,7 +884,7 @@ export default function CashRegister() {
           <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
           <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>{tr('cashAddPendingWithdrawal')}</button>
           <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
-          <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>Выплата работнику</button>
+          <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>{tr('workerPayoutCreateTitle')}</button>
           <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
         </div>
       </div>
@@ -1195,11 +1213,11 @@ export default function CashRegister() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title={workerPayoutModal?.payoutId ? 'Изменить выплату работнику' : 'Выплата работнику'}>
+      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title={workerPayoutModal?.payoutId ? tr('workerPayoutEditTitle') : tr('workerPayoutCreateTitle')}>
         <form onSubmit={handleSaveWorkerPayout} className="card" style={{ padding: '1rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group">
-              <label className="form-label">Работник</label>
+              <label className="form-label">{tr('worker')}</label>
               <select className="form-input" value={workerPayoutForm.worker_id} onChange={(event) => updateWorkerPayoutWorker(event.target.value)} required>
                 <option value="">{UI_DASH}</option>
                 {workers.map((worker) => (
@@ -1208,13 +1226,13 @@ export default function CashRegister() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Тип выплаты</label>
+              <label className="form-label">{tr('workerPayoutType')}</label>
               <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => updateWorkerPayoutType(event.target.value)}>
-                <option value="regular">Выходы</option>
-                <option value="weekly">Неделя</option>
-                <option value="monthly">Месяц</option>
-                <option value="trip_advance">Аванс за командировку</option>
-                <option value="trip_final">Окончательный расчет командировки</option>
+                <option value="regular">{tr('workerPayoutRegular')}</option>
+                <option value="weekly">{tr('workerPayoutWeekly')}</option>
+                <option value="monthly">{tr('workerPayoutMonthly')}</option>
+                <option value="trip_advance">{tr('workerPayoutTripAdvance')}</option>
+                <option value="trip_final">{tr('workerPayoutTripFinal')}</option>
               </select>
             </div>
             <div className="form-group">
@@ -1225,58 +1243,58 @@ export default function CashRegister() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group">
-              <label className="form-label">Период с</label>
+              <label className="form-label">{tr('workerPayoutPeriodStart')}</label>
               <DatePicker value={workerPayoutForm.period_start} onChange={(value) => updateWorkerPayoutPeriod('period_start', value)} />
             </div>
             <div className="form-group">
-              <label className="form-label">Период по</label>
+              <label className="form-label">{tr('workerPayoutPeriodEnd')}</label>
               <DatePicker value={workerPayoutForm.period_end} onChange={(value) => updateWorkerPayoutPeriod('period_end', value)} />
             </div>
             {workerPayoutForm.payout_type === 'regular' ? (
               <div className="record-field">
-                <span className="record-field-label">Выходов</span>
+                <span className="record-field-label">{tr('workerPayoutWorkDays')}</span>
                 <span className="record-field-value">{workerPayoutPreview.workDays}</span>
               </div>
             ) : null}
             {workerPayoutForm.payout_type.startsWith('trip') ? (
               <>
                 <div className="record-field">
-                  <span className="record-field-label">Дней командировки</span>
+                  <span className="record-field-label">{tr('workerPayoutTripDays')}</span>
                   <span className="record-field-value">{workerPayoutPreview.tripDays}</span>
                 </div>
                 <div className="record-field">
-                  <span className="record-field-label">Ночей</span>
+                  <span className="record-field-label">{tr('workerPayoutLodgingNights')}</span>
                   <span className="record-field-value">{workerPayoutPreview.lodgingNights}</span>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Гостиница</label>
+                  <label className="form-label">{tr('workerPayoutLodging')}</label>
                   <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.lodgingAmount)} value={workerPayoutForm.lodging_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_amount: event.target.value }))} />
                 </div>
               </>
             ) : null}
             {workerPayoutForm.payout_type === 'trip_final' ? (
               <div className="form-group">
-                <label className="form-label">Аванс уже выдан</label>
+                <label className="form-label">{tr('workerPayoutAdvancePaid')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={workerPayoutForm.advance_paid} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, advance_paid: event.target.value }))} />
               </div>
             ) : null}
             <div className="form-group">
-              <label className="form-label">Выдать сейчас</label>
+              <label className="form-label">{tr('workerPayoutPayNow')}</label>
               <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.cash)} value={workerPayoutForm.cash_paid_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))} />
             </div>
           </div>
 
           <div className="record-field-grid" style={{ marginBottom: '0.75rem' }}>
             <div className="record-field">
-              <span className="record-field-label">Начислено</span>
+              <span className="record-field-label">{tr('workerPayoutGross')}</span>
               <span className="record-field-value">{fmtAmount(workerPayoutPreview.gross)} RSD</span>
             </div>
             <div className="record-field">
-              <span className="record-field-label">К выдаче</span>
+              <span className="record-field-label">{tr('workerPayoutCash')}</span>
               <span className="record-field-value">{fmtAmount(workerPayoutPreview.cash)} RSD</span>
             </div>
             <div className="record-field">
-              <span className="record-field-label">Остаток</span>
+              <span className="record-field-label">{tr('workerPayoutRemaining')}</span>
               <span className="record-field-value">{fmtAmount(workerPayoutPreview.remaining)} RSD</span>
             </div>
           </div>
