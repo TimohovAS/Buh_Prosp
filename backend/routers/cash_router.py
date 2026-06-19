@@ -32,6 +32,7 @@ from backend.models import (
     PurchaseReceipt,
     TransactionCategory,
     User,
+    WorkerPayout,
 )
 from backend.state_machine import initialize_expense_status
 from backend.schemas import (
@@ -500,6 +501,14 @@ async def delete_cash_expense_entry(
     if receipt_result.scalar_one_or_none():
         raise HTTPException(400, "This cash expense is linked to a receipt")
 
+    await db.execute(
+        delete(WorkerPayout).where(
+            or_(
+                WorkerPayout.cash_entry_id == entry.id,
+                WorkerPayout.expense_id == expense.id,
+            )
+        )
+    )
     await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id == expense.id))
     await db.delete(entry)
     await db.delete(expense)

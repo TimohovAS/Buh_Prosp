@@ -15,7 +15,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import CashEntry, Expense, Project, TransactionCategory, User, Worker, WorkerPayout
+from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
 from backend.schemas import (
     CashEntryResponse,
     WorkerCreate,
@@ -97,6 +97,7 @@ async def _resolve_payout_links(
 def _payout_type_label(payout_type: str) -> str:
     return {
         "regular": "Оплата выхода",
+        "weekly": "Еженедельная оплата",
         "monthly": "Месячная оплата",
         "trip_advance": "Аванс за командировку",
         "trip_final": "Расчет за командировку",
@@ -108,12 +109,18 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
     work_days = _dec(data.work_days)
     trip_days = _dec(data.trip_days)
     regular_day_rate = _dec(data.regular_day_rate if data.regular_day_rate is not None else worker.regular_day_rate)
+    weekly_rate = _dec(data.weekly_rate if data.weekly_rate is not None else worker.weekly_rate)
     monthly_rate = _dec(data.monthly_rate if data.monthly_rate is not None else worker.monthly_rate)
+    trip_pricing_mode = data.trip_pricing_mode or worker.trip_pricing_mode or "allowances"
     trip_work_day_rate = _dec(data.trip_work_day_rate if data.trip_work_day_rate is not None else worker.trip_work_day_rate)
     if trip_work_day_rate <= ZERO_DECIMAL:
         trip_work_day_rate = regular_day_rate
-    trip_per_diem_rate = _dec(data.trip_per_diem_rate if data.trip_per_diem_rate is not None else worker.trip_per_diem_rate)
-    trip_food_rate = _dec(data.trip_food_rate if data.trip_food_rate is not None else worker.trip_food_rate)
+    if trip_pricing_mode == "fixed_plus_lodging":
+        trip_per_diem_rate = ZERO_DECIMAL
+        trip_food_rate = ZERO_DECIMAL
+    else:
+        trip_per_diem_rate = _dec(data.trip_per_diem_rate if data.trip_per_diem_rate is not None else worker.trip_per_diem_rate)
+        trip_food_rate = _dec(data.trip_food_rate if data.trip_food_rate is not None else worker.trip_food_rate)
     trip_advance_day_rate = _dec(data.trip_advance_day_rate if data.trip_advance_day_rate is not None else worker.trip_advance_day_rate)
 
     if data.lodging_nights is not None:
@@ -126,6 +133,8 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
 
     if payout_type == "monthly":
         gross_amount = monthly_rate
+    elif payout_type == "weekly":
+        gross_amount = weekly_rate
     elif payout_type == "regular":
         gross_amount = work_days * regular_day_rate
     else:
@@ -146,7 +155,9 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         "trip_days": trip_days,
         "lodging_nights": lodging_nights,
         "regular_day_rate": regular_day_rate,
+        "weekly_rate": weekly_rate,
         "monthly_rate": monthly_rate,
+        "trip_pricing_mode": trip_pricing_mode,
         "trip_work_day_rate": trip_work_day_rate,
         "trip_per_diem_rate": trip_per_diem_rate,
         "trip_food_rate": trip_food_rate,
@@ -245,7 +256,7 @@ async def update_worker(
     worker = await _get_worker_or_404(db, worker_id)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(worker, key, value)
-    worker.name = worker.name.strip()
+    worker.name = (worker.name or "").strip()
     if not worker.name:
         raise HTTPException(400, "Name is required")
     await db.commit()
@@ -363,7 +374,9 @@ async def create_worker_payout(
         trip_days=calc["trip_days"],
         lodging_nights=calc["lodging_nights"],
         regular_day_rate=calc["regular_day_rate"],
+        weekly_rate=calc["weekly_rate"],
         monthly_rate=calc["monthly_rate"],
+        trip_pricing_mode=calc["trip_pricing_mode"],
         trip_work_day_rate=calc["trip_work_day_rate"],
         trip_per_diem_rate=calc["trip_per_diem_rate"],
         trip_food_rate=calc["trip_food_rate"],

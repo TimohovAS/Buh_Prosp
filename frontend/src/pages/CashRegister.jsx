@@ -265,10 +265,12 @@ export default function CashRegister() {
     const workDays = toNumber(workerPayoutForm.work_days)
     const tripDays = toNumber(workerPayoutForm.trip_days)
     const regularDayRate = toNumber(selectedWorker.regular_day_rate)
+    const weeklyRate = toNumber(selectedWorker.weekly_rate)
     const monthlyRate = toNumber(selectedWorker.monthly_rate)
+    const tripPricingMode = selectedWorker.trip_pricing_mode || 'allowances'
     const tripWorkDayRate = toNumber(selectedWorker.trip_work_day_rate) || regularDayRate
-    const perDiemRate = toNumber(selectedWorker.trip_per_diem_rate)
-    const foodRate = toNumber(selectedWorker.trip_food_rate)
+    const perDiemRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_per_diem_rate)
+    const foodRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_food_rate)
     const advanceDayRate = toNumber(selectedWorker.trip_advance_day_rate)
     const lodgingNights = workerPayoutForm.lodging_nights !== ''
       ? toNumber(workerPayoutForm.lodging_nights)
@@ -278,6 +280,8 @@ export default function CashRegister() {
       : lodgingNights * toNumber(selectedWorker.lodging_night_rate)
     const gross = payoutType === 'monthly'
       ? monthlyRate
+      : payoutType === 'weekly'
+        ? weeklyRate
       : payoutType === 'regular'
         ? workDays * regularDayRate
         : tripDays * (tripWorkDayRate + perDiemRate + foodRate) + lodgingAmount
@@ -575,6 +579,7 @@ export default function CashRegister() {
         lodging_amount: workerPayoutForm.lodging_amount === '' ? null : toNumber(workerPayoutForm.lodging_amount),
         advance_paid: toNumber(workerPayoutForm.advance_paid),
         cash_paid_amount: workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
+        trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
         project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
@@ -1100,6 +1105,7 @@ export default function CashRegister() {
               <label className="form-label">Тип выплаты</label>
               <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, payout_type: event.target.value }))}>
                 <option value="regular">Выходы</option>
+                <option value="weekly">Неделя</option>
                 <option value="monthly">Месяц</option>
                 <option value="trip_advance">Аванс за командировку</option>
                 <option value="trip_final">Окончательный расчет командировки</option>

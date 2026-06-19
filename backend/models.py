@@ -57,11 +57,13 @@ class Worker(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False, index=True)
     worker_type = Column(String(20), nullable=False, default="temporary")  # permanent | temporary
-    pay_scheme = Column(String(20), nullable=False, default="per_day")  # monthly | per_day
+    pay_scheme = Column(String(20), nullable=False, default="per_day")  # monthly | weekly | per_day
     phone = Column(String(50))
     note = Column(Text)
     regular_day_rate = Column(Numeric(14, 2), default=0)
+    weekly_rate = Column(Numeric(14, 2), default=0)
     monthly_rate = Column(Numeric(14, 2), default=0)
+    trip_pricing_mode = Column(String(30), nullable=False, default="allowances")  # allowances | fixed_plus_lodging
     trip_work_day_rate = Column(Numeric(14, 2), default=0)
     trip_per_diem_rate = Column(Numeric(14, 2), default=2500)
     trip_food_rate = Column(Numeric(14, 2), default=3000)
@@ -95,7 +97,9 @@ class WorkerPayout(Base):
     trip_days = Column(Numeric(8, 2), default=0)
     lodging_nights = Column(Numeric(8, 2), default=0)
     regular_day_rate = Column(Numeric(14, 2), default=0)
+    weekly_rate = Column(Numeric(14, 2), default=0)
     monthly_rate = Column(Numeric(14, 2), default=0)
+    trip_pricing_mode = Column(String(30), nullable=False, default="allowances")
     trip_work_day_rate = Column(Numeric(14, 2), default=0)
     trip_per_diem_rate = Column(Numeric(14, 2), default=0)
     trip_food_rate = Column(Numeric(14, 2), default=0)

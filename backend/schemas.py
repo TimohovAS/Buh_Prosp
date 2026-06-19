@@ -1267,7 +1267,9 @@ class WorkerBase(BaseModel):
     phone: Optional[str] = None
     note: Optional[str] = None
     regular_day_rate: Decimal = Field(default=0, ge=0)
+    weekly_rate: Decimal = Field(default=0, ge=0)
     monthly_rate: Decimal = Field(default=0, ge=0)
+    trip_pricing_mode: str = "allowances"
     trip_work_day_rate: Decimal = Field(default=0, ge=0)
     trip_per_diem_rate: Decimal = Field(default=2500, ge=0)
     trip_food_rate: Decimal = Field(default=3000, ge=0)
@@ -1301,7 +1303,9 @@ class WorkerUpdate(BaseModel):
     phone: Optional[str] = None
     note: Optional[str] = None
     regular_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    weekly_rate: Optional[Decimal] = Field(default=None, ge=0)
     monthly_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_pricing_mode: Optional[str] = None
     trip_work_day_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_per_diem_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_food_rate: Optional[Decimal] = Field(default=None, ge=0)
@@ -1346,7 +1350,9 @@ class WorkerPayoutCreate(BaseModel):
     advance_paid: Decimal = Field(default=0, ge=0)
     cash_paid_amount: Optional[Decimal] = Field(default=None, ge=0)
     regular_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    weekly_rate: Optional[Decimal] = Field(default=None, ge=0)
     monthly_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_pricing_mode: Optional[str] = None
     trip_work_day_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_per_diem_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_food_rate: Optional[Decimal] = Field(default=None, ge=0)
