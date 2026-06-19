@@ -1260,6 +1260,149 @@ class CashExpenseCreate(BaseModel):
         return result
 
 
+class WorkerBase(BaseModel):
+    name: str
+    worker_type: str = "temporary"
+    pay_scheme: str = "per_day"
+    phone: Optional[str] = None
+    note: Optional[str] = None
+    regular_day_rate: Decimal = Field(default=0, ge=0)
+    monthly_rate: Decimal = Field(default=0, ge=0)
+    trip_work_day_rate: Decimal = Field(default=0, ge=0)
+    trip_per_diem_rate: Decimal = Field(default=2500, ge=0)
+    trip_food_rate: Decimal = Field(default=3000, ge=0)
+    trip_advance_day_rate: Decimal = Field(default=3000, ge=0)
+    lodging_night_rate: Decimal = Field(default=0, ge=0)
+    lodging_nights_offset: int = -1
+    default_project_id: Optional[int] = None
+    default_category_id: Optional[int] = None
+    is_active: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("default_project_id", "default_category_id"):
+            if key in result and (result[key] == "" or result[key] is None):
+                result[key] = None
+        return result
+
+
+class WorkerCreate(WorkerBase):
+    pass
+
+
+class WorkerUpdate(BaseModel):
+    name: Optional[str] = None
+    worker_type: Optional[str] = None
+    pay_scheme: Optional[str] = None
+    phone: Optional[str] = None
+    note: Optional[str] = None
+    regular_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    monthly_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_work_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_per_diem_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_food_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_advance_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    lodging_night_rate: Optional[Decimal] = Field(default=None, ge=0)
+    lodging_nights_offset: Optional[int] = None
+    default_project_id: Optional[int] = None
+    default_category_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("default_project_id", "default_category_id"):
+            if key in result and (result[key] == "" or result[key] is None):
+                result[key] = None
+        return result
+
+
+class WorkerResponse(WorkerBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class WorkerPayoutCreate(BaseModel):
+    worker_id: int
+    payout_type: str = "regular"
+    date: DateType
+    period_start: Optional[DateType] = None
+    period_end: Optional[DateType] = None
+    work_days: Decimal = Field(default=0, ge=0)
+    trip_days: Decimal = Field(default=0, ge=0)
+    lodging_nights: Optional[Decimal] = Field(default=None, ge=0)
+    lodging_amount: Optional[Decimal] = Field(default=None, ge=0)
+    advance_paid: Decimal = Field(default=0, ge=0)
+    cash_paid_amount: Optional[Decimal] = Field(default=None, ge=0)
+    regular_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    monthly_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_work_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_per_diem_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_food_rate: Optional[Decimal] = Field(default=None, ge=0)
+    trip_advance_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    category_id: Optional[int] = None
+    description: Optional[str] = None
+    note: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("project_id", "contract_id", "category_id", "lodging_nights", "lodging_amount"):
+            if key in result and (result[key] == "" or result[key] is None):
+                result[key] = None
+        return result
+
+
+class WorkerPayoutResponse(BaseModel):
+    id: int
+    worker_id: int
+    worker_name: Optional[str] = None
+    cash_entry_id: Optional[int] = None
+    expense_id: Optional[int] = None
+    payout_type: str
+    date: DateType
+    period_start: Optional[DateType] = None
+    period_end: Optional[DateType] = None
+    work_days: Decimal
+    trip_days: Decimal
+    lodging_nights: Decimal
+    lodging_amount: Decimal
+    advance_paid: Decimal
+    gross_amount: Decimal
+    cash_paid_amount: Decimal
+    remaining_amount: Decimal
+    description: str
+    note: Optional[str] = None
+    project_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    category_id: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkerPayoutCreateResponse(BaseModel):
+    payout: WorkerPayoutResponse
+    cash_entry: CashEntryResponse
+
+
 class CashEntryUpdate(BaseModel):
     date: Optional[DateType] = None
     direction: Optional[str] = None

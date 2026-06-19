@@ -441,6 +441,20 @@ export const api = {
     createExpense: (data) => request('/cash/expenses', { method: 'POST', body: JSON.stringify(data) }),
     createAdjustment: (data) => request('/cash/adjustments', { method: 'POST', body: JSON.stringify(data) }),
   },
+  workers: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/workers${q ? `?${q}` : ''}`)
+    },
+    create: (data) => request('/workers', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id) => request(`/workers/${id}`, { method: 'DELETE' }),
+    payouts: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/workers/payouts${q ? `?${q}` : ''}`)
+    },
+    createPayout: (data) => request('/workers/payouts', { method: 'POST', body: JSON.stringify(data) }),
+  },
   enterprise: {
     get: () => request('/enterprise'),
     branding: () => request('/enterprise/branding'),

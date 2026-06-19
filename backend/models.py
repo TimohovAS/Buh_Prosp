@@ -50,6 +50,77 @@ class Client(Base):
     projects = relationship("Project", back_populates="client")
 
 
+class Worker(Base):
+    """Workers and contractors paid through the cash register."""
+    __tablename__ = "workers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    worker_type = Column(String(20), nullable=False, default="temporary")  # permanent | temporary
+    pay_scheme = Column(String(20), nullable=False, default="per_day")  # monthly | per_day
+    phone = Column(String(50))
+    note = Column(Text)
+    regular_day_rate = Column(Numeric(14, 2), default=0)
+    monthly_rate = Column(Numeric(14, 2), default=0)
+    trip_work_day_rate = Column(Numeric(14, 2), default=0)
+    trip_per_diem_rate = Column(Numeric(14, 2), default=2500)
+    trip_food_rate = Column(Numeric(14, 2), default=3000)
+    trip_advance_day_rate = Column(Numeric(14, 2), default=3000)
+    lodging_night_rate = Column(Numeric(14, 2), default=0)
+    lodging_nights_offset = Column(Integer, default=-1)
+    default_project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    default_category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    default_project = relationship("Project", foreign_keys=[default_project_id])
+    default_category = relationship("TransactionCategory", foreign_keys=[default_category_id])
+    payouts = relationship("WorkerPayout", back_populates="worker")
+
+
+class WorkerPayout(Base):
+    """Calculated worker payment recorded as a cash expense."""
+    __tablename__ = "worker_payouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False, index=True)
+    cash_entry_id = Column(Integer, ForeignKey("cash_entries.id"), unique=True, nullable=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), unique=True, nullable=True)
+    payout_type = Column(String(20), nullable=False, index=True)  # regular | monthly | trip_advance | trip_final
+    date = Column(Date, nullable=False, index=True)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+    work_days = Column(Numeric(8, 2), default=0)
+    trip_days = Column(Numeric(8, 2), default=0)
+    lodging_nights = Column(Numeric(8, 2), default=0)
+    regular_day_rate = Column(Numeric(14, 2), default=0)
+    monthly_rate = Column(Numeric(14, 2), default=0)
+    trip_work_day_rate = Column(Numeric(14, 2), default=0)
+    trip_per_diem_rate = Column(Numeric(14, 2), default=0)
+    trip_food_rate = Column(Numeric(14, 2), default=0)
+    trip_advance_day_rate = Column(Numeric(14, 2), default=0)
+    lodging_amount = Column(Numeric(14, 2), default=0)
+    advance_paid = Column(Numeric(14, 2), default=0)
+    gross_amount = Column(Numeric(14, 2), nullable=False)
+    cash_paid_amount = Column(Numeric(14, 2), nullable=False)
+    remaining_amount = Column(Numeric(14, 2), default=0)
+    description = Column(String(500), nullable=False)
+    note = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    worker = relationship("Worker", back_populates="payouts")
+    cash_entry = relationship("CashEntry", foreign_keys=[cash_entry_id])
+    expense = relationship("Expense", foreign_keys=[expense_id])
+    project = relationship("Project", foreign_keys=[project_id])
+    contract = relationship("Contract", foreign_keys=[contract_id])
+    category = relationship("TransactionCategory", foreign_keys=[category_id])
+
+
 class Enterprise(Base):
     """Данные предприятия (ИП)."""
     __tablename__ = "enterprise"

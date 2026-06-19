@@ -27,6 +27,27 @@ function isSalaryCategory(category) {
   return sr === 'zarade' || sr.includes('zarad') || ru.includes('зарп')
 }
 
+const emptyWorkerPayoutForm = {
+  worker_id: '',
+  payout_type: 'regular',
+  date: todayIso(),
+  period_start: '',
+  period_end: '',
+  work_days: '1',
+  trip_days: '1',
+  lodging_nights: '',
+  lodging_amount: '',
+  advance_paid: '',
+  cash_paid_amount: '',
+  project_id: '',
+  contract_id: '',
+  category_id: '',
+  description: '',
+  note: '',
+}
+
+const toNumber = (value) => Number(value || 0)
+
 export default function CashRegister() {
   const location = useLocation()
   const isActivePage = location.pathname === '/cash'
@@ -42,8 +63,10 @@ export default function CashRegister() {
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
+  const [workers, setWorkers] = useState([])
   const [bankModalOpen, setBankModalOpen] = useState(false)
   const [expenseModal, setExpenseModal] = useState(null)
+  const [workerPayoutModal, setWorkerPayoutModal] = useState(null)
   const [adjustmentModal, setAdjustmentModal] = useState(null)
   const [withdrawalModal, setWithdrawalModal] = useState(null)
   const [pendingWithdrawalModal, setPendingWithdrawalModal] = useState(null)
@@ -78,6 +101,7 @@ export default function CashRegister() {
     description: '',
     note: '',
   })
+  const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -109,13 +133,15 @@ export default function CashRegister() {
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
       api.contracts.list({ limit: 500 }),
+      api.workers.list({ active: true }),
     ])
-      .then(([cashSummary, years, projectList, categoryList, contractList]) => {
+      .then(([cashSummary, years, projectList, categoryList, contractList, workerList]) => {
         setSummary(cashSummary)
         applyAvailableYears(years)
         setProjects(projectList)
         setCategories(categoryList)
         setContracts(contractList)
+        setWorkers(workerList)
       })
       .catch((error) => {
         setPageError(error.message || tr('loadError'))
@@ -218,6 +244,52 @@ export default function CashRegister() {
       return Math.abs(txAmount - entryAmount) < 0.005 && txCurrency === entryCurrency
     })
   }, [pendingLinkModal, summary.available_withdrawals])
+
+  const selectedWorker = useMemo(
+    () => workers.find((worker) => Number(worker.id) === Number(workerPayoutForm.worker_id)) || null,
+    [workers, workerPayoutForm.worker_id]
+  )
+
+  const workerPayoutCategoryId = workerPayoutForm.category_id || selectedWorker?.default_category_id || ''
+  const workerPayoutProjectId = workerPayoutForm.project_id || selectedWorker?.default_project_id || getForcedExpenseProjectId(workerPayoutCategoryId) || ''
+  const workerPayoutContracts = useMemo(() => {
+    const selectedProjectId = workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : null
+    return getContractsForProject(selectedProjectId)
+  }, [contracts, workerPayoutProjectId])
+
+  const workerPayoutPreview = useMemo(() => {
+    if (!selectedWorker) {
+      return { gross: 0, cash: 0, remaining: 0, lodgingNights: 0, lodgingAmount: 0 }
+    }
+    const payoutType = workerPayoutForm.payout_type
+    const workDays = toNumber(workerPayoutForm.work_days)
+    const tripDays = toNumber(workerPayoutForm.trip_days)
+    const regularDayRate = toNumber(selectedWorker.regular_day_rate)
+    const monthlyRate = toNumber(selectedWorker.monthly_rate)
+    const tripWorkDayRate = toNumber(selectedWorker.trip_work_day_rate) || regularDayRate
+    const perDiemRate = toNumber(selectedWorker.trip_per_diem_rate)
+    const foodRate = toNumber(selectedWorker.trip_food_rate)
+    const advanceDayRate = toNumber(selectedWorker.trip_advance_day_rate)
+    const lodgingNights = workerPayoutForm.lodging_nights !== ''
+      ? toNumber(workerPayoutForm.lodging_nights)
+      : Math.max(tripDays + Number(selectedWorker.lodging_nights_offset || 0), 0)
+    const lodgingAmount = workerPayoutForm.lodging_amount !== ''
+      ? toNumber(workerPayoutForm.lodging_amount)
+      : lodgingNights * toNumber(selectedWorker.lodging_night_rate)
+    const gross = payoutType === 'monthly'
+      ? monthlyRate
+      : payoutType === 'regular'
+        ? workDays * regularDayRate
+        : tripDays * (tripWorkDayRate + perDiemRate + foodRate) + lodgingAmount
+    const defaultCash = payoutType === 'trip_advance'
+      ? tripDays * advanceDayRate + lodgingAmount
+      : payoutType === 'trip_final'
+        ? Math.max(gross - toNumber(workerPayoutForm.advance_paid), 0)
+        : gross
+    const cash = workerPayoutForm.cash_paid_amount !== '' ? toNumber(workerPayoutForm.cash_paid_amount) : defaultCash
+    const remaining = Math.max(gross - toNumber(workerPayoutForm.advance_paid) - cash, 0)
+    return { gross, cash, remaining, lodgingNights, lodgingAmount }
+  }, [selectedWorker, workerPayoutForm])
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -456,6 +528,69 @@ export default function CashRegister() {
     }
   }
 
+  const openWorkerPayoutCreate = () => {
+    setWorkerPayoutForm({
+      ...emptyWorkerPayoutForm,
+      date: todayIso(),
+      worker_id: '',
+      category_id: '',
+      project_id: '',
+    })
+    setWorkerPayoutModal(true)
+  }
+
+  const updateWorkerPayoutWorker = (workerId) => {
+    const worker = workers.find((item) => Number(item.id) === Number(workerId))
+    setWorkerPayoutForm((previous) => ({
+      ...previous,
+      worker_id: workerId,
+      project_id: worker?.default_project_id ? String(worker.default_project_id) : '',
+      category_id: worker?.default_category_id ? String(worker.default_category_id) : '',
+      contract_id: '',
+    }))
+  }
+
+  const updateWorkerPayoutProject = (projectId) => {
+    setWorkerPayoutForm((previous) => ({
+      ...previous,
+      project_id: projectId,
+      contract_id: '',
+    }))
+  }
+
+  const handleSaveWorkerPayout = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    setPageError('')
+    try {
+      const payload = {
+        worker_id: parseInt(workerPayoutForm.worker_id, 10),
+        payout_type: workerPayoutForm.payout_type,
+        date: workerPayoutForm.date,
+        period_start: workerPayoutForm.period_start || null,
+        period_end: workerPayoutForm.period_end || null,
+        work_days: toNumber(workerPayoutForm.work_days),
+        trip_days: toNumber(workerPayoutForm.trip_days),
+        lodging_nights: workerPayoutForm.lodging_nights === '' ? null : toNumber(workerPayoutForm.lodging_nights),
+        lodging_amount: workerPayoutForm.lodging_amount === '' ? null : toNumber(workerPayoutForm.lodging_amount),
+        advance_paid: toNumber(workerPayoutForm.advance_paid),
+        cash_paid_amount: workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
+        category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
+        project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
+        contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
+        description: workerPayoutForm.description?.trim() || null,
+        note: workerPayoutForm.note?.trim() || null,
+      }
+      await api.workers.createPayout(payload)
+      setWorkerPayoutModal(null)
+      await loadData()
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSaveAdjustment = async (event) => {
     event.preventDefault()
     setSaving(true)
@@ -620,6 +755,7 @@ export default function CashRegister() {
           <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
           <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>{tr('cashAddPendingWithdrawal')}</button>
           <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
+          <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>Выплата работнику</button>
           <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
         </div>
       </div>
@@ -944,6 +1080,130 @@ export default function CashRegister() {
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setExpenseModal(null)}>{tr('cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title="Выплата работнику">
+        <form onSubmit={handleSaveWorkerPayout} className="card" style={{ padding: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group">
+              <label className="form-label">Работник</label>
+              <select className="form-input" value={workerPayoutForm.worker_id} onChange={(event) => updateWorkerPayoutWorker(event.target.value)} required>
+                <option value="">{UI_DASH}</option>
+                {workers.map((worker) => (
+                  <option key={worker.id} value={worker.id}>{worker.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Тип выплаты</label>
+              <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, payout_type: event.target.value }))}>
+                <option value="regular">Выходы</option>
+                <option value="monthly">Месяц</option>
+                <option value="trip_advance">Аванс за командировку</option>
+                <option value="trip_final">Окончательный расчет командировки</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('date')}</label>
+              <DatePicker value={workerPayoutForm.date} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, date: value }))} required />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group">
+              <label className="form-label">Период с</label>
+              <DatePicker value={workerPayoutForm.period_start} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, period_start: value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Период по</label>
+              <DatePicker value={workerPayoutForm.period_end} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, period_end: value }))} />
+            </div>
+            {workerPayoutForm.payout_type === 'regular' ? (
+              <div className="form-group">
+                <label className="form-label">Выходов</label>
+                <input className="form-input" type="number" min="0" step="0.5" value={workerPayoutForm.work_days} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, work_days: event.target.value }))} />
+              </div>
+            ) : null}
+            {workerPayoutForm.payout_type.startsWith('trip') ? (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Дней командировки</label>
+                  <input className="form-input" type="number" min="0" step="0.5" value={workerPayoutForm.trip_days} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, trip_days: event.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Ночей</label>
+                  <input className="form-input" type="number" min="0" step="0.5" placeholder={String(workerPayoutPreview.lodgingNights)} value={workerPayoutForm.lodging_nights} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_nights: event.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Гостиница</label>
+                  <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.lodgingAmount)} value={workerPayoutForm.lodging_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_amount: event.target.value }))} />
+                </div>
+              </>
+            ) : null}
+            {workerPayoutForm.payout_type === 'trip_final' ? (
+              <div className="form-group">
+                <label className="form-label">Аванс уже выдан</label>
+                <input className="form-input" type="number" min="0" step="0.01" value={workerPayoutForm.advance_paid} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, advance_paid: event.target.value }))} />
+              </div>
+            ) : null}
+            <div className="form-group">
+              <label className="form-label">Выдать сейчас</label>
+              <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.cash)} value={workerPayoutForm.cash_paid_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))} />
+            </div>
+          </div>
+
+          <div className="record-field-grid" style={{ marginBottom: '0.75rem' }}>
+            <div className="record-field">
+              <span className="record-field-label">Начислено</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutPreview.gross)} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">К выдаче</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutPreview.cash)} RSD</span>
+            </div>
+            <div className="record-field">
+              <span className="record-field-label">Остаток</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutPreview.remaining)} RSD</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group">
+              <label className="form-label">{tr('category')}</label>
+              <select className="form-input" value={workerPayoutCategoryId} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, category_id: event.target.value }))}>
+                <option value="">{tr('allCategories')}</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{getCategoryLabel(category.id)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <ProjectSelect projects={projects} value={workerPayoutProjectId} onChange={updateWorkerPayoutProject} allowEmpty emptyLabel={UI_DASH} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('contracts')}</label>
+              <select className="form-input" value={workerPayoutForm.contract_id} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, contract_id: event.target.value }))}>
+                <option value="">{UI_DASH}</option>
+                {workerPayoutContracts.map((contract) => (
+                  <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('description')}</label>
+            <input className="form-input" value={workerPayoutForm.description} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, description: event.target.value }))} placeholder={selectedWorker ? selectedWorker.name : ''} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{tr('note')}</label>
+            <input className="form-input" value={workerPayoutForm.note} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, note: event.target.value }))} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setWorkerPayoutModal(null)}>{tr('cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !selectedWorker}>{saving ? tr('loading') : tr('save')}</button>
           </div>
         </form>
       </Modal>

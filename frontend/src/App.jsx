@@ -26,6 +26,7 @@ import IncomingInvoices from './pages/IncomingInvoices'
 import CounterpartyBalance from './pages/CounterpartyBalance'
 import Receipts from './pages/Receipts'
 import CounterpartyLoans from './pages/CounterpartyLoans'
+import Workers from './pages/Workers'
 
 const APP_PAGE_ROUTES = [
   { id: 'dashboard', path: '/', Component: Dashboard },
@@ -35,6 +36,7 @@ const APP_PAGE_ROUTES = [
   { id: 'counterparty-balance', path: '/counterparty-balance', Component: CounterpartyBalance },
   { id: 'counterparty-loans', path: '/counterparty-loans', Component: CounterpartyLoans },
   { id: 'clients', path: '/clients', Component: Clients },
+  { id: 'workers', path: '/workers', Component: Workers },
   { id: 'finance', path: '/finance', Component: FinanceOverview },
   { id: 'finance-pnl', path: '/finance/pnl', Component: ProfitAndLoss },
   { id: 'finance-ar', path: '/finance/ar', Component: AccountsReceivable },

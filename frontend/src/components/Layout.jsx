@@ -168,6 +168,7 @@ export default function Layout({ lang, toggleLang, children }) {
             <div className="sidebar-group-title">Справочники</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/clients"><Users size={18} /> {tr('clients')}</NavLink></li>
+              <li><NavLink to="/workers"><Users size={18} /> Работники</NavLink></li>
               <li><NavLink to="/projects"><FolderKanban size={18} /> {tr('projects')}</NavLink></li>
               <li><NavLink to="/contracts"><Briefcase size={18} /> {tr('contracts')}</NavLink></li>
             </ul>
