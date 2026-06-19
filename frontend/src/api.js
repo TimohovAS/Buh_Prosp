@@ -453,7 +453,9 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/workers/payouts${q ? `?${q}` : ''}`)
     },
+    getPayout: (id) => request(`/workers/payouts/${id}`),
     createPayout: (data) => request('/workers/payouts', { method: 'POST', body: JSON.stringify(data) }),
+    updatePayout: (id, data) => request(`/workers/payouts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
   enterprise: {
     get: () => request('/enterprise'),

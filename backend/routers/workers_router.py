@@ -223,6 +223,7 @@ def _serialize_cash_entry(entry: CashEntry) -> CashEntryResponse:
         note=entry.note,
         bank_transaction_id=entry.bank_transaction_id,
         expense_id=entry.expense_id,
+        worker_payout_id=None,
         balance_after=ZERO_DECIMAL,
         created_at=entry.created_at,
     )
@@ -302,6 +303,23 @@ async def list_worker_payouts(
         query = query.where(WorkerPayout.worker_id == worker_id)
     result = await db.execute(query.order_by(WorkerPayout.date.desc(), WorkerPayout.id.desc()).limit(limit))
     return [_serialize_worker_payout(item) for item in result.scalars().all()]
+
+
+@router.get("/payouts/{payout_id}", response_model=WorkerPayoutResponse)
+async def get_worker_payout(
+    payout_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(
+        select(WorkerPayout)
+        .options(selectinload(WorkerPayout.worker))
+        .where(WorkerPayout.id == payout_id)
+    )
+    payout = result.scalar_one_or_none()
+    if not payout:
+        raise HTTPException(404, "Worker payout not found")
+    return _serialize_worker_payout(payout)
 
 
 @router.post("/payouts", response_model=WorkerPayoutCreateResponse)
@@ -391,6 +409,106 @@ async def create_worker_payout(
     )
     db.add(payout)
     await db.flush()
+
+    await db.commit()
+    await db.refresh(payout, ["worker"])
+    await db.refresh(entry)
+    return WorkerPayoutCreateResponse(
+        payout=_serialize_worker_payout(payout),
+        cash_entry=_serialize_cash_entry(entry),
+    )
+
+
+@router.patch("/payouts/{payout_id}", response_model=WorkerPayoutCreateResponse)
+async def update_worker_payout(
+    payout_id: int,
+    data: WorkerPayoutCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    result = await db.execute(
+        select(WorkerPayout)
+        .options(
+            selectinload(WorkerPayout.worker),
+            selectinload(WorkerPayout.cash_entry),
+            selectinload(WorkerPayout.expense),
+        )
+        .where(WorkerPayout.id == payout_id)
+    )
+    payout = result.scalar_one_or_none()
+    if not payout:
+        raise HTTPException(404, "Worker payout not found")
+
+    worker = await _get_worker_or_404(db, data.worker_id)
+    project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
+    calc = _calculate_payout(worker, data)
+    if calc["cash_paid_amount"] <= ZERO_DECIMAL:
+        raise HTTPException(400, "Cash paid amount must be greater than zero")
+
+    period = ""
+    if data.period_start and data.period_end:
+        period = f" {data.period_start.isoformat()}-{data.period_end.isoformat()}"
+    label = _payout_type_label(data.payout_type)
+    description = (data.description or f"{label}: {worker.name}{period}").strip()[:500]
+    note = data.note.strip() if data.note and data.note.strip() else None
+
+    expense = payout.expense
+    entry = payout.cash_entry
+    if not expense or not entry:
+        raise HTTPException(404, "Linked cash expense was not found")
+    if entry.entry_type != "expense":
+        raise HTTPException(400, "Linked cash entry is not an expense")
+
+    expense.date = data.date
+    expense.paid_date = data.date
+    expense.description = description
+    expense.amount = calc["cash_paid_amount"]
+    expense.currency = "RSD"
+    expense.category = category_name
+    expense.category_id = category_id
+    expense.contract_id = contract_id
+    expense.is_tax_related = is_tax_related
+    expense.source = "cash"
+    expense.note = note
+    expense.project_id = project_id
+
+    entry.date = data.date
+    entry.direction = "out"
+    entry.amount = calc["cash_paid_amount"]
+    entry.currency = "RSD"
+    entry.description = description
+    entry.entry_type = "expense"
+    entry.note = note
+    entry.expense_id = expense.id
+
+    payout.worker_id = worker.id
+    payout.cash_entry_id = entry.id
+    payout.expense_id = expense.id
+    payout.payout_type = data.payout_type
+    payout.date = data.date
+    payout.period_start = data.period_start
+    payout.period_end = data.period_end
+    payout.work_days = calc["work_days"]
+    payout.trip_days = calc["trip_days"]
+    payout.lodging_nights = calc["lodging_nights"]
+    payout.regular_day_rate = calc["regular_day_rate"]
+    payout.weekly_rate = calc["weekly_rate"]
+    payout.monthly_rate = calc["monthly_rate"]
+    payout.trip_pricing_mode = calc["trip_pricing_mode"]
+    payout.trip_work_day_rate = calc["trip_work_day_rate"]
+    payout.trip_per_diem_rate = calc["trip_per_diem_rate"]
+    payout.trip_food_rate = calc["trip_food_rate"]
+    payout.trip_advance_day_rate = calc["trip_advance_day_rate"]
+    payout.lodging_amount = calc["lodging_amount"]
+    payout.advance_paid = _dec(data.advance_paid)
+    payout.gross_amount = calc["gross_amount"]
+    payout.cash_paid_amount = calc["cash_paid_amount"]
+    payout.remaining_amount = calc["remaining_amount"]
+    payout.description = description
+    payout.note = note
+    payout.project_id = project_id
+    payout.contract_id = contract_id
+    payout.category_id = category_id
 
     await db.commit()
     await db.refresh(payout, ["worker"])

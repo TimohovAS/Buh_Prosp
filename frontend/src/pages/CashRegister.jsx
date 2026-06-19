@@ -46,6 +46,8 @@ const emptyWorkerPayoutForm = {
 }
 
 const toNumber = (value) => Number(value || 0)
+const toFormValue = (value) => (value === null || value === undefined ? '' : String(value))
+const isGeneratedWorkerPayoutNote = (value) => /^days=\d/.test(String(value || '').trim())
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function calculateTripDuration(periodStart, periodEnd) {
@@ -218,6 +220,9 @@ export default function CashRegister() {
   const getEntrySourceLabel = (entry) => {
     if (entry.bank_transaction_id) {
       return `${tr('cashSourceBank')}: ${entry.bank_reference || entry.counterparty_name || `#${entry.bank_transaction_id}`}`
+    }
+    if (entry.worker_payout_id) {
+      return `Выплата работнику: #${entry.worker_payout_id}`
     }
     if (entry.expense_id) {
       return `${tr('cashSourceExpense')}: #${entry.expense_id}`
@@ -587,7 +592,40 @@ export default function CashRegister() {
       category_id: '',
       project_id: '',
     })
-    setWorkerPayoutModal(true)
+    setWorkerPayoutModal({ payoutId: null })
+  }
+
+  const openWorkerPayoutEdit = async (entry) => {
+    if (!entry.worker_payout_id) return
+    setSaving(true)
+    setPageError('')
+    try {
+      const payout = await api.workers.getPayout(entry.worker_payout_id)
+      setWorkerPayoutForm(applyPayoutDuration({
+        ...emptyWorkerPayoutForm,
+        worker_id: toFormValue(payout.worker_id),
+        payout_type: payout.payout_type || 'regular',
+        date: payout.date || todayIso(),
+        period_start: payout.period_start || '',
+        period_end: payout.period_end || '',
+        work_days: toFormValue(payout.work_days || 0),
+        trip_days: toFormValue(payout.trip_days || 0),
+        lodging_nights: toFormValue(payout.lodging_nights || 0),
+        lodging_amount: toFormValue(payout.lodging_amount || 0),
+        advance_paid: toFormValue(payout.advance_paid || 0),
+        cash_paid_amount: toFormValue(payout.cash_paid_amount || 0),
+        project_id: toFormValue(payout.project_id),
+        contract_id: toFormValue(payout.contract_id),
+        category_id: toFormValue(payout.category_id),
+        note: isGeneratedWorkerPayoutNote(payout.note) ? '' : (payout.note || ''),
+      }))
+      setWorkerPayoutModal({ payoutId: payout.id })
+      setDetailModal(null)
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const updateWorkerPayoutWorker = (workerId) => {
@@ -646,7 +684,11 @@ export default function CashRegister() {
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
         note: workerPayoutForm.note?.trim() || null,
       }
-      await api.workers.createPayout(payload)
+      if (workerPayoutModal?.payoutId) {
+        await api.workers.updatePayout(workerPayoutModal.payoutId, payload)
+      } else {
+        await api.workers.createPayout(payload)
+      }
       setWorkerPayoutModal(null)
       await loadData()
     } catch (error) {
@@ -746,6 +788,10 @@ export default function CashRegister() {
   }
 
   const openEditEntry = (entry) => {
+    if (entry.worker_payout_id) {
+      openWorkerPayoutEdit(entry)
+      return
+    }
     if (entry.entry_type === 'expense') {
       openExpenseEdit(entry)
       return
@@ -1149,7 +1195,7 @@ export default function CashRegister() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title="Выплата работнику">
+      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title={workerPayoutModal?.payoutId ? 'Изменить выплату работнику' : 'Выплата работнику'}>
         <form onSubmit={handleSaveWorkerPayout} className="card" style={{ padding: '1rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group">
