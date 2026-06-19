@@ -324,25 +324,7 @@ async def create_worker_payout(
         period = f" {data.period_start.isoformat()}-{data.period_end.isoformat()}"
     label = _payout_type_label(data.payout_type)
     description = (data.description or f"{label}: {worker.name}{period}").strip()[:500]
-    note_parts = []
-    if data.note:
-        note_parts.append(data.note.strip())
-    if data.payout_type.startswith("trip"):
-        note_parts.append(
-            " | ".join(
-                [
-                    f"days={calc['trip_days']}",
-                    f"work_rate={calc['trip_work_day_rate']}",
-                    f"per_diem={calc['trip_per_diem_rate']}",
-                    f"food={calc['trip_food_rate']}",
-                    f"lodging={calc['lodging_amount']}",
-                    f"gross={calc['gross_amount']}",
-                    f"advance_paid={_dec(data.advance_paid)}",
-                    f"remaining={calc['remaining_amount']}",
-                ]
-            )
-        )
-    note = "\n".join(part for part in note_parts if part) or None
+    note = data.note.strip() if data.note and data.note.strip() else None
 
     expense = Expense(
         date=data.date,

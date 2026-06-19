@@ -42,7 +42,6 @@ const emptyWorkerPayoutForm = {
   project_id: '',
   contract_id: '',
   category_id: '',
-  description: '',
   note: '',
 }
 
@@ -645,7 +644,6 @@ export default function CashRegister() {
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
         project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
-        description: workerPayoutForm.description?.trim() || null,
         note: workerPayoutForm.note?.trim() || null,
       }
       await api.workers.createPayout(payload)
@@ -1260,10 +1258,6 @@ export default function CashRegister() {
                 ))}
               </select>
             </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('description')}</label>
-            <input className="form-input" value={workerPayoutForm.description} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, description: event.target.value }))} placeholder={selectedWorker ? selectedWorker.name : ''} />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
