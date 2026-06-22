@@ -220,14 +220,6 @@ export default function CashRegister() {
     }
     return labels[payoutType] || tr('workerPayoutCreateTitle')
   }
-  const buildWorkerPayoutDescription = () => {
-    const workerName = selectedWorker?.name || ''
-    const period = workerPayoutForm.period_start && workerPayoutForm.period_end
-      ? ` ${workerPayoutForm.period_start}-${workerPayoutForm.period_end}`
-      : ''
-    return `${getWorkerPayoutTypeLabel(workerPayoutForm.payout_type)}: ${workerName}${period}`.trim()
-  }
-
   const getEntryTypeLabel = (entry) => {
     if (entry.entry_type === 'withdrawal') return tr('cashEntryTypeWithdrawal')
     if (entry.entry_type === 'pending_withdrawal') return tr('cashEntryTypePendingWithdrawal')
@@ -249,25 +241,14 @@ export default function CashRegister() {
   }
   const getDisplayDescription = (entry) => {
     const description = entry?.description || ''
-    if (!entry?.worker_payout_id || !description.includes(':')) return description
-    const [rawPrefix, ...restParts] = description.split(':')
-    const rest = restParts.join(':').trim()
-    const normalizedPrefix = rawPrefix.trim().toLowerCase()
-    const labelByPrefix = {
-      'оплата выхода': tr('workerPayoutRegular'),
-      'еженедельная оплата': tr('workerPayoutWeekly'),
-      'месячная оплата': tr('workerPayoutMonthly'),
-      'аванс за командировку': tr('workerPayoutTripAdvance'),
-      'расчет за командировку': tr('workerPayoutTripFinal'),
-      'окончательный расчет командировки': tr('workerPayoutTripFinal'),
-      [tr('workerPayoutRegular').toLowerCase()]: tr('workerPayoutRegular'),
-      [tr('workerPayoutWeekly').toLowerCase()]: tr('workerPayoutWeekly'),
-      [tr('workerPayoutMonthly').toLowerCase()]: tr('workerPayoutMonthly'),
-      [tr('workerPayoutTripAdvance').toLowerCase()]: tr('workerPayoutTripAdvance'),
-      [tr('workerPayoutTripFinal').toLowerCase()]: tr('workerPayoutTripFinal'),
+    if (!entry?.worker_payout_id) return description
+    if (entry.worker_payout_type && entry.worker_payout_worker_name) {
+      const period = entry.worker_payout_period_start && entry.worker_payout_period_end
+        ? ` ${entry.worker_payout_period_start}-${entry.worker_payout_period_end}`
+        : ''
+      return `${getWorkerPayoutTypeLabel(entry.worker_payout_type)}: ${entry.worker_payout_worker_name}${period}`
     }
-    const label = labelByPrefix[normalizedPrefix]
-    return label ? `${label}: ${rest}` : description
+    return description
   }
 
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
@@ -451,7 +432,7 @@ export default function CashRegister() {
       rows = rows.filter((entry) => {
         const haystack = [
           entry.date,
-          entry.description,
+          getDisplayDescription(entry),
           entry.note,
           entry.bank_reference,
           entry.counterparty_name,
@@ -489,7 +470,7 @@ export default function CashRegister() {
                 : sortCol === 'amount'
                   ? Number(left.amount || 0)
                   : sortCol === 'description'
-                    ? `${left.description || ''} ${left.note || ''}`
+                    ? `${getDisplayDescription(left) || ''} ${left.note || ''}`
                     : left[sortCol] ?? ''
 
       const rightValue = sortCol === 'entry_type'
@@ -505,7 +486,7 @@ export default function CashRegister() {
                 : sortCol === 'amount'
                   ? Number(right.amount || 0)
                   : sortCol === 'description'
-                    ? `${right.description || ''} ${right.note || ''}`
+                    ? `${getDisplayDescription(right) || ''} ${right.note || ''}`
                     : right[sortCol] ?? ''
 
       if (leftValue < rightValue) return sortAsc ? -1 : 1
@@ -780,7 +761,6 @@ export default function CashRegister() {
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
         project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
-        description: buildWorkerPayoutDescription(),
         note: workerPayoutForm.note?.trim() || null,
       }
       if (workerPayoutModal?.payoutId) {

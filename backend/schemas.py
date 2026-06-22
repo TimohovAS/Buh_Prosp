@@ -1179,6 +1179,10 @@ class CashEntryResponse(BaseModel):
     bank_transaction_id: Optional[int] = None
     expense_id: Optional[int] = None
     worker_payout_id: Optional[int] = None
+    worker_payout_type: Optional[str] = None
+    worker_payout_worker_name: Optional[str] = None
+    worker_payout_period_start: Optional[DateType] = None
+    worker_payout_period_end: Optional[DateType] = None
     bank_reference: Optional[str] = None
     counterparty_name: Optional[str] = None
     purpose: Optional[str] = None

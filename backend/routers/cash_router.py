@@ -166,9 +166,10 @@ def _is_generated_worker_payout_note(note: str | None) -> bool:
     return bool(note and note.strip().startswith("days="))
 
 
-def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout_id: int | None = None) -> CashEntryResponse:
+def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout: WorkerPayout | None = None) -> CashEntryResponse:
     bank_transaction = getattr(entry, "bank_transaction", None)
     expense = getattr(entry, "expense", None)
+    worker_payout_id = getattr(worker_payout, "id", None)
     note = None if worker_payout_id and _is_generated_worker_payout_note(entry.note) else entry.note
     return CashEntryResponse(
         id=entry.id,
@@ -182,6 +183,10 @@ def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout_
         bank_transaction_id=entry.bank_transaction_id,
         expense_id=entry.expense_id,
         worker_payout_id=worker_payout_id,
+        worker_payout_type=getattr(worker_payout, "payout_type", None),
+        worker_payout_worker_name=getattr(getattr(worker_payout, "worker", None), "name", None),
+        worker_payout_period_start=getattr(worker_payout, "period_start", None),
+        worker_payout_period_end=getattr(worker_payout, "period_end", None),
         bank_reference=getattr(bank_transaction, "bank_reference", None),
         counterparty_name=getattr(bank_transaction, "counterparty_name", None),
         purpose=getattr(bank_transaction, "purpose", None),
@@ -229,7 +234,12 @@ async def _get_balance_after_entry(db: AsyncSession, entry_id: int):
 
 async def _serialize_refreshed_entry(db: AsyncSession, entry_id: int) -> CashEntryResponse:
     entry = await _get_entry_with_links(db, entry_id)
-    payout_result = await db.execute(select(WorkerPayout.id).where(WorkerPayout.cash_entry_id == entry_id).limit(1))
+    payout_result = await db.execute(
+        select(WorkerPayout)
+        .options(selectinload(WorkerPayout.worker))
+        .where(WorkerPayout.cash_entry_id == entry_id)
+        .limit(1)
+    )
     return _serialize_cash_entry(entry, await _get_balance_after_entry(db, entry_id), payout_result.scalar_one_or_none())
 
 
@@ -258,14 +268,20 @@ async def _build_cash_summary(
     entries = list(entries_result.scalars().all())
     if limit is not None:
         entries = entries[-limit:]
-    payout_by_entry_id: dict[int, int] = {}
+    payout_by_entry_id: dict[int, WorkerPayout] = {}
     if entries:
         payout_result = await db.execute(
-            select(WorkerPayout.cash_entry_id, WorkerPayout.id).where(
+            select(WorkerPayout)
+            .options(selectinload(WorkerPayout.worker))
+            .where(
                 WorkerPayout.cash_entry_id.in_([entry.id for entry in entries])
             )
         )
-        payout_by_entry_id = {int(cash_entry_id): int(payout_id) for cash_entry_id, payout_id in payout_result.fetchall() if cash_entry_id}
+        payout_by_entry_id = {
+            int(payout.cash_entry_id): payout
+            for payout in payout_result.scalars().all()
+            if payout.cash_entry_id
+        }
 
     running_balance = await _get_balance_before_entry(db, entries[0]) if entries else ZERO_DECIMAL
     entry_items: list[CashEntryResponse] = []

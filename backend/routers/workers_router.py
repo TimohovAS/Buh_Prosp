@@ -94,14 +94,11 @@ async def _resolve_payout_links(
     return project_id, contract_id, category_id, category_name, is_tax_related
 
 
-def _payout_type_label(payout_type: str) -> str:
-    return {
-        "regular": "Оплата выхода",
-        "weekly": "Еженедельная оплата",
-        "monthly": "Месячная оплата",
-        "trip_advance": "Аванс за командировку",
-        "trip_final": "Расчет за командировку",
-    }.get(payout_type, "Выплата")
+def _build_payout_storage_description(worker: Worker, data: WorkerPayoutCreate) -> str:
+    period = ""
+    if data.period_start and data.period_end:
+        period = f" {data.period_start.isoformat()}-{data.period_end.isoformat()}"
+    return f"worker_payout:{data.payout_type}: {worker.name}{period}".strip()[:500]
 
 
 def _inclusive_period_days(data: WorkerPayoutCreate) -> Decimal | None:
@@ -214,7 +211,7 @@ def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
     )
 
 
-def _serialize_cash_entry(entry: CashEntry) -> CashEntryResponse:
+def _serialize_cash_entry(entry: CashEntry, payout: WorkerPayout | None = None) -> CashEntryResponse:
     return CashEntryResponse(
         id=entry.id,
         date=entry.date,
@@ -226,7 +223,11 @@ def _serialize_cash_entry(entry: CashEntry) -> CashEntryResponse:
         note=entry.note,
         bank_transaction_id=entry.bank_transaction_id,
         expense_id=entry.expense_id,
-        worker_payout_id=None,
+        worker_payout_id=getattr(payout, "id", None),
+        worker_payout_type=getattr(payout, "payout_type", None),
+        worker_payout_worker_name=getattr(getattr(payout, "worker", None), "name", None),
+        worker_payout_period_start=getattr(payout, "period_start", None),
+        worker_payout_period_end=getattr(payout, "period_end", None),
         balance_after=ZERO_DECIMAL,
         created_at=entry.created_at,
     )
@@ -340,11 +341,7 @@ async def create_worker_payout(
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
-    period = ""
-    if data.period_start and data.period_end:
-        period = f" {data.period_start.isoformat()}-{data.period_end.isoformat()}"
-    label = _payout_type_label(data.payout_type)
-    description = (data.description or f"{label}: {worker.name}{period}").strip()[:500]
+    description = (data.description or _build_payout_storage_description(worker, data)).strip()[:500]
     note = data.note.strip() if data.note and data.note.strip() else None
 
     expense = Expense(
@@ -419,7 +416,7 @@ async def create_worker_payout(
     await db.refresh(entry)
     return WorkerPayoutCreateResponse(
         payout=_serialize_worker_payout(payout),
-        cash_entry=_serialize_cash_entry(entry),
+        cash_entry=_serialize_cash_entry(entry, payout),
     )
 
 
@@ -449,11 +446,7 @@ async def update_worker_payout(
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
-    period = ""
-    if data.period_start and data.period_end:
-        period = f" {data.period_start.isoformat()}-{data.period_end.isoformat()}"
-    label = _payout_type_label(data.payout_type)
-    description = (data.description or f"{label}: {worker.name}{period}").strip()[:500]
+    description = (data.description or _build_payout_storage_description(worker, data)).strip()[:500]
     note = data.note.strip() if data.note and data.note.strip() else None
 
     expense = payout.expense
@@ -520,5 +513,5 @@ async def update_worker_payout(
     await db.refresh(entry)
     return WorkerPayoutCreateResponse(
         payout=_serialize_worker_payout(payout),
-        cash_entry=_serialize_cash_entry(entry),
+        cash_entry=_serialize_cash_entry(entry, payout),
     )
