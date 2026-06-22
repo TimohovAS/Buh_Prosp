@@ -1253,6 +1253,97 @@ tr.row-reversal {
   padding-bottom: 0.45rem;
 }
 
+.modal.incoming-invoice-detail-modal {
+  width: min(1180px, 95vw);
+  max-width: 1180px;
+}
+
+.modal.incoming-invoice-detail-modal .modal-body {
+  padding: 0.75rem;
+}
+
+.modal.incoming-invoice-detail-modal .record-detail-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.modal.incoming-invoice-detail-modal .record-detail-card {
+  padding: 0.75rem;
+  border-radius: 10px;
+}
+
+.modal.incoming-invoice-detail-modal .record-detail-stack {
+  margin-top: 0.75rem;
+  gap: 0.75rem;
+}
+
+.incoming-invoice-detail-fields {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+}
+
+.incoming-invoice-detail-fields .record-field-label {
+  font-size: 0.72rem;
+}
+
+.incoming-invoice-field-wide {
+  grid-column: span 3;
+}
+
+.incoming-invoice-detail-fields .record-field.full {
+  grid-column: 1 / -1;
+}
+
+.incoming-invoice-payment-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.incoming-invoice-payment-details .incoming-invoice-payment-card {
+  margin: 0;
+  padding: 0.65rem;
+}
+
+.incoming-invoice-payment-card {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.incoming-invoice-settlement-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.incoming-invoice-settlement-card .record-field-label {
+  margin-bottom: 0;
+}
+
+.incoming-invoice-settlement-table {
+  max-height: min(24vh, 210px);
+  overflow: auto;
+}
+
+.incoming-invoice-settlement-table th,
+.incoming-invoice-settlement-table td {
+  padding: 0.45rem 0.6rem;
+}
+
+.incoming-invoice-settlement-table td {
+  vertical-align: top;
+}
+
+.incoming-invoice-detail-modal .record-actions-grid {
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+}
+
+.incoming-invoice-detail-modal .record-actions-grid .btn {
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+}
+
 .record-detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
@@ -2465,6 +2556,22 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
+  .modal.incoming-invoice-detail-modal .record-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .incoming-invoice-detail-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .incoming-invoice-field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .incoming-invoice-payment-details {
+    grid-template-columns: 1fr;
+  }
+
   .bank-match-summary {
     grid-template-columns: 1fr;
   }
@@ -2726,7 +2833,8 @@ tr:hover td {
 
   .modal.receipt-import-modal,
   .modal.receipt-detail-modal,
-  .modal.expense-detail-modal {
+  .modal.expense-detail-modal,
+  .modal.incoming-invoice-detail-modal {
     width: 100vw;
     max-width: none;
     height: 100dvh;

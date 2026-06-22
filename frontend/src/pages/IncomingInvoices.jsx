@@ -65,10 +65,10 @@ function PaymentDetailsSummary({ details }) {
   }
 
   return (
-    <div className="record-field-text" style={{ display: 'grid', gap: '0.75rem' }}>
+    <div className="record-field-text incoming-invoice-payment-details">
       {details.warning === 'linked_expense_without_bank_transaction' ? (
         <div
-          className="record-detail-card"
+          className="record-detail-card incoming-invoice-payment-card"
           style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-warning)', color: 'var(--color-warning)' }}
         >
           {tr('incomingInvoicePaymentNoBankLink')}
@@ -77,7 +77,7 @@ function PaymentDetailsSummary({ details }) {
 
       {details.warning === 'missing_linked_expense' ? (
         <div
-          className="record-detail-card"
+          className="record-detail-card incoming-invoice-payment-card"
           style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
         >
           <strong>{tr('incomingInvoiceMissingLinkedExpense')}</strong>
@@ -88,7 +88,7 @@ function PaymentDetailsSummary({ details }) {
       ) : null}
 
       {expense ? (
-        <div className="record-detail-card" style={{ margin: 0, padding: '0.85rem' }}>
+        <div className="record-detail-card incoming-invoice-payment-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
             <strong>{tr('incomingInvoiceLinkedExpense')} #{expense.id}</strong>
             <strong>{fmt(expense.amount)} {expense.currency || 'RSD'}</strong>
@@ -111,7 +111,7 @@ function PaymentDetailsSummary({ details }) {
       ) : null}
 
       {bankTransaction ? (
-        <div className="record-detail-card" style={{ margin: 0, padding: '0.85rem' }}>
+        <div className="record-detail-card incoming-invoice-payment-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
             <strong>{tr('incomingInvoiceLinkedBank')} #{bankTransaction.id}</strong>
             <strong>{fmt(bankTransaction.amount)} {bankTransaction.currency || 'RSD'}</strong>
@@ -520,9 +520,10 @@ export default function IncomingInvoices() {
         isOpen={!!detailModal}
         onClose={() => setDetailModal(null)}
         title={detailModal ? `${tr('incomingInvoice')} ${detailModal.invoice_number}` : ''}
-        maxWidth="920px"
+        maxWidth="1180px"
+        className="incoming-invoice-detail-modal"
         details={detailModal ? (
-          <div className="record-field-grid">
+          <div className="record-field-grid incoming-invoice-detail-fields">
             <div className="record-field">
               <span className="record-field-label">{tr('date')}</span>
               <span className="record-field-value">{fmtDate(detailModal.date)}</span>
@@ -547,12 +548,12 @@ export default function IncomingInvoices() {
               <span className="record-field-label">{tr('project')}</span>
               <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
             </div>
-            <div className="record-field full">
+            <div className="record-field incoming-invoice-field-wide">
               <span className="record-field-label">{tr('counterpartyName')}</span>
               <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
             </div>
             {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
-              <div className="record-field full">
+              <div className="record-field incoming-invoice-field-wide">
                 <span className="record-field-label">{tr('client')}</span>
                 <span className="record-field-value">{detailModal.client_name}</span>
               </div>
@@ -586,11 +587,11 @@ export default function IncomingInvoices() {
                 <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
               </div>
             ) : null}
-            <div className="record-field full">
+            <div className="record-field incoming-invoice-field-wide">
               <span className="record-field-label">{tr('description')}</span>
               <div className="record-field-text">{detailModal.description || UI_DASH}</div>
             </div>
-            <div className="record-field full">
+            <div className="record-field incoming-invoice-field-wide">
               <span className="record-field-label">{tr('note')}</span>
               <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
@@ -613,10 +614,10 @@ export default function IncomingInvoices() {
         ) : null}
       >
         {detailModal ? (
-          <div className="record-detail-card">
-            <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('settlementHistory')}</div>
+          <div className="record-detail-card incoming-invoice-settlement-card">
+            <div className="record-field-label">{tr('settlementHistory')}</div>
             {detailSettlements.length === 0 ? <p>{tr('noSettlements')}</p> : (
-              <div className="table-wrap">
+              <div className="table-wrap incoming-invoice-settlement-table">
                 <table>
                   <thead>
                     <tr>
