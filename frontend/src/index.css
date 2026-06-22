@@ -1283,8 +1283,12 @@ tr.row-reversal {
 }
 
 .incoming-invoice-detail-fields {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 0.65rem 0.75rem;
+}
+
+.incoming-invoice-detail-fields > .record-field:not(.full):not(.incoming-invoice-field-wide) {
+  grid-column: span 2;
 }
 
 .incoming-invoice-detail-fields .record-field-label {
@@ -1292,7 +1296,7 @@ tr.row-reversal {
 }
 
 .incoming-invoice-field-wide {
-  grid-column: span 3;
+  grid-column: span 5;
 }
 
 .incoming-invoice-detail-fields .record-field.full {
@@ -1300,7 +1304,7 @@ tr.row-reversal {
 }
 
 .incoming-invoice-detail-actions {
-  grid-column: 1 / -1;
+  grid-column: span 4;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -1318,6 +1322,7 @@ tr.row-reversal {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
+  width: 100%;
 }
 
 .incoming-invoice-payment-details .incoming-invoice-payment-card {
@@ -2573,7 +2578,12 @@ tr:hover td {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .incoming-invoice-field-wide {
+  .incoming-invoice-detail-fields > .record-field:not(.full):not(.incoming-invoice-field-wide) {
+    grid-column: span 1;
+  }
+
+  .incoming-invoice-field-wide,
+  .incoming-invoice-detail-actions {
     grid-column: 1 / -1;
   }
 
