@@ -1834,6 +1834,14 @@ tr:hover td {
   flex-direction: column;
 }
 
+.modal-resizable {
+  resize: both;
+  min-width: min(380px, 94vw);
+  min-height: min(300px, 90vh);
+  max-width: 96vw;
+  max-height: 92vh;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -1872,6 +1880,108 @@ tr:hover td {
   gap: 0.5rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+.worker-payout-modal {
+  width: min(1040px, 94vw);
+  max-width: min(1040px, 96vw);
+}
+
+.worker-payout-modal .modal-body {
+  padding: 0.75rem;
+}
+
+.worker-payout-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.worker-payout-section {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.worker-payout-main-grid {
+  grid-template-columns: minmax(190px, 1fr) minmax(210px, 1.15fr) minmax(150px, 0.8fr);
+}
+
+.worker-payout-trip-grid {
+  grid-template-columns: repeat(6, minmax(118px, 1fr));
+  align-items: end;
+}
+
+.worker-payout-links-grid {
+  grid-template-columns: minmax(160px, 0.75fr) minmax(240px, 1.4fr) minmax(180px, 0.9fr);
+}
+
+.worker-payout-totals {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  margin-bottom: 0;
+}
+
+.worker-payout-calc {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+}
+
+.worker-payout-calc-lines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 0.2rem 0.9rem;
+}
+
+.worker-payout-calc-line {
+  font-size: 0.86rem;
+  color: var(--color-text);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.worker-payout-modal .form-group {
+  margin-bottom: 0;
+}
+
+.worker-payout-modal .form-label,
+.worker-payout-modal .record-field-label {
+  font-size: 0.74rem;
+}
+
+.worker-payout-modal .form-input {
+  min-height: 34px;
+  padding: 0.45rem 0.65rem;
+}
+
+.worker-payout-modal .record-field {
+  padding: 0.45rem 0.6rem;
+}
+
+.worker-payout-modal .record-field-value {
+  font-size: 0.95rem;
+}
+
+.worker-payout-modal .modal-actions {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 980px) {
+  .worker-payout-main-grid,
+  .worker-payout-trip-grid,
+  .worker-payout-links-grid,
+  .worker-payout-calc-lines {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .worker-payout-main-grid,
+  .worker-payout-trip-grid,
+  .worker-payout-links-grid,
+  .worker-payout-totals,
+  .worker-payout-calc-lines {
+    grid-template-columns: 1fr;
+  }
 }
 
 .bank-match-modal {

@@ -8,6 +8,7 @@ export default function Modal({
   maxWidth,
   closeOnOverlay = false,
   style,
+  resizable = true,
 }) {
   if (!isOpen) return null
 
@@ -17,7 +18,7 @@ export default function Modal({
       onClick={closeOnOverlay ? onClose : undefined}
     >
       <div
-        className={`modal ${className}`.trim()}
+        className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()}
         style={{ ...(maxWidth ? { maxWidth } : {}), ...(style || {}) }}
         onClick={closeOnOverlay ? (event) => event.stopPropagation() : undefined}
       >

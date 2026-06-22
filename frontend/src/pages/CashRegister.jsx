@@ -1272,9 +1272,14 @@ export default function CashRegister() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!workerPayoutModal} onClose={() => setWorkerPayoutModal(null)} title={workerPayoutModal?.payoutId ? tr('workerPayoutEditTitle') : tr('workerPayoutCreateTitle')}>
-        <form onSubmit={handleSaveWorkerPayout} className="card" style={{ padding: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+      <Modal
+        isOpen={!!workerPayoutModal}
+        onClose={() => setWorkerPayoutModal(null)}
+        title={workerPayoutModal?.payoutId ? tr('workerPayoutEditTitle') : tr('workerPayoutCreateTitle')}
+        className="worker-payout-modal"
+      >
+        <form onSubmit={handleSaveWorkerPayout} className="worker-payout-form">
+          <div className="worker-payout-section worker-payout-main-grid">
             <div className="form-group">
               <label className="form-label">{tr('worker')}</label>
               <select className="form-input" value={workerPayoutForm.worker_id} onChange={(event) => updateWorkerPayoutWorker(event.target.value)} required>
@@ -1300,7 +1305,7 @@ export default function CashRegister() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+          <div className="worker-payout-section worker-payout-trip-grid">
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPeriodStart')}</label>
               <DatePicker value={workerPayoutForm.period_start} onChange={(value) => updateWorkerPayoutPeriod('period_start', value)} />
@@ -1343,7 +1348,7 @@ export default function CashRegister() {
             </div>
           </div>
 
-          <div className="record-field-grid" style={{ marginBottom: '0.75rem' }}>
+          <div className="record-field-grid worker-payout-totals">
             <div className="record-field">
               <span className="record-field-label">{tr('workerPayoutGross')}</span>
               <span className="record-field-value">{fmtAmount(workerPayoutPreview.gross)} RSD</span>
@@ -1358,15 +1363,17 @@ export default function CashRegister() {
             </div>
           </div>
           {workerPayoutMathLines.length ? (
-            <div style={{ padding: '0.75rem', marginBottom: '0.75rem', border: '1px solid var(--color-border)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
+            <div className="worker-payout-calc">
               <div className="record-field-label" style={{ marginBottom: '0.35rem' }}>{tr('workerPayoutCalculation')}</div>
-              {workerPayoutMathLines.map((line) => (
-                <div key={line} style={{ fontSize: '0.9rem', color: 'var(--color-text)', lineHeight: 1.45 }}>{line}</div>
-              ))}
+              <div className="worker-payout-calc-lines">
+                {workerPayoutMathLines.map((line) => (
+                  <div key={line} className="worker-payout-calc-line">{line}</div>
+                ))}
+              </div>
             </div>
           ) : null}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+          <div className="worker-payout-section worker-payout-links-grid">
             <div className="form-group">
               <label className="form-label">{tr('category')}</label>
               <select className="form-input" value={workerPayoutCategoryId} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, category_id: event.target.value }))}>
