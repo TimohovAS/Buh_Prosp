@@ -104,6 +104,7 @@ class WorkerPayout(Base):
     trip_per_diem_rate = Column(Numeric(14, 2), default=0)
     trip_food_rate = Column(Numeric(14, 2), default=0)
     trip_advance_day_rate = Column(Numeric(14, 2), default=0)
+    lodging_night_rate = Column(Numeric(14, 2), default=0)
     lodging_amount = Column(Numeric(14, 2), default=0)
     advance_paid = Column(Numeric(14, 2), default=0)
     gross_amount = Column(Numeric(14, 2), nullable=False)

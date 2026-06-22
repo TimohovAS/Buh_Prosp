@@ -1358,6 +1358,7 @@ class WorkerPayoutCreate(BaseModel):
     trip_per_diem_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_food_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_advance_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    lodging_night_rate: Optional[Decimal] = Field(default=None, ge=0)
     project_id: Optional[int] = None
     contract_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -1370,7 +1371,7 @@ class WorkerPayoutCreate(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        for key in ("project_id", "contract_id", "category_id", "lodging_nights", "lodging_amount"):
+        for key in ("project_id", "contract_id", "category_id", "lodging_nights", "lodging_night_rate", "lodging_amount"):
             if key in result and (result[key] == "" or result[key] is None):
                 result[key] = None
         return result
@@ -1389,6 +1390,7 @@ class WorkerPayoutResponse(BaseModel):
     work_days: Decimal
     trip_days: Decimal
     lodging_nights: Decimal
+    lodging_night_rate: Decimal
     lodging_amount: Decimal
     advance_paid: Decimal
     gross_amount: Decimal

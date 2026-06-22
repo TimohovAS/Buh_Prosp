@@ -141,9 +141,10 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         lodging_nights = _dec(data.lodging_nights)
     else:
         lodging_nights = max(trip_days + Decimal(int(worker.lodging_nights_offset or 0)), ZERO_DECIMAL)
-    lodging_amount = _dec(data.lodging_amount)
-    if data.lodging_amount is None:
-        lodging_amount = lodging_nights * _dec(worker.lodging_night_rate)
+    lodging_night_rate = _dec(data.lodging_night_rate if data.lodging_night_rate is not None else worker.lodging_night_rate)
+    lodging_amount = lodging_nights * lodging_night_rate if data.lodging_night_rate is not None else _dec(data.lodging_amount)
+    if data.lodging_amount is None and data.lodging_night_rate is None:
+        lodging_amount = lodging_nights * lodging_night_rate
 
     if payout_type == "monthly":
         gross_amount = monthly_rate
@@ -176,6 +177,7 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         "trip_per_diem_rate": trip_per_diem_rate,
         "trip_food_rate": trip_food_rate,
         "trip_advance_day_rate": trip_advance_day_rate,
+        "lodging_night_rate": lodging_night_rate,
         "lodging_amount": lodging_amount,
         "gross_amount": gross_amount,
         "cash_paid_amount": cash_paid_amount,
@@ -197,6 +199,7 @@ def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
         work_days=_dec(payout.work_days),
         trip_days=_dec(payout.trip_days),
         lodging_nights=_dec(payout.lodging_nights),
+        lodging_night_rate=_dec(payout.lodging_night_rate),
         lodging_amount=_dec(payout.lodging_amount),
         advance_paid=_dec(payout.advance_paid),
         gross_amount=_dec(payout.gross_amount),
@@ -395,6 +398,7 @@ async def create_worker_payout(
         trip_per_diem_rate=calc["trip_per_diem_rate"],
         trip_food_rate=calc["trip_food_rate"],
         trip_advance_day_rate=calc["trip_advance_day_rate"],
+        lodging_night_rate=calc["lodging_night_rate"],
         lodging_amount=calc["lodging_amount"],
         advance_paid=_dec(data.advance_paid),
         gross_amount=calc["gross_amount"],
@@ -499,6 +503,7 @@ async def update_worker_payout(
     payout.trip_per_diem_rate = calc["trip_per_diem_rate"]
     payout.trip_food_rate = calc["trip_food_rate"]
     payout.trip_advance_day_rate = calc["trip_advance_day_rate"]
+    payout.lodging_night_rate = calc["lodging_night_rate"]
     payout.lodging_amount = calc["lodging_amount"]
     payout.advance_paid = _dec(data.advance_paid)
     payout.gross_amount = calc["gross_amount"]

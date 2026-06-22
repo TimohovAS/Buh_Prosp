@@ -36,6 +36,7 @@ const emptyWorkerPayoutForm = {
   work_days: '1',
   trip_days: '1',
   lodging_nights: '',
+  lodging_night_rate: '',
   lodging_amount: '',
   advance_paid: '',
   cash_paid_amount: '',
@@ -325,7 +326,13 @@ export default function CashRegister() {
         workDays: fallbackWorkDays,
         tripDays: fallbackTripDays,
         lodgingNights: fallbackLodgingNights,
+        lodgingNightRate: 0,
         lodgingAmount: 0,
+        regularDayRate: 0,
+        tripWorkDayRate: 0,
+        perDiemRate: 0,
+        foodRate: 0,
+        advanceDayRate: 0,
       }
     }
     const payoutType = workerPayoutForm.payout_type
@@ -344,9 +351,10 @@ export default function CashRegister() {
       : workerPayoutForm.lodging_nights !== ''
       ? fallbackLodgingNights
       : Math.max(tripDays + Number(selectedWorker.lodging_nights_offset || 0), 0)
-    const lodgingAmount = workerPayoutForm.lodging_amount !== ''
-      ? toNumber(workerPayoutForm.lodging_amount)
-      : lodgingNights * toNumber(selectedWorker.lodging_night_rate)
+    const lodgingNightRate = workerPayoutForm.lodging_night_rate !== ''
+      ? toNumber(workerPayoutForm.lodging_night_rate)
+      : toNumber(selectedWorker.lodging_night_rate)
+    const lodgingAmount = lodgingNights * lodgingNightRate
     const gross = payoutType === 'monthly'
       ? monthlyRate
       : payoutType === 'weekly'
@@ -361,8 +369,57 @@ export default function CashRegister() {
         : gross
     const cash = workerPayoutForm.cash_paid_amount !== '' ? toNumber(workerPayoutForm.cash_paid_amount) : defaultCash
     const remaining = Math.max(gross - toNumber(workerPayoutForm.advance_paid) - cash, 0)
-    return { gross, cash, remaining, workDays, tripDays, lodgingNights, lodgingAmount }
+    return {
+      gross,
+      cash,
+      remaining,
+      workDays,
+      tripDays,
+      lodgingNights,
+      lodgingNightRate,
+      lodgingAmount,
+      regularDayRate,
+      tripWorkDayRate,
+      perDiemRate,
+      foodRate,
+      advanceDayRate,
+    }
   }, [selectedWorker, workerPayoutForm])
+
+  const workerPayoutMathLines = useMemo(() => {
+    if (!selectedWorker) return []
+    const lines = []
+    if (workerPayoutForm.payout_type.startsWith('trip')) {
+      lines.push(
+        `${tr('workerPayoutLodging')}: ${fmtAmount(workerPayoutPreview.lodgingNightRate)} * ${fmtAmount(workerPayoutPreview.lodgingNights)} = ${fmtAmount(workerPayoutPreview.lodgingAmount)} RSD`
+      )
+      lines.push(
+        `${tr('workerPayoutDay')}: ${fmtAmount(workerPayoutPreview.tripWorkDayRate)} + ${fmtAmount(workerPayoutPreview.perDiemRate)} + ${fmtAmount(workerPayoutPreview.foodRate)} = ${fmtAmount(workerPayoutPreview.tripWorkDayRate + workerPayoutPreview.perDiemRate + workerPayoutPreview.foodRate)} RSD`
+      )
+      lines.push(
+        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.tripDays)} * (${fmtAmount(workerPayoutPreview.tripWorkDayRate)} + ${fmtAmount(workerPayoutPreview.perDiemRate)} + ${fmtAmount(workerPayoutPreview.foodRate)}) + ${fmtAmount(workerPayoutPreview.lodgingAmount)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`
+      )
+      if (workerPayoutForm.payout_type === 'trip_advance' && workerPayoutForm.cash_paid_amount === '') {
+        lines.push(
+          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.tripDays)} * ${fmtAmount(workerPayoutPreview.advanceDayRate)} + ${fmtAmount(workerPayoutPreview.lodgingAmount)} = ${fmtAmount(workerPayoutPreview.cash)} RSD`
+        )
+      } else if (workerPayoutForm.payout_type === 'trip_final' && workerPayoutForm.cash_paid_amount === '') {
+        lines.push(
+          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} = ${fmtAmount(workerPayoutPreview.cash)} RSD`
+        )
+      } else {
+        lines.push(`${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.cash)} RSD`)
+      }
+      lines.push(
+        `${tr('workerPayoutRemaining')}: ${fmtAmount(workerPayoutPreview.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} - ${fmtAmount(workerPayoutPreview.cash)} = ${fmtAmount(workerPayoutPreview.remaining)} RSD`
+      )
+      return lines
+    }
+    if (workerPayoutForm.payout_type === 'regular') {
+      return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.workDays)} * ${fmtAmount(workerPayoutPreview.regularDayRate)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`]
+    }
+    return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.gross)} RSD`]
+  }, [selectedWorker, workerPayoutForm, workerPayoutPreview])
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -628,6 +685,7 @@ export default function CashRegister() {
         work_days: toFormValue(payout.work_days || 0),
         trip_days: toFormValue(payout.trip_days || 0),
         lodging_nights: toFormValue(payout.lodging_nights || 0),
+        lodging_night_rate: toFormValue(payout.lodging_night_rate || payout.lodging_amount || 0),
         lodging_amount: toFormValue(payout.lodging_amount || 0),
         advance_paid: toFormValue(payout.advance_paid || 0),
         cash_paid_amount: toFormValue(payout.cash_paid_amount || 0),
@@ -692,7 +750,8 @@ export default function CashRegister() {
         work_days: workerPayoutPreview.workDays,
         trip_days: workerPayoutPreview.tripDays,
         lodging_nights: workerPayoutPreview.lodgingNights,
-        lodging_amount: workerPayoutForm.lodging_amount === '' ? null : toNumber(workerPayoutForm.lodging_amount),
+        lodging_night_rate: workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
+        lodging_amount: workerPayoutPreview.lodgingAmount,
         advance_paid: toNumber(workerPayoutForm.advance_paid),
         cash_paid_amount: workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
         trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
@@ -1267,8 +1326,8 @@ export default function CashRegister() {
                   <span className="record-field-value">{workerPayoutPreview.lodgingNights}</span>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">{tr('workerPayoutLodging')}</label>
-                  <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.lodgingAmount)} value={workerPayoutForm.lodging_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_amount: event.target.value }))} />
+                  <label className="form-label">{tr('workerPayoutLodgingNightRate')}</label>
+                  <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.lodgingNightRate)} value={workerPayoutForm.lodging_night_rate} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_night_rate: event.target.value }))} />
                 </div>
               </>
             ) : null}
@@ -1298,6 +1357,14 @@ export default function CashRegister() {
               <span className="record-field-value">{fmtAmount(workerPayoutPreview.remaining)} RSD</span>
             </div>
           </div>
+          {workerPayoutMathLines.length ? (
+            <div style={{ padding: '0.75rem', marginBottom: '0.75rem', border: '1px solid var(--color-border)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
+              <div className="record-field-label" style={{ marginBottom: '0.35rem' }}>{tr('workerPayoutCalculation')}</div>
+              {workerPayoutMathLines.map((line) => (
+                <div key={line} style={{ fontSize: '0.9rem', color: 'var(--color-text)', lineHeight: 1.45 }}>{line}</div>
+              ))}
+            </div>
+          ) : null}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group">
