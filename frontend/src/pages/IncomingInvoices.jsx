@@ -538,82 +538,94 @@ export default function IncomingInvoices() {
         maxWidth="1180px"
         className="incoming-invoice-detail-modal"
         details={detailModal ? (
-          <div className="record-field-grid incoming-invoice-detail-fields">
-            <div className="record-field">
-              <span className="record-field-label">{tr('date')}</span>
-              <span className="record-field-value">{fmtDate(detailModal.date)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('status')}</span>
-              <div><StatusBadge status={detailModal.status} /></div>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('amount')}</span>
-              <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('settledAmount')}</span>
-              <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('remainingAmount')}</span>
-              <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('project')}</span>
-              <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
-            </div>
-            {detailActionButtons ? (
-              <div className="incoming-invoice-detail-actions">
-                {detailActionButtons}
+          <div className="incoming-invoice-detail-content">
+            <div className="incoming-invoice-detail-top">
+              <div className="incoming-invoice-summary-grid">
+                <div className="record-field">
+                  <span className="record-field-label">{tr('date')}</span>
+                  <span className="record-field-value">{fmtDate(detailModal.date)}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('status')}</span>
+                  <div><StatusBadge status={detailModal.status} /></div>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('amount')}</span>
+                  <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('settledAmount')}</span>
+                  <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('remainingAmount')}</span>
+                  <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
+                </div>
+                <div className="record-field">
+                  <span className="record-field-label">{tr('project')}</span>
+                  <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
+                </div>
               </div>
-            ) : null}
-            <div className="record-field incoming-invoice-field-wide">
-              <span className="record-field-label">{tr('counterpartyName')}</span>
-              <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
+              {detailActionButtons ? (
+                <div className="incoming-invoice-detail-actions">
+                  {detailActionButtons}
+                </div>
+              ) : null}
             </div>
-            {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
-              <div className="record-field incoming-invoice-field-wide">
-                <span className="record-field-label">{tr('client')}</span>
-                <span className="record-field-value">{detailModal.client_name}</span>
+
+            <div className="incoming-invoice-party-grid">
+              <div className="record-field">
+                <span className="record-field-label">{tr('counterpartyName')}</span>
+                <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
               </div>
-            ) : null}
+              {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('client')}</span>
+                  <span className="record-field-value">{detailModal.client_name}</span>
+                </div>
+              ) : null}
+            </div>
+
             {detailPaymentDetails && (detailPaymentDetails.expense || detailPaymentDetails.bank_transaction || detailPaymentDetails.warning) ? (
-              <div className="record-field full">
+              <div className="incoming-invoice-detail-section">
                 <span className="record-field-label">{tr('paymentDetails')}</span>
                 <PaymentDetailsSummary details={detailPaymentDetails} />
               </div>
             ) : detailModal.status === 'paid' && detailModal.expense_id && detailSettlements.length === 0 ? (
-              <div className="record-field full">
+              <div className="incoming-invoice-detail-section">
                 <span className="record-field-label">{tr('linkedExpense')}</span>
                 <span className="record-field-value">#{detailModal.expense_id}</span>
               </div>
             ) : null}
+
             {detailModal.advance_invoice ? (
-              <div className="record-field full">
+              <div className="incoming-invoice-detail-section">
                 <span className="record-field-label">{tr('advanceInvoice')}</span>
                 <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
               </div>
             ) : null}
             {detailModal.closing_invoice ? (
-              <div className="record-field full">
+              <div className="incoming-invoice-detail-section">
                 <span className="record-field-label">{tr('closingInvoice')}</span>
                 <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
               </div>
             ) : null}
             {detailModal.advance_invoice && detailAmount === 0 ? (
-              <div className="record-field full">
+              <div className="incoming-invoice-detail-section">
                 <span className="record-field-label">{tr('note')}</span>
                 <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
               </div>
             ) : null}
-            <div className="record-field incoming-invoice-field-wide">
-              <span className="record-field-label">{tr('description')}</span>
-              <div className="record-field-text">{detailModal.description || UI_DASH}</div>
-            </div>
-            <div className="record-field incoming-invoice-field-wide">
-              <span className="record-field-label">{tr('note')}</span>
-              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+
+            <div className="incoming-invoice-text-grid">
+              <div className="record-field">
+                <span className="record-field-label">{tr('description')}</span>
+                <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('note')}</span>
+                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+              </div>
             </div>
           </div>
         ) : null}
