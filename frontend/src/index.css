@@ -1325,6 +1325,11 @@ tr.row-reversal {
   border-radius: 10px;
 }
 
+.modal.incoming-invoice-detail-modal .incoming-invoice-payment-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+}
+
 .incoming-invoice-settlement-card {
   display: grid;
   gap: 0.65rem;
