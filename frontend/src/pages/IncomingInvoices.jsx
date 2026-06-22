@@ -535,145 +535,142 @@ export default function IncomingInvoices() {
         isOpen={!!detailModal}
         onClose={() => setDetailModal(null)}
         title={detailModal ? `${tr('incomingInvoice')} ${detailModal.invoice_number}` : ''}
-        maxWidth="1180px"
+        maxWidth="1040px"
         className="incoming-invoice-detail-modal"
         details={detailModal ? (
-          <div className="incoming-invoice-detail-content">
-            <div className="incoming-invoice-detail-top">
-              <div className="incoming-invoice-summary-grid">
-                <div className="record-field">
-                  <span className="record-field-label">{tr('date')}</span>
-                  <span className="record-field-value">{fmtDate(detailModal.date)}</span>
+          <div className="iid">
+            <div className="iid-top">
+              <div className="iid-stats">
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('date')}</span>
+                  <span className="iid-stat-value">{fmtDate(detailModal.date)}</span>
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('status')}</span>
-                  <div><StatusBadge status={detailModal.status} /></div>
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('status')}</span>
+                  <div className="iid-stat-value"><StatusBadge status={detailModal.status} /></div>
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('amount')}</span>
-                  <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('amount')}</span>
+                  <span className="iid-stat-value iid-stat-strong">{fmt(detailModal.amount)} {detailModal.currency}</span>
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('settledAmount')}</span>
-                  <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('settledAmount')}</span>
+                  <span className="iid-stat-value">{fmt(detailModal.settled_amount)}</span>
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('remainingAmount')}</span>
-                  <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('remainingAmount')}</span>
+                  <span className="iid-stat-value">{fmt(detailModal.remaining_amount)}</span>
                 </div>
-                <div className="record-field">
-                  <span className="record-field-label">{tr('project')}</span>
-                  <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
+                <div className="iid-stat">
+                  <span className="iid-stat-label">{tr('project')}</span>
+                  <span className="iid-stat-value">{getProjectLabel(detailModal) || UI_DASH}</span>
                 </div>
               </div>
+
               {detailActionButtons ? (
-                <div className="incoming-invoice-detail-actions">
-                  {detailActionButtons}
-                </div>
+                <div className="iid-actions">{detailActionButtons}</div>
               ) : null}
             </div>
 
-            <div className="incoming-invoice-party-grid">
-              <div className="record-field">
+            <div className="iid-meta">
+              <div className="iid-section">
                 <span className="record-field-label">{tr('counterpartyName')}</span>
                 <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
+                {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+                  <span className="iid-subvalue">{tr('client')}: {detailModal.client_name}</span>
+                ) : null}
               </div>
-              {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('client')}</span>
-                  <span className="record-field-value">{detailModal.client_name}</span>
-                </div>
-              ) : null}
+              <div className="iid-section">
+                <span className="record-field-label">{tr('description')}</span>
+                <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+              </div>
+              <div className="iid-section">
+                <span className="record-field-label">{tr('note')}</span>
+                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+              </div>
             </div>
 
             {detailPaymentDetails && (detailPaymentDetails.expense || detailPaymentDetails.bank_transaction || detailPaymentDetails.warning) ? (
-              <div className="incoming-invoice-detail-section">
+              <div className="iid-section iid-section-flush">
                 <span className="record-field-label">{tr('paymentDetails')}</span>
                 <PaymentDetailsSummary details={detailPaymentDetails} />
               </div>
             ) : detailModal.status === 'paid' && detailModal.expense_id && detailSettlements.length === 0 ? (
-              <div className="incoming-invoice-detail-section">
+              <div className="iid-section">
                 <span className="record-field-label">{tr('linkedExpense')}</span>
                 <span className="record-field-value">#{detailModal.expense_id}</span>
               </div>
             ) : null}
 
-            {detailModal.advance_invoice ? (
-              <div className="incoming-invoice-detail-section">
-                <span className="record-field-label">{tr('advanceInvoice')}</span>
-                <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
-              </div>
-            ) : null}
-            {detailModal.closing_invoice ? (
-              <div className="incoming-invoice-detail-section">
-                <span className="record-field-label">{tr('closingInvoice')}</span>
-                <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
-              </div>
-            ) : null}
-            {detailModal.advance_invoice && detailAmount === 0 ? (
-              <div className="incoming-invoice-detail-section">
-                <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+            {detailModal.advance_invoice || detailModal.closing_invoice || (detailModal.advance_invoice && detailAmount === 0) ? (
+              <div className="iid-meta">
+                {detailModal.advance_invoice ? (
+                  <div className="iid-section">
+                    <span className="record-field-label">{tr('advanceInvoice')}</span>
+                    <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
+                  </div>
+                ) : null}
+                {detailModal.closing_invoice ? (
+                  <div className="iid-section">
+                    <span className="record-field-label">{tr('closingInvoice')}</span>
+                    <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
+                  </div>
+                ) : null}
+                {detailModal.advance_invoice && detailAmount === 0 ? (
+                  <div className="iid-section iid-section-hint">
+                    <span className="record-field-label">{tr('note')}</span>
+                    <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            <div className="incoming-invoice-text-grid">
-              <div className="record-field">
-                <span className="record-field-label">{tr('description')}</span>
-                <div className="record-field-text">{detailModal.description || UI_DASH}</div>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-              </div>
+            <div className="iid-section iid-settlements">
+              <span className="record-field-label">{tr('settlementHistory')}</span>
+              {detailSettlements.length === 0 ? (
+                <span className="iid-empty">{tr('noSettlements')}</span>
+              ) : (
+                <div className="table-wrap incoming-invoice-settlement-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('date')}</th>
+                        <th>{tr('type')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
+                        <th>{tr('note')}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailSettlements.map(settlement => (
+                        <tr key={settlement.id}>
+                          <td>{fmtDate(settlement.date)}</td>
+                          <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
+                          <td>
+                            <div>{settlement.note || ''}</div>
+                            {settlement.bank_transaction ? (
+                              <div style={{ marginTop: 4, color: 'var(--color-text-muted)' }}>
+                                {[
+                                  `${tr('bank')} #${settlement.bank_transaction.id}`,
+                                  settlement.bank_transaction.bank_reference ? `${tr('paymentReference')}: ${settlement.bank_transaction.bank_reference}` : '',
+                                  settlement.bank_transaction.counterparty_name,
+                                  compactText(settlement.bank_transaction.purpose, 80),
+                                ].filter(Boolean).join(` ${UI_DASH} `)}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         ) : null}
-      >
-        {detailModal ? (
-          <div className="record-detail-card incoming-invoice-settlement-card">
-            <div className="record-field-label">{tr('settlementHistory')}</div>
-            {detailSettlements.length === 0 ? <p>{tr('noSettlements')}</p> : (
-              <div className="table-wrap incoming-invoice-settlement-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr('date')}</th>
-                      <th>{tr('type')}</th>
-                      <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
-                      <th>{tr('note')}</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailSettlements.map(settlement => (
-                      <tr key={settlement.id}>
-                        <td>{fmtDate(settlement.date)}</td>
-                        <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(settlement.amount)}</td>
-                        <td>
-                          <div>{settlement.note || ''}</div>
-                          {settlement.bank_transaction ? (
-                            <div style={{ marginTop: 4, color: 'var(--color-text-muted)' }}>
-                              {[
-                                `${tr('bank')} #${settlement.bank_transaction.id}`,
-                                settlement.bank_transaction.bank_reference ? `${tr('paymentReference')}: ${settlement.bank_transaction.bank_reference}` : '',
-                                settlement.bank_transaction.counterparty_name,
-                                compactText(settlement.bank_transaction.purpose, 80),
-                              ].filter(Boolean).join(` ${UI_DASH} `)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </EntityDetailModal>
+      />
     </div>
   )
 }
