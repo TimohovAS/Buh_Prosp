@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.db_utils import get_category_or_none, get_unassigned_project_id
-from backend.models import PlannedExpense, PlannedExpensePayment, User
+from backend.models import PlannedExpense, PlannedExpensePayment, User, Worker
 from backend.planned_expenses_service import payment_dates_in_range
 from backend.schemas import (
     PlannedExpenseCreate,
@@ -26,6 +26,15 @@ async def _resolve_category_project_id(db: AsyncSession, category_id: int | None
     if category and category.default_project_id:
         return category.default_project_id
     return project_id
+
+
+async def _validate_worker_id(db: AsyncSession, worker_id: int | None) -> int | None:
+    if worker_id is None:
+        return None
+    result = await db.execute(select(Worker.id).where(Worker.id == worker_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(404, "Worker not found")
+    return worker_id
 
 
 @router.get("", response_model=list[PlannedExpenseResponse])
@@ -64,11 +73,15 @@ async def get_upcoming_payments(
     paid_set = set()
     if items:
         r_paid = await db.execute(
-            select(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date).where(
+            select(
+                PlannedExpensePayment.planned_expense_id,
+                PlannedExpensePayment.due_date,
+                PlannedExpensePayment.worker_payout_id,
+            ).where(
                 PlannedExpensePayment.planned_expense_id.in_([pe.id for pe in items])
             )
         )
-        paid_set = {(row[0], row[1]) for row in r_paid.fetchall()}
+        paid_set = {(row[0], row[1]): row[2] for row in r_paid.fetchall()}
 
     unpaid = []
     paid = []
@@ -83,6 +96,8 @@ async def get_upcoming_payments(
                     due_date=d.isoformat(),
                     reminder_days=pe.reminder_days or 0,
                     is_paid=(pe.id, d) in paid_set,
+                    worker_id=pe.worker_id,
+                    worker_payout_id=paid_set.get((pe.id, d)),
                 )
                 if item.is_paid:
                     paid.append(item)
@@ -161,6 +176,7 @@ async def create_planned_expense(
     )
     if not project_id:
         project_id = await get_unassigned_project_id(db)
+    worker_id = await _validate_worker_id(db, data.worker_id)
     pe = PlannedExpense(
         name=data.name,
         description=data.description,
@@ -169,6 +185,7 @@ async def create_planned_expense(
         category=data.category,
         category_id=data.category_id if hasattr(data, "category_id") else None,
         project_id=project_id,
+        worker_id=worker_id,
         period=data.period,
         payment_day=data.payment_day,
         payment_day_of_week=data.payment_day_of_week,
@@ -221,6 +238,8 @@ async def update_planned_expense(
     dump["project_id"] = desired_project_id
     if "project_id" in dump and not dump["project_id"]:
         dump["project_id"] = await get_unassigned_project_id(db)
+    if "worker_id" in dump:
+        dump["worker_id"] = await _validate_worker_id(db, dump.get("worker_id"))
     for k, v in dump.items():
         setattr(pe, k, v)
     await db.commit()

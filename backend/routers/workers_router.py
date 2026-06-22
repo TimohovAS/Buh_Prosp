@@ -16,6 +16,7 @@ from backend.db_utils import (
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
+from backend.planned_expenses_service import sync_worker_payout_planned_payment
 from backend.schemas import (
     CashEntryResponse,
     WorkerCreate,
@@ -410,6 +411,7 @@ async def create_worker_payout(
     )
     db.add(payout)
     await db.flush()
+    await sync_worker_payout_planned_payment(db, payout)
 
     await db.commit()
     await db.refresh(payout, ["worker"])
@@ -508,6 +510,7 @@ async def update_worker_payout(
     payout.contract_id = contract_id
     payout.category_id = category_id
 
+    await sync_worker_payout_planned_payment(db, payout)
     await db.commit()
     await db.refresh(payout, ["worker"])
     await db.refresh(entry)

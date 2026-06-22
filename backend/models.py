@@ -791,6 +791,7 @@ class PlannedExpense(Base):
     category = Column(String(50))  # legacy: rent, internet, phone, utilities, insurance, other
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=True)
     period = Column(String(20), default="monthly")  # weekly, monthly, quarterly, yearly
     payment_day = Column(Integer)  # День месяца (1-31) для monthly/quarterly/yearly
     payment_day_of_week = Column(Integer)  # День недели (0=пн, 6=вс) для weekly
@@ -804,6 +805,7 @@ class PlannedExpense(Base):
 
     category_ref = relationship("TransactionCategory")
     project = relationship("Project")
+    worker = relationship("Worker")
 
 
 class PlannedExpensePayment(Base):
@@ -814,8 +816,12 @@ class PlannedExpensePayment(Base):
     planned_expense_id = Column(Integer, ForeignKey("planned_expenses.id"), nullable=False)
     due_date = Column(Date, nullable=False)
     paid_date = Column(Date, nullable=False)
+    worker_payout_id = Column(Integer, ForeignKey("worker_payouts.id"), nullable=True)
     note = Column(String(200))
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    planned_expense = relationship("PlannedExpense")
+    worker_payout = relationship("WorkerPayout")
 
 
 class EcoTax(Base):

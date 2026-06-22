@@ -73,6 +73,7 @@ export default function PlannedExpenses() {
     category: '',
     category_id: '',
     project_id: '',
+    worker_id: '',
     period: 'monthly',
     payment_day: 5,
     payment_day_of_week: 0,
@@ -84,6 +85,7 @@ export default function PlannedExpenses() {
   })
   const [projects, setProjects] = useState([])
   const [apiCategories, setApiCategories] = useState([])
+  const [workers, setWorkers] = useState([])
 
   const load = () => {
     setLoading(true)
@@ -110,6 +112,7 @@ export default function PlannedExpenses() {
     if (!isActivePage) return
     api.projects.list({ show_archived: true }).then(setProjects)
     api.categories.list({ category_type: 'expense' }).then(setApiCategories)
+    api.workers.list().then(setWorkers).catch(() => setWorkers([]))
   }, [isActivePage])
 
   const openAdd = () => {
@@ -122,6 +125,7 @@ export default function PlannedExpenses() {
       category: '',
       category_id: '',
       project_id: unassigned ? String(unassigned.id) : '',
+      worker_id: '',
       period: 'monthly',
       payment_day: 5,
       payment_day_of_week: 0,
@@ -143,6 +147,7 @@ export default function PlannedExpenses() {
       category: item.category || '\u2014',
       category_id: item.category_id ?? '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
+      worker_id: item.worker_id ?? '',
       period: item.period || 'monthly',
       payment_day: item.payment_day ?? 5,
       payment_day_of_week: item.payment_day_of_week ?? 0,
@@ -169,6 +174,7 @@ export default function PlannedExpenses() {
         project_id: categoryDefaultProjectId
           ? parseInt(categoryDefaultProjectId, 10)
           : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+        worker_id: form.worker_id ? parseInt(form.worker_id, 10) : null,
         period: form.period || 'monthly',
         payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
@@ -274,6 +280,7 @@ export default function PlannedExpenses() {
     const legacy = CATEGORIES.find((c) => c.value === item.category)
     return legacy ? tr(legacy.label) : (item.category || UI_DASH)
   }
+  const getWorkerName = (workerId) => workers.find((worker) => Number(worker.id) === Number(workerId))?.name || ''
 
   return (
     <>
@@ -340,6 +347,7 @@ export default function PlannedExpenses() {
                   <th>{tr('plannedName')}</th>
                   <th>{tr('plannedDueDate')}</th>
                   <th>{tr('amount')}</th>
+                  <th>{tr('worker')}</th>
                   <th>{tr('status')}</th>
                   <th></th>
                 </tr>
@@ -347,7 +355,7 @@ export default function PlannedExpenses() {
               <tbody>
                 {upcoming.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
                       {tr('plannedNoUpcoming')}
                     </td>
                   </tr>
@@ -362,6 +370,7 @@ export default function PlannedExpenses() {
                       <td>
                         {fmtAmount(u.amount)} {u.currency}
                       </td>
+                      <td>{getWorkerName(u.worker_id) || UI_DASH}</td>
                       <td>
                         <SharedStatusBadge
                           tone={u.is_paid ? 'success' : (new Date(u.due_date + 'T12:00:00') < new Date() ? 'danger' : 'warning')}
@@ -405,6 +414,7 @@ export default function PlannedExpenses() {
                   <th>{tr('plannedName')}</th>
                   <th>{tr('category')}</th>
                   <th>{tr('amount')}</th>
+                  <th>{tr('worker')}</th>
                   <th>{tr('plannedPeriod')}</th>
                   <th>{tr('plannedPaymentDay')}</th>
                   <th>{tr('status')}</th>
@@ -414,11 +424,11 @@ export default function PlannedExpenses() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7}>{tr('loading')}</td>
+                    <td colSpan={8}>{tr('loading')}</td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>
                       {tr('plannedNoItems')}
                     </td>
                   </tr>
@@ -438,6 +448,7 @@ export default function PlannedExpenses() {
                       <td>
                         {fmtAmount(i.amount)} {i.currency}
                       </td>
+                      <td>{getWorkerName(i.worker_id) || UI_DASH}</td>
                       <td>{tr(PERIODS.find((p) => p.value === i.period)?.label || i.period)}</td>
                       <td>
                         {i.period === 'weekly'
@@ -612,6 +623,19 @@ export default function PlannedExpenses() {
                     />
                   </div>
                 ) : null}
+              <div className="form-group">
+                <label className="form-label">{tr('worker')}</label>
+                <select
+                  className="form-input"
+                  value={form.worker_id}
+                  onChange={(e) => setForm({ ...form, worker_id: e.target.value })}
+                >
+                  <option value="">{UI_DASH}</option>
+                  {workers.map((worker) => (
+                    <option key={worker.id} value={worker.id}>{worker.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="form-group">
                 <label className="form-label">{tr('plannedPeriod')}</label>
                 <select

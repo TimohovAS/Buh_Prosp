@@ -1036,6 +1036,7 @@ class PlannedExpenseBase(BaseModel):
     category: Optional[str] = None
     category_id: Optional[int] = None
     project_id: Optional[int] = None
+    worker_id: Optional[int] = None
     period: str = "monthly"  # weekly, monthly, quarterly, yearly
     payment_day: Optional[int] = None  # 1-31 Р Т‘Р В»РЎРЏ monthly/quarterly/yearly
     payment_day_of_week: Optional[int] = None  # 0-6 Р Т‘Р В»РЎРЏ weekly (0=Р С—Р Р…)
@@ -1045,7 +1046,7 @@ class PlannedExpenseBase(BaseModel):
     is_active: bool = True
     note: Optional[str] = None
 
-    @field_validator("project_id", "category_id", mode="before")
+    @field_validator("project_id", "category_id", "worker_id", mode="before")
     @classmethod
     def empty_str_to_none(cls, value):
         if value == "" or value is None:
@@ -1065,6 +1066,7 @@ class PlannedExpenseUpdate(BaseModel):
     category: Optional[str] = None
     category_id: Optional[int] = None
     project_id: Optional[int] = None
+    worker_id: Optional[int] = None
     period: Optional[str] = None
     payment_day: Optional[int] = None
     payment_day_of_week: Optional[int] = None
@@ -1080,7 +1082,7 @@ class PlannedExpenseUpdate(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        for key in ("project_id", "category_id"):
+        for key in ("project_id", "category_id", "worker_id"):
             if key in result and (result[key] == "" or result[key] is None):
                 result[key] = None
         return result
@@ -1090,6 +1092,7 @@ class PlannedExpenseResponse(PlannedExpenseBase):
     id: int
     category_id: Optional[int] = None
     project_id: Optional[int] = None
+    worker_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -1105,6 +1108,8 @@ class UpcomingPaymentItem(BaseModel):
     due_date: str  # YYYY-MM-DD
     reminder_days: int
     is_paid: bool = False
+    worker_id: Optional[int] = None
+    worker_payout_id: Optional[int] = None
 
 
 class PlannedExpenseMarkPaid(BaseModel):

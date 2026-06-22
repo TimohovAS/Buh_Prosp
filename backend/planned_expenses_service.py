@@ -4,7 +4,10 @@ import calendar
 from decimal import Decimal
 
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import PlannedExpense
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.models import PlannedExpense, PlannedExpensePayment, WorkerPayout
 
 
 def next_payment_dates(pe: "PlannedExpense", from_date: date, limit: int = 12) -> list[date]:
@@ -212,5 +215,80 @@ def planned_expenses_sum_until_including_overdue(
                 total += to_decimal(pe.amount or ZERO_DECIMAL)
     return total
 
+
+async def sync_worker_payout_planned_payment(
+    db: AsyncSession,
+    payout: WorkerPayout,
+) -> PlannedExpensePayment | None:
+    """Mark one linked planned expense occurrence as paid by this worker payout.
+
+    This keeps planned expenses as reminders only: no expenses or cash entries are
+    created here. Existing automatic marks for the same payout are rebuilt so
+    editing a payout moves the reminder mark instead of leaving stale rows.
+    """
+    await db.execute(
+        delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
+    )
+
+    if payout.payout_type not in {"regular", "weekly", "monthly"}:
+        return None
+    if not payout.worker_id or not payout.date:
+        return None
+
+    range_start = payout.period_start or (payout.date - timedelta(days=45))
+    range_end = payout.period_end or (payout.date + timedelta(days=14))
+    if range_end < range_start:
+        range_start = range_end = payout.date
+
+    result = await db.execute(
+        select(PlannedExpense)
+        .where(PlannedExpense.is_active == True)
+        .where(PlannedExpense.worker_id == payout.worker_id)
+    )
+    planned_items = result.scalars().all()
+    if not planned_items:
+        return None
+
+    candidate_pairs: list[tuple[PlannedExpense, date]] = []
+    for planned in planned_items:
+        for due_date in payment_dates_in_range(planned, range_start, range_end, limit=24):
+            candidate_pairs.append((planned, due_date))
+    if not candidate_pairs:
+        return None
+
+    paid_result = await db.execute(
+        select(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date).where(
+            PlannedExpensePayment.planned_expense_id.in_({item.id for item, _ in candidate_pairs})
+        )
+    )
+    paid_pairs = {(row[0], row[1]) for row in paid_result.fetchall()}
+
+    unpaid_pairs = [
+        (planned, due_date)
+        for planned, due_date in candidate_pairs
+        if (planned.id, due_date) not in paid_pairs
+    ]
+    if not unpaid_pairs:
+        return None
+
+    planned, due_date = min(
+        unpaid_pairs,
+        key=lambda pair: (
+            abs((pair[1] - payout.date).days),
+            pair[1] > payout.date,
+            pair[1],
+            pair[0].id,
+        ),
+    )
+    payment = PlannedExpensePayment(
+        planned_expense_id=planned.id,
+        due_date=due_date,
+        paid_date=payout.date,
+        worker_payout_id=payout.id,
+        note=f"auto_worker_payout:{payout.id}",
+    )
+    db.add(payment)
+    await db.flush()
+    return payment
 
 

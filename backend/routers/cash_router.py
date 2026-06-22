@@ -29,6 +29,7 @@ from backend.models import (
     IncomingInvoice,
     IncomingInvoiceSettlement,
     Project,
+    PlannedExpensePayment,
     PurchaseReceipt,
     TransactionCategory,
     User,
@@ -540,14 +541,15 @@ async def delete_cash_expense_entry(
     if receipt_result.scalar_one_or_none():
         raise HTTPException(400, "This cash expense is linked to a receipt")
 
-    await db.execute(
-        delete(WorkerPayout).where(
-            or_(
-                WorkerPayout.cash_entry_id == entry.id,
-                WorkerPayout.expense_id == expense.id,
-            )
+    payout_ids_result = await db.execute(
+        select(WorkerPayout.id).where(
+            or_(WorkerPayout.cash_entry_id == entry.id, WorkerPayout.expense_id == expense.id)
         )
     )
+    payout_ids = [row[0] for row in payout_ids_result.fetchall()]
+    if payout_ids:
+        await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id.in_(payout_ids)))
+        await db.execute(delete(WorkerPayout).where(WorkerPayout.id.in_(payout_ids)))
     await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id == expense.id))
     await db.delete(entry)
     await db.delete(expense)
