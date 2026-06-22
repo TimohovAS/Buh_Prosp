@@ -1263,9 +1263,13 @@ tr.row-reversal {
 }
 
 .modal.incoming-invoice-detail-modal .record-detail-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   align-items: start;
+}
+
+.modal.incoming-invoice-detail-modal .record-detail-grid.record-detail-grid-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .modal.incoming-invoice-detail-modal .record-detail-card {
@@ -1293,6 +1297,21 @@ tr.row-reversal {
 
 .incoming-invoice-detail-fields .record-field.full {
   grid-column: 1 / -1;
+}
+
+.incoming-invoice-detail-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding-top: 0.1rem;
+}
+
+.incoming-invoice-detail-actions .btn {
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
 }
 
 .incoming-invoice-payment-details {
@@ -1332,16 +1351,6 @@ tr.row-reversal {
 
 .incoming-invoice-settlement-table td {
   vertical-align: top;
-}
-
-.incoming-invoice-detail-modal .record-actions-grid {
-  grid-template-columns: 1fr;
-  gap: 0.55rem;
-}
-
-.incoming-invoice-detail-modal .record-actions-grid .btn {
-  min-height: 36px;
-  padding: 0.45rem 0.65rem;
 }
 
 .record-detail-grid {

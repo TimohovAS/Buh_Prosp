@@ -328,6 +328,21 @@ export default function IncomingInvoices() {
   const showDetailActions = canEditDetail || canRestoreDetail || canCancelDetail || canLinkAdvanceDetail || canLinkClosingDetail || canUnlinkAdvanceDetail || canUnlinkClosingDetail || canSettleDetail
   const detailPaymentDetails = detailModal?.payment_details || null
   const detailSettlements = detailPaymentDetails?.settlements || detailModal?.settlements || []
+  const detailActionButtons = detailModal && showDetailActions ? (
+    <>
+      {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
+      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
+      {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
+      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
+      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
+      {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
+      {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
+      {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
+      {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
+      {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
+      {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
+    </>
+  ) : null
 
   return (
     <div className="page">
@@ -548,6 +563,11 @@ export default function IncomingInvoices() {
               <span className="record-field-label">{tr('project')}</span>
               <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
             </div>
+            {detailActionButtons ? (
+              <div className="incoming-invoice-detail-actions">
+                {detailActionButtons}
+              </div>
+            ) : null}
             <div className="record-field incoming-invoice-field-wide">
               <span className="record-field-label">{tr('counterpartyName')}</span>
               <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
@@ -595,21 +615,6 @@ export default function IncomingInvoices() {
               <span className="record-field-label">{tr('note')}</span>
               <div className="record-field-text">{detailModal.note || UI_DASH}</div>
             </div>
-          </div>
-        ) : null}
-        actions={detailModal && showDetailActions ? (
-          <div className="record-actions-grid">
-            {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
-            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
-            {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
-            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
-            {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
-            {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
-            {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
-            {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
-            {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
-            {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
-            {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
           </div>
         ) : null}
       >
