@@ -41,6 +41,24 @@ const CATEGORIES = [
   { value: 'other', label: 'plannedCatOther' },
 ] // legacy, kept for table display fallback
 
+const WORKER_CATEGORY_MARKERS = ['зарп', 'zarad', 'salary', 'услуг', 'uslug', 'service']
+
+const isWorkerLinkedCategory = (category) => {
+  if (!category) return false
+  const text = typeof category === 'string'
+    ? category
+    : [
+        category.name_ru,
+        category.name_sr,
+        category.name,
+        category.label,
+        category.value,
+        category.category,
+      ].filter(Boolean).join(' ')
+  const normalized = text.toLowerCase()
+  return WORKER_CATEGORY_MARKERS.some((marker) => normalized.includes(marker))
+}
+
 export default function PlannedExpenses() {
   const location = useLocation()
   const isActivePage = location.pathname === '/planned-expenses'
@@ -164,6 +182,10 @@ export default function PlannedExpenses() {
     e.preventDefault()
     try {
       const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
+      const selectedPayloadCategory = form.category_id
+        ? apiCategories.find((c) => String(c.id) === String(form.category_id))
+        : form.category
+      const shouldLinkWorker = isWorkerLinkedCategory(selectedPayloadCategory)
       const payload = {
         name: form.name.trim(),
         description: form.description?.trim() || null,
@@ -174,7 +196,7 @@ export default function PlannedExpenses() {
         project_id: categoryDefaultProjectId
           ? parseInt(categoryDefaultProjectId, 10)
           : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
-        worker_id: form.worker_id ? parseInt(form.worker_id, 10) : null,
+        worker_id: shouldLinkWorker && form.worker_id ? parseInt(form.worker_id, 10) : null,
         period: form.period || 'monthly',
         payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
@@ -280,6 +302,10 @@ export default function PlannedExpenses() {
     const legacy = CATEGORIES.find((c) => c.value === item.category)
     return legacy ? tr(legacy.label) : (item.category || UI_DASH)
   }
+  const selectedFormCategory = form.category_id
+    ? getCategoryById(form.category_id)
+    : form.category
+  const showWorkerField = isWorkerLinkedCategory(selectedFormCategory)
   const getWorkerName = (workerId) => workers.find((worker) => Number(worker.id) === Number(workerId))?.name || ''
 
   return (
@@ -603,6 +629,7 @@ export default function PlannedExpenses() {
                         category_id: cid,
                         category: cat ? cat.name_ru : '',
                         project_id: defaultProjectId || form.project_id,
+                        worker_id: isWorkerLinkedCategory(cat) ? form.worker_id : '',
                       })
                     }}
                   >
@@ -623,19 +650,21 @@ export default function PlannedExpenses() {
                     />
                   </div>
                 ) : null}
-              <div className="form-group">
-                <label className="form-label">{tr('worker')}</label>
-                <select
-                  className="form-input"
-                  value={form.worker_id}
-                  onChange={(e) => setForm({ ...form, worker_id: e.target.value })}
-                >
-                  <option value="">{UI_DASH}</option>
-                  {workers.map((worker) => (
-                    <option key={worker.id} value={worker.id}>{worker.name}</option>
-                  ))}
-                </select>
-              </div>
+              {showWorkerField ? (
+                <div className="form-group">
+                  <label className="form-label">{tr('worker')}</label>
+                  <select
+                    className="form-input"
+                    value={form.worker_id}
+                    onChange={(e) => setForm({ ...form, worker_id: e.target.value })}
+                  >
+                    <option value="">{UI_DASH}</option>
+                    {workers.map((worker) => (
+                      <option key={worker.id} value={worker.id}>{worker.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <div className="form-group">
                 <label className="form-label">{tr('plannedPeriod')}</label>
                 <select
