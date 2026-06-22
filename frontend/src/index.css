@@ -1253,154 +1253,68 @@ tr.row-reversal {
   padding-bottom: 0.45rem;
 }
 
+/* Incoming-invoice detail modal mirrors the receipt/expense detail layout:
+   summary grid on the left, action card on the right, tables stacked below. */
 .modal.incoming-invoice-detail-modal {
-  width: min(1040px, 95vw);
-  max-width: 1040px;
+  width: min(96vw, 1200px);
+  max-width: none;
 }
 
 .modal.incoming-invoice-detail-modal .modal-body {
-  padding: 0.85rem 1rem 1rem;
-}
-
-/* Flatten the wrapper cards that EntityDetailModal adds — the .iid markup
-   provides its own layout and section cards. */
-.modal.incoming-invoice-detail-modal .record-detail-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  padding: 0.8rem;
 }
 
 .modal.incoming-invoice-detail-modal .record-detail-card {
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  min-width: 0;
+  padding: 0.85rem;
+  border-radius: 10px;
 }
 
-.iid {
+.modal.incoming-invoice-detail-modal .record-detail-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 0.75rem;
+}
+
+.modal.incoming-invoice-detail-modal .record-detail-stack {
+  margin-top: 0.75rem;
+  gap: 0.75rem;
+}
+
+.incoming-invoice-summary-grid {
   display: grid;
-  gap: 0.85rem;
-  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1.1rem;
 }
 
-/* Summary stat strip */
-.iid-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
-  gap: 0.7rem;
-  align-items: stretch;
+.incoming-invoice-summary-grid .record-field.full {
+  grid-column: 1 / -1;
 }
 
-.iid-stats {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--color-border);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  overflow: hidden;
-  min-height: 100%;
+.incoming-invoice-summary-grid .record-field-value,
+.incoming-invoice-summary-grid .record-field-text {
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.iid-stat {
+.incoming-invoice-side-card {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.65rem 0.8rem;
-  background: var(--color-surface);
+  gap: 1rem;
   min-width: 0;
-}
-
-.iid-stat-label {
-  color: var(--color-text-muted);
-  font-size: 0.66rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.iid-stat-value {
-  font-size: 0.95rem;
-  word-break: break-word;
-}
-
-.iid-stat-strong {
-  font-weight: 700;
-}
-
-/* Action buttons */
-.iid-actions {
-  display: grid;
-  align-content: start;
-  gap: 0.5rem;
-  min-height: 100%;
-  padding: 0.65rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-}
-
-.iid-actions .btn {
-  width: 100%;
-  min-width: 0;
-  min-height: 34px;
-  padding: 0.45rem 0.65rem;
-  white-space: normal;
-}
-
-/* Meta sections laid out in auto-fitting columns so short fields
-   (supplier / description / note) share one row when there is room. */
-.iid-meta {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.7rem;
-  align-items: start;
-}
-
-.iid-section {
-  display: grid;
-  gap: 0.35rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.65rem 0.8rem;
-  min-width: 0;
-}
-
-.iid-section .record-field-label {
-  font-size: 0.68rem;
-}
-
-.iid-section-hint {
-  border-style: dashed;
-}
-
-/* Borderless section: just a label above its own content (used for payment
-   details, whose inner expense/bank cards keep their own borders). */
-.iid-section-flush {
-  background: transparent;
-  border: none;
-  padding: 0;
-  gap: 0.4rem;
-}
-
-.iid-subvalue {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
 }
 
 .iid-empty {
   color: var(--color-text-muted);
   font-size: 0.9rem;
+  margin: 0;
 }
 
-/* Payment details: flatten inner cards so they read as section content,
-   but keep warning/error cards' inline colour. */
+/* Payment details: linked expense / bank shown side by side when room allows. */
 .incoming-invoice-payment-details {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.55rem 0.8rem;
   width: 100%;
+  margin-top: 0.15rem;
 }
 
 .incoming-invoice-payment-card {
@@ -1411,9 +1325,13 @@ tr.row-reversal {
   border-radius: 10px;
 }
 
-/* Settlement history */
-.iid-settlements .record-field-label {
-  margin-bottom: 0.1rem;
+.incoming-invoice-settlement-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.incoming-invoice-settlement-card .record-field-label {
+  margin-bottom: 0;
 }
 
 .incoming-invoice-settlement-table {
@@ -2642,15 +2560,11 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
-  .iid-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .iid-top {
+  .modal.incoming-invoice-detail-modal .record-detail-grid {
     grid-template-columns: 1fr;
   }
 
-  .iid-actions {
+  .incoming-invoice-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2925,11 +2839,11 @@ tr:hover td {
     border: none;
   }
 
-  .iid-stats {
+  .incoming-invoice-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .iid-actions {
+  .record-actions-grid {
     grid-template-columns: 1fr;
   }
 
