@@ -247,6 +247,28 @@ export default function CashRegister() {
     }
     return UI_DASH
   }
+  const getDisplayDescription = (entry) => {
+    const description = entry?.description || ''
+    if (!entry?.worker_payout_id || !description.includes(':')) return description
+    const [rawPrefix, ...restParts] = description.split(':')
+    const rest = restParts.join(':').trim()
+    const normalizedPrefix = rawPrefix.trim().toLowerCase()
+    const labelByPrefix = {
+      'оплата выхода': tr('workerPayoutRegular'),
+      'еженедельная оплата': tr('workerPayoutWeekly'),
+      'месячная оплата': tr('workerPayoutMonthly'),
+      'аванс за командировку': tr('workerPayoutTripAdvance'),
+      'расчет за командировку': tr('workerPayoutTripFinal'),
+      'окончательный расчет командировки': tr('workerPayoutTripFinal'),
+      [tr('workerPayoutRegular').toLowerCase()]: tr('workerPayoutRegular'),
+      [tr('workerPayoutWeekly').toLowerCase()]: tr('workerPayoutWeekly'),
+      [tr('workerPayoutMonthly').toLowerCase()]: tr('workerPayoutMonthly'),
+      [tr('workerPayoutTripAdvance').toLowerCase()]: tr('workerPayoutTripAdvance'),
+      [tr('workerPayoutTripFinal').toLowerCase()]: tr('workerPayoutTripFinal'),
+    }
+    const label = labelByPrefix[normalizedPrefix]
+    return label ? `${label}: ${rest}` : description
+  }
 
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
 
@@ -1004,6 +1026,7 @@ export default function CashRegister() {
                     ) : filteredEntries.map((entry) => {
                       const typeLabel = getEntryTypeLabel(entry)
                       const sourceLabel = getEntrySourceLabel(entry)
+                      const descriptionLabel = getDisplayDescription(entry)
                       return (
                         <tr
                           key={entry.id}
@@ -1020,7 +1043,7 @@ export default function CashRegister() {
                           <td>{entry.date}</td>
                           <td>{typeLabel}</td>
                           <td>
-                            <div className="record-cell-ellipsis">{entry.description}</div>
+                            <div className="record-cell-ellipsis">{descriptionLabel}</div>
                             {entry.note ? (
                               <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{entry.note}</div>
                             ) : null}
@@ -1075,7 +1098,7 @@ export default function CashRegister() {
                 </div>
                 <div className="record-field full">
                   <span className="record-field-label">{tr('description')}</span>
-                  <div className="record-field-text">{detailModal.description || UI_DASH}</div>
+                  <div className="record-field-text">{getDisplayDescription(detailModal) || UI_DASH}</div>
                 </div>
                 <div className="record-field full">
                   <span className="record-field-label">{tr('cashSource')}</span>
