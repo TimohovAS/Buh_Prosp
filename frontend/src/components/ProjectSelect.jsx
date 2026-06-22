@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 
@@ -19,11 +20,13 @@ export default function ProjectSelect({
   placeholder,
 }) {
   const rootRef = useRef(null)
+  const dropdownRef = useRef(null)
   const refreshPromiseRef = useRef(null)
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const [liveProjects, setLiveProjects] = useState(projects)
+  const [dropdownStyle, setDropdownStyle] = useState(null)
 
   useEffect(() => {
     setLiveProjects(projects)
@@ -71,13 +74,50 @@ export default function ProjectSelect({
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!rootRef.current?.contains(event.target)) {
+      if (!rootRef.current?.contains(event.target) && !dropdownRef.current?.contains(event.target)) {
         setIsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+
+    const updateDropdownPosition = () => {
+      const rect = rootRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const gap = 4
+      const viewportPadding = 12
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+      const spaceAbove = rect.top - viewportPadding
+      const openUp = spaceBelow < 180 && spaceAbove > spaceBelow
+      const maxHeight = Math.max(140, Math.min(320, (openUp ? spaceAbove : spaceBelow) - gap))
+      setDropdownStyle({
+        position: 'fixed',
+        top: openUp ? undefined : rect.bottom + gap,
+        bottom: openUp ? window.innerHeight - rect.top + gap : undefined,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 3000,
+        background: 'var(--color-surface)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 12,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+        maxHeight,
+        overflowY: 'auto',
+      })
+    }
+
+    updateDropdownPosition()
+    window.addEventListener('resize', updateDropdownPosition)
+    window.addEventListener('scroll', updateDropdownPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition)
+      window.removeEventListener('scroll', updateDropdownPosition, true)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (highlightedIndex >= filteredOptions.length) {
@@ -165,21 +205,10 @@ export default function ProjectSelect({
         aria-expanded={isOpen}
         aria-required={required}
       />
-      {isOpen && (
+      {isOpen && dropdownStyle && createPortal(
         <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 0.25rem)',
-            left: 0,
-            right: 0,
-            zIndex: 30,
-            background: 'var(--color-surface)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 12,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-            maxHeight: 260,
-            overflowY: 'auto',
-          }}
+          ref={dropdownRef}
+          style={dropdownStyle}
         >
           {filteredOptions.length === 0 ? (
             <div style={{ padding: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
@@ -224,7 +253,8 @@ export default function ProjectSelect({
               )
             })
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
