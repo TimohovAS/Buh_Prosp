@@ -12,6 +12,13 @@ export default function Modal({
 }) {
   if (!isOpen) return null
 
+  const hasExplicitWidth = !!maxWidth || !!style?.width || !!className
+  const modalStyle = {
+    ...(resizable && !hasExplicitWidth ? { width: 'min(500px, 90vw)' } : {}),
+    ...(maxWidth ? { maxWidth } : {}),
+    ...(style || {}),
+  }
+
   return (
     <div
       className="modal-overlay"
@@ -19,7 +26,7 @@ export default function Modal({
     >
       <div
         className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()}
-        style={{ ...(maxWidth ? { maxWidth } : {}), ...(style || {}) }}
+        style={modalStyle}
         onClick={closeOnOverlay ? (event) => event.stopPropagation() : undefined}
       >
         <div className="modal-header">
