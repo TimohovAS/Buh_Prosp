@@ -133,7 +133,7 @@ export default function BankImport() {
           </div>
           {skippedFiles && skippedFiles.length > 0 && (
             <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
-              <strong>Пропущенные файлы ({skippedFiles.length}):</strong>
+              <strong>{tr('bankImportSkippedFiles')} ({skippedFiles.length}):</strong>
               <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
                 {skippedFiles.map((sf, idx) => (
                   <li key={idx}>{sf.file_name} - {sf.reason}</li>

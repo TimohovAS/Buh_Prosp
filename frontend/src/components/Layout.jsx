@@ -130,7 +130,7 @@ export default function Layout({ lang, toggleLang, children }) {
           }}
         >
           <div className="sidebar-group">
-            <div className="sidebar-group-title">Обзор</div>
+            <div className="sidebar-group-title">{tr('sidebarOverview')}</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/" end><LayoutDashboard size={18} /> {tr('dashboard')}</NavLink></li>
               <li><NavLink to="/finance" end><LineChart size={18} /> {tr('finance')}</NavLink></li>
@@ -143,7 +143,7 @@ export default function Layout({ lang, toggleLang, children }) {
           </div>
 
           <div className="sidebar-group">
-            <div className="sidebar-group-title">Операции</div>
+            <div className="sidebar-group-title">{tr('sidebarOperations')}</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
               <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
@@ -156,7 +156,7 @@ export default function Layout({ lang, toggleLang, children }) {
           </div>
 
           <div className="sidebar-group">
-            <div className="sidebar-group-title">Банка</div>
+            <div className="sidebar-group-title">{tr('sidebarBank')}</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}{bankTransactionsBadge}</NavLink></li>
               <li><NavLink to="/cash"><Wallet size={18} /> {tr('cashRegister')}</NavLink></li>
@@ -165,17 +165,17 @@ export default function Layout({ lang, toggleLang, children }) {
           </div>
 
           <div className="sidebar-group">
-            <div className="sidebar-group-title">Справочники</div>
+            <div className="sidebar-group-title">{tr('sidebarDirectories')}</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/clients"><Users size={18} /> {tr('clients')}</NavLink></li>
-              <li><NavLink to="/workers"><Users size={18} /> Работники</NavLink></li>
+              <li><NavLink to="/workers"><Users size={18} /> {tr('workersTitle')}</NavLink></li>
               <li><NavLink to="/projects"><FolderKanban size={18} /> {tr('projects')}</NavLink></li>
               <li><NavLink to="/contracts"><Briefcase size={18} /> {tr('contracts')}</NavLink></li>
             </ul>
           </div>
 
           <div className="sidebar-group">
-            <div className="sidebar-group-title">Система</div>
+            <div className="sidebar-group-title">{tr('sidebarSystem')}</div>
             <ul className="sidebar-nav">
               <li><NavLink to="/settings"><Settings size={18} /> {tr('settings')}</NavLink></li>
             </ul>

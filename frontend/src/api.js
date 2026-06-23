@@ -1,3 +1,5 @@
+import { tr } from './i18n'
+
 // В dev — через proxy Vite (чтобы избежать CORS и Failed to fetch)
 const API_BASE = '/api';
 export const PENDING_LINKS_UPDATE_EVENT = 'pending-links-updated';
@@ -187,8 +189,8 @@ export const api = {
         headers: { Accept: 'application/json' },
       }).then(async (r) => {
         if (!r.ok) {
-          const e = await r.json().catch(() => ({}));
-          const msg = e.detail || 'Неверный логин или пароль';
+          await r.json().catch(() => ({}));
+          const msg = tr('invalidLogin');
           window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
           throw new Error(msg);
         }

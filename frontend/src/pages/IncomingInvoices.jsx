@@ -1106,7 +1106,7 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           {type === 'offset' && (
             <div className="form-group">
               <label className="form-label">{tr('selectIncome')}</label>
-              {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>Для взаимозачета нужно указать клиента у входящей фактуры.</p> : (
+              {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>{tr('incomingInvoiceOffsetClientRequired')}</p> : (
                 <div>
                   <select className="form-input" required value={form.income_id} onChange={e => {
                     const income = openIncomes.find(item => item.id === Number(e.target.value))

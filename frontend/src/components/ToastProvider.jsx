@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { tr } from '../i18n';
 
 export default function ToastProvider() {
     const [toasts, setToasts] = useState([]);
@@ -57,6 +58,7 @@ export default function ToastProvider() {
                     <div>{t.message}</div>
                     <button
                         onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                        aria-label={tr('close')}
                         style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 4px', color: 'inherit', opacity: 0.5, fontSize: '18px', lineHeight: 1 }}
                     >
                         ×

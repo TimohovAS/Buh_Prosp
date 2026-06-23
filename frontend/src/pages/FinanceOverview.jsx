@@ -366,7 +366,7 @@ export default function FinanceOverview() {
                       <td>{i.issued_date}</td>
                       <td>{i.due_date || '—'}</td>
                       <td>{fmt(i.amount)} RSD</td>
-                      <td style={{ color: 'var(--color-danger)' }}>{Math.max(0, i.days_overdue ?? 0)} дн.</td>
+                      <td style={{ color: 'var(--color-danger)' }}>{Math.max(0, i.days_overdue ?? 0)} {tr('financeDaysShort')}</td>
                     </tr>
                   ))}
                 </tbody>
