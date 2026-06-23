@@ -445,6 +445,31 @@ const t = {
     workerPayoutCash: 'За исплату',
     workerPayoutRemaining: 'Остатак',
     workerPayoutCalculation: 'Обрачун',
+    archive: 'Архива',
+    workersTitle: 'Радници',
+    workersSubtitle: 'Стални и привремени радници, тарифе и правила службених путева.',
+    workersEmpty: 'Радници нису додати',
+    workerAddTitle: 'Додај радника',
+    workerEditTitle: 'Измени радника',
+    workerArchiveConfirm: 'Архивирати радника "{name}"?',
+    workerTypePermanent: 'Стални',
+    workerTypeTemporary: 'Привремени',
+    workerPayScheme: 'Шема плаћања',
+    workerPayPerDay: 'По радном дану',
+    workerPayWeekly: 'Недељно',
+    workerPayMonthly: 'Месечно',
+    workerPerDayRate: 'По радном дану',
+    workerWeeklyRate: 'Недељна тарифа',
+    workerMonthlyRate: 'Месечна тарифа',
+    workerTripDayRate: 'Службени пут/дан',
+    workerTripCalculation: 'Обрачун службеног пута',
+    workerTripModeAllowances: 'Рад + дневница + исхрана + смештај',
+    workerTripModeFixed: 'Фиксна тарифа/дан + смештај',
+    workerTripWorkDayRate: 'Рад на службеном путу/дан',
+    workerPerDiemRate: 'Дневница',
+    workerFoodDayRate: 'Исхрана/дан',
+    workerAdvanceDayRate: 'Аванс/дан',
+    workerLodgingNightRate: 'Хотел/ноћ',
     cashManagedInRegister: 'Овај готовински расход мења се преко екрана Готовина.',
     cashDeleteExpense: 'Обриши готовински расход',
     cashDeleteExpenseConfirm: 'Обрисати овај готовински расход? Биће обрисана и повезана ставка у Расходима.',
@@ -1206,6 +1231,31 @@ const t = {
     workerPayoutCash: 'К выдаче',
     workerPayoutRemaining: 'Остаток',
     workerPayoutCalculation: 'Расчет',
+    archive: 'Архив',
+    workersTitle: 'Работники',
+    workersSubtitle: 'Постоянные и временные работники, ставки и правила командировок.',
+    workersEmpty: 'Работники не добавлены',
+    workerAddTitle: 'Добавить работника',
+    workerEditTitle: 'Изменить работника',
+    workerArchiveConfirm: 'Архивировать работника "{name}"?',
+    workerTypePermanent: 'Постоянный',
+    workerTypeTemporary: 'Временный',
+    workerPayScheme: 'Схема оплаты',
+    workerPayPerDay: 'За выход',
+    workerPayWeekly: 'Еженедельно',
+    workerPayMonthly: 'Раз в месяц',
+    workerPerDayRate: 'Ставка за выход',
+    workerWeeklyRate: 'Недельная ставка',
+    workerMonthlyRate: 'Месячная ставка',
+    workerTripDayRate: 'Командировка/день',
+    workerTripCalculation: 'Расчет командировки',
+    workerTripModeAllowances: 'Работа + дневница + питание + проживание',
+    workerTripModeFixed: 'Фиксированная ставка/день + проживание',
+    workerTripWorkDayRate: 'Работа в командировке/день',
+    workerPerDiemRate: 'Дневница',
+    workerFoodDayRate: 'Питание/день',
+    workerAdvanceDayRate: 'Аванс/день',
+    workerLodgingNightRate: 'Гостиница/ночь',
     cashManagedInRegister: 'Этот наличный расход изменяется через экран налички.',
     cashDeleteExpense: 'Удалить наличный расход',
     cashDeleteExpenseConfirm: 'Удалить этот наличный расход? Связанная запись в «Расходах» тоже будет удалена.',
@@ -1700,8 +1750,13 @@ export function getLang() {
   return lang;
 }
 
-export function tr(key) {
-  return t[lang]?.[key] ?? t.sr[key] ?? key;
+export function tr(key, replacements = null) {
+  const value = t[lang]?.[key] ?? t.sr[key] ?? key;
+  if (!replacements) return value;
+  return Object.entries(replacements).reduce(
+    (text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement ?? '')),
+    value
+  );
 }
 
 const MONTH_NAMES_SR = ['Јан', 'Феб', 'Мар', 'Апр', 'Мај', 'Јун', 'Јул', 'Авг', 'Сеп', 'Окт', 'Нов', 'Дец'];

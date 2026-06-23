@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
+import { tr } from '../i18n'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
@@ -28,6 +29,13 @@ const emptyForm = {
 
 function num(value) {
   return Number(value || 0)
+}
+
+const workerTypeLabel = (value) => tr(value === 'permanent' ? 'workerTypePermanent' : 'workerTypeTemporary')
+const paySchemeLabel = (value) => {
+  if (value === 'monthly') return tr('workerPayMonthly')
+  if (value === 'weekly') return tr('workerPayWeekly')
+  return tr('workerPayPerDay')
 }
 
 export default function Workers() {
@@ -128,7 +136,7 @@ export default function Workers() {
   }
 
   const archiveWorker = async (item) => {
-    if (!confirm(`Архивировать работника "${item.name}"?`)) return
+    if (!confirm(tr('workerArchiveConfirm', { name: item.name }))) return
     await api.workers.delete(item.id)
     load()
   }
@@ -136,16 +144,16 @@ export default function Workers() {
   return (
     <>
       <PageHeader
-        title="Работники"
-        subtitle="Постоянные и временные работники, ставки и правила командировок."
+        title={tr('workersTitle')}
+        subtitle={tr('workersSubtitle')}
         actions={(
           <>
-            <SearchInput placeholder="Поиск" value={search} onChange={setSearch} style={{ width: 220 }} />
+            <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 220 }} />
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)' }}>
               <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
-              Архив
+              {tr('archive')}
             </label>
-            <button className="btn btn-primary" onClick={openAdd}>Добавить</button>
+            <button className="btn btn-primary" onClick={openAdd}>{tr('add')}</button>
           </>
         )}
       />
@@ -156,32 +164,32 @@ export default function Workers() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Имя <SortIndicator active={sortCol === 'name'} asc={sortAsc} /></th>
-                  <th>Тип</th>
-                  <th>Схема</th>
-                  <th style={{ textAlign: 'right' }}>За выход</th>
-                  <th style={{ textAlign: 'right' }}>Неделя</th>
-                  <th style={{ textAlign: 'right' }}>Месяц</th>
-                  <th style={{ textAlign: 'right' }}>Командировка/день</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('name')} <SortIndicator active={sortCol === 'name'} asc={sortAsc} /></th>
+                  <th>{tr('type')}</th>
+                  <th>{tr('workerPayScheme')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('workerPerDayRate')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('workerWeeklyRate')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('workerMonthlyRate')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('workerTripDayRate')}</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8}>Загрузка...</td></tr>
+                  <tr><td colSpan={8}>{tr('loading')}</td></tr>
                 ) : sorted.length === 0 ? (
-                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>Работники не добавлены</td></tr>
+                  <tr><td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('workersEmpty')}</td></tr>
                 ) : sorted.map((item) => (
                   <tr key={item.id} className="record-row" onClick={() => openEdit(item)} tabIndex={0}>
                     <td>{item.name}</td>
-                    <td>{item.worker_type === 'permanent' ? 'Постоянный' : 'Временный'}</td>
-                    <td>{item.pay_scheme === 'monthly' ? 'Раз в месяц' : item.pay_scheme === 'weekly' ? 'Еженедельно' : 'За выход'}</td>
+                    <td>{workerTypeLabel(item.worker_type)}</td>
+                    <td>{paySchemeLabel(item.pay_scheme)}</td>
                     <td style={{ textAlign: 'right' }}>{fmtAmount(item.regular_day_rate)} RSD</td>
                     <td style={{ textAlign: 'right' }}>{fmtAmount(item.weekly_rate)} RSD</td>
                     <td style={{ textAlign: 'right' }}>{fmtAmount(item.monthly_rate)} RSD</td>
                     <td style={{ textAlign: 'right' }}>{fmtAmount(num(item.trip_work_day_rate) + (item.trip_pricing_mode === 'fixed_plus_lodging' ? 0 : num(item.trip_per_diem_rate) + num(item.trip_food_rate)))} RSD</td>
                     <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-sm btn-secondary" onClick={(event) => { event.stopPropagation(); archiveWorker(item) }}>Архив</button>
+                      <button className="btn btn-sm btn-secondary" onClick={(event) => { event.stopPropagation(); archiveWorker(item) }}>{tr('archive')}</button>
                     </td>
                   </tr>
                 ))}
@@ -191,58 +199,58 @@ export default function Workers() {
         </div>
       </div>
 
-      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal === 'add' ? 'Добавить работника' : 'Изменить работника'}>
+      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal === 'add' ? tr('workerAddTitle') : tr('workerEditTitle')}>
         {modal ? (
           <form onSubmit={handleSubmit} className="card" style={{ padding: '1rem' }}>
             <div className="form-group">
-              <label className="form-label">Имя</label>
+              <label className="form-label">{tr('name')}</label>
               <input className="form-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label">Тип</label>
+                <label className="form-label">{tr('type')}</label>
                 <select className="form-input" value={form.worker_type} onChange={(event) => setForm({ ...form, worker_type: event.target.value })}>
-                  <option value="temporary">Временный</option>
-                  <option value="permanent">Постоянный</option>
+                  <option value="temporary">{tr('workerTypeTemporary')}</option>
+                  <option value="permanent">{tr('workerTypePermanent')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Схема оплаты</label>
+                <label className="form-label">{tr('workerPayScheme')}</label>
                 <select className="form-input" value={form.pay_scheme} onChange={(event) => setForm({ ...form, pay_scheme: event.target.value })}>
-                  <option value="per_day">За выход</option>
-                  <option value="weekly">Еженедельно</option>
-                  <option value="monthly">Раз в месяц</option>
+                  <option value="per_day">{tr('workerPayPerDay')}</option>
+                  <option value="weekly">{tr('workerPayWeekly')}</option>
+                  <option value="monthly">{tr('workerPayMonthly')}</option>
                 </select>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label">Ставка за выход</label>
+                <label className="form-label">{tr('workerPerDayRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.regular_day_rate} onChange={(event) => setForm({ ...form, regular_day_rate: event.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Недельная ставка</label>
+                <label className="form-label">{tr('workerWeeklyRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.weekly_rate} onChange={(event) => setForm({ ...form, weekly_rate: event.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Месячная ставка</label>
+                <label className="form-label">{tr('workerMonthlyRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.monthly_rate} onChange={(event) => setForm({ ...form, monthly_rate: event.target.value })} />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label">Расчет командировки</label>
+                <label className="form-label">{tr('workerTripCalculation')}</label>
                 <select
                   className="form-input"
                   value={form.trip_pricing_mode}
                   onChange={(event) => setForm({ ...form, trip_pricing_mode: event.target.value })}
                 >
-                  <option value="allowances">Работа + дневница + питание + проживание</option>
-                  <option value="fixed_plus_lodging">Фиксированная ставка/день + проживание</option>
+                  <option value="allowances">{tr('workerTripModeAllowances')}</option>
+                  <option value="fixed_plus_lodging">{tr('workerTripModeFixed')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Работа в командировке/день</label>
+                <label className="form-label">{tr('workerTripWorkDayRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.trip_work_day_rate} onChange={(event) => setForm({ ...form, trip_work_day_rate: event.target.value })} />
               </div>
             </div>
@@ -250,31 +258,31 @@ export default function Workers() {
               {form.trip_pricing_mode !== 'fixed_plus_lodging' ? (
                 <>
                   <div className="form-group">
-                    <label className="form-label">Дневница</label>
+                    <label className="form-label">{tr('workerPerDiemRate')}</label>
                     <input className="form-input" type="number" min="0" step="0.01" value={form.trip_per_diem_rate} onChange={(event) => setForm({ ...form, trip_per_diem_rate: event.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Питание/день</label>
+                    <label className="form-label">{tr('workerFoodDayRate')}</label>
                     <input className="form-input" type="number" min="0" step="0.01" value={form.trip_food_rate} onChange={(event) => setForm({ ...form, trip_food_rate: event.target.value })} />
                   </div>
                 </>
               ) : null}
               <div className="form-group">
-                <label className="form-label">Аванс/день</label>
+                <label className="form-label">{tr('workerAdvanceDayRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.trip_advance_day_rate} onChange={(event) => setForm({ ...form, trip_advance_day_rate: event.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Гостиница/ночь</label>
+                <label className="form-label">{tr('workerLodgingNightRate')}</label>
                 <input className="form-input" type="number" min="0" step="0.01" value={form.lodging_night_rate} onChange={(event) => setForm({ ...form, lodging_night_rate: event.target.value })} />
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Примечание</label>
+              <label className="form-label">{tr('note')}</label>
               <input className="form-input" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Отмена</button>
-              <button type="submit" className="btn btn-primary">Сохранить</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>{tr('cancel')}</button>
+              <button type="submit" className="btn btn-primary">{tr('save')}</button>
             </div>
           </form>
         ) : null}
