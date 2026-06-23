@@ -40,6 +40,7 @@ DEFAULT_EFAKTURA_INCOMING_LIST_PATH = "/api/publicApi/purchase-invoice/ids?dateF
 DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = "/api/publicApi/purchase-invoice/xml?invoiceId={id}"
 DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = "/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}"
 DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invoiceId={id}"
+DEFAULT_EFAKTURA_OUTGOING_DETAILS_PATH = "/api/publicApi/sales-invoice?invoiceId={id}"
 DEFAULT_EFAKTURA_OUTGOING_CHANGES_PATH = "/api/publicApi/sales-invoice/changes?date={date}"
 
 EFAKTURA_CANCELLED_STATUS_MARKERS = (
@@ -241,6 +242,62 @@ async def handle_cancelled_outgoing_invoice(
     )
     await db.flush()
     return {"reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled"}
+
+
+async def handle_cancelled_outgoing_import_record(
+    db: AsyncSession,
+    *,
+    external_id: str,
+    status_text: str,
+) -> dict[str, Any] | None:
+    result = await db.execute(
+        select(EfakturaImportRecord)
+        .where(
+            EfakturaImportRecord.external_id == str(external_id),
+            EfakturaImportRecord.direction == "outgoing",
+            EfakturaImportRecord.imported_as == "income",
+        )
+        .order_by(EfakturaImportRecord.id.desc())
+        .limit(1)
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        return None
+
+    income = await db.get(Income, record.imported_record_id)
+    if income is None:
+        return {
+            "external_id": str(external_id),
+            "invoice_number": record.invoice_number,
+            "reason": f"Outgoing eFaktura import record has no linked income ({status_text or 'unknown status'})",
+        }
+    if income.status == "cancelled":
+        return {
+            "external_id": str(external_id),
+            "invoice_number": income.invoice_number,
+            "reason": f"Outgoing eFaktura is already cancelled ({status_text or 'unknown status'})",
+        }
+    if to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL) > ZERO_DECIMAL or income.status == "paid":
+        return {
+            "external_id": str(external_id),
+            "invoice_number": income.invoice_number,
+            "reason": (
+                f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'}), "
+                f"but income #{income.id} has payments and was not changed"
+            ),
+        }
+
+    cancel_income(income)
+    income.bank_reference = None
+    status_note = f"eFaktura API status: {status_text or 'cancelled/storned'}; income cancelled during sync."
+    if status_note not in (income.note or ""):
+        income.note = "\n".join(part for part in [income.note, status_note] if part)
+    await db.flush()
+    return {
+        "external_id": str(external_id),
+        "invoice_number": income.invoice_number,
+        "reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled",
+    }
 
 
 async def register_import_record(
@@ -772,6 +829,34 @@ def _extract_document_refs(payload: Any) -> list[dict[str, Any]]:
                 })
         return output
     if isinstance(payload, dict):
+        external_id = _case_insensitive_get(
+            payload,
+            (
+                "id",
+                "documentId",
+                "invoiceId",
+                "invoice_id",
+                "uid",
+                "salesInvoiceId",
+                "purchaseInvoiceId",
+            ),
+        )
+        if external_id not in (None, ""):
+            source_status = _case_insensitive_get(
+                payload,
+                (
+                    "status",
+                    "invoiceStatus",
+                    "documentStatus",
+                    "salesInvoiceStatus",
+                    "purchaseInvoiceStatus",
+                ),
+            )
+            return [{
+                "external_id": str(external_id),
+                "source_status": source_status,
+                "source_payload": payload,
+            }]
         lowered_keys = {str(key).lower(): key for key in payload.keys()}
         for key in ("salesinvoiceids", "purchaseinvoiceids", "invoiceids"):
             actual_key = lowered_keys.get(key)
@@ -875,6 +960,33 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
     documents: list[dict[str, Any]] = []
     outgoing_status_by_id: dict[str, Any] = {}
 
+    async def fetch_outgoing_current_statuses(document_refs: list[dict[str, Any]]) -> dict[str, Any]:
+        statuses: dict[str, Any] = {}
+        for document_ref in document_refs:
+            external_id = document_ref["external_id"]
+            details_url = _format_url(
+                base_url,
+                DEFAULT_EFAKTURA_OUTGOING_DETAILS_PATH,
+                id=external_id,
+                external_id=external_id,
+            )
+            if not details_url:
+                continue
+            try:
+                raw_details, _ = await asyncio.to_thread(
+                    _http_request,
+                    details_url,
+                    method="GET",
+                    header_name=header_name,
+                    header_value=header_value,
+                )
+                details_payload = json.loads(raw_details.decode("utf-8"))
+            except Exception:
+                continue
+            for details_ref in _extract_document_refs(details_payload):
+                statuses[details_ref["external_id"]] = details_ref.get("source_status")
+        return statuses
+
     async def fetch_outgoing_status_changes() -> None:
         for day_offset in range((date_to - date_from).days + 1):
             day = date_from + timedelta(days=day_offset)
@@ -921,11 +1033,23 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         except Exception:
             ids_payload = None
         document_refs = _extract_document_refs(ids_payload)
+        current_status_by_id = {}
+        if direction == "outgoing":
+            current_status_by_id = await fetch_outgoing_current_statuses(document_refs)
+            for current_external_id, current_status in current_status_by_id.items():
+                if current_status not in (None, ""):
+                    outgoing_status_by_id[current_external_id] = current_status
         for document_ref in document_refs:
             external_id = document_ref["external_id"]
             source_status = document_ref.get("source_status")
-            if direction == "outgoing" and external_id in outgoing_status_by_id:
-                source_status = outgoing_status_by_id[external_id]
+            if direction == "outgoing":
+                source_status = (
+                    current_status_by_id.get(external_id)
+                    or outgoing_status_by_id.get(external_id)
+                    or source_status
+                )
+                if is_efaktura_cancelled_status(source_status):
+                    continue
             xml_url = _format_url(
                 base_url,
                 document_path,
@@ -982,6 +1106,24 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 "direction_hint": direction,
             })
 
+    async def apply_cancelled_outgoing_status_changes() -> list[dict[str, Any]]:
+        applied: list[dict[str, Any]] = []
+        for external_id, source_status in outgoing_status_by_id.items():
+            if not is_efaktura_cancelled_status(source_status):
+                continue
+            status_text = _document_status_text(source_status)
+            async with db.begin_nested():
+                result_item = await handle_cancelled_outgoing_import_record(
+                    db,
+                    external_id=external_id,
+                    status_text=status_text,
+                )
+            if result_item:
+                applied.append(result_item)
+        if applied:
+            await db.commit()
+        return applied
+
     if enterprise.efaktura_sync_incoming:
         await fetch_direction("incoming", incoming_list_path, incoming_document_path, incoming_pdf_path)
     if enterprise.efaktura_sync_outgoing:
@@ -989,5 +1131,9 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path, outgoing_pdf_path)
 
     result = await import_efaktura_documents(db, user_id=user_id, documents=documents, source="api")
+    status_change_results = await apply_cancelled_outgoing_status_changes()
+    if status_change_results:
+        result["skipped"].extend(status_change_results)
+        result["skipped_count"] = len(result["skipped"])
     result["fetched_count"] = len(documents)
     return result
