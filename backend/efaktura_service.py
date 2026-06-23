@@ -17,6 +17,7 @@ from backend.db_utils import get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.income_service import (
     has_invoice_duplicate,
+    invoice_identity,
     normalize_name,
     normalize_pib,
     parse_efaktura_invoice,
@@ -25,6 +26,7 @@ from backend.income_service import (
 from backend.incoming_invoice_service import INCOMING_INVOICE_SOURCE, create_incoming_invoice
 from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomingInvoice, Project
 from backend.state_machine import (
+    cancel_income,
     cancel_incoming_invoice,
     initialize_expense_status,
     initialize_income_status,
@@ -38,6 +40,21 @@ DEFAULT_EFAKTURA_INCOMING_LIST_PATH = "/api/publicApi/purchase-invoice/ids?dateF
 DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH = "/api/publicApi/purchase-invoice/xml?invoiceId={id}"
 DEFAULT_EFAKTURA_OUTGOING_LIST_PATH = "/api/publicApi/sales-invoice/ids?dateFrom={from}&dateTo={to}"
 DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH = "/api/publicApi/sales-invoice/xml?invoiceId={id}"
+DEFAULT_EFAKTURA_OUTGOING_CHANGES_PATH = "/api/publicApi/sales-invoice/changes?date={date}"
+
+EFAKTURA_CANCELLED_STATUS_MARKERS = (
+    "storn",
+    "cancel",
+    "annul",
+    "mistake",
+    "void",
+    "reversed",
+    "gres",
+    "greš",
+    "отмен",
+    "ошиб",
+    "сторн",
+)
 
 
 async def get_efaktura_enterprise(db: AsyncSession) -> Enterprise | None:
@@ -150,6 +167,80 @@ async def get_import_record_by_key(db: AsyncSession, document_key: str) -> Efakt
         select(EfakturaImportRecord).where(EfakturaImportRecord.document_key == document_key).limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def get_income_by_invoice_identity(db: AsyncSession, invoice_number: str, invoice_year: int) -> Income | None:
+    target_year, target_key = invoice_identity(invoice_number, invoice_year)
+    result = await db.execute(
+        select(Income.id, Income.invoice_number, Income.invoice_year, Income.issued_date).where(
+            or_(
+                Income.invoice_year == invoice_year,
+                Income.issued_date.between(date(invoice_year, 1, 1), date(invoice_year, 12, 31)),
+            )
+        )
+    )
+    for income_id, existing_number, existing_year, issued_date in result.fetchall():
+        year_val = int(existing_year) if existing_year is not None else (issued_date.year if issued_date else None)
+        existing_year_key, existing_key = invoice_identity(existing_number, year_val)
+        if existing_year_key == target_year and existing_key == target_key:
+            return await db.get(Income, income_id)
+    return None
+
+
+def _document_status_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if "status" in key_text or key_text in {"state", "documentstate"}:
+                parts.append(_document_status_text(item))
+        return " ".join(part for part in parts if part)
+    if isinstance(value, list):
+        return " ".join(_document_status_text(item) for item in value)
+    return str(value)
+
+
+def is_efaktura_cancelled_status(value: Any) -> bool:
+    text = _document_status_text(value).casefold()
+    return bool(text) and any(marker in text for marker in EFAKTURA_CANCELLED_STATUS_MARKERS)
+
+
+async def handle_cancelled_outgoing_invoice(
+    db: AsyncSession,
+    *,
+    invoice_number: str,
+    invoice_year: int,
+    status_text: str,
+) -> dict[str, Any]:
+    income = await get_income_by_invoice_identity(db, invoice_number, invoice_year)
+    if income is None:
+        return {"reason": f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'})"}
+    if income.status == "cancelled":
+        return {"reason": f"Outgoing eFaktura is already cancelled ({status_text or 'unknown status'})"}
+    if to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL) > ZERO_DECIMAL or income.status == "paid":
+        return {
+            "reason": (
+                f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'}), "
+                f"but income #{income.id} has payments and was not changed"
+            )
+        }
+
+    cancel_income(income)
+    income.bank_reference = None
+    income.note = "\n".join(
+        part for part in [
+            income.note,
+            f"eFaktura API status: {status_text or 'cancelled/storned'}; income cancelled during sync.",
+        ] if part
+    )
+    await db.flush()
+    return {"reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled"}
 
 
 async def register_import_record(
@@ -340,6 +431,8 @@ async def import_efaktura_documents(
         direction_hint = document.get("direction_hint")
         content = document.get("content")
         pdf_content = document.get("pdf_content")
+        source_status = document.get("source_status")
+        source_status_text = _document_status_text(source_status)
         document_download_errors = document.get("download_errors") or []
         if document_download_errors:
             download_errors.extend(document_download_errors)
@@ -376,6 +469,28 @@ async def import_efaktura_documents(
 
         # Первичная дедупликация: тот же документ (ключ) уже импортирован — не создаём вторую запись.
         document_key = build_document_key(parsed, direction)
+        if source == "api" and direction == "outgoing" and is_efaktura_cancelled_status(source_status):
+            try:
+                async with db.begin_nested():
+                    cancel_result = await handle_cancelled_outgoing_invoice(
+                        db,
+                        invoice_number=normalized_invoice_number,
+                        invoice_year=invoice_year,
+                        status_text=source_status_text,
+                    )
+                skipped.append({
+                    "file_name": file_name,
+                    "invoice_number": normalized_invoice_number,
+                    "reason": cancel_result["reason"],
+                })
+            except Exception as exc:
+                errors.append({
+                    "file_name": file_name,
+                    "invoice_number": normalized_invoice_number,
+                    "error": str(exc),
+                })
+            continue
+
         if source == "api" and pdf_content:
             pdf_downloads.append({
                 "file_name": _build_pdf_download_name(parsed, direction=direction, external_id=external_id),
@@ -605,6 +720,119 @@ def _extract_ids(payload: Any) -> list[str]:
     return []
 
 
+def _case_insensitive_get(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    lowered = {str(key).lower(): key for key in payload.keys()}
+    for key in keys:
+        actual_key = lowered.get(key.lower())
+        if actual_key is not None:
+            return payload[actual_key]
+    return None
+
+
+def _extract_document_refs(payload: Any) -> list[dict[str, Any]]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        output: list[dict[str, Any]] = []
+        for item in payload:
+            if isinstance(item, (str, int)):
+                output.append({"external_id": str(item), "source_status": None})
+            elif isinstance(item, dict):
+                external_id = _case_insensitive_get(
+                    item,
+                    (
+                        "id",
+                        "documentId",
+                        "invoiceId",
+                        "invoice_id",
+                        "uid",
+                        "salesInvoiceId",
+                        "purchaseInvoiceId",
+                    ),
+                )
+                if external_id in (None, ""):
+                    nested_refs = _extract_document_refs(item)
+                    if nested_refs:
+                        output.extend(nested_refs)
+                    continue
+                source_status = _case_insensitive_get(
+                    item,
+                    (
+                        "status",
+                        "invoiceStatus",
+                        "documentStatus",
+                        "salesInvoiceStatus",
+                        "purchaseInvoiceStatus",
+                    ),
+                )
+                output.append({
+                    "external_id": str(external_id),
+                    "source_status": source_status,
+                    "source_payload": item,
+                })
+        return output
+    if isinstance(payload, dict):
+        lowered_keys = {str(key).lower(): key for key in payload.keys()}
+        for key in ("salesinvoiceids", "purchaseinvoiceids", "invoiceids"):
+            actual_key = lowered_keys.get(key)
+            if actual_key is not None:
+                return _extract_document_refs(payload[actual_key])
+        for key in ("items", "data", "result", "documents", "invoices"):
+            actual_key = lowered_keys.get(key)
+            if actual_key is not None:
+                refs = _extract_document_refs(payload[actual_key])
+                if refs:
+                    return refs
+    return [{"external_id": external_id, "source_status": None} for external_id in _extract_ids(payload)]
+
+
+def _extract_status_change_refs(payload: Any) -> list[dict[str, Any]]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        output: list[dict[str, Any]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            external_id = _case_insensitive_get(
+                item,
+                (
+                    "salesInvoiceId",
+                    "purchaseInvoiceId",
+                    "invoiceId",
+                    "documentId",
+                    "id",
+                ),
+            )
+            if external_id in (None, ""):
+                output.extend(_extract_status_change_refs(item))
+                continue
+            source_status = _case_insensitive_get(
+                item,
+                (
+                    "newInvoiceStatus",
+                    "invoiceStatus",
+                    "documentStatus",
+                    "status",
+                ),
+            )
+            output.append({
+                "external_id": str(external_id),
+                "source_status": source_status,
+                "source_payload": item,
+            })
+        return output
+    if isinstance(payload, dict):
+        lowered_keys = {str(key).lower(): key for key in payload.keys()}
+        for key in ("items", "data", "result", "documents", "invoices", "changes"):
+            actual_key = lowered_keys.get(key)
+            if actual_key is not None:
+                refs = _extract_status_change_refs(payload[actual_key])
+                if refs:
+                    return refs
+    return []
+
+
 def _extract_xml_bytes(raw: bytes, content_type: str) -> bytes:
     if "xml" in content_type.lower():
         return raw
@@ -645,6 +873,31 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
     date_to_value = _format_sync_boundary(date_to, end_of_day=True)
 
     documents: list[dict[str, Any]] = []
+    outgoing_status_by_id: dict[str, Any] = {}
+
+    async def fetch_outgoing_status_changes() -> None:
+        for day_offset in range((date_to - date_from).days + 1):
+            day = date_from + timedelta(days=day_offset)
+            changes_url = _format_url(
+                base_url,
+                DEFAULT_EFAKTURA_OUTGOING_CHANGES_PATH,
+                date=_format_sync_boundary(day, end_of_day=False),
+            )
+            if not changes_url:
+                continue
+            try:
+                raw_changes, _ = await asyncio.to_thread(
+                    _http_request,
+                    changes_url,
+                    method="POST",
+                    header_name=header_name,
+                    header_value=header_value,
+                )
+                changes_payload = json.loads(raw_changes.decode("utf-8"))
+            except Exception:
+                continue
+            for change_ref in _extract_status_change_refs(changes_payload):
+                outgoing_status_by_id[change_ref["external_id"]] = change_ref.get("source_status")
 
     async def fetch_direction(direction: str, list_path: str, document_path: str, pdf_path: str | None) -> None:
         list_url = _format_url(
@@ -667,8 +920,12 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
             ids_payload = json.loads(raw_ids.decode("utf-8"))
         except Exception:
             ids_payload = None
-        ids = _extract_ids(ids_payload)
-        for external_id in ids:
+        document_refs = _extract_document_refs(ids_payload)
+        for document_ref in document_refs:
+            external_id = document_ref["external_id"]
+            source_status = document_ref.get("source_status")
+            if direction == "outgoing" and external_id in outgoing_status_by_id:
+                source_status = outgoing_status_by_id[external_id]
             xml_url = _format_url(
                 base_url,
                 document_path,
@@ -720,12 +977,15 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 "pdf_content": pdf_content,
                 "download_errors": download_errors,
                 "external_id": external_id,
+                "source_status": source_status,
+                "source_payload": document_ref.get("source_payload"),
                 "direction_hint": direction,
             })
 
     if enterprise.efaktura_sync_incoming:
         await fetch_direction("incoming", incoming_list_path, incoming_document_path, incoming_pdf_path)
     if enterprise.efaktura_sync_outgoing:
+        await fetch_outgoing_status_changes()
         await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path, outgoing_pdf_path)
 
     result = await import_efaktura_documents(db, user_id=user_id, documents=documents, source="api")
