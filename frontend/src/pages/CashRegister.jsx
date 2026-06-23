@@ -79,6 +79,21 @@ function applyPayoutDuration(form) {
   }
 }
 
+const getTripPeriodKey = (payout) => `${payout?.period_start || ''}|${payout?.period_end || ''}`
+
+function findOpenTripAdvance(payouts) {
+  const finalPeriodKeys = new Set(
+    (payouts || [])
+      .filter((payout) => payout.payout_type === 'trip_final')
+      .map(getTripPeriodKey)
+  )
+  return (payouts || []).find((payout) => (
+    payout.payout_type === 'trip_advance' &&
+    !finalPeriodKeys.has(getTripPeriodKey(payout)) &&
+    Number(payout.remaining_amount || 0) > 0
+  )) || null
+}
+
 export default function CashRegister() {
   const location = useLocation()
   const isActivePage = location.pathname === '/cash'
@@ -706,6 +721,38 @@ export default function CashRegister() {
     }
   }
 
+  const prefillTripFinalFromAdvance = async (workerId) => {
+    if (!workerId || workerPayoutModal?.payoutId) return
+    try {
+      const payouts = await api.workers.payouts({ worker_id: workerId, limit: 100 })
+      const advance = findOpenTripAdvance(payouts)
+      if (!advance) return
+
+      setWorkerPayoutForm((previous) => {
+        if (previous.payout_type !== 'trip_final' || String(previous.worker_id) !== String(workerId)) {
+          return previous
+        }
+        return applyPayoutDuration({
+          ...previous,
+          period_start: advance.period_start || previous.period_start,
+          period_end: advance.period_end || previous.period_end,
+          work_days: toFormValue(advance.work_days || advance.trip_days || previous.work_days),
+          trip_days: toFormValue(advance.trip_days || previous.trip_days),
+          lodging_nights: toFormValue(advance.lodging_nights ?? previous.lodging_nights),
+          lodging_night_rate: toFormValue(advance.lodging_night_rate ?? previous.lodging_night_rate),
+          lodging_amount: toFormValue(advance.lodging_amount ?? previous.lodging_amount),
+          advance_paid: toFormValue(advance.cash_paid_amount || 0),
+          cash_paid_amount: '',
+          project_id: toFormValue(advance.project_id) || previous.project_id,
+          contract_id: toFormValue(advance.contract_id) || previous.contract_id,
+          category_id: toFormValue(advance.category_id) || previous.category_id,
+        })
+      })
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    }
+  }
+
   const updateWorkerPayoutWorker = (workerId) => {
     const worker = workers.find((item) => Number(item.id) === Number(workerId))
     setWorkerPayoutForm((previous) => ({
@@ -715,6 +762,9 @@ export default function CashRegister() {
       category_id: worker?.default_category_id ? String(worker.default_category_id) : '',
       contract_id: '',
     }))
+    if (workerPayoutForm.payout_type === 'trip_final') {
+      prefillTripFinalFromAdvance(workerId)
+    }
   }
 
   const updateWorkerPayoutProject = (projectId) => {
@@ -730,6 +780,9 @@ export default function CashRegister() {
       const next = { ...previous, payout_type: payoutType }
       return ['regular', 'trip_advance', 'trip_final'].includes(payoutType) ? applyPayoutDuration(next) : next
     })
+    if (payoutType === 'trip_final' && workerPayoutForm.worker_id) {
+      prefillTripFinalFromAdvance(workerPayoutForm.worker_id)
+    }
   }
 
   const updateWorkerPayoutPeriod = (field, value) => {
