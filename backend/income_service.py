@@ -58,6 +58,18 @@ def normalize_name(value: Optional[str]) -> Optional[str]:
     text = normalize_whitespace(value)
     return text.lower() if text else None
 
+def _decimal_from_xml(value: Optional[str]) -> Decimal:
+    normalized = (value or "0").replace("\u00A0", "").replace(" ", "").replace(",", ".")
+    return to_decimal(Decimal(normalized))
+
+def _unit_from_ubl(value: Optional[str]) -> str:
+    normalized = (value or "").strip().upper()
+    return {
+        "H87": "kom",
+        "DAY": "dan",
+        "HUR": "sat",
+    }.get(normalized, normalized.lower() or "kom")
+
 def parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Optional[int]]:
     """
     Разобрать номер фактуры в форматах YYYY-NNNN и NNNN-YYYY.
@@ -164,20 +176,49 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
     )
     if not amount_raw:
         raise ValueError(f"{file_name}: отсутствует сумма к оплате (cbc:PayableAmount)")
-    normalized_amount = amount_raw.replace("\u00A0", "").replace(" ", "").replace(",", ".")
     try:
-        amount_rsd = to_decimal(Decimal(normalized_amount))
+        amount_rsd = _decimal_from_xml(amount_raw)
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"{file_name}: некорректная сумма ({amount_raw})") from exc
 
     customer_name, customer_pib = _extract_party_info(invoice, "cac:AccountingCustomerParty")
     supplier_name, supplier_pib = _extract_party_info(invoice, "cac:AccountingSupplierParty")
 
+    items: list[dict] = []
     line_titles: list[str] = []
-    for node in invoice.findall("cac:InvoiceLine/cac:Item/cbc:Name", EF_NS):
-        line_name = normalize_whitespace(node.text)
+    for index, line in enumerate(invoice.findall("cac:InvoiceLine", EF_NS), start=1):
+        line_name = normalize_whitespace(line.findtext("cac:Item/cbc:Name", default="", namespaces=EF_NS))
         if line_name:
             line_titles.append(line_name)
+        quantity_node = line.find("cbc:InvoicedQuantity", EF_NS)
+        quantity_text = normalize_whitespace(quantity_node.text if quantity_node is not None else None)
+        unit_code = quantity_node.attrib.get("unitCode") if quantity_node is not None else None
+        price_text = normalize_whitespace(line.findtext("cac:Price/cbc:PriceAmount", default="", namespaces=EF_NS))
+        line_total_text = normalize_whitespace(line.findtext("cbc:LineExtensionAmount", default="", namespaces=EF_NS))
+        tax_category = normalize_whitespace(
+            line.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:ID", default="O", namespaces=EF_NS)
+        ) or "O"
+        tax_rate_text = normalize_whitespace(
+            line.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:Percent", default="0", namespaces=EF_NS)
+        )
+        if line_name:
+            try:
+                quantity = _decimal_from_xml(quantity_text or "1")
+                unit_price = _decimal_from_xml(price_text or "0")
+                total_amount = _decimal_from_xml(line_total_text or str(quantity * unit_price))
+                tax_rate = _decimal_from_xml(tax_rate_text or "0")
+            except (InvalidOperation, ValueError) as exc:
+                raise ValueError(f"{file_name}: invalid invoice line #{index}") from exc
+            items.append({
+                "line_no": index,
+                "name": line_name,
+                "quantity": quantity,
+                "unit": _unit_from_ubl(unit_code),
+                "unit_price": unit_price,
+                "total_amount": total_amount,
+                "tax_category": tax_category,
+                "tax_rate": tax_rate,
+            })
     description = "; ".join(line_titles) if line_titles else f"eFaktura {invoice_number}"
     if len(description) > 500:
         description = f"{description[:497]}..."
@@ -196,11 +237,10 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         "supplier_name": supplier_name,
         "supplier_pib": supplier_pib,
         "description": description,
+        "items": items,
     }
 
 def invoice_year_from_number(invoice_number: str) -> Optional[int]:
     """Год из номера YYYY-NNNN или NNNN-YYYY."""
     y, _ = parse_invoice_number_parts(invoice_number)
     return y
-
-

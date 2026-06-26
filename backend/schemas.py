@@ -148,6 +148,53 @@ class ProjectBrief(BaseModel):
 
 
 # --- Income ---
+class IncomeItemBase(BaseModel):
+    name: str
+    quantity: Decimal = Decimal("1")
+    unit: str = "kom"
+    unit_price: Decimal = Decimal("0.00")
+    total_amount: Optional[Decimal] = None
+    tax_category: str = "O"
+    tax_rate: Decimal = Decimal("0.00")
+    note: Optional[str] = None
+
+    @field_validator("quantity", "unit_price", "total_amount", "tax_rate", mode="before")
+    @classmethod
+    def empty_decimal_to_none(cls, value):
+        if value == "":
+            return None
+        return value
+
+
+class IncomeItemCreate(IncomeItemBase):
+    pass
+
+
+class IncomeItemResponse(IncomeItemBase):
+    id: int
+    income_id: int
+    line_no: int
+    total_amount: Decimal = Decimal("0.00")
+
+    class Config:
+        from_attributes = True
+
+
+class IncomeItemSuggestion(BaseModel):
+    source: str
+    name: str
+    unit: str = "kom"
+    quantity: Decimal = Decimal("1")
+    unit_price: Decimal = Decimal("0.00")
+    total_amount: Decimal = Decimal("0.00")
+    tax_category: str = "O"
+    tax_rate: Decimal = Decimal("0.00")
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    issued_date: Optional[DateType] = None
+    client_name: Optional[str] = None
+
+
 class IncomeBase(BaseModel):
     issued_date: DateType = Field(serialization_alias="date")  # Р Т‘Р В°РЎвЂљР В° РЎРѓРЎвЂЎРЎвЂРЎвЂљР В° (Р Р† Р вЂР вЂќ: date)
     due_date: Optional[DateType] = None  # Valuta / РЎРѓРЎР‚Р С•Р С” Р С•Р С—Р В»Р В°РЎвЂљРЎвЂ№
@@ -176,6 +223,7 @@ class IncomeCreate(IncomeBase):
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
     income_type: Optional[str] = None
+    items: Optional[list[IncomeItemCreate]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -208,6 +256,7 @@ class IncomeUpdate(BaseModel):
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
     note: Optional[str] = None
+    items: Optional[list[IncomeItemCreate]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -245,6 +294,7 @@ class IncomeResponse(IncomeBase):
     paid_amount: Decimal = Decimal("0.00")
     created_at: datetime
     contract_number: Optional[str] = None
+    items: list[IncomeItemResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

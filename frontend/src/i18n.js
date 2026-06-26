@@ -1757,6 +1757,32 @@ Object.assign(t.ru, {
   linkedInvoiceAmountZeroHint: 'Нулевая фактура закрыта через связанную авансную фактуру.',
 })
 
+Object.assign(t.sr, {
+  invoiceItems: 'Stavke fakture',
+  invoiceItemName: 'Naziv usluge ili robe',
+  previousInvoiceItems: 'Ranije fakturisano ovom klijentu',
+  addLine: 'Dodaj stavku',
+  quantity: 'Kolicina',
+  unit: 'Jedinica',
+  unitPrice: 'Cena',
+  amountFromInvoiceItems: 'Iznos je izracunat iz stavki fakture.',
+  invoiceNoItems: 'Nema stavki. Unesite ukupan iznos rucno ili dodajte stavku.',
+  exportEfakturaXml: 'eFaktura XML',
+})
+
+Object.assign(t.ru, {
+  invoiceItems: 'Позиции фактуры',
+  invoiceItemName: 'Название услуги или товара',
+  previousInvoiceItems: 'Ранее фактурисали этому контрагенту',
+  addLine: 'Добавить позицию',
+  quantity: 'Количество',
+  unit: 'Ед.',
+  unitPrice: 'Цена',
+  amountFromInvoiceItems: 'Сумма рассчитана из позиций фактуры.',
+  invoiceNoItems: 'Позиций нет. Введите общую сумму вручную или добавьте позицию.',
+  exportEfakturaXml: 'eFaktura XML',
+})
+
 let lang = localStorage.getItem('prospel_lang') || 'sr';
 
 export function setLang(l) {

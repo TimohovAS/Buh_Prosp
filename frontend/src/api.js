@@ -221,6 +221,11 @@ export const api = {
     get: (id) => request(`/income/${id}`),
     payments: (id) => request(`/income/${id}/payments`),
     clearManualPayment: (id) => request(`/income/${id}/clear-manual-payment`, { method: 'POST' }),
+    itemSuggestions: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/income/item-suggestions${q ? `?${q}` : ''}`);
+    },
+    exportEfakturaXml: (id, fallbackFilename = 'efaktura.xml') => downloadBlob(`/income/${id}/efaktura-xml`, fallbackFilename, 'Export failed'),
     create: (data) => request('/income', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/income/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => request(`/income/${id}`, { method: 'DELETE' }),

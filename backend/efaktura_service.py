@@ -24,7 +24,7 @@ from backend.income_service import (
     to_number_year_format,
 )
 from backend.incoming_invoice_service import INCOMING_INVOICE_SOURCE, create_incoming_invoice
-from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomingInvoice, Project
+from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomeItem, IncomingInvoice, Project
 from backend.state_machine import (
     cancel_income,
     cancel_incoming_invoice,
@@ -666,6 +666,20 @@ async def import_efaktura_documents(
                     note=f"Import eFaktura: {file_name}",
                     created_by=user_id,
                 )
+                income.items = [
+                    IncomeItem(
+                        line_no=item.get("line_no") or index,
+                        name=item["name"],
+                        quantity=item.get("quantity") or Decimal("1"),
+                        unit=item.get("unit") or "kom",
+                        unit_price=item.get("unit_price") or ZERO_DECIMAL,
+                        total_amount=item.get("total_amount") or ZERO_DECIMAL,
+                        tax_category=item.get("tax_category") or "O",
+                        tax_rate=item.get("tax_rate") or ZERO_DECIMAL,
+                    )
+                    for index, item in enumerate(parsed.get("items") or [], start=1)
+                    if item.get("name")
+                ]
                 initialize_income_status(income, "issued", paid_amount=ZERO_DECIMAL)
                 db.add(income)
                 await db.flush()

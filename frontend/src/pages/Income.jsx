@@ -19,6 +19,25 @@ import { MONTHS } from '../utils/constants'
 import { amountSearchHay } from '../utils/searchUtils'
 
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
+const newIncomeLine = () => ({
+  name: '',
+  quantity: '1',
+  unit: 'kom',
+  unit_price: '',
+  total_amount: '',
+  note: '',
+})
+
+const numericValue = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const computeLineTotal = (line) => {
+  const explicit = numericValue(line.total_amount)
+  if (explicit > 0) return explicit
+  return numericValue(line.quantity) * numericValue(line.unit_price)
+}
 
 export default function Income() {
   const location = useLocation()
@@ -50,6 +69,9 @@ export default function Income() {
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentActionLoading, setPaymentActionLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [itemSuggestions, setItemSuggestions] = useState([])
+  const [itemSearchSuggestions, setItemSearchSuggestions] = useState([])
+  const [activeLineIndex, setActiveLineIndex] = useState(null)
   const [form, setForm] = useState({
     date: todayIso(),
     due_date: '',
@@ -61,6 +83,7 @@ export default function Income() {
     project_id: '',
     description: '',
     amount_rsd: '',
+    items: [newIncomeLine()],
     note: '',
   })
 
@@ -100,6 +123,34 @@ export default function Income() {
     if (modal === 'add' || !modal?.id) params.status = 'active'
     api.contracts.list(params).then(setContracts)
   }, [modal, form.client_id])
+  useEffect(() => {
+    if (!modal || !form.client_id) {
+      setItemSuggestions([])
+      return
+    }
+    api.income.itemSuggestions({ client_id: form.client_id, limit: 12 })
+      .then(setItemSuggestions)
+      .catch(() => setItemSuggestions([]))
+  }, [modal, form.client_id])
+  useEffect(() => {
+    if (!modal || activeLineIndex == null) {
+      setItemSearchSuggestions([])
+      return undefined
+    }
+    const term = String(form.items?.[activeLineIndex]?.name || '').trim()
+    if (term.length < 2) {
+      setItemSearchSuggestions([])
+      return undefined
+    }
+    const timer = window.setTimeout(() => {
+      const params = { search: term, limit: 8 }
+      if (form.client_id) params.client_id = form.client_id
+      api.income.itemSuggestions(params)
+        .then(setItemSearchSuggestions)
+        .catch(() => setItemSearchSuggestions([]))
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [modal, form.client_id, form.items, activeLineIndex])
 
   const [nextInvoiceHint, setNextInvoiceHint] = useState('')
   const getDefaultIncomeDate = () => {
@@ -139,6 +190,7 @@ export default function Income() {
       project_id: unassignedProject ? String(unassignedProject.id) : '',
       description: '',
       amount_rsd: '',
+      items: [newIncomeLine()],
       note: '',
     }
     setForm(defaultForm)
@@ -159,6 +211,14 @@ export default function Income() {
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       description: item.description || '',
       amount_rsd: item.amount_rsd,
+      items: item.items?.length ? item.items.map((line) => ({
+        name: line.name || '',
+        quantity: String(line.quantity ?? '1'),
+        unit: line.unit || 'kom',
+        unit_price: String(line.unit_price ?? ''),
+        total_amount: String(line.total_amount ?? ''),
+        note: line.note || '',
+      })) : [],
       note: item.note || '',
     })
     setSubmitError('')
@@ -177,6 +237,18 @@ export default function Income() {
         return Number.isNaN(parsed) ? null : parsed
       }
       const invoiceValue = form.invoice_number?.trim() || null
+      const normalizedItems = (form.items || [])
+        .filter((line) => String(line.name || '').trim())
+        .map((line, index) => ({
+          name: String(line.name || '').trim(),
+          quantity: numericValue(line.quantity) || 1,
+          unit: String(line.unit || 'kom').trim() || 'kom',
+          unit_price: numericValue(line.unit_price),
+          total_amount: computeLineTotal(line),
+          note: line.note || null,
+          line_no: index + 1,
+        }))
+      const itemsTotal = normalizedItems.reduce((sum, line) => sum + numericValue(line.total_amount), 0)
       const payload = {
         date: form.date,
         due_date: form.due_date || null,
@@ -188,7 +260,8 @@ export default function Income() {
         contract_payment_type: form.contract_payment_type || null,
         project_id: toInt(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
         description: form.description || null,
-        amount_rsd: parseFloat(form.amount_rsd) || 0,
+        amount_rsd: normalizedItems.length ? itemsTotal : (parseFloat(form.amount_rsd) || 0),
+        items: normalizedItems,
         note: form.note || null,
       }
       if (modal === 'add') {
@@ -313,6 +386,13 @@ export default function Income() {
     await handleDelete(item)
   }
 
+  const handleExportEfakturaXml = async (item) => {
+    await api.income.exportEfakturaXml(item.id, `efaktura_${item.invoice_number || item.id}.xml`).catch((error) => {
+      setPageError(error.message || tr('loadError'))
+      console.error(error)
+    })
+  }
+
   const handleUnlinkIncomePayment = async (transactionId) => {
     if (!paymentModal) return
     if (!confirm(tr('incomeUnlinkPaymentConfirm'))) return
@@ -417,6 +497,71 @@ export default function Income() {
     }))
     updateContractBase(contractId)
   }
+
+  const updateIncomeLine = (index, patch) => {
+    setForm((previous) => {
+      const lines = [...(previous.items || [])]
+      const current = { ...(lines[index] || newIncomeLine()), ...patch }
+      if ('quantity' in patch || 'unit_price' in patch) {
+        const total = numericValue(current.quantity) * numericValue(current.unit_price)
+        current.total_amount = total ? total.toFixed(2) : ''
+      }
+      lines[index] = current
+      return { ...previous, items: lines }
+    })
+  }
+
+  const addIncomeLine = (line = null) => {
+    setForm((previous) => ({ ...previous, items: [...(previous.items || []), line || newIncomeLine()] }))
+  }
+
+  const removeIncomeLine = (index) => {
+    if (activeLineIndex === index) {
+      setActiveLineIndex(null)
+      setItemSearchSuggestions([])
+    } else if (activeLineIndex > index) {
+      setActiveLineIndex(activeLineIndex - 1)
+    }
+    setForm((previous) => ({ ...previous, items: (previous.items || []).filter((_, itemIndex) => itemIndex !== index) }))
+  }
+
+  const lineFromSuggestion = (suggestion) => ({
+    name: suggestion.name || '',
+    quantity: String(suggestion.quantity ?? 1),
+    unit: suggestion.unit || 'kom',
+    unit_price: String(suggestion.unit_price ?? ''),
+    total_amount: String(suggestion.total_amount ?? ''),
+    note: '',
+  })
+
+  const applySuggestedLine = (index, suggestion) => {
+    const line = lineFromSuggestion(suggestion)
+    setForm((previous) => {
+      const lines = [...(previous.items || [])]
+      lines[index] = line
+      return { ...previous, items: lines }
+    })
+    setActiveLineIndex(null)
+    setItemSearchSuggestions([])
+  }
+
+  const useSuggestedLine = (suggestion) => {
+    const line = lineFromSuggestion(suggestion)
+    setForm((previous) => {
+      const lines = previous.items || []
+      const firstEmpty = lines.findIndex((item) => !String(item.name || '').trim())
+      if (firstEmpty >= 0) {
+        const next = [...lines]
+        next[firstEmpty] = line
+        return { ...previous, items: next }
+      }
+      return { ...previous, items: [...lines, line] }
+    })
+  }
+
+  const invoiceLineTotal = useMemo(() => (
+    (form.items || []).reduce((sum, line) => sum + computeLineTotal(line), 0)
+  ), [form.items])
 
   const filteredContracts = useMemo(() => {
     const selectedProjectId = form.project_id ? parseInt(form.project_id, 10) : null
@@ -639,6 +784,35 @@ export default function Income() {
               <span className="record-field-label">{tr('description')}</span>
               <div className="record-field-text">{detailModal.description || UI_DASH}</div>
             </div>
+            {detailModal.items?.length ? (
+              <div className="record-field full">
+                <span className="record-field-label">{tr('invoiceItems')}</span>
+                <div className="table-wrap" style={{ marginTop: '0.4rem' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('name')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('quantity')}</th>
+                        <th>{tr('unit')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('unitPrice')}</th>
+                        <th style={{ textAlign: 'right' }}>{tr('total')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailModal.items.map((line) => (
+                        <tr key={line.id || line.line_no}>
+                          <td>{line.name}</td>
+                          <td style={{ textAlign: 'right' }}>{Number(line.quantity || 0).toLocaleString('sr-RS')}</td>
+                          <td>{line.unit || 'kom'}</td>
+                          <td style={{ textAlign: 'right' }}>{Number(line.unit_price || 0).toLocaleString('sr-RS')}</td>
+                          <td style={{ textAlign: 'right' }}>{Number(line.total_amount || 0).toLocaleString('sr-RS')} RSD</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
             <div className="record-field full">
               <span className="record-field-label">{tr('note')}</span>
               <div className="record-field-text">{detailModal.note || UI_DASH}</div>
@@ -653,6 +827,13 @@ export default function Income() {
               onClick={() => openPaymentFromDetail(detailModal)}
             >
               {tr('incomePaymentDetails')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => handleExportEfakturaXml(detailModal)}
+            >
+              {tr('exportEfakturaXml')}
             </button>
             <button
               type="button"
@@ -777,6 +958,7 @@ export default function Income() {
         isOpen={!!modal}
         onClose={closeModal}
         title={modal === 'add' ? tr('add') : tr('edit')}
+        maxWidth="1040px"
         closeOnOverlay
       >
         {modal ? (
@@ -895,15 +1077,141 @@ export default function Income() {
                 />
               </div>
               <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>{tr('invoiceItems')}</label>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIncomeLine()}>
+                    {tr('addLine')}
+                  </button>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('name')}</th>
+                        <th style={{ width: 95 }}>{tr('quantity')}</th>
+                        <th style={{ width: 80 }}>{tr('unit')}</th>
+                        <th style={{ width: 120 }}>{tr('unitPrice')}</th>
+                        <th style={{ width: 125 }}>{tr('total')}</th>
+                        <th style={{ width: 54 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(form.items || []).length ? (form.items || []).map((line, index) => (
+                        <tr key={index}>
+                          <td>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={line.name}
+                              onFocus={() => setActiveLineIndex(index)}
+                              onChange={(event) => updateIncomeLine(index, { name: event.target.value })}
+                              placeholder={tr('invoiceItemName')}
+                            />
+                            {activeLineIndex === index && itemSearchSuggestions.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem' }}>
+                                {itemSearchSuggestions.map((suggestion, suggestionIndex) => (
+                                  <button
+                                    key={`${suggestion.source}-${suggestion.invoice_id || suggestionIndex}-${suggestion.name}-${suggestionIndex}`}
+                                    type="button"
+                                    className="btn btn-sm btn-secondary"
+                                    style={{ justifyContent: 'space-between', textAlign: 'left', width: '100%' }}
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => applySuggestedLine(index, suggestion)}
+                                    title={[suggestion.invoice_number, suggestion.issued_date].filter(Boolean).join(' / ')}
+                                  >
+                                    <span>{suggestion.name}</span>
+                                    <span>{Number(suggestion.unit_price || 0).toLocaleString('sr-RS')} RSD</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.001"
+                              className="form-input"
+                              value={line.quantity}
+                              onChange={(event) => updateIncomeLine(index, { quantity: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={line.unit}
+                              onChange={(event) => updateIncomeLine(index, { unit: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="form-input"
+                              value={line.unit_price}
+                              onChange={(event) => updateIncomeLine(index, { unit_price: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="form-input"
+                              value={line.total_amount}
+                              onChange={(event) => updateIncomeLine(index, { total_amount: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <button type="button" className="btn btn-sm btn-danger" onClick={() => removeIncomeLine(index)}>
+                              {UI_CLOSE}
+                            </button>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('invoiceNoItems')}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {itemSuggestions.length > 0 ? (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                      {tr('previousInvoiceItems')}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {itemSuggestions.map((suggestion, index) => (
+                        <button
+                          key={`${suggestion.source}-${suggestion.invoice_id || index}-${suggestion.name}-${index}`}
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => useSuggestedLine(suggestion)}
+                          title={[suggestion.invoice_number, suggestion.issued_date].filter(Boolean).join(' / ')}
+                        >
+                          {suggestion.name} · {Number(suggestion.unit_price || 0).toLocaleString('sr-RS')} RSD
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="form-group">
                 <label className="form-label">{tr('amount')}</label>
                 <input
                   type="number"
                   step="0.01"
                   className="form-input"
-                  value={form.amount_rsd}
+                  value={invoiceLineTotal > 0 ? invoiceLineTotal.toFixed(2) : form.amount_rsd}
                   onChange={(event) => setForm({ ...form, amount_rsd: event.target.value })}
+                  readOnly={invoiceLineTotal > 0}
                   required
                 />
+                {invoiceLineTotal > 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                    {tr('amountFromInvoiceItems')}
+                  </div>
+                ) : null}
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('note')}</label>

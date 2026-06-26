@@ -542,10 +542,35 @@ class Income(Base):
         back_populates="income",
         cascade="all, delete-orphan",
     )
+    items = relationship(
+        "IncomeItem",
+        back_populates="income",
+        cascade="all, delete-orphan",
+        order_by="IncomeItem.line_no.asc()",
+    )
 
     @property
     def contract_number(self) -> Optional[str]:
         return self.contract.number if self.contract else None
+
+
+class IncomeItem(Base):
+    __tablename__ = "income_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    income_id = Column(Integer, ForeignKey("income.id", ondelete="CASCADE"), nullable=False, index=True)
+    line_no = Column(Integer, nullable=False, default=1)
+    name = Column(String(500), nullable=False)
+    quantity = Column(Numeric(14, 3), nullable=False, default=1)
+    unit = Column(String(20), default="kom")
+    unit_price = Column(Numeric(14, 2), nullable=False, default=0)
+    total_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    tax_category = Column(String(20), nullable=False, default="O")
+    tax_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    income = relationship("Income", back_populates="items", foreign_keys=[income_id])
 
 
 class Contract(Base):

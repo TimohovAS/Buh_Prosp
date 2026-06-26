@@ -3,8 +3,8 @@ from datetime import date
 from typing import Optional
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, or_, and_, update
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
@@ -15,12 +15,22 @@ from backend.db_utils import (
     get_project_or_404,
     get_unassigned_project_id,
 )
-from backend.models import Income, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, Expense
-from backend.schemas import IncomeCreate, IncomeUpdate, IncomeResponse, IncomeMarkPaid, BulkAssignProject, IncomePaymentDetailsResponse, IncomePaymentTransactionResponse
+from backend.models import Income, IncomeItem, Client, User, Project, BankTransaction, BankTransactionIncomeAllocation, Contract, ContractItem, Enterprise
+from backend.schemas import (
+    IncomeCreate,
+    IncomeUpdate,
+    IncomeResponse,
+    IncomeItemCreate,
+    IncomeItemSuggestion,
+    BulkAssignProject,
+    IncomePaymentDetailsResponse,
+    IncomePaymentTransactionResponse,
+)
 from backend.auth import get_current_user_required, require_edit_access
 from backend.bank_matching_service import detach_income_transaction_link, get_income_linked_payment_entries
-from backend.services import get_income_total, get_next_invoice_number, allocate_next_invoice_number
+from backend.services import get_next_invoice_number, allocate_next_invoice_number
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
+from backend.invoice_export_service import build_income_efaktura_xml
 from backend.state_machine import (
     InvalidStatusTransition,
     cancel_income,
@@ -136,13 +146,70 @@ async def _detach_income_transactions(db: AsyncSession, income_id: int) -> None:
     for tx_id in dict.fromkeys(direct_tx_ids + allocation_tx_ids):
         await detach_income_transaction_link(db, tx_id, income_id)
 
+
+def _line_total(item: IncomeItemCreate) -> Decimal:
+    explicit = item.total_amount
+    if explicit is not None:
+        return to_decimal(explicit)
+    return to_decimal(item.quantity or ZERO_DECIMAL) * to_decimal(item.unit_price or ZERO_DECIMAL)
+
+
+def _normalize_income_items(items: list[IncomeItemCreate] | None) -> tuple[list[dict], Decimal]:
+    normalized: list[dict] = []
+    for index, item in enumerate(items or [], start=1):
+        name = (item.name or "").strip()
+        if not name:
+            continue
+        quantity = to_decimal(item.quantity or ZERO_DECIMAL)
+        unit_price = to_decimal(item.unit_price or ZERO_DECIMAL)
+        total_amount = _line_total(item)
+        normalized.append(
+            {
+                "line_no": len(normalized) + 1,
+                "name": name,
+                "quantity": quantity,
+                "unit": (item.unit or "kom").strip() or "kom",
+                "unit_price": unit_price,
+                "total_amount": total_amount,
+                "tax_category": "O",
+                "tax_rate": ZERO_DECIMAL,
+                "note": item.note,
+            }
+        )
+    return normalized, decimal_sum([item["total_amount"] for item in normalized])
+
+
+def _replace_income_items(income: Income, items: list[IncomeItemCreate] | None) -> Decimal | None:
+    if items is None:
+        return None
+    normalized, total = _normalize_income_items(items)
+    income.items = [IncomeItem(**item) for item in normalized]
+    return total if normalized else None
+
+
+def _income_response(income: Income) -> IncomeResponse:
+    data = IncomeResponse.model_validate(income).model_dump()
+    if income.client:
+        data["client_name"] = income.client.name
+    return IncomeResponse(**data)
+
+
+def _is_legacy_full_invoice_item(item: IncomeItem, income: Income) -> bool:
+    name = (item.name or "").strip()
+    description = (income.description or "").strip()
+    if not name or not description or name != description or ";" not in name:
+        return False
+    invoice_amount = to_decimal(income.amount_rsd or ZERO_DECIMAL)
+    return (
+        to_decimal(item.quantity or ZERO_DECIMAL) == Decimal("1")
+        and to_decimal(item.unit_price or ZERO_DECIMAL) == invoice_amount
+        and to_decimal(item.total_amount or ZERO_DECIMAL) == invoice_amount
+    )
+
 from backend.income_service import (
     to_number_year_format,
     has_invoice_duplicate,
-    parse_efaktura_invoice,
     invoice_year_from_number,
-    normalize_pib,
-    normalize_name,
 )
 
 @router.get("", response_model=list[IncomeResponse])
@@ -156,7 +223,7 @@ async def list_income(
     current_user: User = Depends(get_current_user_required),
 ):
     """РЎРїРёСЃРѕРє РґРѕС…РѕРґРѕРІ СЃ С„РёР»СЊС‚СЂР°С†РёРµР№."""
-    q = select(Income).options(selectinload(Income.contract), selectinload(Income.client)).order_by(Income.issued_date.desc(), Income.id.desc())
+    q = select(Income).options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items)).order_by(Income.issued_date.desc(), Income.id.desc())
     if year:
         q = q.where(Income.issued_date >= date(year, 1, 1), Income.issued_date <= date(year, 12, 31))
     if month and year:
@@ -171,13 +238,7 @@ async def list_income(
         q = q.limit(limit)
     result = await db.execute(q)
     items = result.scalars().all()
-    out = []
-    for i in items:
-        data = IncomeResponse.model_validate(i).model_dump()
-        if i.client:
-            data["client_name"] = i.client.name
-        out.append(IncomeResponse(**data))
-    return out
+    return [_income_response(i) for i in items]
 
 
 @router.get("/years", response_model=list[int])
@@ -253,12 +314,15 @@ async def create_income(
         note=data.note,
         created_by=current_user.id,
     )
+    item_total = _replace_income_items(income, data.items)
+    if item_total is not None:
+        income.amount_rsd = item_total
     try:
         initialize_income_status(
             income,
             status_val,
             paid_date=data.paid_date,
-            paid_amount=to_decimal(data.amount_rsd or ZERO_DECIMAL) if status_val == "paid" else ZERO_DECIMAL,
+            paid_amount=to_decimal(income.amount_rsd or ZERO_DECIMAL) if status_val == "paid" else ZERO_DECIMAL,
         )
     except InvalidStatusTransition as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -274,8 +338,8 @@ async def create_income(
     if status_val == "paid" and data.paid_date:
         pass # BankTransaction now handles cash flow
     await db.commit()
-    await db.refresh(income, ["contract"])
-    return IncomeResponse.model_validate(income)
+    await db.refresh(income, ["contract", "client", "items"])
+    return _income_response(income)
 
 
 @router.get("/check-invoice")
@@ -339,6 +403,109 @@ async def bulk_assign_project_income(
     return {"updated": len(items)}
 
 
+@router.get("/item-suggestions", response_model=list[IncomeItemSuggestion])
+async def income_item_suggestions(
+    client_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    pattern = f"%{search.strip()}%" if search and search.strip() else None
+    suggestions: list[IncomeItemSuggestion] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    item_query = (
+        select(IncomeItem, Income)
+        .join(Income, IncomeItem.income_id == Income.id)
+        .options(selectinload(Income.client))
+        .order_by(Income.issued_date.desc(), IncomeItem.line_no.asc())
+        .limit(300)
+    )
+    if client_id:
+        item_query = item_query.where(Income.client_id == client_id)
+    if pattern:
+        item_query = item_query.where(IncomeItem.name.ilike(pattern))
+    item_rows = await db.execute(item_query)
+    for item, income in item_rows.fetchall():
+        if _is_legacy_full_invoice_item(item, income):
+            continue
+        key = (item.name.strip().lower(), (item.unit or "kom").lower(), str(to_decimal(item.unit_price or ZERO_DECIMAL)))
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            IncomeItemSuggestion(
+                source="invoice",
+                name=item.name,
+                unit=item.unit or "kom",
+                quantity=item.quantity or Decimal("1"),
+                unit_price=item.unit_price or ZERO_DECIMAL,
+                total_amount=item.total_amount or ZERO_DECIMAL,
+                tax_category="O",
+                tax_rate=ZERO_DECIMAL,
+                invoice_id=income.id,
+                invoice_number=income.invoice_number,
+                issued_date=income.issued_date,
+                client_name=income.client.name if income.client else income.client_name,
+            )
+        )
+        if len(suggestions) >= limit:
+            return suggestions
+
+    contract_query = select(ContractItem, Contract).join(Contract, ContractItem.contract_id == Contract.id).order_by(Contract.date.desc(), ContractItem.sort_order.asc()).limit(300)
+    if client_id:
+        contract_query = contract_query.where(Contract.client_id == client_id)
+    if pattern:
+        contract_query = contract_query.where(ContractItem.description.ilike(pattern))
+    contract_rows = await db.execute(contract_query)
+    for item, contract in contract_rows.fetchall():
+        key = (item.description.strip().lower(), (item.unit or "kom").lower(), str(to_decimal(item.price or ZERO_DECIMAL)))
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            IncomeItemSuggestion(
+                source="contract",
+                name=item.description,
+                unit=item.unit or "kom",
+                quantity=to_decimal(item.quantity or 1),
+                unit_price=item.price or ZERO_DECIMAL,
+                total_amount=item.amount or ZERO_DECIMAL,
+                client_name=None,
+            )
+        )
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
+@router.get("/{income_id}/efaktura-xml")
+async def export_income_efaktura_xml(
+    income_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    result = await db.execute(
+        select(Income)
+        .options(selectinload(Income.client), selectinload(Income.items))
+        .where(Income.id == income_id)
+    )
+    income = result.scalar_one_or_none()
+    if not income:
+        raise HTTPException(404, "Income not found")
+    enterprise_result = await db.execute(select(Enterprise).limit(1))
+    enterprise = enterprise_result.scalar_one_or_none()
+    if not enterprise:
+        raise HTTPException(400, "Enterprise settings are required for eFaktura export")
+    xml_bytes = build_income_efaktura_xml(income, enterprise, income.client)
+    safe_number = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in income.invoice_number)
+    return Response(
+        content=xml_bytes,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="efaktura_{safe_number}.xml"'},
+    )
+
 
 @router.get("/{income_id}/payments", response_model=IncomePaymentDetailsResponse)
 async def get_income_payments(
@@ -377,14 +544,11 @@ async def get_income(
     current_user: User = Depends(get_current_user_required),
 ):
     """РџРѕР»СѓС‡РёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР°."""
-    r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client)).where(Income.id == income_id))
+    r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items)).where(Income.id == income_id))
     income = r.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
-    data = IncomeResponse.model_validate(income).model_dump()
-    if income.client:
-        data["client_name"] = income.client.name
-    return IncomeResponse(**data)
+    return _income_response(income)
 
 
 @router.patch("/{income_id}", response_model=IncomeResponse)
@@ -395,13 +559,14 @@ async def update_income(
     current_user: User = Depends(require_edit_access),
 ):
     """РћР±РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР°."""
-    r = await db.execute(select(Income).where(Income.id == income_id))
+    r = await db.execute(select(Income).options(selectinload(Income.items)).where(Income.id == income_id))
     income = r.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
     if income.status == "cancelled":
         raise HTTPException(400, "Cancelled income cannot be updated")
-    dump = data.model_dump(exclude_unset=True)
+    requested_items = data.items if "items" in data.model_fields_set else None
+    dump = data.model_dump(exclude_unset=True, exclude={"items"})
     payment_fields_requested = "paid_date" in dump or "is_paid" in dump
     requested_paid_date = dump.pop("paid_date", income.paid_date) if "paid_date" in dump else income.paid_date
     requested_is_paid = dump.pop("is_paid", None) if "is_paid" in dump else None
@@ -423,6 +588,9 @@ async def update_income(
         dump["contract_payment_type"] = None
     for k, v in dump.items():
         setattr(income, k, v)
+    item_total = _replace_income_items(income, requested_items)
+    if item_total is not None:
+        income.amount_rsd = item_total
     if payment_fields_requested:
         should_mark_paid = requested_paid_date is not None
         if requested_is_paid is not None:
@@ -465,12 +633,9 @@ async def update_income(
             raise HTTPException(409, INVOICE_DUPLICATE_DETAIL) from e
         raise
     # РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°, BankTransaction СЃР°Рј СѓРїСЂР°РІР»СЏРµС‚СЃСЏ
-    r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client)).where(Income.id == income_id))
+    r = await db.execute(select(Income).options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items)).where(Income.id == income_id))
     income = r.scalar_one()
-    data = IncomeResponse.model_validate(income).model_dump()
-    if income.client:
-        data["client_name"] = income.client.name
-    return IncomeResponse(**data)
+    return _income_response(income)
 
 
 @router.delete("/{income_id}")
@@ -500,4 +665,3 @@ async def delete_income(
     income.bank_reference = None
     await db.commit()
     return {"ok": True, "cancelled": True}
-
