@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -64,7 +65,30 @@ def sync_boundary(value: date, *, end_of_day: bool) -> str:
 
 def normalize_income_number(income: Income) -> str:
     fallback_year = income.invoice_year or (income.issued_date.year if income.issued_date else None)
-    return to_number_year_format(income.invoice_number, fallback_year)
+    return canonical_invoice_number(income.invoice_number, fallback_year)
+
+
+def canonical_invoice_number(value: str | None, fallback_year: int | None = None) -> str:
+    """Normalize invoice numbers for matching, including suffixes like 0012-2026-A."""
+    raw = (value or "").strip().upper()
+    raw = " ".join(raw.split())
+    if not raw:
+        return ""
+
+    match = re.fullmatch(r"0*(\d+)-(20\d{2})(.*)", raw)
+    if match:
+        serial, year, suffix = match.groups()
+        return f"{int(serial)}-{year}{suffix}"
+
+    match = re.fullmatch(r"(20\d{2})-0*(\d+)(.*)", raw)
+    if match:
+        year, serial, suffix = match.groups()
+        return f"{int(serial)}-{year}{suffix}"
+
+    normalized = to_number_year_format(raw, fallback_year)
+    if normalized != raw:
+        return canonical_invoice_number(normalized, fallback_year)
+    return raw
 
 
 def is_amount_close(left: Decimal, right: Decimal) -> bool:
@@ -248,7 +272,7 @@ async def load_scan_candidates(db, args, exclude_income_ids: set[int]) -> list[I
 
 
 def match_scanned_income(parsed: dict[str, Any], candidates: list[Income]) -> tuple[Income | None, str]:
-    parsed_number = to_number_year_format(parsed["invoice_number"], parsed["issued_date"].year)
+    parsed_number = canonical_invoice_number(parsed["invoice_number"], parsed["issued_date"].year)
     parsed_date = parsed["issued_date"]
     parsed_amount = to_decimal(parsed["amount_rsd"])
 
@@ -274,8 +298,8 @@ def match_scanned_income(parsed: dict[str, Any], candidates: list[Income]) -> tu
 
 def validate_parsed_for_income(parsed: dict[str, Any], income: Income) -> list[str]:
     warnings: list[str] = []
-    parsed_number = to_number_year_format(parsed["invoice_number"], parsed["issued_date"].year)
-    expected_number = normalize_income_number(income)
+    parsed_number = canonical_invoice_number(parsed["invoice_number"], parsed["issued_date"].year)
+    expected_number = canonical_invoice_number(income.invoice_number, income.invoice_year or income.issued_date.year)
     if parsed_number != expected_number:
         warnings.append(f"invoice number mismatch: income={expected_number}, xml={parsed_number}")
     if parsed["issued_date"] != income.issued_date:
@@ -299,7 +323,10 @@ async def backfill_from_xml(db, *, candidate: Candidate, xml_bytes: bytes, args,
 
     line_total = decimal_sum([item.total_amount or ZERO_DECIMAL for item in items])
     if not is_amount_close(line_total, to_decimal(income.amount_rsd or ZERO_DECIMAL)):
-        warnings.append(f"line total mismatch: income={income.amount_rsd}, lines={line_total}")
+        warning = f"line total mismatch: income={income.amount_rsd}, lines={line_total}"
+        warnings.append(warning)
+        if not args.allow_line_total_mismatch:
+            return {"status": "skipped", "reason": warning, "warnings": warnings}
 
     if args.save_xml_dir:
         args.save_xml_dir.mkdir(parents=True, exist_ok=True)
@@ -325,6 +352,8 @@ async def run_backfill(args) -> dict[str, Any]:
         "downloaded": 0,
         "updated": 0,
         "would_update": 0,
+        "cleared": 0,
+        "would_clear": 0,
         "skipped": 0,
         "errors": 0,
     }
@@ -336,6 +365,15 @@ async def run_backfill(args) -> dict[str, Any]:
         print("[backfill-income-items] Dry-run mode: database changes will not be committed.")
 
     async with AsyncSessionLocal() as db:
+        if args.clear_line_total_mismatches:
+            clear_summary = await clear_existing_line_total_mismatches(db, args)
+            summary.update(clear_summary)
+            if args.dry_run:
+                await db.rollback()
+            else:
+                await db.commit()
+            return summary
+
         config = await load_api_config(db)
         processed_income_ids: set[int] = set()
 
@@ -440,6 +478,47 @@ def print_result(income: Income, external_id: str | None, result: dict[str, Any]
         print(f"  [WARN] {warning}")
 
 
+async def clear_existing_line_total_mismatches(db, args) -> dict[str, int]:
+    summary = {
+        "record_candidates": 0,
+        "scan_candidates": 0,
+        "downloaded": 0,
+        "updated": 0,
+        "would_update": 0,
+        "cleared": 0,
+        "would_clear": 0,
+        "skipped": 0,
+        "errors": 0,
+    }
+    stmt = select(Income).options(selectinload(Income.items)).order_by(Income.issued_date.asc(), Income.id.asc())
+    if args.from_date:
+        stmt = stmt.where(Income.issued_date >= args.from_date)
+    if args.to_date:
+        stmt = stmt.where(Income.issued_date <= args.to_date)
+    if args.income_id:
+        stmt = stmt.where(Income.id.in_(args.income_id))
+
+    rows = list((await db.execute(stmt)).scalars().all())
+    for income in rows:
+        items = list(income.items or [])
+        if not items:
+            continue
+        line_total = decimal_sum([item.total_amount or ZERO_DECIMAL for item in items])
+        amount = to_decimal(income.amount_rsd or ZERO_DECIMAL)
+        if is_amount_close(line_total, amount):
+            summary["skipped"] += 1
+            continue
+        if args.dry_run:
+            summary["would_clear"] += 1
+            status = "WOULD-CLEAR"
+        else:
+            income.items = []
+            summary["cleared"] += 1
+            status = "CLEARED"
+        print(f"[{status}] income #{income.id} {income.invoice_number} amount={amount} lines={line_total}")
+    return summary
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Download outgoing eFaktura XML documents and backfill income_items for old Income records.",
@@ -453,6 +532,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--replace-legacy", action="store_true", help="Replace a single legacy full-invoice item if it is detected.")
     parser.add_argument("--replace-existing", action="store_true", help="Replace existing income_items. Use only after manual review.")
     parser.add_argument("--allow-mismatch", action="store_true", help="Allow XML number/date mismatch when an import record points to the Income.")
+    parser.add_argument("--allow-line-total-mismatch", action="store_true", help="Write XML lines even when their total differs from the Income amount.")
+    parser.add_argument("--clear-line-total-mismatches", action="store_true", help="Clear existing income_items whose line total differs from Income.amount_rsd. Use with --income-id for targeted repair.")
     parser.add_argument("--save-xml-dir", type=Path, help="Optional directory to save downloaded XML files for audit.")
     return parser
 
