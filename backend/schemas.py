@@ -182,6 +182,7 @@ class IncomeItemResponse(IncomeItemBase):
 
 class IncomeItemSuggestion(BaseModel):
     source: str
+    match_scope: str = "global"
     name: str
     unit: str = "kom"
     quantity: Decimal = Decimal("1")
@@ -192,7 +193,10 @@ class IncomeItemSuggestion(BaseModel):
     invoice_id: Optional[int] = None
     invoice_number: Optional[str] = None
     issued_date: Optional[DateType] = None
+    contract_id: Optional[int] = None
+    contract_number: Optional[str] = None
     client_name: Optional[str] = None
+    project_name: Optional[str] = None
 
 
 class IncomeBase(BaseModel):

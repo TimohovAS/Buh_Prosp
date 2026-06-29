@@ -1817,6 +1817,257 @@ tr.row-reversal {
   border-color: var(--color-accent);
 }
 
+.modal-body.income-modal-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.income-modal-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.income-modal-form.has-sidebar {
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
+}
+
+.income-modal-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.8rem 1rem;
+}
+
+.income-modal-main .form-group {
+  margin-bottom: 0.65rem;
+}
+
+.income-modal-main .modal-actions {
+  margin-top: 0.85rem;
+}
+
+.income-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  column-gap: 0.75rem;
+  row-gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+.income-form-grid .form-group {
+  margin-bottom: 0;
+}
+
+.income-form-grid .form-group:only-child {
+  grid-column: 1 / -1;
+}
+
+.income-form-grid-dates {
+  grid-template-columns: repeat(2, minmax(150px, 180px));
+  justify-content: start;
+}
+
+.income-modal-main .form-input {
+  padding: 0.45rem 0.65rem;
+}
+
+.income-modal-main .table-wrap th,
+.income-modal-main .table-wrap td {
+  padding: 0.45rem 0.55rem;
+}
+
+.income-modal-main .table-wrap .form-input {
+  padding: 0.4rem 0.55rem;
+}
+
+.income-line-number {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.income-calculated-field {
+  min-height: 2.1rem;
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.55rem;
+  color: var(--color-text);
+  background: transparent;
+}
+
+.income-line-total {
+  justify-content: flex-end;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.income-invoice-total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem 3.95rem 0 0;
+}
+
+.income-invoice-total-label {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 2.25rem;
+}
+
+.income-invoice-total {
+  min-height: 2.25rem;
+  min-width: 125px;
+  justify-content: flex-end;
+  padding: 0.45rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.income-invoice-total-hint {
+  max-width: 260px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.income-item-name-field {
+  position: relative;
+  min-width: 220px;
+}
+
+.income-item-suggestion-dropdown {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: auto;
+  width: min(520px, 70vw);
+  max-height: min(320px, 48vh);
+  overflow: auto;
+  padding: 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.income-suggestion-sidebar {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
+  border-left: 1px solid var(--color-border);
+}
+
+.income-suggestion-sidebar-title,
+.income-suggestion-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.income-suggestion-sidebar-title {
+  margin-bottom: 0.55rem;
+}
+
+.income-suggestion-group + .income-suggestion-group {
+  margin-top: 0.65rem;
+}
+
+.income-suggestion-options,
+.income-sidebar-suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.income-suggestion-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.45rem 0.55rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.income-suggestion-option:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+}
+
+.income-suggestion-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.income-suggestion-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.income-suggestion-price {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.income-suggestion-meta {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 1040px) {
+  .modal-body.income-modal-body {
+    overflow: auto;
+  }
+
+  .income-modal-form,
+  .income-modal-form.has-sidebar {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .income-modal-main {
+    overflow: visible;
+  }
+
+  .income-form-grid,
+  .income-form-grid-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .income-suggestion-sidebar {
+    max-height: none;
+    padding: 0.85rem 1rem 1rem;
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .income-item-suggestion-dropdown {
+    width: min(520px, 86vw);
+  }
+}
+
 .table-wrap {
   overflow: visible;
   position: relative;

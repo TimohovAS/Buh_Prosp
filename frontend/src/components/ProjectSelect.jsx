@@ -18,6 +18,7 @@ export default function ProjectSelect({
   allowEmpty = false,
   emptyLabel = UI_DASH,
   placeholder,
+  projectFilter = null,
 }) {
   const rootRef = useRef(null)
   const dropdownRef = useRef(null)
@@ -28,9 +29,14 @@ export default function ProjectSelect({
   const [liveProjects, setLiveProjects] = useState(projects)
   const [dropdownStyle, setDropdownStyle] = useState(null)
 
+  const visibleProjects = useMemo(
+    () => (projectFilter ? projects.filter(projectFilter) : projects),
+    [projectFilter, projects]
+  )
+
   useEffect(() => {
-    setLiveProjects(projects)
-  }, [projects])
+    setLiveProjects(visibleProjects)
+  }, [visibleProjects])
 
   const selectedProject = useMemo(
     () => liveProjects.find((project) => String(project.id) === String(value)) || null,
@@ -137,7 +143,7 @@ export default function ProjectSelect({
     const request = api.projects.list({ show_archived: true })
       .then((projectList) => {
         if (Array.isArray(projectList)) {
-          setLiveProjects(projectList)
+          setLiveProjects(projectFilter ? projectList.filter(projectFilter) : projectList)
         }
         return projectList
       })

@@ -414,69 +414,104 @@ async def income_item_suggestions(
     pattern = f"%{search.strip()}%" if search and search.strip() else None
     suggestions: list[IncomeItemSuggestion] = []
     seen: set[tuple[str, str, str]] = set()
+    counts = {"client": 0, "global": 0}
 
-    item_query = (
-        select(IncomeItem, Income)
-        .join(Income, IncomeItem.income_id == Income.id)
-        .options(selectinload(Income.client))
-        .order_by(Income.issued_date.desc(), IncomeItem.line_no.asc())
-        .limit(300)
-    )
-    if client_id:
-        item_query = item_query.where(Income.client_id == client_id)
-    if pattern:
-        item_query = item_query.where(IncomeItem.name.ilike(pattern))
-    item_rows = await db.execute(item_query)
-    for item, income in item_rows.fetchall():
-        if _is_legacy_full_invoice_item(item, income):
-            continue
-        key = (item.name.strip().lower(), (item.unit or "kom").lower(), str(to_decimal(item.unit_price or ZERO_DECIMAL)))
-        if key in seen:
-            continue
-        seen.add(key)
-        suggestions.append(
-            IncomeItemSuggestion(
-                source="invoice",
-                name=item.name,
-                unit=item.unit or "kom",
-                quantity=item.quantity or Decimal("1"),
-                unit_price=item.unit_price or ZERO_DECIMAL,
-                total_amount=item.total_amount or ZERO_DECIMAL,
-                tax_category="O",
-                tax_rate=ZERO_DECIMAL,
-                invoice_id=income.id,
-                invoice_number=income.invoice_number,
-                issued_date=income.issued_date,
-                client_name=income.client.name if income.client else income.client_name,
-            )
-        )
-        if len(suggestions) >= limit:
-            return suggestions
+    def key_for(name: str, unit: str | None, price: Decimal | None) -> tuple[str, str, str]:
+        return (name.strip().lower(), (unit or "kom").lower(), str(to_decimal(price or ZERO_DECIMAL)))
 
-    contract_query = select(ContractItem, Contract).join(Contract, ContractItem.contract_id == Contract.id).order_by(Contract.date.desc(), ContractItem.sort_order.asc()).limit(300)
-    if client_id:
-        contract_query = contract_query.where(Contract.client_id == client_id)
-    if pattern:
-        contract_query = contract_query.where(ContractItem.description.ilike(pattern))
-    contract_rows = await db.execute(contract_query)
-    for item, contract in contract_rows.fetchall():
-        key = (item.description.strip().lower(), (item.unit or "kom").lower(), str(to_decimal(item.price or ZERO_DECIMAL)))
+    def append_suggestion(suggestion: IncomeItemSuggestion) -> bool:
+        scope = suggestion.match_scope if suggestion.match_scope in counts else "global"
+        if counts[scope] >= limit:
+            return False
+        key = key_for(suggestion.name, suggestion.unit, suggestion.unit_price)
         if key in seen:
-            continue
+            return False
         seen.add(key)
-        suggestions.append(
-            IncomeItemSuggestion(
-                source="contract",
-                name=item.description,
-                unit=item.unit or "kom",
-                quantity=to_decimal(item.quantity or 1),
-                unit_price=item.price or ZERO_DECIMAL,
-                total_amount=item.amount or ZERO_DECIMAL,
-                client_name=None,
-            )
+        counts[scope] += 1
+        suggestions.append(suggestion)
+        return True
+
+    async def add_invoice_suggestions(scope: str, only_client_id: Optional[int] = None, exclude_client_id: Optional[int] = None) -> None:
+        item_query = (
+            select(IncomeItem, Income)
+            .join(Income, IncomeItem.income_id == Income.id)
+            .options(selectinload(Income.client), selectinload(Income.project))
+            .order_by(Income.issued_date.desc(), IncomeItem.line_no.asc())
+            .limit(500)
         )
-        if len(suggestions) >= limit:
-            break
+        if only_client_id:
+            item_query = item_query.where(Income.client_id == only_client_id)
+        elif exclude_client_id:
+            item_query = item_query.where(or_(Income.client_id.is_(None), Income.client_id != exclude_client_id))
+        if pattern:
+            item_query = item_query.where(IncomeItem.name.ilike(pattern))
+        item_rows = await db.execute(item_query)
+        for item, income in item_rows.fetchall():
+            if counts[scope] >= limit:
+                break
+            if _is_legacy_full_invoice_item(item, income):
+                continue
+            append_suggestion(
+                IncomeItemSuggestion(
+                    source="invoice",
+                    match_scope=scope,
+                    name=item.name,
+                    unit=item.unit or "kom",
+                    quantity=item.quantity or Decimal("1"),
+                    unit_price=item.unit_price or ZERO_DECIMAL,
+                    total_amount=item.total_amount or ZERO_DECIMAL,
+                    tax_category="O",
+                    tax_rate=ZERO_DECIMAL,
+                    invoice_id=income.id,
+                    invoice_number=income.invoice_number,
+                    issued_date=income.issued_date,
+                    client_name=income.client.name if income.client else income.client_name,
+                    project_name=income.project.name if income.project else None,
+                )
+            )
+
+    async def add_contract_suggestions(scope: str, only_client_id: Optional[int] = None, exclude_client_id: Optional[int] = None) -> None:
+        contract_query = (
+            select(ContractItem, Contract)
+            .join(Contract, ContractItem.contract_id == Contract.id)
+            .options(selectinload(Contract.client), selectinload(Contract.project))
+            .order_by(Contract.date.desc(), ContractItem.sort_order.asc())
+            .limit(500)
+        )
+        if only_client_id:
+            contract_query = contract_query.where(Contract.client_id == only_client_id)
+        elif exclude_client_id:
+            contract_query = contract_query.where(Contract.client_id != exclude_client_id)
+        if pattern:
+            contract_query = contract_query.where(ContractItem.description.ilike(pattern))
+        contract_rows = await db.execute(contract_query)
+        for item, contract in contract_rows.fetchall():
+            if counts[scope] >= limit:
+                break
+            append_suggestion(
+                IncomeItemSuggestion(
+                    source="contract",
+                    match_scope=scope,
+                    name=item.description,
+                    unit=item.unit or "kom",
+                    quantity=to_decimal(item.quantity or 1),
+                    unit_price=item.price or ZERO_DECIMAL,
+                    total_amount=item.amount or ZERO_DECIMAL,
+                    contract_id=contract.id,
+                    contract_number=contract.number,
+                    client_name=contract.client.name if contract.client else None,
+                    project_name=contract.project.name if contract.project else None,
+                )
+            )
+
+    if client_id:
+        await add_invoice_suggestions("client", only_client_id=client_id)
+        await add_contract_suggestions("client", only_client_id=client_id)
+        await add_invoice_suggestions("global", exclude_client_id=client_id)
+        await add_contract_suggestions("global", exclude_client_id=client_id)
+    else:
+        await add_invoice_suggestions("global")
+        await add_contract_suggestions("global")
     return suggestions
 
 

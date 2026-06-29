@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -19,6 +19,7 @@ import { MONTHS } from '../utils/constants'
 import { amountSearchHay } from '../utils/searchUtils'
 
 const PAYMENT_TYPE_KEYS = { advance: 'contractPaymentAdvance', intermediate: 'contractPaymentIntermediate', closing: 'contractPaymentClosing' }
+const INCOME_UNIT_OPTIONS = ['kom', 'sat', 'dan', 'm', 'm2', 'm3', 'kg', 'l', 'set', 'usl']
 const newIncomeLine = () => ({
   name: '',
   quantity: '1',
@@ -33,10 +34,23 @@ const numericValue = (value) => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+const formatMoney = (value) => numericValue(value).toLocaleString('sr-RS', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 const computeLineTotal = (line) => {
   const explicit = numericValue(line.total_amount)
   if (explicit > 0) return explicit
   return numericValue(line.quantity) * numericValue(line.unit_price)
+}
+
+const unitOptionsForLine = (unit) => {
+  const normalizedUnit = String(unit || '').trim()
+  if (!normalizedUnit || INCOME_UNIT_OPTIONS.includes(normalizedUnit)) {
+    return INCOME_UNIT_OPTIONS
+  }
+  return [normalizedUnit, ...INCOME_UNIT_OPTIONS]
 }
 
 export default function Income() {
@@ -77,7 +91,6 @@ export default function Income() {
     due_date: '',
     invoice_number: '',
     client_id: '',
-    client_name: '',
     contract_id: '',
     contract_payment_type: '',
     project_id: '',
@@ -118,7 +131,7 @@ export default function Income() {
     api.projects.list({ show_archived: true }).then(setProjects)
   }, [isActivePage])
   useEffect(() => {
-    if (!modal) return setContracts([])
+    if (!modal || !form.client_id) return setContracts([])
     const params = form.client_id ? { client_id: form.client_id } : {}
     if (modal === 'add' || !modal?.id) params.status = 'active'
     api.contracts.list(params).then(setContracts)
@@ -161,10 +174,19 @@ export default function Income() {
     const targetDay = Math.min(today.getDate(), lastDay)
     return targetYear + '-' + String(targetMonth).padStart(2, '0') + '-' + String(targetDay).padStart(2, '0')
   }
+  const closeItemSearchSuggestions = useCallback((lineIndex = null) => {
+    setActiveLineIndex((current) => {
+      if (lineIndex !== null && current !== lineIndex) return current
+      return null
+    })
+    setItemSearchSuggestions([])
+  }, [])
+
   const closeModal = () => {
     setModal(null)
     setNextInvoiceHint('')
     setSubmitError('')
+    closeItemSearchSuggestions()
   }
 
   useEffect(() => {
@@ -184,7 +206,6 @@ export default function Income() {
       due_date: '',
       invoice_number: '',
       client_id: '',
-      client_name: '',
       contract_id: '',
       contract_payment_type: '',
       project_id: unassignedProject ? String(unassignedProject.id) : '',
@@ -205,7 +226,6 @@ export default function Income() {
       due_date: item.due_date || '',
       invoice_number: item.invoice_number,
       client_id: item.client_id || '',
-      client_name: item.client_name || '',
       contract_id: item.contract_id || '',
       contract_payment_type: item.contract_payment_type || '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
@@ -255,7 +275,6 @@ export default function Income() {
         invoice_number: modal === 'add' ? invoiceValue : (invoiceValue || undefined),
         invoice_year: new Date(form.date).getFullYear(),
         client_id: toInt(form.client_id),
-        client_name: form.client_name || null,
         contract_id: toInt(form.contract_id),
         contract_payment_type: form.contract_payment_type || null,
         project_id: toInt(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
@@ -469,6 +488,18 @@ export default function Income() {
   const exportPdf = () => api.reports.downloadPdf(year, month || undefined).catch((error) => console.error(error))
 
   const unassignedProject = findUnassignedProject(projects)
+  const unassignedProjectId = unassignedProject ? String(unassignedProject.id) : ''
+  const selectedClientId = form.client_id ? String(form.client_id) : ''
+  const incomeProjectFilter = useCallback((project) => {
+    if (!project) return false
+    if (unassignedProjectId && String(project.id) === unassignedProjectId) return true
+    if (!selectedClientId) return false
+    return String(project.client_id || '') === selectedClientId
+  }, [selectedClientId, unassignedProjectId])
+  const incomeProjects = useMemo(
+    () => projects.filter(incomeProjectFilter),
+    [incomeProjectFilter, projects]
+  )
   const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
   const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
@@ -489,6 +520,26 @@ export default function Income() {
     })
     updateProjectBase(projectId)
   }
+
+  useEffect(() => {
+    if (!modal) return
+    const currentProjectId = form.project_id == null ? '' : String(form.project_id)
+    if (!currentProjectId) return
+    const projectAllowed = incomeProjects.some((project) => String(project.id) === currentProjectId)
+    if (projectAllowed) return
+    setForm((previous) => {
+      const previousProjectId = previous.project_id == null ? '' : String(previous.project_id)
+      if (!previousProjectId || incomeProjects.some((project) => String(project.id) === previousProjectId)) {
+        return previous
+      }
+      return {
+        ...previous,
+        project_id: unassignedProjectId,
+        contract_id: '',
+        contract_payment_type: '',
+      }
+    })
+  }, [form.project_id, incomeProjects, modal, unassignedProjectId])
 
   const updateContract = (contractId) => {
     setForm((previous) => ({
@@ -558,6 +609,56 @@ export default function Income() {
       return { ...previous, items: [...lines, line] }
     })
   }
+
+  const groupedSuggestions = (suggestionsList) => [
+    { key: 'client', items: (suggestionsList || []).filter((suggestion) => suggestion.match_scope === 'client') },
+    { key: 'global', items: (suggestionsList || []).filter((suggestion) => suggestion.match_scope !== 'client') },
+  ].filter((group) => group.items.length > 0)
+
+  const suggestionGroupLabel = (scope) => (
+    scope === 'client' ? tr('suggestionsThisClient') : tr('suggestionsAllClients')
+  )
+
+  const suggestionMeta = (suggestion) => (
+    [
+      suggestion.client_name,
+      suggestion.project_name,
+      suggestion.invoice_number ? `${tr('invoiceNumber')} ${suggestion.invoice_number}` : null,
+      suggestion.contract_number ? `${tr('contract')} ${suggestion.contract_number}` : null,
+      suggestion.issued_date,
+    ].filter(Boolean).join(' · ')
+  )
+
+  const renderSuggestionGroups = (suggestionsList, onSelect, options = {}) => (
+    groupedSuggestions(suggestionsList).map((group) => (
+      <div key={group.key} className="income-suggestion-group">
+        <div className="income-suggestion-group-title">
+          {suggestionGroupLabel(group.key)}
+        </div>
+        <div className={options.dropdown ? 'income-suggestion-options' : 'income-sidebar-suggestion-list'}>
+          {group.items.map((suggestion, suggestionIndex) => {
+            const meta = suggestionMeta(suggestion)
+            return (
+              <button
+                key={`${group.key}-${suggestion.source}-${suggestion.invoice_id || suggestion.contract_id || suggestionIndex}-${suggestion.name}-${suggestionIndex}`}
+                type="button"
+                className="income-suggestion-option"
+                onMouseDown={options.dropdown ? (event) => event.preventDefault() : undefined}
+                onClick={() => onSelect(suggestion)}
+                title={meta}
+              >
+                <span className="income-suggestion-main">
+                  <span className="income-suggestion-name">{suggestion.name}</span>
+                  <span className="income-suggestion-price">{Number(suggestion.unit_price || 0).toLocaleString('sr-RS')} RSD</span>
+                </span>
+                {meta ? <span className="income-suggestion-meta">{meta}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    ))
+  )
 
   const invoiceLineTotal = useMemo(() => (
     (form.items || []).reduce((sum, line) => sum + computeLineTotal(line), 0)
@@ -791,6 +892,7 @@ export default function Income() {
                   <table>
                     <thead>
                       <tr>
+                        <th style={{ width: 42 }}>#</th>
                         <th>{tr('name')}</th>
                         <th style={{ textAlign: 'right' }}>{tr('quantity')}</th>
                         <th>{tr('unit')}</th>
@@ -799,8 +901,9 @@ export default function Income() {
                       </tr>
                     </thead>
                     <tbody>
-                      {detailModal.items.map((line) => (
+                      {detailModal.items.map((line, index) => (
                         <tr key={line.id || line.line_no}>
+                          <td>{line.line_no || index + 1}</td>
                           <td>{line.name}</td>
                           <td style={{ textAlign: 'right' }}>{Number(line.quantity || 0).toLocaleString('sr-RS')}</td>
                           <td>{line.unit || 'kom'}</td>
@@ -958,20 +1061,34 @@ export default function Income() {
         isOpen={!!modal}
         onClose={closeModal}
         title={modal === 'add' ? tr('add') : tr('edit')}
-        maxWidth="1040px"
-        closeOnOverlay
+        maxWidth="1280px"
+        style={{ width: 'min(1280px, 96vw)', height: 'min(920px, 96vh)' }}
+        bodyClassName="income-modal-body"
       >
         {modal ? (
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">{tr('date')}</label>
-                <DatePicker
-                  value={form.date}
-                  onChange={(value) => setForm({ ...form, date: value })}
-                  required
-                />
+            <form
+              className={`income-modal-form ${itemSuggestions.length > 0 ? 'has-sidebar' : ''}`.trim()}
+              onSubmit={handleSubmit}
+            >
+              <div className="income-modal-main">
+              <div className="income-form-grid income-form-grid-dates">
+                <div className="form-group">
+                  <label className="form-label">{tr('date')}</label>
+                  <DatePicker
+                    value={form.date}
+                    onChange={(value) => setForm({ ...form, date: value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('valuta')}</label>
+                  <DatePicker
+                    value={form.due_date}
+                    onChange={(value) => setForm({ ...form, due_date: value })}
+                  />
+                </div>
               </div>
-              <div className="form-group">
+              <div className="form-group form-group-compact">
                 <label className="form-label">{tr('invoiceNumber')}</label>
                 {modal === 'add' && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
@@ -992,30 +1109,26 @@ export default function Income() {
                   </div>
                 )}
               </div>
-              <div className="form-group">
-                <label className="form-label">{tr('valuta')}</label>
-                <DatePicker
-                  value={form.due_date}
-                  onChange={(value) => setForm({ ...form, due_date: value })}
-                />
+              <div className="income-form-grid">
+                <div className="form-group">
+                  <label className="form-label">{tr('client')}</label>
+                  <select
+                    className="form-input"
+                    value={form.client_id}
+                    onChange={(event) => {
+                      const id = event.target.value ? parseInt(event.target.value, 10) : ''
+                      setForm({ ...form, client_id: id, contract_id: '', contract_payment_type: '' })
+                    }}
+                    required
+                  >
+                    <option value="">{`${UI_DASH} ${tr('selectClient')} ${UI_DASH}`}</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">{tr('client')}</label>
-                <select
-                  className="form-input"
-                  value={form.client_id}
-                  onChange={(event) => {
-                    const id = event.target.value ? parseInt(event.target.value, 10) : ''
-                    const client = clients.find((item) => item.id === id)
-                    setForm({ ...form, client_id: id, client_name: client ? client.name : '', contract_id: '', contract_payment_type: '' })
-                  }}
-                >
-                  <option value="">{`${UI_DASH} ${tr('incomeManual')} ${UI_DASH}`}</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
-                  ))}
-                </select>
-              </div>
+              <div className="income-form-grid">
               {contracts.length > 0 && (
                 <div className="form-group">
                   <label className="form-label">{tr('contracts')}</label>
@@ -1031,14 +1144,16 @@ export default function Income() {
                   </select>
                 </div>
               )}
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={form.project_id}
-                  onChange={updateProject}
-                  required
-                />
+                <div className="form-group">
+                  <label className="form-label">{tr('project')}</label>
+                  <ProjectSelect
+                    projects={incomeProjects}
+                    value={form.project_id}
+                    onChange={updateProject}
+                    required
+                    projectFilter={incomeProjectFilter}
+                  />
+                </div>
               </div>
               {form.contract_id && (
                 <div className="form-group">
@@ -1053,17 +1168,6 @@ export default function Income() {
                     <option value="intermediate">{tr('contractPaymentIntermediate')}</option>
                     <option value="closing">{tr('contractPaymentClosing')}</option>
                   </select>
-                </div>
-              )}
-              {!form.client_id && (
-                <div className="form-group">
-                  <label className="form-label">{tr('incomeClientName')}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={form.client_name}
-                    onChange={(event) => setForm({ ...form, client_name: event.target.value })}
-                  />
                 </div>
               )}
               <div className="form-group">
@@ -1087,6 +1191,7 @@ export default function Income() {
                   <table>
                     <thead>
                       <tr>
+                        <th style={{ width: 42 }}>#</th>
                         <th>{tr('name')}</th>
                         <th style={{ width: 95 }}>{tr('quantity')}</th>
                         <th style={{ width: 80 }}>{tr('unit')}</th>
@@ -1098,33 +1203,39 @@ export default function Income() {
                     <tbody>
                       {(form.items || []).length ? (form.items || []).map((line, index) => (
                         <tr key={index}>
+                          <td className="income-line-number">{index + 1}</td>
                           <td>
-                            <input
+                            <div
+                              className="income-item-name-field"
+                              onBlur={(event) => {
+                                if (event.currentTarget.contains(event.relatedTarget)) return
+                                closeItemSearchSuggestions(index)
+                              }}
+                            >
+                              <input
                               type="text"
                               className="form-input"
                               value={line.name}
                               onFocus={() => setActiveLineIndex(index)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  closeItemSearchSuggestions(index)
+                                }
+                              }}
                               onChange={(event) => updateIncomeLine(index, { name: event.target.value })}
                               placeholder={tr('invoiceItemName')}
                             />
                             {activeLineIndex === index && itemSearchSuggestions.length > 0 ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem' }}>
-                                {itemSearchSuggestions.map((suggestion, suggestionIndex) => (
-                                  <button
-                                    key={`${suggestion.source}-${suggestion.invoice_id || suggestionIndex}-${suggestion.name}-${suggestionIndex}`}
-                                    type="button"
-                                    className="btn btn-sm btn-secondary"
-                                    style={{ justifyContent: 'space-between', textAlign: 'left', width: '100%' }}
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => applySuggestedLine(index, suggestion)}
-                                    title={[suggestion.invoice_number, suggestion.issued_date].filter(Boolean).join(' / ')}
-                                  >
-                                    <span>{suggestion.name}</span>
-                                    <span>{Number(suggestion.unit_price || 0).toLocaleString('sr-RS')} RSD</span>
-                                  </button>
-                                ))}
+                              <div className="income-item-suggestion-dropdown">
+                                {renderSuggestionGroups(
+                                  itemSearchSuggestions,
+                                  (suggestion) => applySuggestedLine(index, suggestion),
+                                  { dropdown: true },
+                                )}
                               </div>
                             ) : null}
+                            </div>
                           </td>
                           <td>
                             <input
@@ -1136,12 +1247,15 @@ export default function Income() {
                             />
                           </td>
                           <td>
-                            <input
-                              type="text"
+                            <select
                               className="form-input"
                               value={line.unit}
                               onChange={(event) => updateIncomeLine(index, { unit: event.target.value })}
-                            />
+                            >
+                              {unitOptionsForLine(line.unit).map((unit) => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
                           </td>
                           <td>
                             <input
@@ -1153,13 +1267,9 @@ export default function Income() {
                             />
                           </td>
                           <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className="form-input"
-                              value={line.total_amount}
-                              onChange={(event) => updateIncomeLine(index, { total_amount: event.target.value })}
-                            />
+                            <div className="income-calculated-field income-line-total">
+                              {formatMoney(computeLineTotal(line))}
+                            </div>
                           </td>
                           <td>
                             <button type="button" className="btn btn-sm btn-danger" onClick={() => removeIncomeLine(index)}>
@@ -1169,49 +1279,23 @@ export default function Income() {
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('invoiceNoItems')}</td>
+                          <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('invoiceNoItems')}</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
-                {itemSuggestions.length > 0 ? (
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
-                      {tr('previousInvoiceItems')}
+                <div className="income-invoice-total-row">
+                  <div className="income-invoice-total-label">{tr('amount')}</div>
+                  <div>
+                    <div className="income-calculated-field income-invoice-total">
+                      {formatMoney(invoiceLineTotal || form.amount_rsd)} RSD
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      {itemSuggestions.map((suggestion, index) => (
-                        <button
-                          key={`${suggestion.source}-${suggestion.invoice_id || index}-${suggestion.name}-${index}`}
-                          type="button"
-                          className="btn btn-sm btn-secondary"
-                          onClick={() => useSuggestedLine(suggestion)}
-                          title={[suggestion.invoice_number, suggestion.issued_date].filter(Boolean).join(' / ')}
-                        >
-                          {suggestion.name} · {Number(suggestion.unit_price || 0).toLocaleString('sr-RS')} RSD
-                        </button>
-                      ))}
+                    <div className="income-invoice-total-hint">
+                      {tr('amountFromInvoiceItems')}
                     </div>
                   </div>
-                ) : null}
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('amount')}</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="form-input"
-                  value={invoiceLineTotal > 0 ? invoiceLineTotal.toFixed(2) : form.amount_rsd}
-                  onChange={(event) => setForm({ ...form, amount_rsd: event.target.value })}
-                  readOnly={invoiceLineTotal > 0}
-                  required
-                />
-                {invoiceLineTotal > 0 ? (
-                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                    {tr('amountFromInvoiceItems')}
-                  </div>
-                ) : null}
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('note')}</label>
@@ -1235,6 +1319,15 @@ export default function Income() {
                   {tr('save')}
                 </button>
               </div>
+                </div>
+                {itemSuggestions.length > 0 ? (
+                  <aside className="income-suggestion-sidebar">
+                    <div className="income-suggestion-sidebar-title">
+                      {tr('previousInvoiceItems')}
+                    </div>
+                    {renderSuggestionGroups(itemSuggestions, useSuggestedLine)}
+                  </aside>
+                ) : null}
             </form>
         ) : null}
       </Modal>
