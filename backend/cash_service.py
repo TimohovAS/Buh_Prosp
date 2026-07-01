@@ -239,6 +239,108 @@ def _pending_entry_matches_transaction(
     return transaction.date <= entry.date + timedelta(days=max_days)
 
 
+def _pending_entry_matches_matched_cash_expense_transaction(
+    entry: CashEntry,
+    transaction: BankTransaction,
+    max_days: int,
+) -> bool:
+    if entry.entry_type != "pending_withdrawal" or entry.direction != "in":
+        return False
+    if entry.bank_transaction_id or entry.expense_id:
+        return False
+    if transaction.direction != "out" or transaction.status != "matched" or transaction.matched_type != "expense":
+        return False
+    if not _looks_like_cash_withdrawal_transaction(transaction):
+        return False
+    if (entry.currency or "RSD") != (transaction.currency or "RSD"):
+        return False
+    if not money_eq(entry.amount or ZERO_DECIMAL, money_abs(transaction.amount or ZERO_DECIMAL)):
+        return False
+    if transaction.date < entry.date:
+        return False
+    return transaction.date <= entry.date + timedelta(days=max_days)
+
+
+async def _get_linkable_matched_cash_expense(
+    db: AsyncSession,
+    transaction: BankTransaction,
+) -> Expense | None:
+    if transaction.status != "matched" or transaction.matched_type != "expense" or not transaction.matched_id:
+        return None
+    if await get_cash_entry_by_bank_transaction(db, transaction.id):
+        return None
+
+    result = await db.execute(select(Expense).where(Expense.id == transaction.matched_id))
+    expense = result.scalar_one_or_none()
+    if not expense:
+        return None
+    if await get_cash_entry_by_expense(db, expense.id):
+        return None
+    if getattr(expense, "source", None) not in {"bank_import", CASH_TRANSFER_SOURCE}:
+        return None
+
+    cash_project_id = await get_or_create_cash_project_id(db)
+    if (
+        getattr(expense, "source", None) != CASH_TRANSFER_SOURCE
+        and getattr(expense, "category", None) != CASH_CATEGORY
+        and getattr(expense, "project_id", None) != cash_project_id
+        and getattr(transaction, "project_id", None) != cash_project_id
+    ):
+        return None
+    return expense
+
+
+async def _link_pending_entry_to_matched_cash_expense(
+    db: AsyncSession,
+    transaction: BankTransaction,
+    pending_entry: CashEntry,
+    expense: Expense,
+    *,
+    note: str | None,
+) -> CashEntry:
+    transfer_amount = money_abs(transaction.amount or ZERO_DECIMAL)
+    if not money_eq(transfer_amount, pending_entry.amount or ZERO_DECIMAL):
+        raise ValueError("Bank transaction amount must match the pending cash withdrawal")
+    if (transaction.currency or "RSD") != (pending_entry.currency or "RSD"):
+        raise ValueError("Bank transaction currency must match the pending cash withdrawal")
+
+    cash_project_id = await get_or_create_cash_project_id(db)
+    resolved_description = build_cash_transfer_description(transaction, pending_entry.description)
+    resolved_note = note if note is not None else pending_entry.note
+
+    expense.date = transaction.date
+    expense.description = resolved_description
+    expense.amount = transfer_amount
+    expense.currency = transaction.currency or "RSD"
+    expense.category = CASH_CATEGORY
+    expense.category_id = None
+    expense.contract_id = None
+    expense.bank_reference = transaction.bank_reference
+    expense.paid_date = transaction.date
+    expense.status = "paid"
+    expense.is_tax_related = False
+    expense.source = CASH_TRANSFER_SOURCE
+    expense.note = resolved_note
+    expense.project_id = cash_project_id
+
+    pending_entry.entry_type = "withdrawal"
+    pending_entry.direction = "in"
+    pending_entry.amount = transfer_amount
+    pending_entry.currency = transaction.currency or "RSD"
+    pending_entry.description = resolved_description
+    pending_entry.note = resolved_note
+    pending_entry.bank_transaction_id = transaction.id
+    pending_entry.expense_id = expense.id
+
+    transaction.status = "matched"
+    transaction.matched_type = "expense"
+    transaction.matched_id = expense.id
+    transaction.project_id = cash_project_id
+
+    await db.flush()
+    return pending_entry
+
+
 async def auto_link_pending_cash_withdrawals(
     db: AsyncSession,
     *,
@@ -284,8 +386,6 @@ async def auto_link_pending_cash_withdrawals(
         for transaction in transactions_result.scalars().all()
         if _looks_like_cash_withdrawal_transaction(transaction)
     ]
-    if not transactions:
-        return 0
 
     linked_count = 0
     used_pending_ids: set[int] = set()
@@ -308,6 +408,60 @@ async def auto_link_pending_cash_withdrawals(
                 description=build_cash_transfer_description(transaction),
                 note=entry.note,
                 created_by=created_by,
+            )
+        except ValueError:
+            continue
+        used_pending_ids.add(int(entry.id))
+        linked_count += 1
+
+    remaining_pending_entries = [
+        entry
+        for entry in pending_entries
+        if int(entry.id) not in used_pending_ids
+    ]
+    if not remaining_pending_entries:
+        return linked_count
+
+    matched_transactions_result = await db.execute(
+        select(BankTransaction)
+        .where(
+            BankTransaction.direction == "out",
+            BankTransaction.status == "matched",
+            BankTransaction.matched_type == "expense",
+            BankTransaction.matched_id.is_not(None),
+            BankTransaction.date >= first_pending_date,
+            BankTransaction.date <= last_pending_date + timedelta(days=max_days),
+            currency_filter,
+            func.abs(BankTransaction.amount).in_(pending_amounts),
+        )
+        .order_by(BankTransaction.date.asc(), BankTransaction.id.asc())
+    )
+    matched_transactions = [
+        transaction
+        for transaction in matched_transactions_result.scalars().all()
+        if _looks_like_cash_withdrawal_transaction(transaction)
+    ]
+    for transaction in matched_transactions:
+        expense = await _get_linkable_matched_cash_expense(db, transaction)
+        if not expense:
+            continue
+        candidates = [
+            entry
+            for entry in remaining_pending_entries
+            if int(entry.id) not in used_pending_ids
+            and _pending_entry_matches_matched_cash_expense_transaction(entry, transaction, max_days)
+        ]
+        if not candidates:
+            continue
+        entry = sorted(candidates, key=lambda item: (item.date, item.id or 0))[0]
+
+        try:
+            await _link_pending_entry_to_matched_cash_expense(
+                db,
+                transaction,
+                entry,
+                expense,
+                note=entry.note,
             )
         except ValueError:
             continue
