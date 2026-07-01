@@ -5,6 +5,7 @@ from decimal import Decimal
 from backend.cash_service import (
     _pending_entry_matches_manual_cash_transfer,
     _pending_entry_matches_matched_cash_expense_transaction,
+    _select_unambiguous_pending_withdrawal,
 )
 from backend.models import BankTransaction, CashEntry
 
@@ -94,6 +95,41 @@ class CashServiceTest(unittest.TestCase):
         )
 
         self.assertFalse(_pending_entry_matches_manual_cash_transfer(entry, transaction, 14))
+
+    def test_ambiguous_pending_withdrawal_candidates_are_not_auto_selected(self):
+        first = CashEntry(
+            id=1,
+            date=date(2026, 6, 26),
+            direction="in",
+            amount=Decimal("70000"),
+            currency="RSD",
+            description="Temporary cash withdrawal",
+            entry_type="pending_withdrawal",
+        )
+        second = CashEntry(
+            id=2,
+            date=date(2026, 6, 30),
+            direction="in",
+            amount=Decimal("70000"),
+            currency="RSD",
+            description="Temporary cash withdrawal",
+            entry_type="pending_withdrawal",
+        )
+
+        self.assertIsNone(_select_unambiguous_pending_withdrawal([first, second]))
+
+    def test_single_pending_withdrawal_candidate_is_auto_selected(self):
+        entry = CashEntry(
+            id=1,
+            date=date(2026, 6, 26),
+            direction="in",
+            amount=Decimal("70000"),
+            currency="RSD",
+            description="Temporary cash withdrawal",
+            entry_type="pending_withdrawal",
+        )
+
+        self.assertIs(_select_unambiguous_pending_withdrawal([entry]), entry)
 
 
 if __name__ == "__main__":

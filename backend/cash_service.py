@@ -94,6 +94,12 @@ def _pending_entry_matches_manual_cash_transfer(
     return transaction.date <= entry.date + timedelta(days=max_days)
 
 
+def _select_unambiguous_pending_withdrawal(candidates: list[CashEntry]) -> CashEntry | None:
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
+
+
 async def _find_pending_withdrawal_for_manual_cash_transfer(
     db: AsyncSession,
     transaction: BankTransaction,
@@ -123,7 +129,7 @@ async def _find_pending_withdrawal_for_manual_cash_transfer(
         for entry in result.scalars().all()
         if _pending_entry_matches_manual_cash_transfer(entry, transaction, max_days)
     ]
-    return candidates[0] if candidates else None
+    return _select_unambiguous_pending_withdrawal(candidates)
 
 
 async def create_cash_transfer_from_transaction(
@@ -461,9 +467,9 @@ async def auto_link_pending_cash_withdrawals(
             if int(entry.id) not in used_pending_ids
             and _pending_entry_matches_transaction(entry, transaction, max_days)
         ]
-        if not candidates:
+        entry = _select_unambiguous_pending_withdrawal(candidates)
+        if not entry:
             continue
-        entry = sorted(candidates, key=lambda item: (item.date, item.id or 0))[0]
 
         try:
             await create_cash_transfer_from_pending_entry(
@@ -516,9 +522,9 @@ async def auto_link_pending_cash_withdrawals(
             if int(entry.id) not in used_pending_ids
             and _pending_entry_matches_matched_cash_expense_transaction(entry, transaction, max_days)
         ]
-        if not candidates:
+        entry = _select_unambiguous_pending_withdrawal(candidates)
+        if not entry:
             continue
-        entry = sorted(candidates, key=lambda item: (item.date, item.id or 0))[0]
 
         try:
             await _link_pending_entry_to_matched_cash_expense(
