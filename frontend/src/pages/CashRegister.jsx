@@ -21,6 +21,15 @@ function buildBankLabel(item) {
   return parts.join(` ${UI_DASH} `) || UI_DASH
 }
 
+function escapeExcelHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function isSalaryCategory(category) {
   const sr = String(category?.name_sr || '').trim().toLowerCase()
   const ru = String(category?.name_ru || '').trim().toLowerCase()
@@ -518,6 +527,66 @@ export default function CashRegister() {
     }
   }
 
+  const handleExportExcel = () => {
+    if (filteredEntries.length === 0) return
+
+    const columns = [
+      { label: tr('date'), type: 'text', value: (entry) => entry.date || '' },
+      { label: tr('cashEntryType'), type: 'text', value: getEntryTypeLabel },
+      { label: tr('description'), type: 'text', value: (entry) => getDisplayDescription(entry) || '' },
+      { label: tr('note'), type: 'text', value: (entry) => entry.note || '' },
+      { label: tr('cashSource'), type: 'text', value: getEntrySourceLabel },
+      { label: tr('project'), type: 'text', value: (entry) => getProjectName(entry.project_id) || '' },
+      { label: tr('cashflowInflow'), type: 'number', value: (entry) => entry.direction === 'in' ? Number(entry.amount || 0) : 0 },
+      { label: tr('cashflowOutflow'), type: 'number', value: (entry) => entry.direction === 'out' ? Number(entry.amount || 0) : 0 },
+      { label: tr('cashBalanceAfter'), type: 'number', value: (entry) => Number(entry.balance_after || 0) },
+      { label: tr('valuta'), type: 'text', value: (entry) => entry.currency || 'RSD' },
+    ]
+
+    const header = columns
+      .map((column) => `<th>${escapeExcelHtml(column.label)}</th>`)
+      .join('')
+    const body = filteredEntries
+      .map((entry) => {
+        const cells = columns.map((column) => {
+          const value = column.value(entry)
+          if (column.type === 'number') return `<td class="number">${Number(value || 0)}</td>`
+          return `<td class="text">${escapeExcelHtml(value || UI_DASH)}</td>`
+        })
+        return `<tr>${cells.join('')}</tr>`
+      })
+      .join('')
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #d9d9d9; padding: 6px; }
+    th { font-weight: 700; background: #eef2f7; }
+    td.text { mso-number-format: "\\@"; }
+    td.number { mso-number-format: "0.00"; }
+  </style>
+</head>
+<body>
+  <table>
+    <thead><tr>${header}</tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+</body>
+</html>`
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.href = url
+    link.download = `cash_register_${new Date().toISOString().slice(0, 10)}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const openExpenseCreate = () => {
     setExpenseForm({
       date: todayIso(),
@@ -995,7 +1064,9 @@ export default function CashRegister() {
             onChange={setSearch}
             style={{ width: 220 }}
           />
-          <button className="btn btn-secondary" onClick={() => setBankModalOpen(true)}>{tr('cashAddFromBank')}</button>
+          <button className="btn btn-secondary" onClick={handleExportExcel} disabled={loading || filteredEntries.length === 0}>
+            {tr('bankTxExportSelectedExcel')} ({filteredEntries.length})
+          </button>
           <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>{tr('cashAddPendingWithdrawal')}</button>
           <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
           <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>{tr('workerPayoutCreateTitle')}</button>
