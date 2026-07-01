@@ -74,6 +74,58 @@ async def get_cash_entry_by_expense(db: AsyncSession, expense_id: int) -> CashEn
     return result.scalar_one_or_none()
 
 
+def _pending_entry_matches_manual_cash_transfer(
+    entry: CashEntry,
+    transaction: BankTransaction,
+    max_days: int = AUTO_LINK_PENDING_WITHDRAWAL_DAYS,
+) -> bool:
+    if entry.entry_type != "pending_withdrawal" or entry.direction != "in":
+        return False
+    if entry.bank_transaction_id or entry.expense_id:
+        return False
+    if transaction.direction != "out" or transaction.status not in {"unmatched", "ignored"}:
+        return False
+    if (entry.currency or "RSD") != (transaction.currency or "RSD"):
+        return False
+    if not money_eq(entry.amount or ZERO_DECIMAL, money_abs(transaction.amount or ZERO_DECIMAL)):
+        return False
+    if transaction.date < entry.date:
+        return False
+    return transaction.date <= entry.date + timedelta(days=max_days)
+
+
+async def _find_pending_withdrawal_for_manual_cash_transfer(
+    db: AsyncSession,
+    transaction: BankTransaction,
+    max_days: int = AUTO_LINK_PENDING_WITHDRAWAL_DAYS,
+) -> CashEntry | None:
+    currency = transaction.currency or "RSD"
+    currency_filter = CashEntry.currency == currency
+    if currency == "RSD":
+        currency_filter = or_(currency_filter, CashEntry.currency.is_(None))
+
+    result = await db.execute(
+        select(CashEntry)
+        .where(
+            CashEntry.entry_type == "pending_withdrawal",
+            CashEntry.direction == "in",
+            CashEntry.bank_transaction_id.is_(None),
+            CashEntry.expense_id.is_(None),
+            CashEntry.date >= transaction.date - timedelta(days=max_days),
+            CashEntry.date <= transaction.date,
+            CashEntry.amount == money_abs(transaction.amount or ZERO_DECIMAL),
+            currency_filter,
+        )
+        .order_by(CashEntry.date.desc(), CashEntry.id.asc())
+    )
+    candidates = [
+        entry
+        for entry in result.scalars().all()
+        if _pending_entry_matches_manual_cash_transfer(entry, transaction, max_days)
+    ]
+    return candidates[0] if candidates else None
+
+
 async def create_cash_transfer_from_transaction(
     db: AsyncSession,
     transaction: BankTransaction,
@@ -95,6 +147,8 @@ async def create_cash_transfer_from_transaction(
 
     cash_project_id = await get_or_create_cash_project_id(db)
     transfer_amount = money_abs(transaction.amount or ZERO_DECIMAL)
+    pending_entry = await _find_pending_withdrawal_for_manual_cash_transfer(db, transaction)
+    resolved_note = note if note is not None else getattr(pending_entry, "note", None)
 
     expense = Expense(
         date=transaction.date,
@@ -106,7 +160,7 @@ async def create_cash_transfer_from_transaction(
         contract_id=None,
         bank_reference=transaction.bank_reference,
         source=CASH_TRANSFER_SOURCE,
-        note=note,
+        note=resolved_note,
         project_id=cash_project_id,
         created_by=created_by,
     )
@@ -114,19 +168,30 @@ async def create_cash_transfer_from_transaction(
     db.add(expense)
     await db.flush()
 
-    entry = CashEntry(
-        date=transaction.date,
-        direction="in",
-        amount=transfer_amount,
-        currency=transaction.currency or "RSD",
-        description=expense.description,
-        entry_type="withdrawal",
-        note=note,
-        bank_transaction_id=transaction.id,
-        expense_id=expense.id,
-        created_by=created_by,
-    )
-    db.add(entry)
+    if pending_entry:
+        entry = pending_entry
+        entry.direction = "in"
+        entry.amount = transfer_amount
+        entry.currency = transaction.currency or "RSD"
+        entry.description = expense.description
+        entry.entry_type = "withdrawal"
+        entry.note = resolved_note
+        entry.bank_transaction_id = transaction.id
+        entry.expense_id = expense.id
+    else:
+        entry = CashEntry(
+            date=transaction.date,
+            direction="in",
+            amount=transfer_amount,
+            currency=transaction.currency or "RSD",
+            description=expense.description,
+            entry_type="withdrawal",
+            note=resolved_note,
+            bank_transaction_id=transaction.id,
+            expense_id=expense.id,
+            created_by=created_by,
+        )
+        db.add(entry)
     await db.flush()
 
     transaction.status = "matched"
