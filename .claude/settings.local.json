@@ -8,7 +8,13 @@
       "Bash(venv/Scripts/python.exe -m pytest backend/ --co -q)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python -m compileall -q backend)",
+      "Bash(echo \"COMPILE_OK=$?\")",
+      "Bash(python -c \"from backend.main import app; from sqlalchemy.orm import configure_mappers; configure_mappers\\(\\); print\\('APP+MAPPERS OK'\\); print\\('worker routes:', [r.path for r in app.routes if '/workers' in getattr\\(r,'path',''\\)]\\)\")",
+      "Bash(venv/Scripts/python.exe -c \"from backend.main import app; from sqlalchemy.orm import configure_mappers; configure_mappers\\(\\); print\\('APP+MAPPERS OK'\\); print\\('worker routes:', sorted\\(set\\(r.path for r in app.routes if '/workers' in getattr\\(r,'path',''\\)\\)\\)\\)\")",
+      "Bash(venv/Scripts/python.exe backend/scripts/migrate_v22_workers.py --dry-run)",
+      "Bash(npm run *)"
     ]
   }
 }

@@ -1,463 +1,282 @@
-# Handoff Context — Buh_Prosp
+# Handoff Context - Buh_Prosp
 
-Дата подготовки: 2026-06-03  
-Текущая ветка: `main`  
-Последний известный коммит: `0a7519f Add receipt search and sorting`
+Дата обновления: 2026-07-02
+Текущая ветка: `main`
+Последний известный коммит: `18d6abc Warn on non-production hosts`
 Рабочая папка: `D:\Work\Programming\Buh_Prosp`
 
-Этот файл нужен, чтобы проверить контекст, при необходимости отредактировать его и начать следующую ветку без потери решений и договорённостей.
+Этот файл нужен, чтобы быстро продолжить работу без потери договоренностей, технических ограничений и текущего состояния.
 
-## 1. Жёсткие правила проекта
+## 1. Жесткие правила проекта
 
-- Все изменения схемы БД делаются только вручную через отдельные скрипты в `manual_migrations`.
-- Нельзя добавлять автоматические миграции в runtime-приложение и множить legacy-код в роутерах/сервисах.
+- Все изменения схемы БД делать только отдельными ручными скриптами в `manual_migrations`.
+- Не добавлять автоматические runtime-миграции в startup приложения.
 - Боевой сервер: `192.168.10.20`.
-- Боевая БД находится на сервере в `D:\Program\ProspEl\prospel.db`.
-- Скрипт обновления `!update_prod.cmd` делает backup, pull, install/build/restart, но не запускает миграции БД.
-- Перед ручной миграцией на сервере должен быть backup. В update script backup уже создаётся, но для one-shot migration лучше иметь отдельный backup от самого скрипта.
-- В git не трогать чужие незакоммиченные изменения без проверки diff.
+- Боевая БД на сервере: `D:\Program\ProspEl\prospel.db`.
+- `!update_prod.cmd` делает backup, pull, install/build/restart, но не запускает ручные миграции БД.
+- Перед ручной миграцией на сервере должен быть backup.
+- Не трогать чужие незакоммиченные изменения без проверки diff.
+- Локальный `.claude/settings.local.json` часто бывает изменен и не должен попадать в коммиты.
 - Если появляется `.git\index.lock`, сначала проверить, что нет активного git-процесса, потом можно удалить stale lock.
+- Для UI-лейблов не хранить текст как бизнес-данные: backend хранит код/тип, frontend переводит.
 
-## 2. Как продолжать из новой ветки
+## 2. Текущее состояние рабочего дерева
 
-Рекомендуемый старт:
-
-```powershell
-git switch main
-git pull origin main
-git switch -c codex/<short-task-name>
-```
-
-Для сервера после перехода на `main`:
-
-```powershell
-git fetch origin
-git switch main
-git pull origin main
-.\!update_prod.cmd
-```
-
-Если нужна миграция БД, её запускать отдельно из `manual_migrations`.
-
-## 3. Что уже находится в `main`
-
-### 3.1. Кассовые чеки
-
-Добавлен модуль `Кассовые чеки`:
-
-- Импорт по QR URL с `suf.purs.gov.rs`.
-- Сохранение ссылки на чек и кнопка `Открыть чек`.
-- Список позиций чека.
-- Удаление ошибочно добавленного чека.
-- Ручная привязка чека к расходу, включая режим `Все расходы за период`.
-- Создание расхода из чека.
-- Автоподбор расходов и банковских транзакций.
-- Статусы чеков: `new`, `linked_expense`, `waiting_bank`, `matched_bank`, `cash_expense`, `error`.
-- Пустые неинформативные поля в модалке чека скрываются.
-- Проект у чека и связанного расхода синхронизируется при изменении проекта расхода.
-- Способ оплаты чека определяется из сохранённого HTML журнала SUF: `Gotovina / Готовина` переводит `payment_kind` в `cash`.
-- Новые наличные чеки в режиме создания расхода `auto` создают `Expense(source="cash", status="paid")` и `CashEntry(direction="out", entry_type="expense")`.
-- Для старых чеков со статусом `Ждет банк` добавлено ручное действие `Оплачено наличкой`.
-- Для ошибочно отмеченного наличного чека добавлено действие `Вернуть в ожидание банка`, которое удаляет связанную наличную запись и возвращает расход в `planned`.
-- В списке кассовых чеков добавлена сортировка по видимым колонкам: дата, продавец, номер фактуры, способ оплаты, проект, сумма, статус.
-- Поиск на странице чеков ищет по полям списка и связям: сумма в разных форматах, проект, продавец, ПИБ, адрес, номер, способ оплаты, статус, id связанных расхода/банка/налички. Поиск по позициям товаров намеренно не включён.
-- Проверен класс проблем со скрытым `limit` на страницах с фильтрами год/месяц: `Расходы`, `Доходы (КПО)` и `Наличка` теперь без явного `limit` отдают весь выбранный период. `Банк` и `Входящие фактуры` уже не имели такого лимита.
-
-Ключевые файлы:
-
-- `backend/models.py`: `PurchaseReceipt`, `PurchaseReceiptItem`.
-- `backend/receipt_service.py`.
-- `backend/routers/receipts_router.py`.
-- `frontend/src/pages/Receipts.jsx`.
-- `frontend/src/api.js`: `api.receipts`.
-- `frontend/src/i18n.js`: русские/сербские labels.
-
-### 3.2. Android-приложение для QR
-
-В проект добавлена папка `android-app`.
-
-Назначение приложения:
-
-- На телефоне сканировать QR кассового чека.
-- Автоматически отправлять URL в web/backend.
-- После успешного сканирования: виброотклик, beep, автоотправка, очистка URL и автоскрытие сообщения об успехе.
-- Добавлена иконка приложения.
-
-Проверка сборки ранее выполнялась через Gradle wrapper.
-
-### 3.3. Расходы с позициями
-
-Добавлена сущность `ExpenseItem`, чтобы расход мог хранить табличные строки, а не только один текст description.
-
-Реализовано:
-
-- `Expense.items` relationship.
-- `ExpenseItem` в модели.
-- Схемы `ExpenseItemCreate`, `ExpenseItemResponse`.
-- `ExpenseCreate.items`, `ExpenseUpdate.items`, `ExpenseDetailResponse.items`.
-- Создание/редактирование расхода с несколькими позициями.
-- Добавление/удаление строк расхода в UI.
-- Сумма расхода считается по строкам, если строки заполнены.
-- Description fallback строится из первых строк, если описание пустое.
-- При создании расхода из кассового чека строки чека копируются в `ExpenseItem`.
-- В модалке расхода показывается информативная карточка, таблица строк расхода и кнопка перехода к связанному чеку вместо дублирования `Позиции чека`.
-
-Ключевые файлы:
-
-- `backend/models.py`: `ExpenseItem`.
-- `backend/schemas.py`: expense item schemas.
-- `backend/routers/expenses_router.py`.
-- `backend/receipt_service.py`: copy receipt items to expense.
-- `frontend/src/pages/Expenses.jsx`.
-- `frontend/src/pages/Receipts.jsx`: открытие чека из state `openReceiptId`.
-- `frontend/src/i18n.js`.
-
-### 3.4. Миграция v18
-
-Добавлена ручная миграция:
-
-- `backend/scripts/migrate_v18_expense_items.py`
-- `manual_migrations/v18_expense_items.cmd`
-
-Назначение:
-
-- Создать таблицу `expense_items`.
-- Backfill: скопировать позиции из `purchase_receipt_items` в `expense_items` для расходов, связанных с чеками.
-
-Dry-run локально был проверен:
-
-```powershell
-manual_migrations\v18_expense_items.cmd --dry-run
-```
-
-Последний результат dry-run:
+На момент обновления handoff:
 
 ```text
-[v18] Using DB: D:\Work\Programming\Buh_Prosp\prospel.db
-[v18] Dry-run mode: changes will be rolled back.
-[v18] Would copy receipt items into expense_items: 0
-[v18] Dry-run completed, no changes committed.
+## main...origin/main
+ M .claude/settings.local.json
+ M HANDOFF_CONTEXT.md
+?? .codex_tmp/
 ```
 
-Важно: на проде после деплоя `main` нужно отдельно запустить v18, если таблица ещё не создана:
+Смысл:
+
+- `main` синхронизирован с `origin/main`.
+- `.claude/settings.local.json` - локальные настройки, не коммитить.
+- `.codex_tmp/` - локальные диагностические файлы, не коммитить без явной просьбы.
+- Из проектных файлов незакоммичен только сам `HANDOFF_CONTEXT.md`.
+
+Перед любой новой задачей проверять:
 
 ```powershell
-manual_migrations\v18_expense_items.cmd --dry-run
-manual_migrations\v18_expense_items.cmd
+git status --short --branch
+git diff --stat
 ```
 
-### 3.5. Займы контрагентам
+## 3. Последние коммиты в `main`
 
-Добавлен учёт полученных и выданных займов без искажения доходов/расходов:
+```text
+18d6abc Warn on non-production hosts
+aebbf5e Show trip advance payout totals in cash register
+2ae086d Remove cash register table title
+823f75f Add selection summaries to ledger tables
+5f5ca23 Avoid ambiguous cash withdrawal auto matching
+a393cf1 Add cash register Excel export
+37fa9a2 Reuse pending cash withdrawals for bank cash transfers
+4c0a0fd Disable bank import cash withdrawal auto-link
+792a0d2 Link pending cash withdrawals from matched expenses
+3b10b8f Harden income item backfill mismatches
+d9e4d53 Improve income invoice item entry
+651d21b Add income invoice items and eFaktura export
+```
 
-- отдельные таблицы `counterparty_loans` и `counterparty_loan_movements`;
-- банковская строка связывается с движением займа через `matched_type = "loan_movement"`;
-- сценарии: получить заём, выдать заём, погасить полученный, получить возврат выданного;
-- займы входят в расчёты с контрагентами отдельными колонками (`issued_loans`, `borrowed_loans`);
-- тело займа не создаёт `Income`/`Expense` и не меняет P&L;
-- cash flow показывает займы отдельными колонками `Финансирование: приток/отток` и учитывает их в закрывающем остатке;
-- нельзя менять контрагента у займа после появления движений;
-- нельзя добавлять движения к погашенному/отменённому займу;
-- race-condition при двойном связывании банковской операции возвращает `409`.
-- У займа есть поле `note`; карточка займа показывает и позволяет редактировать общий комментарий через существующий `PATCH /counterparty-loans/{id}`.
-- Комментарии движений займа и назначение банковской транзакции показываются в таблице движений.
-- Страница `Займы` показывает `Внесение собственных средств`/`Возврат собственных средств` отдельной read-only секцией из уже существующих `BankTransaction` с `matched_type = "owner_funds"`; схема БД для этого не менялась.
-- В секции `Собственные средства` на странице `Займы` собственные средства показываются одной агрегированной строкой, как обычный займ: `Дата`, `Поставщик`, `Тип займа`, `Номер договора`, `Внесено`, `Возвращено`, `Остаток долга`, `Статус`. Верхняя таблица займов и таблица собственных средств используют одну сетку колонок, чтобы `Статус`, `Остаток долга` и денежные колонки визуально стояли друг под другом.
-- По клику на агрегированную строку открывается карточка с итогами `Внесено`, `Возвращено`, `Фирма должна владельцу` и таблицей отдельных движений. В агрегированной строке видимое имя владельца очищается от адреса/счёта, полные реквизиты остаются в tooltip; длинный контрагент, счёт и банковский референс строки движения тоже спрятаны в tooltip и доступны в карточке отдельного движения.
+## 4. Последние важные решения и изменения
+
+### 4.1. Non-production banner
+
+- В UI добавлен заметный красный баннер, если приложение открыто не на боевом host.
+- Боевой host по умолчанию: `192.168.10.20`.
+- Можно переопределить список боевых адресов через `VITE_PRODUCTION_HOSTS` (через запятую).
+- Ключевые файлы:
+  - `frontend/src/components/Layout.jsx`
+  - `frontend/src/index.css`
+  - `frontend/src/i18n.js`
+
+### 4.2. Доходы, позиции фактур и eFaktura
+
+- В доходах есть таблица позиций фактуры (`income_items`).
+- Create/update дохода пересобирают позиции и считают `amount_rsd` из строк.
+- Подсказки позиций берутся из прошлых фактур, legacy-описаний и договоров.
+- В UI подсказки разделены на:
+  - ранее фактурисали текущему контрагенту;
+  - все клиенты и проекты.
+- Подсказки при вводе показываются в выпадающем списке, справа в модалке есть история по контрагенту.
+- Ручной ввод контрагента в доходах убран: выбирать только из справочника.
+- Проекты в форме дохода ограничены выбранным клиентом и `Razno`.
+- Для строк фактуры добавлены номер позиции, выбор единиц, неinput-итог по строке и итоговая сумма справа под суммами позиций.
+- Модалка дохода не должна закрываться по клику вне окна.
+
+eFaktura export выбран как non-VAT для паушала:
+
+- `CustomizationID`: `urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.rs:srbdt:2021`.
+- `ProfileID` Peppol нужно убирать, он не из сербского CIUS.
+- `InvoiceTypeCode = 380`.
+- `EndpointID schemeID = 9948`.
+- Не копировать `TaxExemptionReasonCode = PDV-RS-11-1-4` из примера: это не основание для паушала. Если точный код "није у систему ПДВ-а" не подтвержден по шифарнику, лучше оставить TODO и свободный `TaxExemptionReason`, чем зашить неверный код.
 
 Ключевые файлы:
 
-- `backend/models.py`: `CounterpartyLoan`, `CounterpartyLoanMovement`.
-- `backend/counterparty_loan_service.py`.
-- `backend/routers/counterparty_loans_router.py`.
-- `backend/finance_service.py`: financing columns in cash flow.
-- `backend/incoming_invoice_service.py`: займы в балансе контрагентов.
-- `backend/bank_matching_service.py`, `backend/routers/bank_transactions_router.py`, `backend/link_diagnostics.py`.
-- `frontend/src/pages/CounterpartyLoans.jsx`.
-- `frontend/src/pages/BankTransactions.jsx`.
-- `frontend/src/pages/CashFlow.jsx`.
+- `backend/models.py`
+- `backend/schemas.py`
+- `backend/routers/income_router.py`
+- `backend/income_efaktura_xml.py`
+- `backend/scripts/migrate_v26_income_items.py`
+- `backend/scripts/backfill_income_items_from_efaktura.py`
+- `manual_migrations/v26_income_items.cmd`
+- `manual_migrations/backfill_income_items_from_efaktura.cmd`
+- `frontend/src/pages/Income.jsx`
+- `frontend/src/i18n.js`
 
-### 3.6. Миграция v19
+### 4.3. Backfill старых позиций доходов из eFaktura
 
-Добавлена ручная миграция:
-
-- `backend/scripts/migrate_v19_counterparty_loans.py`
-- `manual_migrations/v19_counterparty_loans.cmd`
-
-Назначение:
-
-- создать таблицы `counterparty_loans` и `counterparty_loan_movements`;
-- создать индексы для типа/статуса/дат/контрагента/движений;
-- создать partial unique index на `counterparty_loan_movements.bank_transaction_id`, если ссылка банка не `NULL`.
-
-Важно: на проде после деплоя `main` нужно отдельно запустить v19, если таблицы ещё не созданы:
+Скрипт:
 
 ```powershell
-manual_migrations\v19_counterparty_loans.cmd --dry-run
-manual_migrations\v19_counterparty_loans.cmd
+manual_migrations\backfill_income_items_from_efaktura.cmd
 ```
 
-### 3.7. Входящие фактуры и банк
+Важные флаги:
 
-Важные уже внесённые изменения:
+```powershell
+manual_migrations\backfill_income_items_from_efaktura.cmd --dry-run
+manual_migrations\backfill_income_items_from_efaktura.cmd --income-id 24 --income-id 25
+manual_migrations\backfill_income_items_from_efaktura.cmd --clear-line-total-mismatches --income-id 27 --income-id 35
+```
 
-- Закрытие входящей фактуры банком сделано через стандартный pathway `settle_via_bank`.
-- Ранее была проблема: банк мог создавать settlement напрямую и обходить проверки. Исправлено.
-- При успешной привязке банк-модалка закрывается автоматически.
-- Для входящих фактур улучшен список: итоги вынесены вверх, добавлен проект, общий стиль ближе к `Доходы (КПО)`.
-- В модалках входящих фактур добавлены реквизиты оплаты/связанные операции, чтобы понимать, почему статус `Оплачено`.
+Что уже было сделано по пользовательскому логу:
+
+- Основной backfill нашел 21 candidate.
+- 19 записей обновились сразу.
+- #24 и #25 сначала были skipped из-за расхождения `0012` / `12` / `012`, затем обновились после hardened matching.
+- #27 и #35 имели line total mismatch из-за удвоенных строк; их позиции были очищены через `--clear-line-total-mismatches`.
+
+При повторном запуске сначала делать `--dry-run`.
+
+### 4.4. Банк и наличка
+
+- На странице `Банк` отключены автоматические matching-сценарии снятия налички.
+- Снятие налички должно идти через временное пополнение/связку с реестром налички, а не автоматически как расход на странице банка.
+- Важная причина: банковская выписка может показать снятие 26.06 как проведенное 30.06, и автоматическое закрытие может ошибочно убрать несколько временных пополнений.
+- Для снятий налички используется проект `_Gotovina / Наличка`.
+- В реестр налички добавлен Excel export.
+- Кнопка `Добавить из банка` из реестра налички убрана.
+- Заголовок строки `Операции по наличке` в карточке таблицы убран.
+- В реестре налички дата расширена и не переносится.
+- В реестре налички добавлены checkbox-выделение строк и сумма выделения.
+- На страницах с массовым выделением добавлена общая сводка выделенных строк:
+  - `Банк`: приход / расход / нетто;
+  - `Наличка`: приход / расход / нетто;
+  - `Доходы`: сумма;
+  - `Расходы`: сумма;
+  - `Импорт выписки`: сумма.
+- Для строки `Аванс за командировку` в реестре налички под описанием показываются `Начислено` и `Остаток`.
 
 Ключевые файлы:
 
-- `backend/incoming_invoice_service.py`
-- `backend/bank_matching_service.py`
-- `backend/routers/incoming_invoices_router.py`
-- `frontend/src/pages/IncomingInvoices.jsx`
+- `backend/cash_service.py`
+- `backend/routers/bank_transactions_router.py`
+- `backend/routers/cash_router.py`
+- `backend/routers/workers_router.py`
 - `frontend/src/pages/BankTransactions.jsx`
+- `frontend/src/pages/CashRegister.jsx`
+- `frontend/src/components/SelectionSummary.jsx`
+- `frontend/src/index.css`
 
-### 3.8. Диагностика связей
+### 4.5. Работники и выплаты
 
-Добавлена read-only диагностика связей:
-
-- `backend/link_diagnostics.py`
-- endpoint в service/router, если подключён в текущей версии.
-
-Цель:
-
-- Находить битые `BankTransaction.matched_id`.
-- Находить `IncomingInvoiceSettlement` с отсутствующими linked rows.
-- Находить `PurchaseReceipt` с отсутствующим расходом/банком/наличкой.
-- Находить `Expense.source="receipt"` без связанного чека.
-- Находить рассинхрон статусов чеков.
-- Находить битые связи `loan_movement`.
-
-Перед большими правками логики связей нужно запускать диагностику и сохранять baseline.
-
-### 3.9. Финансовая аналитика
-
-Уже исправлялись:
-
-- Расчёт лимитов паушала.
-- Разделение `по начислению` / `по деньгам` вместо непонятных `accrual/cash`.
-- Панель/Финансы/P&L пересматривались на корректность.
-- Блок предупреждения о лимитах упрощён: риск отображается визуально на самом блоке лимита.
-- В cash flow добавлены отдельные колонки финансирования по займам, без попадания principal в revenue/expense.
+- Есть список работников: постоянные и временные.
+- Схемы оплаты: за выход, еженедельно, раз в месяц.
+- Командировки рассчитываются по датам: дни командировки и ночи выводятся автоматически.
+- Гостиница считается как `стоимость ночи * количество ночей`.
+- В выплатах есть типы: обычная, еженедельная, месячная, аванс за командировку, окончательный расчет командировки.
+- Окончательный расчет командировки должен предзаполняться из ранее созданного аванса.
+- Редактирование выплаты из реестра налички открывает форму выплаты, а не обычную форму наличного расхода.
 
 Ключевые файлы:
 
-- `backend/finance_service.py`
-- `backend/routers/dashboard_router.py`
-- `frontend/src/pages/FinanceOverview.jsx`
-- `frontend/src/pages/Dashboard.jsx`
-- `frontend/src/pages/ProfitAndLoss.jsx`
+- `backend/models.py`
+- `backend/routers/workers_router.py`
+- `backend/routers/cash_router.py`
+- `frontend/src/pages/Workers.jsx`
+- `frontend/src/pages/CashRegister.jsx`
+- `frontend/src/i18n.js`
 
-### 3.10. Backup
+### 4.6. eFaktura sync
 
-В `Настройки / Сервис и backup` добавлена возможность скачать backup.
+- eFaktura синхронизация поддерживает входящие и исходящие документы.
+- PDF не сохраняются на сервере. Если включена галка сохранения PDF, frontend скачивает PDF на компьютер пользователя.
+- Настройки eFaktura API вынесены в `Настройки / eFaktura API`.
+- Исходящие фактуры со статусами `Storno`, `Cancelled`, `Mistake` не должны создаваться как обычный доход.
+- Уже импортированный доход по сторнированной исходящей eFaktura отменяется при синхронизации, если по нему нет оплат.
+- Для исходящих фактур текущий статус дополнительно читается через `GET /api/publicApi/sales-invoice?invoiceId=...`, а не только через `/sales-invoice/changes`.
 
 Ключевые файлы:
 
-- `frontend/src/pages/Settings.jsx`
-- `frontend/src/api.js`
-- backend service/router для backup.
+- `backend/efaktura_service.py`
+- `backend/routers/efaktura_router.py`
+- `frontend/src/pages/Efaktura.jsx`
 
-## 4. Последние проверки
+### 4.7. Входящие фактуры
 
-Последние локальные проверки перед handoff:
+- Детальная модалка входящей фактуры переработана под компактный layout без лишнего скроллинга.
+- Блоки связанного расхода и банковской транзакции обернуты в единый визуальный стиль.
+- Кнопки действий вынесены в правую колонку в верхнем summary-блоке.
+- Входящая фактура может закрываться банком, наличкой и взаимозачетом.
+- Settlement должен идти через сервис, не прямой записью в таблицу.
+
+### 4.8. Кассовые чеки
+
+- Импорт по QR URL с `suf.purs.gov.rs`.
+- Сохранение ссылки на чек и открытие оригинала.
+- Позиции чека сохраняются.
+- Создание расхода из чека.
+- Ручная привязка чека к расходу.
+- Для наличного чека можно создать `Expense(source="cash", status="paid")` и `CashEntry(direction="out", entry_type="expense")`.
+- Если чек ошибочно отмечен наличным, есть возврат в ожидание банка.
+- Поиск чеков учитывает суммы, проект, продавца, ПИБ, адрес, номер, способ оплаты, статус, id связанных расхода/банка/налички.
+
+### 4.9. Займы
+
+- Займы вынесены в отдельные сущности `counterparty_loans` и `counterparty_loan_movements`.
+- Тело займа не создает `Income`/`Expense` и не попадает в P&L.
+- В cash flow займы отражаются как финансирование.
+- Банковская строка связывается с движением займа через `matched_type = "loan_movement"`.
+- Собственные средства показываются отдельной read-only секцией из `BankTransaction` с `matched_type = "owner_funds"`.
+
+### 4.10. Android-приложение для QR
+
+- Папка `android-app`.
+- Приложение сканирует QR кассового чека и отправляет URL в backend.
+- После успешного сканирования: vibration/beep, auto-submit, очистка URL.
+
+## 5. Ручные миграции и скрипты
+
+Из известных ручных миграций/скриптов:
+
+- `manual_migrations\v18_expense_items.cmd`
+- `manual_migrations\v19_counterparty_loans.cmd`
+- `manual_migrations\v26_income_items.cmd`
+- `manual_migrations\backfill_income_items_from_efaktura.cmd`
+
+Проверка перед запуском:
 
 ```powershell
-.\venv\Scripts\python.exe -m compileall backend
-npm --prefix frontend run build
 manual_migrations\v18_expense_items.cmd --dry-run
-.\venv\Scripts\python.exe backend\scripts\migrate_v19_counterparty_loans.py --dry-run
+manual_migrations\v19_counterparty_loans.cmd --dry-run
+manual_migrations\v26_income_items.cmd --dry-run
+manual_migrations\backfill_income_items_from_efaktura.cmd --dry-run
 ```
-
-Результат:
-
-- Backend compile: успешно.
-- Frontend build: успешно.
-- Vite warning про большой bundle остаётся стандартным предупреждением, не ошибкой.
-- v18 dry-run: успешно.
-- v19 dry-run: успешно.
-- In-memory сценарий займов/cash flow: успешно.
-- In-memory сценарий наличной оплаты чека `waiting_bank -> cash_expense -> waiting_bank`: успешно.
-
-Файл старого плана `EXPENSE_ITEMS_IMPLEMENTATION_PLAN.md` удалён после проверки выполнения.
-
-## 5. Текущий граф документооборота
-
-```mermaid
-flowchart LR
-    subgraph DOC["Документы"]
-        INC["Income / Доходы КПО"]
-        EXP["Expense / Расходы"]
-        EXPI["ExpenseItem / Строки расхода"]
-        II["IncomingInvoice / Входящие фактуры"]
-        REC["PurchaseReceipt / Кассовый чек"]
-        RECI["PurchaseReceiptItem / Строки чека"]
-        OBL["MonthlyObligation / Налоги и взносы"]
-        PE["PlannedExpense / Периодические расходы"]
-        LOAN["CounterpartyLoan / Заём"]
-        LOANM["CounterpartyLoanMovement / Движение займа"]
-    end
-
-    subgraph MONEY["Деньги"]
-        BT["BankTransaction / Банк"]
-        CE["CashEntry / Наличка"]
-    end
-
-    subgraph LINKS["Связи"]
-        IIS["IncomingInvoiceSettlement"]
-        BIA["BankTransactionIncomeAllocation"]
-    end
-
-    REC --> RECI
-    REC --> EXP
-    REC -.copies items.-> EXPI
-    EXP --> EXPI
-    II --> EXP
-    OBL --> EXP
-    CE --> EXP
-    PE --> EXP
-    LOAN --> LOANM
-    LOANM --> BT
-
-    II --> IIS
-    IIS --> BT
-    IIS --> CE
-    IIS --> INC
-
-    BT --> INC
-    BT --> BIA
-    BIA --> INC
-    BT --> EXP
-    BT --> OBL
-    BT --> LOANM
-```
+Запуск на проде только после backup и dry-run.
 
 ## 6. Известные инварианты
 
 - Кассовый чек сам по себе является документом подтверждения расхода.
-- Поэтому чек должен иметь связанный расход сразу после импорта или после ручного действия пользователя.
 - Если чек оплачен картой, связанный расход может быть `planned/waiting_bank` до появления банковской транзакции.
-- Если чек оплачен наличкой, расход должен быть `Expense(source="cash", status="paid")`, а чек должен иметь `cash_entry_id` и статус `cash_expense`.
-- Если наличная отметка была ошибочной, возврат в `waiting_bank` должен удалить только связанную `CashEntry` и вернуть расход в `planned`.
-- Банковская транзакция должна потом связываться с уже существующим расходом, а не создавать дубликат.
-- Для кассовых чеков и банковских списаний суммы сравнивать по абсолютному значению: `-380` в банке соответствует `380` в расходе/чеке.
-- Проект у чека и расхода должен совпадать.
-- Если пользователь меняет проект у расхода, связанный чек должен получить тот же проект.
+- Если чек оплачен наличкой, расход должен быть `Expense(source="cash", status="paid")`, а чек должен иметь `cash_entry_id`.
+- Ошибочный cash-mark для чека должен удалять только связанную `CashEntry` и возвращать расход в `planned`.
+- Банковские списания и расходы сравнивать по абсолютной сумме: `abs(bank.amount) == expense.amount`.
+- Проект у чека и связанного расхода должен совпадать.
+- Если пользователь меняет проект у расхода, связанный чек получает тот же проект.
 - Если договор выбран в форме дохода/расхода, проект должен подставляться из договора.
-- Входящая фактура может закрываться банком, наличкой или взаимозачётом. Settlement должен идти через сервис, не прямой записью в таблицу.
-- Тело займа не является доходом/расходом и не должно попадать в P&L.
-- Получение/выдача/возврат займа должны отражаться в cash flow только как финансирование.
-- Займ с движениями нельзя переносить на другого контрагента без отдельной осознанной операции.
+- Тело займа не является доходом/расходом.
+- Снятия налички не матчить автоматически на странице банка.
+- Временные пополнения налички могут быть неоднозначными из-за даты проводки в банковской выписке; при сомнении проверять вручную.
 
-## 7. Открытые риски и что проверить на проде
+## 7. Что проверить на проде
 
-### 7.1. Выполнены ли v18/v19 на сервере
+- После обновления сервера проверить, что non-production banner НЕ показывается на `192.168.10.20`.
+- Проверить, что на локальном/тестовом адресе banner показывается.
+- Запустить eFaktura sync и проверить, что сторнированные исходящие фактуры не остаются `issued`.
+- Проверить, выполнены ли нужные ручные миграции на сервере.
+- Проверить, что доходы с позициями корректно экспортируются в XML non-VAT.
+- Проверить, что подсказки позиций в доходах работают по текущему контрагенту и глобально.
+- Проверить временные пополнения налички: банковское снятие должно закрывать только соответствующее временное пополнение.
+- Проверить Excel export реестра налички.
+- Проверить строку `Аванс за командировку`: под описанием должны отображаться `Начислено` и `Остаток`.
 
-Проверить наличие таблицы:
-
-```powershell
-sqlite3 D:\Program\ProspEl\prospel.db ".schema expense_items"
-sqlite3 D:\Program\ProspEl\prospel.db ".schema counterparty_loans"
-```
-
-Если sqlite3 CLI нет, использовать Python или просто запустить:
-
-```powershell
-manual_migrations\v18_expense_items.cmd --dry-run
-manual_migrations\v19_counterparty_loans.cmd --dry-run
-```
-
-### 7.2. Старые данные чеков/расходов
-
-После v18 желательно проверить:
-
-- У расходов, созданных из чеков, появились `ExpenseItem`.
-- Сумма расхода совпадает с суммой строк.
-- В модалке расхода открывается связанный чек.
-- При смене проекта у расхода связанный чек меняет проект.
-- Банк предлагает расход из чека как лучший кандидат, если совпадает абсолютная сумма и дата в допустимом окне.
-- Чеки с `Gotovina / Готовина` в журнале показывают `payment_kind = cash`.
-- Ручная кнопка `Оплачено наличкой` создаёт запись в `Наличке` и переводит чек в `Наличный расход`.
-- Кнопка `Вернуть в ожидание банка` удаляет связанную `CashEntry` и возвращает чек в `Ждет банк`.
-
-### 7.3. Диагностика связей
-
-После деплоя и миграций прогнать диагностику связей:
-
-- Получить summary по кодам.
-- Если есть P0/P1 проблемы — не чинить руками в UI вслепую, а сделать one-shot repair script в `manual_migrations`.
-
-### 7.4. Admin delete
-
-Админское удаление записей из таблиц добавлялось как emergency tool.
-
-Риск:
-
-- Можно нарушить связи, если удалить только одну сторону.
-- После удаления обязательно запускать диагностику связей.
-
-## 8. Следующие задачи, если начинать новую ветку
-
-### A. Прод-проверка v18/v19 и чеков
-
-1. Обновить сервер на `main`.
-2. Запустить `manual_migrations\v18_expense_items.cmd --dry-run`.
-3. Запустить `manual_migrations\v19_counterparty_loans.cmd --dry-run`.
-4. Если dry-run нормальный — запустить обе нужные миграции без `--dry-run`.
-5. Проверить несколько старых чеков и расходов.
-6. Проверить связку банк → расход из чека.
-7. Проверить наличный чек: `Ждет банк -> Оплачено наличкой -> Наличный расход`.
-8. Проверить cash flow с займом: principal виден только как финансирование.
-
-### B. Улучшить диагностику и repair workflow
-
-1. Добавить кнопку/страницу для админа: `Сервис и backup / Диагностика связей`.
-2. Показать summary и список проблем.
-3. Сделать экспорт diagnostics JSON.
-4. Для часто встречающихся проблем делать отдельные ручные repair scripts.
-
-### C. Усилить ограничения БД
-
-После чистой диагностики:
-
-1. CHECK для `IncomingInvoiceSettlement`: ровно один FK заполнен в зависимости от `settlement_type`.
-2. Индексы для часто используемых связей.
-3. Проверить FK/cascade для `expense_items`.
-
-### D. Дальше унифицировать UI модалок
-
-Единый паттерн:
-
-- Клик по строке открывает модалку.
-- Левая часть: данные объекта.
-- Правая часть: действия и связанные операции.
-- Ниже: строки/позиции/история.
-- Пустые поля не показывать.
-- Кнопки редких действий группировать ниже или под admin-section.
-
-Кандидаты на приведение:
-
-- `Expenses`
-- `Income`
-- `IncomingInvoices`
-- `BankTransactions`
-- `Receipts`
-- `CashRegister`
-- справочники.
-
-### E. Code cleanup
-
-Продолжить рефакторинг дублей:
-
-- Общие formatters/constants/hooks.
-- Единые modal/action components.
-- Удаление устаревших моделей/роутеров, если они точно не используются.
-- Держать изменения маленькими и проверяемыми.
-
-## 9. Полезные команды
+## 8. Полезные команды
 
 Backend:
 
@@ -468,53 +287,19 @@ Backend:
 Frontend:
 
 ```powershell
-npm --prefix frontend run build
+cmd /c npm --prefix frontend run build
 ```
 
 Git:
 
 ```powershell
-git status -sb
-git log --oneline -8
-git push origin main
+git status --short --branch
+git log --oneline -12
 ```
 
-Миграция v18:
+Manual scripts:
 
 ```powershell
-manual_migrations\v18_expense_items.cmd --dry-run
-manual_migrations\v18_expense_items.cmd
+manual_migrations\v26_income_items.cmd --dry-run
+manual_migrations\backfill_income_items_from_efaktura.cmd --dry-run
 ```
-
-Миграция v19:
-
-```powershell
-manual_migrations\v19_counterparty_loans.cmd --dry-run
-manual_migrations\v19_counterparty_loans.cmd
-```
-
-## 10. Последние коммиты на момент handoff
-
-```text
-0a7519f Add receipt search and sorting
-3bfb6f0 Show loan comments and owner funds
-07aa7ac Handle cash-paid receipts
-b593b32 refactor(loans): tighten invariants and show loans as financing in cashflow
-1e7ab85 Add counterparty loan tracking
-3cb288a style(incoming-invoices): tighten table row height
-7ecdb2b fix(incoming-invoices): drop redundant currency under invoice number
-654c730 fix(search): match amounts in dotted and comma-decimal forms
-dc410d9 refactor(rows): unify bank rows under .record-row + global hover accent
-1f51c96 fix(ux): extend row-selection guard to bank transactions
-20f7d49 fix(ux): don't open row detail when selecting text inside a row
-979bcd2 fix(receipts): accept SUF receipt URLs with an explicit :443 port
-```
-
-## 11. Что не делать
-
-- Не переносить новые миграции в startup приложения.
-- Не удалять связанные записи из БД без диагностики и backup.
-- Не делать универсальную полиморфную `operation_links` таблицу без явной причины: текущие типизированные связи лучше усиливать CHECK/FK-ограничениями.
-- Не сравнивать банковские списания и расходы по знаку суммы: для расходов нужен `abs(bank.amount) == expense.amount`.
-- Не создавать второй расход, если чек уже создал `Expense(source="receipt")`.
-- Не добавлять скрытый default `limit` на основных списках с фильтрами год/месяц. Если нужен лимит для вспомогательного picker/log, frontend должен передавать его явно.
