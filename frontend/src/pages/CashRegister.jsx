@@ -276,6 +276,17 @@ export default function CashRegister() {
     }
     return description
   }
+  const getWorkerPayoutDescriptionMeta = (entry) => {
+    if (entry?.worker_payout_type !== 'trip_advance') return ''
+    const parts = []
+    if (entry.worker_payout_gross_amount !== null && entry.worker_payout_gross_amount !== undefined) {
+      parts.push(`${tr('workerPayoutGross')}: ${fmtAmount(entry.worker_payout_gross_amount)} RSD`)
+    }
+    if (entry.worker_payout_remaining_amount !== null && entry.worker_payout_remaining_amount !== undefined) {
+      parts.push(`${tr('workerPayoutRemaining')}: ${fmtAmount(entry.worker_payout_remaining_amount)} RSD`)
+    }
+    return parts.join(` ${UI_DASH} `)
+  }
 
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
 
@@ -1176,6 +1187,7 @@ export default function CashRegister() {
                       const typeLabel = getEntryTypeLabel(entry)
                       const sourceLabel = getEntrySourceLabel(entry)
                       const descriptionLabel = getDisplayDescription(entry)
+                      const payoutMeta = getWorkerPayoutDescriptionMeta(entry)
                       return (
                         <tr
                           key={entry.id}
@@ -1201,6 +1213,9 @@ export default function CashRegister() {
                           <td>{typeLabel}</td>
                           <td>
                             <div className="record-cell-ellipsis">{descriptionLabel}</div>
+                            {payoutMeta ? (
+                              <div className="record-cell-subtitle" title={payoutMeta}>{payoutMeta}</div>
+                            ) : null}
                             {entry.note ? (
                               <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{entry.note}</div>
                             ) : null}

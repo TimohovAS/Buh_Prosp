@@ -188,6 +188,8 @@ def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout:
         worker_payout_worker_name=getattr(getattr(worker_payout, "worker", None), "name", None),
         worker_payout_period_start=getattr(worker_payout, "period_start", None),
         worker_payout_period_end=getattr(worker_payout, "period_end", None),
+        worker_payout_gross_amount=to_decimal(getattr(worker_payout, "gross_amount", None) or ZERO_DECIMAL) if worker_payout else None,
+        worker_payout_remaining_amount=to_decimal(getattr(worker_payout, "remaining_amount", None) or ZERO_DECIMAL) if worker_payout else None,
         bank_reference=getattr(bank_transaction, "bank_reference", None),
         counterparty_name=getattr(bank_transaction, "counterparty_name", None),
         purpose=getattr(bank_transaction, "purpose", None),
