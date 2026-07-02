@@ -1793,6 +1793,8 @@ Object.assign(t.sr, {
   selectedIn: 'Priliv',
   selectedOut: 'Odliv',
   selectedNet: 'Neto',
+  nonProductionBannerTitle: 'TEST SERVER',
+  nonProductionBannerText: 'Ovo nije produkcioni server. Ne unosite stvarne podatke. Adresa: {host}',
 })
 
 Object.assign(t.ru, {
@@ -1801,6 +1803,8 @@ Object.assign(t.ru, {
   selectedIn: 'Приход',
   selectedOut: 'Расход',
   selectedNet: 'Нетто',
+  nonProductionBannerTitle: 'НЕ БОЕВОЙ СЕРВЕР',
+  nonProductionBannerText: 'Не вводите реальные данные: это тестовая среда. Текущий адрес: {host}',
 })
 
 let lang = localStorage.getItem('prospel_lang') || 'sr';

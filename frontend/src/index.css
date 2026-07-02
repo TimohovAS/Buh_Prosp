@@ -275,6 +275,35 @@ textarea {
   overflow: hidden;
 }
 
+.environment-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(248, 113, 113, 0.65);
+  border-left: 6px solid var(--color-danger);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(127, 29, 29, 0.72), rgba(69, 10, 10, 0.48));
+  color: #fecaca;
+  box-shadow: 0 12px 28px rgba(127, 29, 29, 0.28);
+}
+
+.environment-banner strong {
+  color: #fff;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.environment-banner span {
+  min-width: 0;
+  font-weight: 600;
+}
+
 .route-cache-slot {
   display: none;
   flex: 1;

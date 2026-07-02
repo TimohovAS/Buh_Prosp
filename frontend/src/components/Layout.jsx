@@ -24,12 +24,38 @@ import {
   LogOut,
   Menu,
   X,
+  AlertTriangle,
 } from 'lucide-react'
+
+const DEFAULT_PRODUCTION_HOSTS = ['192.168.10.20']
+
+function normalizeHost(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .split(':')[0]
+}
+
+function getProductionHosts() {
+  const configured = import.meta.env.VITE_PRODUCTION_HOSTS || ''
+  const hosts = configured.split(',').map(normalizeHost).filter(Boolean)
+  return hosts.length ? hosts : DEFAULT_PRODUCTION_HOSTS
+}
+
+function isProductionHost() {
+  if (typeof window === 'undefined') return true
+  const currentHost = normalizeHost(window.location.hostname)
+  return getProductionHosts().includes(currentHost)
+}
 
 export default function Layout({ lang, toggleLang, children }) {
   const location = useLocation()
   const brand = useEnterpriseBrand()
   const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
+  const showNonProductionBanner = !isProductionHost()
+  const currentHostLabel = typeof window === 'undefined' ? '' : window.location.host
   const [pendingCounts, setPendingCounts] = useState({
     bank_unmatched_count: 0,
     incoming_invoices_pending_count: 0,
@@ -213,6 +239,13 @@ export default function Layout({ lang, toggleLang, children }) {
             {lang === 'sr' ? 'RU' : 'SR'}
           </button>
         </div>
+        {showNonProductionBanner ? (
+          <div className="environment-banner" role="alert">
+            <AlertTriangle size={20} aria-hidden="true" />
+            <strong>{tr('nonProductionBannerTitle')}</strong>
+            <span>{tr('nonProductionBannerText', { host: currentHostLabel })}</span>
+          </div>
+        ) : null}
         {children}
       </main>
     </div>
