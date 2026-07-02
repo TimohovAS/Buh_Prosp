@@ -6,6 +6,7 @@ import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
@@ -114,6 +115,7 @@ export default function CashRegister() {
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
   const [summary, setSummary] = useState({ current_balance: 0, total_in: 0, total_out: 0, entries: [], available_withdrawals: [] })
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
@@ -518,6 +520,41 @@ export default function CashRegister() {
       return 0
     })
   }, [summary.entries, search, sortCol, sortAsc, projects, lang])
+
+  const selectedEntries = useMemo(() => {
+    if (selectedIds.length === 0) return []
+    const selectedIdSet = new Set(selectedIds)
+    return (summary.entries || []).filter((entry) => selectedIdSet.has(entry.id))
+  }, [summary.entries, selectedIds])
+
+  const selectedTotals = useMemo(() => {
+    return selectedEntries.reduce((totals, entry) => {
+      const amount = Number(entry.amount || 0)
+      if (entry.direction === 'in') totals.in += amount
+      else totals.out += amount
+      totals.net += entry.direction === 'in' ? amount : -amount
+      return totals
+    }, { in: 0, out: 0, net: 0 })
+  }, [selectedEntries])
+
+  const allFilteredSelected = filteredEntries.length > 0 && filteredEntries.every((entry) => selectedIds.includes(entry.id))
+
+  const toggleSelect = (id) => {
+    setSelectedIds((previous) => (
+      previous.includes(id)
+        ? previous.filter((value) => value !== id)
+        : [...previous, id]
+    ))
+  }
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIdSet = new Set(filteredEntries.map((entry) => entry.id))
+      setSelectedIds((previous) => previous.filter((id) => !filteredIdSet.has(id)))
+      return
+    }
+    setSelectedIds((previous) => Array.from(new Set([...previous, ...filteredEntries.map((entry) => entry.id)])))
+  }
 
   const toggleSort = (column) => {
     if (sortCol === column) setSortAsc((value) => !value)
@@ -1109,11 +1146,22 @@ export default function CashRegister() {
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                 <div className="card-title" style={{ margin: 0 }}>{tr('cashEntries')}</div>
               </div>
+              <SelectionSummary
+                count={selectedEntries.length}
+                items={[
+                  { label: tr('selectedIn'), value: `+${fmtAmount(selectedTotals.in)} RSD`, tone: 'positive' },
+                  { label: tr('selectedOut'), value: `-${fmtAmount(selectedTotals.out)} RSD`, tone: 'negative' },
+                  { label: tr('selectedNet'), value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`, tone: selectedTotals.net >= 0 ? 'positive' : 'negative' },
+                ]}
+              />
               <div className="table-wrap">
-                <table>
+                <table className="cash-list-table">
                   <thead>
                     <tr>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
+                      <th className="col-select">
+                        <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} />
+                      </th>
+                      <th className="col-date" style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
                       <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} /></th>
                       <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
                       <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} /></th>
@@ -1125,7 +1173,7 @@ export default function CashRegister() {
                   <tbody>
                     {filteredEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
+                        <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
                       </tr>
                     ) : filteredEntries.map((entry) => {
                       const typeLabel = getEntryTypeLabel(entry)
@@ -1134,7 +1182,7 @@ export default function CashRegister() {
                       return (
                         <tr
                           key={entry.id}
-                          className="record-row"
+                          className={`record-row ${selectedIds.includes(entry.id) ? 'record-row-selected' : ''}`.trim()}
                           onClick={() => openDetail(entry)}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -1144,7 +1192,15 @@ export default function CashRegister() {
                           }}
                           tabIndex={0}
                         >
-                          <td>{entry.date}</td>
+                          <td className="col-select">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(entry.id)}
+                              onChange={() => toggleSelect(entry.id)}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          </td>
+                          <td className="col-date">{entry.date}</td>
                           <td>{typeLabel}</td>
                           <td>
                             <div className="record-cell-ellipsis">{descriptionLabel}</div>

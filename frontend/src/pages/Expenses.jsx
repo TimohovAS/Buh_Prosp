@@ -8,6 +8,7 @@ import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
@@ -616,6 +617,15 @@ export default function Expenses() {
   }, [items, search, sortCol, sortAsc, contracts, projects, categories, lang])
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0)
+  const selectedItems = useMemo(() => {
+    if (selectedIds.length === 0) return []
+    const selectedIdSet = new Set(selectedIds)
+    return items.filter((item) => selectedIdSet.has(item.id))
+  }, [items, selectedIds])
+  const selectedTotal = useMemo(
+    () => selectedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    [selectedItems]
+  )
 
   const handleExportCsv = () => {
     const rows = [
@@ -912,6 +922,10 @@ export default function Expenses() {
         )}
 
         <div className="card">
+          <SelectionSummary
+            count={selectedItems.length}
+            items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
+          />
           <div className="table-wrap">
             <table className="expenses-list-table">
               <thead>
@@ -936,7 +950,7 @@ export default function Expenses() {
                   filtered.map((item) => (
                     <tr
                       key={item.id}
-                      className={`record-row ${(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}`.trim()}
+                      className={`record-row ${selectedIds.includes(item.id) ? 'record-row-selected' : ''} ${(item.status === 'reversed' || item.reversal_of_id) ? 'row-reversal' : ''}`.trim()}
                       onClick={() => openDetail(item)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {

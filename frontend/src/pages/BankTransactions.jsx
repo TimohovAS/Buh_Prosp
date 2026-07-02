@@ -7,6 +7,7 @@ import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
+import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
@@ -274,6 +275,16 @@ export default function BankTransactions() {
       ...data.filter((transaction) => selectedIdSet.has(transaction.id) && !displayedIdSet.has(transaction.id)),
     ]
   }, [data, displayed, selectedIds])
+
+  const selectedTotals = useMemo(() => {
+    return selectedTransactions.reduce((totals, transaction) => {
+      const amount = Math.abs(Number(transaction.amount || 0))
+      if (transaction.direction === 'in') totals.in += amount
+      else totals.out += amount
+      totals.net += transaction.direction === 'in' ? amount : -amount
+      return totals
+    }, { in: 0, out: 0, net: 0 })
+  }, [selectedTransactions])
 
   const buildExpenseForm = (transaction) => ({
     date: transaction?.date || todayIso(),
@@ -1443,6 +1454,14 @@ export default function BankTransactions() {
 
       <div className="page-body" ref={pageBodyRef}>
         <div className="card">
+          <SelectionSummary
+            count={selectedTransactions.length}
+            items={[
+              { label: tr('selectedIn'), value: `+${formatMoney(selectedTotals.in)} RSD`, tone: 'positive' },
+              { label: tr('selectedOut'), value: `-${formatMoney(selectedTotals.out)} RSD`, tone: 'negative' },
+              { label: tr('selectedNet'), value: `${selectedTotals.net >= 0 ? '+' : '-'}${formatMoney(Math.abs(selectedTotals.net))} RSD`, tone: selectedTotals.net >= 0 ? 'positive' : 'negative' },
+            ]}
+          />
           <div className="table-wrap">
             <table>
               <thead>
@@ -1467,7 +1486,7 @@ export default function BankTransactions() {
                   displayed.map((transaction) => (
                     <tr
                       key={transaction.id}
-                      className="record-row"
+                      className={`record-row ${selectedIds.includes(transaction.id) ? 'record-row-selected' : ''}`.trim()}
                       onClick={() => openTransactionModal(transaction)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {

@@ -1787,6 +1787,22 @@ Object.assign(t.ru, {
   exportEfakturaXml: 'eFaktura XML',
 })
 
+Object.assign(t.sr, {
+  selectedRows: 'Izabrano',
+  selectedAmount: 'Iznos',
+  selectedIn: 'Priliv',
+  selectedOut: 'Odliv',
+  selectedNet: 'Neto',
+})
+
+Object.assign(t.ru, {
+  selectedRows: 'Выбрано',
+  selectedAmount: 'Сумма',
+  selectedIn: 'Приход',
+  selectedOut: 'Расход',
+  selectedNet: 'Нетто',
+})
+
 let lang = localStorage.getItem('prospel_lang') || 'sr';
 
 export function setLang(l) {

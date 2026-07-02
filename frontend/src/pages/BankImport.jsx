@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import SelectionSummary from '../components/SelectionSummary'
+import { formatMoney2 as fmtMoney } from '../utils/formatters'
 
 export default function BankImport() {
   const location = useLocation()
@@ -112,6 +114,15 @@ export default function BankImport() {
     }))
   }
 
+  const selectedTransactions = useMemo(
+    () => transactions.filter((_, index) => selections[index]?.selected ?? true),
+    [transactions, selections]
+  )
+  const selectedTotal = useMemo(
+    () => selectedTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+    [selectedTransactions]
+  )
+
   return (
     <>
       <div className="page-header">
@@ -151,6 +162,10 @@ export default function BankImport() {
                 {applying ? tr('importing') : tr('importSelected')}
               </button>
             </div>
+            <SelectionSummary
+              count={selectedTransactions.length}
+              items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
+            />
             <div className="table-wrap">
               <table>
                 <thead>
@@ -165,7 +180,7 @@ export default function BankImport() {
                 </thead>
                 <tbody>
                   {transactions.map((tx, i) => (
-                    <tr key={i}>
+                    <tr key={i} className={(selections[i]?.selected ?? true) ? 'record-row-selected' : ''}>
                       <td>
                         <input
                           type="checkbox"

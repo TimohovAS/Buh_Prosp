@@ -953,6 +953,52 @@ tr.row-reversal {
   color: var(--color-accent);
 }
 
+.record-row.record-row-selected td,
+.record-row-selected td,
+.record-row.record-row-selected:hover td,
+.record-row-selected:hover td,
+.record-row.record-row-selected:focus-visible td,
+.record-row-selected:focus-visible td {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--color-accent);
+}
+
+.selection-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--color-text);
+}
+
+.selection-summary-count {
+  font-weight: 700;
+}
+
+.selection-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text-muted);
+}
+
+.selection-summary-item strong {
+  color: var(--color-text);
+}
+
+.selection-summary-item-positive strong {
+  color: var(--color-success);
+}
+
+.selection-summary-item-negative strong {
+  color: var(--color-danger);
+}
+
 .record-cell-ellipsis {
   display: block;
   white-space: nowrap;
@@ -1147,6 +1193,18 @@ tr.row-reversal {
 .income-list-table tbody td {
   padding-top: 0.9rem;
   padding-bottom: 0.9rem;
+}
+
+.cash-list-table .col-select,
+.cash-list-table td.col-select {
+  width: 44px;
+}
+
+.cash-list-table .col-date,
+.cash-list-table td.col-date {
+  min-width: 112px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .incoming-invoices-list-table {
