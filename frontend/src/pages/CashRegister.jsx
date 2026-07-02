@@ -1143,9 +1143,6 @@ export default function CashRegister() {
             </div>
 
             <div className="card">
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                <div className="card-title" style={{ margin: 0 }}>{tr('cashEntries')}</div>
-              </div>
               <SelectionSummary
                 count={selectedEntries.length}
                 items={[
