@@ -27,6 +27,7 @@ import CounterpartyBalance from './pages/CounterpartyBalance'
 import Receipts from './pages/Receipts'
 import CounterpartyLoans from './pages/CounterpartyLoans'
 import Workers from './pages/Workers'
+import useResizableTableColumns from './hooks/useResizableTableColumns'
 
 const APP_PAGE_ROUTES = [
   { id: 'dashboard', path: '/', Component: Dashboard },
@@ -102,6 +103,7 @@ function PersistentPages() {
 
 function App() {
   const [lang, setLangState] = useState(getLang())
+  useResizableTableColumns()
 
   useEffect(() => {
     const user = getUser()

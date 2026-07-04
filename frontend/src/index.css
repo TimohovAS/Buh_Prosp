@@ -268,6 +268,7 @@ textarea {
 
 .main {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   padding: 2rem;
   display: flex;
@@ -307,6 +308,7 @@ textarea {
 .route-cache-slot {
   display: none;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -317,6 +319,7 @@ textarea {
 
 .page {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -326,6 +329,7 @@ textarea {
 .page-header {
   flex-shrink: 0;
   display: flex;
+  min-width: 0;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
@@ -342,6 +346,7 @@ textarea {
 .page-header-main {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 0.25rem;
 }
 
@@ -353,13 +358,20 @@ textarea {
 
 .page-header-actions {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   gap: 0.5rem;
   flex-wrap: wrap;
   align-items: center;
 }
 
+.page-header-actions > * {
+  max-width: 100%;
+}
+
 .page-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding-inline-end: 0.35rem;
@@ -412,6 +424,7 @@ textarea {
 }
 
 .card {
+  min-width: 0;
   background: var(--color-surface);
   border-radius: 12px;
   border: 1px solid var(--color-border);
@@ -1224,6 +1237,23 @@ tr.row-reversal {
   padding-bottom: 0.9rem;
 }
 
+.cash-register-list-card {
+  overflow: hidden;
+}
+
+.cash-register-table-wrap {
+  max-width: 100%;
+  max-height: clamp(280px, 38vh, 620px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.cash-list-table {
+  table-layout: fixed;
+  min-width: 1240px;
+  width: 100%;
+}
+
 .cash-list-table .col-select,
 .cash-list-table td.col-select {
   width: 44px;
@@ -1231,9 +1261,47 @@ tr.row-reversal {
 
 .cash-list-table .col-date,
 .cash-list-table td.col-date {
-  min-width: 112px;
+  width: 112px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.cash-list-table .col-type {
+  width: 160px;
+}
+
+.cash-list-table .col-description {
+  width: 280px;
+}
+
+.cash-list-table .col-source {
+  width: 208px;
+}
+
+.cash-list-table .col-amount {
+  width: 152px;
+}
+
+.cash-list-table .col-balance {
+  width: 168px;
+}
+
+.cash-list-table th,
+.cash-list-table td {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cash-list-table .col-amount,
+.cash-list-table .col-balance {
+  white-space: nowrap;
+}
+
+.cash-list-table .col-description > div {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .incoming-invoices-list-table {
@@ -2156,7 +2224,10 @@ tr.row-reversal {
 }
 
 .table-wrap {
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
   position: relative;
   isolation: isolate;
 }
@@ -2168,6 +2239,7 @@ tr.row-reversal {
 
 .table-wrap table {
   position: relative;
+  max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -2207,6 +2279,28 @@ th {
   background: var(--color-surface);
   background-clip: padding-box;
   box-shadow: inset 0 -1px 0 var(--color-border);
+  overflow: visible;
+}
+
+.table-wrap thead th:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 0.55rem;
+  right: 0;
+  bottom: 0.55rem;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.28);
+  pointer-events: none;
+}
+
+.table-wrap thead th:not(:last-child):hover::after,
+.table-wrap thead th:not(:last-child):focus-within::after {
+  background: rgba(59, 130, 246, 0.85);
+}
+
+.table-column-resize-cursor,
+.table-column-resize-cursor * {
+  cursor: col-resize !important;
 }
 
 tr:hover td {

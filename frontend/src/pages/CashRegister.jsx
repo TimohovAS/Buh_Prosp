@@ -1153,7 +1153,7 @@ export default function CashRegister() {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card cash-register-list-card">
               <SelectionSummary
                 count={selectedEntries.length}
                 items={[
@@ -1162,7 +1162,7 @@ export default function CashRegister() {
                   { label: tr('selectedNet'), value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`, tone: selectedTotals.net >= 0 ? 'positive' : 'negative' },
                 ]}
               />
-              <div className="table-wrap">
+              <div className="table-wrap cash-register-table-wrap">
                 <table className="cash-list-table">
                   <thead>
                     <tr>
@@ -1170,12 +1170,12 @@ export default function CashRegister() {
                         <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} />
                       </th>
                       <th className="col-date" style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
-                      <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIndicator active={sortCol === 'inflow'} asc={sortAsc} /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIndicator active={sortCol === 'outflow'} asc={sortAsc} /></th>
-                      <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIndicator active={sortCol === 'balance_after'} asc={sortAsc} /></th>
+                      <th className="col-type" style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} /></th>
+                      <th className="col-description" style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
+                      <th className="col-source" style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} /></th>
+                      <th className="col-amount" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIndicator active={sortCol === 'inflow'} asc={sortAsc} /></th>
+                      <th className="col-amount" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIndicator active={sortCol === 'outflow'} asc={sortAsc} /></th>
+                      <th className="col-balance" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIndicator active={sortCol === 'balance_after'} asc={sortAsc} /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1210,8 +1210,8 @@ export default function CashRegister() {
                             />
                           </td>
                           <td className="col-date">{entry.date}</td>
-                          <td>{typeLabel}</td>
-                          <td>
+                          <td className="col-type">{typeLabel}</td>
+                          <td className="col-description">
                             <div className="record-cell-ellipsis">{descriptionLabel}</div>
                             {payoutMeta ? (
                               <div className="record-cell-subtitle" title={payoutMeta}>{payoutMeta}</div>
@@ -1220,14 +1220,14 @@ export default function CashRegister() {
                               <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{entry.note}</div>
                             ) : null}
                           </td>
-                          <td>{sourceLabel}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--color-success)' }}>
+                          <td className="col-source">{sourceLabel}</td>
+                          <td className="col-amount" style={{ textAlign: 'right', color: 'var(--color-success)' }}>
                             {entry.direction === 'in' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
                           </td>
-                          <td style={{ textAlign: 'right', color: 'var(--color-danger)' }}>
+                          <td className="col-amount" style={{ textAlign: 'right', color: 'var(--color-danger)' }}>
                             {entry.direction === 'out' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(entry.balance_after)} RSD</td>
+                          <td className="col-balance" style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(entry.balance_after)} RSD</td>
                         </tr>
                       )
                     })}

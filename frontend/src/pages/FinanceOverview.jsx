@@ -197,7 +197,7 @@ export default function FinanceOverview() {
         {/* KPI карточки */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
           gap: '1rem',
           marginBottom: '2rem',
         }}>
