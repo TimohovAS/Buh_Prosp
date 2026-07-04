@@ -9,14 +9,17 @@ export default function useListPageState({
   const [sortCol, setSortCol] = useState(initialSortCol)
   const [sortAsc, setSortAsc] = useState(initialSortAsc)
 
-  const toggleSort = useCallback((column) => {
-    if (sortCol === column) {
-      setSortAsc((value) => !value)
-    } else {
-      setSortCol(column)
-      setSortAsc(true)
-    }
-  }, [sortCol])
+  const toggleSort = useCallback(
+    (column) => {
+      if (sortCol === column) {
+        setSortAsc((value) => !value)
+      } else {
+        setSortCol(column)
+        setSortAsc(true)
+      }
+    },
+    [sortCol]
+  )
 
   return {
     search,
