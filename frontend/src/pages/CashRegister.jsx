@@ -12,7 +12,12 @@ import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useProjectContractForm from '../hooks/useProjectContractForm'
-import { buildContractLabel, filterContractsForProject, findUnassignedProject, getContractLabelById } from '../utils/entityLabels'
+import {
+  buildContractLabel,
+  filterContractsForProject,
+  findUnassignedProject,
+  getContractLabelById,
+} from '../utils/entityLabels'
 import { UI_DASH, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
@@ -32,8 +37,12 @@ function escapeExcelHtml(value) {
 }
 
 function isSalaryCategory(category) {
-  const sr = String(category?.name_sr || '').trim().toLowerCase()
-  const ru = String(category?.name_ru || '').trim().toLowerCase()
+  const sr = String(category?.name_sr || '')
+    .trim()
+    .toLowerCase()
+  const ru = String(category?.name_ru || '')
+    .trim()
+    .toLowerCase()
   return sr === 'zarade' || sr.includes('zarad') || ru.includes('зарп')
 }
 
@@ -93,21 +102,24 @@ const getTripPeriodKey = (payout) => `${payout?.period_start || ''}|${payout?.pe
 
 function findOpenTripAdvance(payouts) {
   const finalPeriodKeys = new Set(
-    (payouts || [])
-      .filter((payout) => payout.payout_type === 'trip_final')
-      .map(getTripPeriodKey)
+    (payouts || []).filter((payout) => payout.payout_type === 'trip_final').map(getTripPeriodKey)
   )
-  return (payouts || []).find((payout) => (
-    payout.payout_type === 'trip_advance' &&
-    !finalPeriodKeys.has(getTripPeriodKey(payout)) &&
-    Number(payout.remaining_amount || 0) > 0
-  )) || null
+  return (
+    (payouts || []).find(
+      (payout) =>
+        payout.payout_type === 'trip_advance' &&
+        !finalPeriodKeys.has(getTripPeriodKey(payout)) &&
+        Number(payout.remaining_amount || 0) > 0
+    ) || null
+  )
 }
 
 export default function CashRegister() {
   const location = useLocation()
   const isActivePage = location.pathname === '/cash'
-  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: '' })
+  const { year, setYear, availableYears, applyAvailableYears } = useAvailableYears({
+    initialYear: '',
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState('')
@@ -116,7 +128,13 @@ export default function CashRegister() {
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
-  const [summary, setSummary] = useState({ current_balance: 0, total_in: 0, total_out: 0, entries: [], available_withdrawals: [] })
+  const [summary, setSummary] = useState({
+    current_balance: 0,
+    total_in: 0,
+    total_out: 0,
+    entries: [],
+    available_withdrawals: [],
+  })
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
@@ -163,19 +181,20 @@ export default function CashRegister() {
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
   const salaryProject = projects.find((project) => project.code === 'INT-SALARY') || null
-  const {
-    getCategoryById,
-    getCategoryDefaultProjectId,
-    getCategoryLabel: getResolvedCategoryLabel,
-  } = useCategoryProjectResolver(categories, lang)
-  const { updateProject: updateExpenseProjectBase, updateContract: updateExpenseContractBase } = useProjectContractForm({
-    contracts,
-    setForm: setExpenseForm,
-  })
-  const { updateProject: updateWithdrawalProjectBase, updateContract: updateWithdrawalContractBase } = useProjectContractForm({
-    contracts,
-    setForm: setWithdrawalForm,
-  })
+  const { getCategoryById, getCategoryLabel: getResolvedCategoryLabel } = useCategoryProjectResolver(
+    categories,
+    lang
+  )
+  const { updateProject: updateExpenseProjectBase, updateContract: updateExpenseContractBase } =
+    useProjectContractForm({
+      contracts,
+      setForm: setExpenseForm,
+    })
+  const { updateProject: updateWithdrawalProjectBase, updateContract: updateWithdrawalContractBase } =
+    useProjectContractForm({
+      contracts,
+      setForm: setWithdrawalForm,
+    })
   const getProjectName = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
 
   const loadData = () => {
@@ -226,6 +245,7 @@ export default function CashRegister() {
     }
 
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, search, isActivePage, location.search])
 
   const getCategoryLabel = (categoryId) => getResolvedCategoryLabel(categoryId, UI_DASH)
@@ -269,9 +289,10 @@ export default function CashRegister() {
     const description = entry?.description || ''
     if (!entry?.worker_payout_id) return description
     if (entry.worker_payout_type && entry.worker_payout_worker_name) {
-      const period = entry.worker_payout_period_start && entry.worker_payout_period_end
-        ? ` ${entry.worker_payout_period_start}-${entry.worker_payout_period_end}`
-        : ''
+      const period =
+        entry.worker_payout_period_start && entry.worker_payout_period_end
+          ? ` ${entry.worker_payout_period_start}-${entry.worker_payout_period_end}`
+          : ''
       return `${getWorkerPayoutTypeLabel(entry.worker_payout_type)}: ${entry.worker_payout_worker_name}${period}`
     }
     return description
@@ -291,15 +312,13 @@ export default function CashRegister() {
   const getContractsForProject = (projectId) => filterContractsForProject(contracts, projectId)
 
   const expenseContracts = useMemo(() => {
-    const effectiveProjectId = getForcedExpenseProjectId(expenseForm.category_id) || expenseForm.project_id || ''
+    const effectiveProjectId =
+      getForcedExpenseProjectId(expenseForm.category_id) || expenseForm.project_id || ''
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
     return getContractsForProject(selectedProjectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contracts, expenseForm.project_id, expenseForm.category_id, categories, salaryProject])
 
-  const selectedExpenseCategory = useMemo(
-    () => getCategoryById(expenseForm.category_id),
-    [categories, expenseForm.category_id]
-  )
   const expenseUsesForcedProject = Boolean(getForcedExpenseProjectId(expenseForm.category_id))
 
   useEffect(() => {
@@ -311,17 +330,20 @@ export default function CashRegister() {
       project_id: forcedProjectId,
       contract_id: '',
     }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expenseForm.category_id, expenseForm.project_id, expenseForm.contract_id, categories, salaryProject])
 
   const withdrawalContracts = useMemo(() => {
     const selectedProjectId = withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : null
     return getContractsForProject(selectedProjectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contracts, withdrawalForm.project_id])
 
   const pendingWithdrawalTotal = useMemo(
-    () => (summary.entries || [])
-      .filter((entry) => entry.entry_type === 'pending_withdrawal')
-      .reduce((total, entry) => total + Number(entry.amount || 0), 0),
+    () =>
+      (summary.entries || [])
+        .filter((entry) => entry.entry_type === 'pending_withdrawal')
+        .reduce((total, entry) => total + Number(entry.amount || 0), 0),
     [summary.entries]
   )
 
@@ -342,10 +364,15 @@ export default function CashRegister() {
   )
 
   const workerPayoutCategoryId = workerPayoutForm.category_id || selectedWorker?.default_category_id || ''
-  const workerPayoutProjectId = workerPayoutForm.project_id || selectedWorker?.default_project_id || getForcedExpenseProjectId(workerPayoutCategoryId) || ''
+  const workerPayoutProjectId =
+    workerPayoutForm.project_id ||
+    selectedWorker?.default_project_id ||
+    getForcedExpenseProjectId(workerPayoutCategoryId) ||
+    ''
   const workerPayoutContracts = useMemo(() => {
     const selectedProjectId = workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : null
     return getContractsForProject(selectedProjectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contracts, workerPayoutProjectId])
 
   const workerPayoutPreview = useMemo(() => {
@@ -353,11 +380,12 @@ export default function CashRegister() {
     const calculatedDays = duration ? duration.days : null
     const fallbackWorkDays = calculatedDays ?? toNumber(workerPayoutForm.work_days)
     const fallbackTripDays = calculatedDays ?? toNumber(workerPayoutForm.trip_days)
-    const fallbackLodgingNights = calculatedDays !== null
-      ? Math.max(calculatedDays - 1, 0)
-      : workerPayoutForm.lodging_nights !== ''
-      ? toNumber(workerPayoutForm.lodging_nights)
-      : Math.max(fallbackTripDays - 1, 0)
+    const fallbackLodgingNights =
+      calculatedDays !== null
+        ? Math.max(calculatedDays - 1, 0)
+        : workerPayoutForm.lodging_nights !== ''
+          ? toNumber(workerPayoutForm.lodging_nights)
+          : Math.max(fallbackTripDays - 1, 0)
     if (!selectedWorker) {
       return {
         gross: 0,
@@ -383,31 +411,37 @@ export default function CashRegister() {
     const monthlyRate = toNumber(selectedWorker.monthly_rate)
     const tripPricingMode = selectedWorker.trip_pricing_mode || 'allowances'
     const tripWorkDayRate = toNumber(selectedWorker.trip_work_day_rate) || regularDayRate
-    const perDiemRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_per_diem_rate)
+    const perDiemRate =
+      tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_per_diem_rate)
     const foodRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_food_rate)
     const advanceDayRate = toNumber(selectedWorker.trip_advance_day_rate)
-    const lodgingNights = calculatedDays !== null
-      ? fallbackLodgingNights
-      : workerPayoutForm.lodging_nights !== ''
-      ? fallbackLodgingNights
-      : Math.max(tripDays + Number(selectedWorker.lodging_nights_offset || 0), 0)
-    const lodgingNightRate = workerPayoutForm.lodging_night_rate !== ''
-      ? toNumber(workerPayoutForm.lodging_night_rate)
-      : toNumber(selectedWorker.lodging_night_rate)
+    const lodgingNights =
+      calculatedDays !== null
+        ? fallbackLodgingNights
+        : workerPayoutForm.lodging_nights !== ''
+          ? fallbackLodgingNights
+          : Math.max(tripDays + Number(selectedWorker.lodging_nights_offset || 0), 0)
+    const lodgingNightRate =
+      workerPayoutForm.lodging_night_rate !== ''
+        ? toNumber(workerPayoutForm.lodging_night_rate)
+        : toNumber(selectedWorker.lodging_night_rate)
     const lodgingAmount = lodgingNights * lodgingNightRate
-    const gross = payoutType === 'monthly'
-      ? monthlyRate
-      : payoutType === 'weekly'
-        ? weeklyRate
-      : payoutType === 'regular'
-        ? workDays * regularDayRate
-        : tripDays * (tripWorkDayRate + perDiemRate + foodRate) + lodgingAmount
-    const defaultCash = payoutType === 'trip_advance'
-      ? tripDays * advanceDayRate + lodgingAmount
-      : payoutType === 'trip_final'
-        ? Math.max(gross - toNumber(workerPayoutForm.advance_paid), 0)
-        : gross
-    const cash = workerPayoutForm.cash_paid_amount !== '' ? toNumber(workerPayoutForm.cash_paid_amount) : defaultCash
+    const gross =
+      payoutType === 'monthly'
+        ? monthlyRate
+        : payoutType === 'weekly'
+          ? weeklyRate
+          : payoutType === 'regular'
+            ? workDays * regularDayRate
+            : tripDays * (tripWorkDayRate + perDiemRate + foodRate) + lodgingAmount
+    const defaultCash =
+      payoutType === 'trip_advance'
+        ? tripDays * advanceDayRate + lodgingAmount
+        : payoutType === 'trip_final'
+          ? Math.max(gross - toNumber(workerPayoutForm.advance_paid), 0)
+          : gross
+    const cash =
+      workerPayoutForm.cash_paid_amount !== '' ? toNumber(workerPayoutForm.cash_paid_amount) : defaultCash
     const remaining = Math.max(gross - toNumber(workerPayoutForm.advance_paid) - cash, 0)
     return {
       gross,
@@ -456,7 +490,9 @@ export default function CashRegister() {
       return lines
     }
     if (workerPayoutForm.payout_type === 'regular') {
-      return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.workDays)} * ${fmtAmount(workerPayoutPreview.regularDayRate)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`]
+      return [
+        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.workDays)} * ${fmtAmount(workerPayoutPreview.regularDayRate)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`,
+      ]
     }
     return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.gross)} RSD`]
   }, [selectedWorker, workerPayoutForm, workerPayoutPreview])
@@ -494,42 +530,45 @@ export default function CashRegister() {
       const leftOut = left.direction === 'out' ? Number(left.amount || 0) : 0
       const rightOut = right.direction === 'out' ? Number(right.amount || 0) : 0
 
-      const leftValue = sortCol === 'entry_type'
-        ? getEntryTypeLabel(left)
-        : sortCol === 'source'
-          ? getEntrySourceLabel(left)
-          : sortCol === 'inflow'
-            ? leftIn
-            : sortCol === 'outflow'
-              ? leftOut
-              : sortCol === 'balance_after'
-                ? Number(left.balance_after || 0)
-                : sortCol === 'amount'
-                  ? Number(left.amount || 0)
-                  : sortCol === 'description'
-                    ? `${getDisplayDescription(left) || ''} ${left.note || ''}`
-                    : left[sortCol] ?? ''
+      const leftValue =
+        sortCol === 'entry_type'
+          ? getEntryTypeLabel(left)
+          : sortCol === 'source'
+            ? getEntrySourceLabel(left)
+            : sortCol === 'inflow'
+              ? leftIn
+              : sortCol === 'outflow'
+                ? leftOut
+                : sortCol === 'balance_after'
+                  ? Number(left.balance_after || 0)
+                  : sortCol === 'amount'
+                    ? Number(left.amount || 0)
+                    : sortCol === 'description'
+                      ? `${getDisplayDescription(left) || ''} ${left.note || ''}`
+                      : (left[sortCol] ?? '')
 
-      const rightValue = sortCol === 'entry_type'
-        ? getEntryTypeLabel(right)
-        : sortCol === 'source'
-          ? getEntrySourceLabel(right)
-          : sortCol === 'inflow'
-            ? rightIn
-            : sortCol === 'outflow'
-              ? rightOut
-              : sortCol === 'balance_after'
-                ? Number(right.balance_after || 0)
-                : sortCol === 'amount'
-                  ? Number(right.amount || 0)
-                  : sortCol === 'description'
-                    ? `${getDisplayDescription(right) || ''} ${right.note || ''}`
-                    : right[sortCol] ?? ''
+      const rightValue =
+        sortCol === 'entry_type'
+          ? getEntryTypeLabel(right)
+          : sortCol === 'source'
+            ? getEntrySourceLabel(right)
+            : sortCol === 'inflow'
+              ? rightIn
+              : sortCol === 'outflow'
+                ? rightOut
+                : sortCol === 'balance_after'
+                  ? Number(right.balance_after || 0)
+                  : sortCol === 'amount'
+                    ? Number(right.amount || 0)
+                    : sortCol === 'description'
+                      ? `${getDisplayDescription(right) || ''} ${right.note || ''}`
+                      : (right[sortCol] ?? '')
 
       if (leftValue < rightValue) return sortAsc ? -1 : 1
       if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summary.entries, search, sortCol, sortAsc, projects, lang])
 
   const selectedEntries = useMemo(() => {
@@ -539,23 +578,25 @@ export default function CashRegister() {
   }, [summary.entries, selectedIds])
 
   const selectedTotals = useMemo(() => {
-    return selectedEntries.reduce((totals, entry) => {
-      const amount = Number(entry.amount || 0)
-      if (entry.direction === 'in') totals.in += amount
-      else totals.out += amount
-      totals.net += entry.direction === 'in' ? amount : -amount
-      return totals
-    }, { in: 0, out: 0, net: 0 })
+    return selectedEntries.reduce(
+      (totals, entry) => {
+        const amount = Number(entry.amount || 0)
+        if (entry.direction === 'in') totals.in += amount
+        else totals.out += amount
+        totals.net += entry.direction === 'in' ? amount : -amount
+        return totals
+      },
+      { in: 0, out: 0, net: 0 }
+    )
   }, [selectedEntries])
 
-  const allFilteredSelected = filteredEntries.length > 0 && filteredEntries.every((entry) => selectedIds.includes(entry.id))
+  const allFilteredSelected =
+    filteredEntries.length > 0 && filteredEntries.every((entry) => selectedIds.includes(entry.id))
 
   const toggleSelect = (id) => {
-    setSelectedIds((previous) => (
-      previous.includes(id)
-        ? previous.filter((value) => value !== id)
-        : [...previous, id]
-    ))
+    setSelectedIds((previous) =>
+      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id]
+    )
   }
 
   const toggleSelectAll = () => {
@@ -564,7 +605,9 @@ export default function CashRegister() {
       setSelectedIds((previous) => previous.filter((id) => !filteredIdSet.has(id)))
       return
     }
-    setSelectedIds((previous) => Array.from(new Set([...previous, ...filteredEntries.map((entry) => entry.id)])))
+    setSelectedIds((previous) =>
+      Array.from(new Set([...previous, ...filteredEntries.map((entry) => entry.id)]))
+    )
   }
 
   const toggleSort = (column) => {
@@ -585,15 +628,21 @@ export default function CashRegister() {
       { label: tr('note'), type: 'text', value: (entry) => entry.note || '' },
       { label: tr('cashSource'), type: 'text', value: getEntrySourceLabel },
       { label: tr('project'), type: 'text', value: (entry) => getProjectName(entry.project_id) || '' },
-      { label: tr('cashflowInflow'), type: 'number', value: (entry) => entry.direction === 'in' ? Number(entry.amount || 0) : 0 },
-      { label: tr('cashflowOutflow'), type: 'number', value: (entry) => entry.direction === 'out' ? Number(entry.amount || 0) : 0 },
+      {
+        label: tr('cashflowInflow'),
+        type: 'number',
+        value: (entry) => (entry.direction === 'in' ? Number(entry.amount || 0) : 0),
+      },
+      {
+        label: tr('cashflowOutflow'),
+        type: 'number',
+        value: (entry) => (entry.direction === 'out' ? Number(entry.amount || 0) : 0),
+      },
       { label: tr('cashBalanceAfter'), type: 'number', value: (entry) => Number(entry.balance_after || 0) },
       { label: tr('valuta'), type: 'text', value: (entry) => entry.currency || 'RSD' },
     ]
 
-    const header = columns
-      .map((column) => `<th>${escapeExcelHtml(column.label)}</th>`)
-      .join('')
+    const header = columns.map((column) => `<th>${escapeExcelHtml(column.label)}</th>`).join('')
     const body = filteredEntries
       .map((entry) => {
         const cells = columns.map((column) => {
@@ -724,7 +773,9 @@ export default function CashRegister() {
     }
     setExpenseForm((previous) => {
       const selectedContract = contracts.find((contract) => String(contract.id) === String(contractId))
-      const nextProjectId = selectedContract?.project_id ? String(selectedContract.project_id) : previous.project_id
+      const nextProjectId = selectedContract?.project_id
+        ? String(selectedContract.project_id)
+        : previous.project_id
       return {
         ...previous,
         project_id: nextProjectId,
@@ -775,7 +826,11 @@ export default function CashRegister() {
         category_id: expenseForm.category_id ? parseInt(expenseForm.category_id, 10) : null,
         project_id: forcedProjectId
           ? parseInt(forcedProjectId, 10)
-          : (expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+          : expenseForm.project_id
+            ? parseInt(expenseForm.project_id, 10)
+            : unassignedProject
+              ? unassignedProject.id
+              : null,
         contract_id: expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null,
         note: expenseForm.note?.trim() || null,
       }
@@ -810,25 +865,27 @@ export default function CashRegister() {
     setPageError('')
     try {
       const payout = await api.workers.getPayout(entry.worker_payout_id)
-      setWorkerPayoutForm(applyPayoutDuration({
-        ...emptyWorkerPayoutForm,
-        worker_id: toFormValue(payout.worker_id),
-        payout_type: payout.payout_type || 'regular',
-        date: payout.date || todayIso(),
-        period_start: payout.period_start || '',
-        period_end: payout.period_end || '',
-        work_days: toFormValue(payout.work_days || 0),
-        trip_days: toFormValue(payout.trip_days || 0),
-        lodging_nights: toFormValue(payout.lodging_nights || 0),
-        lodging_night_rate: toFormValue(payout.lodging_night_rate || payout.lodging_amount || 0),
-        lodging_amount: toFormValue(payout.lodging_amount || 0),
-        advance_paid: toFormValue(payout.advance_paid || 0),
-        cash_paid_amount: toFormValue(payout.cash_paid_amount || 0),
-        project_id: toFormValue(payout.project_id),
-        contract_id: toFormValue(payout.contract_id),
-        category_id: toFormValue(payout.category_id),
-        note: isGeneratedWorkerPayoutNote(payout.note) ? '' : (payout.note || ''),
-      }))
+      setWorkerPayoutForm(
+        applyPayoutDuration({
+          ...emptyWorkerPayoutForm,
+          worker_id: toFormValue(payout.worker_id),
+          payout_type: payout.payout_type || 'regular',
+          date: payout.date || todayIso(),
+          period_start: payout.period_start || '',
+          period_end: payout.period_end || '',
+          work_days: toFormValue(payout.work_days || 0),
+          trip_days: toFormValue(payout.trip_days || 0),
+          lodging_nights: toFormValue(payout.lodging_nights || 0),
+          lodging_night_rate: toFormValue(payout.lodging_night_rate || payout.lodging_amount || 0),
+          lodging_amount: toFormValue(payout.lodging_amount || 0),
+          advance_paid: toFormValue(payout.advance_paid || 0),
+          cash_paid_amount: toFormValue(payout.cash_paid_amount || 0),
+          project_id: toFormValue(payout.project_id),
+          contract_id: toFormValue(payout.contract_id),
+          category_id: toFormValue(payout.category_id),
+          note: isGeneratedWorkerPayoutNote(payout.note) ? '' : payout.note || '',
+        })
+      )
       setWorkerPayoutModal({ payoutId: payout.id })
       setDetailModal(null)
     } catch (error) {
@@ -923,13 +980,19 @@ export default function CashRegister() {
         work_days: workerPayoutPreview.workDays,
         trip_days: workerPayoutPreview.tripDays,
         lodging_nights: workerPayoutPreview.lodgingNights,
-        lodging_night_rate: workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
+        lodging_night_rate:
+          workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
         lodging_amount: workerPayoutPreview.lodgingAmount,
         advance_paid: toNumber(workerPayoutForm.advance_paid),
-        cash_paid_amount: workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
+        cash_paid_amount:
+          workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
         trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
-        project_id: workerPayoutProjectId ? parseInt(workerPayoutProjectId, 10) : (unassignedProject ? unassignedProject.id : null),
+        project_id: workerPayoutProjectId
+          ? parseInt(workerPayoutProjectId, 10)
+          : unassignedProject
+            ? unassignedProject.id
+            : null,
         contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
         note: workerPayoutForm.note?.trim() || null,
       }
@@ -981,7 +1044,11 @@ export default function CashRegister() {
     try {
       await api.cash.updateEntry(withdrawalModal.entryId, {
         description: withdrawalForm.description.trim(),
-        project_id: withdrawalForm.project_id ? parseInt(withdrawalForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null),
+        project_id: withdrawalForm.project_id
+          ? parseInt(withdrawalForm.project_id, 10)
+          : unassignedProject
+            ? unassignedProject.id
+            : null,
         contract_id: withdrawalForm.contract_id ? parseInt(withdrawalForm.contract_id, 10) : null,
         note: withdrawalForm.note?.trim() || null,
       })
@@ -1067,9 +1134,10 @@ export default function CashRegister() {
 
   const handleDeleteCashEntry = async (entry) => {
     if (!entry || !['expense', 'pending_withdrawal'].includes(entry.entry_type)) return
-    const confirmMessage = entry.entry_type === 'pending_withdrawal'
-      ? tr('cashDeletePendingWithdrawalConfirm')
-      : tr('cashDeleteExpenseConfirm')
+    const confirmMessage =
+      entry.entry_type === 'pending_withdrawal'
+        ? tr('cashDeletePendingWithdrawalConfirm')
+        : tr('cashDeleteExpenseConfirm')
     if (!confirm(confirmMessage)) return
     setSaving(true)
     setPageError('')
@@ -1100,10 +1168,18 @@ export default function CashRegister() {
               setMonth('')
             }}
           />
-          <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
+          <select
+            className="form-input"
+            style={{ width: 'auto' }}
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+            disabled={!year}
+          >
             <option value="">{tr('allMonths')}</option>
             {MONTHS.map((value) => (
-              <option key={value} value={value}>{String(value).padStart(2, '0')}</option>
+              <option key={value} value={value}>
+                {String(value).padStart(2, '0')}
+              </option>
             ))}
           </select>
           <SearchInput
@@ -1112,13 +1188,25 @@ export default function CashRegister() {
             onChange={setSearch}
             style={{ width: 220 }}
           />
-          <button className="btn btn-secondary" onClick={handleExportExcel} disabled={loading || filteredEntries.length === 0}>
+          <button
+            className="btn btn-secondary"
+            onClick={handleExportExcel}
+            disabled={loading || filteredEntries.length === 0}
+          >
             {tr('bankTxExportSelectedExcel')} ({filteredEntries.length})
           </button>
-          <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>{tr('cashAddPendingWithdrawal')}</button>
-          <button className="btn btn-secondary" onClick={openAdjustmentCreate}>{tr('cashAddAdjustment')}</button>
-          <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>{tr('workerPayoutCreateTitle')}</button>
-          <button className="btn btn-primary" onClick={openExpenseCreate}>{tr('cashAddExpense')}</button>
+          <button className="btn btn-secondary" onClick={openPendingWithdrawalCreate}>
+            {tr('cashAddPendingWithdrawal')}
+          </button>
+          <button className="btn btn-secondary" onClick={openAdjustmentCreate}>
+            {tr('cashAddAdjustment')}
+          </button>
+          <button className="btn btn-secondary" onClick={openWorkerPayoutCreate}>
+            {tr('workerPayoutCreateTitle')}
+          </button>
+          <button className="btn btn-primary" onClick={openExpenseCreate}>
+            {tr('cashAddExpense')}
+          </button>
         </div>
       </div>
 
@@ -1133,23 +1221,38 @@ export default function CashRegister() {
           <div>{tr('loading')}</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '1rem',
+                marginBottom: '1rem',
+              }}
+            >
               <div className="card">
                 <div className="card-title">{tr('cashCurrentBalance')}</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{fmtAmount(summary.current_balance)} RSD</div>
+                <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                  {fmtAmount(summary.current_balance)} RSD
+                </div>
                 {pendingWithdrawalTotal > 0 ? (
-                  <div style={{ marginTop: '0.35rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  <div
+                    style={{ marginTop: '0.35rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}
+                  >
                     {tr('cashPendingWithdrawalTotal')}: +{fmtAmount(pendingWithdrawalTotal)} RSD
                   </div>
                 ) : null}
               </div>
               <div className="card">
                 <div className="card-title">{tr('cashTotalIn')}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-success)' }}>+{fmtAmount(summary.total_in)} RSD</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-success)' }}>
+                  +{fmtAmount(summary.total_in)} RSD
+                </div>
               </div>
               <div className="card">
                 <div className="card-title">{tr('cashTotalOut')}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-danger)' }}>-{fmtAmount(summary.total_out)} RSD</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-danger)' }}>
+                  -{fmtAmount(summary.total_out)} RSD
+                </div>
               </div>
             </div>
 
@@ -1157,9 +1260,21 @@ export default function CashRegister() {
               <SelectionSummary
                 count={selectedEntries.length}
                 items={[
-                  { label: tr('selectedIn'), value: `+${fmtAmount(selectedTotals.in)} RSD`, tone: 'positive' },
-                  { label: tr('selectedOut'), value: `-${fmtAmount(selectedTotals.out)} RSD`, tone: 'negative' },
-                  { label: tr('selectedNet'), value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`, tone: selectedTotals.net >= 0 ? 'positive' : 'negative' },
+                  {
+                    label: tr('selectedIn'),
+                    value: `+${fmtAmount(selectedTotals.in)} RSD`,
+                    tone: 'positive',
+                  },
+                  {
+                    label: tr('selectedOut'),
+                    value: `-${fmtAmount(selectedTotals.out)} RSD`,
+                    tone: 'negative',
+                  },
+                  {
+                    label: tr('selectedNet'),
+                    value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`,
+                    tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
+                  },
                 ]}
               />
               <div className="table-wrap cash-register-table-wrap">
@@ -1169,68 +1284,138 @@ export default function CashRegister() {
                       <th className="col-select">
                         <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} />
                       </th>
-                      <th className="col-date" style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
-                      <th className="col-type" style={{ cursor: 'pointer' }} onClick={() => toggleSort('entry_type')}>{tr('cashEntryType')} <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} /></th>
-                      <th className="col-description" style={{ cursor: 'pointer' }} onClick={() => toggleSort('description')}>{tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} /></th>
-                      <th className="col-source" style={{ cursor: 'pointer' }} onClick={() => toggleSort('source')}>{tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} /></th>
-                      <th className="col-amount" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('inflow')}>{tr('cashflowInflow')} <SortIndicator active={sortCol === 'inflow'} asc={sortAsc} /></th>
-                      <th className="col-amount" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('outflow')}>{tr('cashflowOutflow')} <SortIndicator active={sortCol === 'outflow'} asc={sortAsc} /></th>
-                      <th className="col-balance" style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('balance_after')}>{tr('cashBalanceAfter')} <SortIndicator active={sortCol === 'balance_after'} asc={sortAsc} /></th>
+                      <th
+                        className="col-date"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggleSort('date')}
+                      >
+                        {tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-type"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggleSort('entry_type')}
+                      >
+                        {tr('cashEntryType')}{' '}
+                        <SortIndicator active={sortCol === 'entry_type'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-description"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggleSort('description')}
+                      >
+                        {tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-source"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggleSort('source')}
+                      >
+                        {tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-amount"
+                        style={{ textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => toggleSort('inflow')}
+                      >
+                        {tr('cashflowInflow')} <SortIndicator active={sortCol === 'inflow'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-amount"
+                        style={{ textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => toggleSort('outflow')}
+                      >
+                        {tr('cashflowOutflow')} <SortIndicator active={sortCol === 'outflow'} asc={sortAsc} />
+                      </th>
+                      <th
+                        className="col-balance"
+                        style={{ textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => toggleSort('balance_after')}
+                      >
+                        {tr('cashBalanceAfter')}{' '}
+                        <SortIndicator active={sortCol === 'balance_after'} asc={sortAsc} />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoEntries')}</td>
+                        <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>
+                          {tr('cashNoEntries')}
+                        </td>
                       </tr>
-                    ) : filteredEntries.map((entry) => {
-                      const typeLabel = getEntryTypeLabel(entry)
-                      const sourceLabel = getEntrySourceLabel(entry)
-                      const descriptionLabel = getDisplayDescription(entry)
-                      const payoutMeta = getWorkerPayoutDescriptionMeta(entry)
-                      return (
-                        <tr
-                          key={entry.id}
-                          className={`record-row ${selectedIds.includes(entry.id) ? 'record-row-selected' : ''}`.trim()}
-                          onClick={() => openDetail(entry)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              openDetail(entry)
-                            }
-                          }}
-                          tabIndex={0}
-                        >
-                          <td className="col-select">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(entry.id)}
-                              onChange={() => toggleSelect(entry.id)}
-                              onClick={(event) => event.stopPropagation()}
-                            />
-                          </td>
-                          <td className="col-date">{entry.date}</td>
-                          <td className="col-type">{typeLabel}</td>
-                          <td className="col-description">
-                            <div className="record-cell-ellipsis">{descriptionLabel}</div>
-                            {payoutMeta ? (
-                              <div className="record-cell-subtitle" title={payoutMeta}>{payoutMeta}</div>
-                            ) : null}
-                            {entry.note ? (
-                              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{entry.note}</div>
-                            ) : null}
-                          </td>
-                          <td className="col-source">{sourceLabel}</td>
-                          <td className="col-amount" style={{ textAlign: 'right', color: 'var(--color-success)' }}>
-                            {entry.direction === 'in' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
-                          </td>
-                          <td className="col-amount" style={{ textAlign: 'right', color: 'var(--color-danger)' }}>
-                            {entry.direction === 'out' ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}` : UI_DASH}
-                          </td>
-                          <td className="col-balance" style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(entry.balance_after)} RSD</td>
-                        </tr>
-                      )
-                    })}
+                    ) : (
+                      filteredEntries.map((entry) => {
+                        const typeLabel = getEntryTypeLabel(entry)
+                        const sourceLabel = getEntrySourceLabel(entry)
+                        const descriptionLabel = getDisplayDescription(entry)
+                        const payoutMeta = getWorkerPayoutDescriptionMeta(entry)
+                        return (
+                          <tr
+                            key={entry.id}
+                            className={`record-row ${selectedIds.includes(entry.id) ? 'record-row-selected' : ''}`.trim()}
+                            onClick={() => openDetail(entry)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                openDetail(entry)
+                              }
+                            }}
+                            tabIndex={0}
+                          >
+                            <td className="col-select">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(entry.id)}
+                                onChange={() => toggleSelect(entry.id)}
+                                onClick={(event) => event.stopPropagation()}
+                              />
+                            </td>
+                            <td className="col-date">{entry.date}</td>
+                            <td className="col-type">{typeLabel}</td>
+                            <td className="col-description">
+                              <div className="record-cell-ellipsis">{descriptionLabel}</div>
+                              {payoutMeta ? (
+                                <div className="record-cell-subtitle" title={payoutMeta}>
+                                  {payoutMeta}
+                                </div>
+                              ) : null}
+                              {entry.note ? (
+                                <div
+                                  style={{
+                                    color: 'var(--color-text-muted)',
+                                    fontSize: '0.8rem',
+                                    marginTop: '0.2rem',
+                                  }}
+                                >
+                                  {entry.note}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="col-source">{sourceLabel}</td>
+                            <td
+                              className="col-amount"
+                              style={{ textAlign: 'right', color: 'var(--color-success)' }}
+                            >
+                              {entry.direction === 'in'
+                                ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}`
+                                : UI_DASH}
+                            </td>
+                            <td
+                              className="col-amount"
+                              style={{ textAlign: 'right', color: 'var(--color-danger)' }}
+                            >
+                              {entry.direction === 'out'
+                                ? `${fmtAmount(entry.amount)} ${entry.currency || 'RSD'}`
+                                : UI_DASH}
+                            </td>
+                            <td className="col-balance" style={{ textAlign: 'right', fontWeight: 700 }}>
+                              {fmtAmount(entry.balance_after)} RSD
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1239,7 +1424,14 @@ export default function CashRegister() {
         )}
       </div>
 
-      <Modal isOpen={!!detailModal} onClose={() => setDetailModal(null)} title={detailModal ? `${tr('cashEntryType')}: ${getEntryTypeLabel(detailModal)}` : tr('cashEntryType')} maxWidth="860px">
+      <Modal
+        isOpen={!!detailModal}
+        onClose={() => setDetailModal(null)}
+        title={
+          detailModal ? `${tr('cashEntryType')}: ${getEntryTypeLabel(detailModal)}` : tr('cashEntryType')
+        }
+        maxWidth="860px"
+      >
         {detailModal ? (
           <div className="record-detail-grid">
             <div className="record-detail-card">
@@ -1254,11 +1446,19 @@ export default function CashRegister() {
                 </div>
                 <div className="record-field">
                   <span className="record-field-label">{tr('cashflowInflow')}</span>
-                  <span className="record-field-value">{detailModal.direction === 'in' ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}` : UI_DASH}</span>
+                  <span className="record-field-value">
+                    {detailModal.direction === 'in'
+                      ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}`
+                      : UI_DASH}
+                  </span>
                 </div>
                 <div className="record-field">
                   <span className="record-field-label">{tr('cashflowOutflow')}</span>
-                  <span className="record-field-value">{detailModal.direction === 'out' ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}` : UI_DASH}</span>
+                  <span className="record-field-value">
+                    {detailModal.direction === 'out'
+                      ? `${fmtAmount(detailModal.amount)} ${detailModal.currency || 'RSD'}`
+                      : UI_DASH}
+                  </span>
                 </div>
                 <div className="record-field">
                   <span className="record-field-label">{tr('cashBalanceAfter')}</span>
@@ -1266,7 +1466,9 @@ export default function CashRegister() {
                 </div>
                 <div className="record-field">
                   <span className="record-field-label">{tr('project')}</span>
-                  <span className="record-field-value">{getProjectName(detailModal.project_id) || UI_DASH}</span>
+                  <span className="record-field-value">
+                    {getProjectName(detailModal.project_id) || UI_DASH}
+                  </span>
                 </div>
                 <div className="record-field full">
                   <span className="record-field-label">{tr('description')}</span>
@@ -1285,7 +1487,9 @@ export default function CashRegister() {
                 {detailModal.contract_id ? (
                   <div className="record-field">
                     <span className="record-field-label">{tr('contracts')}</span>
-                    <span className="record-field-value">{getContractLabelById(contracts, detailModal.contract_id, UI_DASH)}</span>
+                    <span className="record-field-value">
+                      {getContractLabelById(contracts, detailModal.contract_id, UI_DASH)}
+                    </span>
                   </div>
                 ) : null}
                 <div className="record-field full">
@@ -1296,20 +1500,40 @@ export default function CashRegister() {
             </div>
             <div className="record-detail-card">
               <div className="record-actions-grid">
-                <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => openEditFromDetail(detailModal)}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={saving}
+                  onClick={() => openEditFromDetail(detailModal)}
+                >
                   {tr('edit')}
                 </button>
                 {detailModal.entry_type === 'expense' ? (
-                  <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashEntry(detailModal)}>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={saving}
+                    onClick={() => handleDeleteCashEntry(detailModal)}
+                  >
                     {tr('cashDeleteExpense')}
                   </button>
                 ) : null}
                 {detailModal.entry_type === 'pending_withdrawal' ? (
                   <>
-                    <button type="button" className="btn btn-primary" disabled={saving} onClick={() => setPendingLinkModal({ entry: detailModal })}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={saving}
+                      onClick={() => setPendingLinkModal({ entry: detailModal })}
+                    >
                       {tr('cashLinkPendingWithdrawal')}
                     </button>
-                    <button type="button" className="btn btn-danger" disabled={saving} onClick={() => handleDeleteCashEntry(detailModal)}>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={saving}
+                      onClick={() => handleDeleteCashEntry(detailModal)}
+                    >
                       {tr('cashDeletePendingWithdrawal')}
                     </button>
                   </>
@@ -1335,38 +1559,54 @@ export default function CashRegister() {
               <tbody>
                 {summary.available_withdrawals.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoAvailableWithdrawals')}</td>
-                  </tr>
-                ) : summary.available_withdrawals.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td>{transaction.date}</td>
-                    <td>
-                      <div>{buildBankLabel(transaction)}</div>
-                      {transaction.project_id ? (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                          {projects.find((project) => project.id === transaction.project_id)?.name || UI_DASH}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleTransferToCash(transaction)}>
-                        {tr('cashTransferToCash')}
-                      </button>
+                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('cashNoAvailableWithdrawals')}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  summary.available_withdrawals.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td>{transaction.date}</td>
+                      <td>
+                        <div>{buildBankLabel(transaction)}</div>
+                        {transaction.project_id ? (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            {projects.find((project) => project.id === transaction.project_id)?.name ||
+                              UI_DASH}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        {fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={saving}
+                          onClick={() => handleTransferToCash(transaction)}
+                        >
+                          {tr('cashTransferToCash')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </Modal>
 
-      <Modal isOpen={!!pendingLinkModal} onClose={() => setPendingLinkModal(null)} title={tr('cashLinkPendingWithdrawalTitle')}>
+      <Modal
+        isOpen={!!pendingLinkModal}
+        onClose={() => setPendingLinkModal(null)}
+        title={tr('cashLinkPendingWithdrawalTitle')}
+      >
         <div className="card" style={{ padding: '1rem' }}>
           {pendingLinkModal?.entry ? (
             <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-              {pendingLinkModal.entry.date} · {fmtAmount(pendingLinkModal.entry.amount)} {pendingLinkModal.entry.currency || 'RSD'} · {pendingLinkModal.entry.description}
+              {pendingLinkModal.entry.date} · {fmtAmount(pendingLinkModal.entry.amount)}{' '}
+              {pendingLinkModal.entry.currency || 'RSD'} · {pendingLinkModal.entry.description}
             </div>
           ) : null}
           <div className="table-wrap">
@@ -1382,49 +1622,90 @@ export default function CashRegister() {
               <tbody>
                 {pendingLinkCandidates.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('cashNoMatchingWithdrawals')}</td>
-                  </tr>
-                ) : pendingLinkCandidates.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td>{transaction.date}</td>
-                    <td>{buildBankLabel(transaction)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-sm btn-primary" disabled={saving} onClick={() => handleLinkPendingWithdrawal(transaction)}>
-                        {tr('cashLinkPendingWithdrawal')}
-                      </button>
+                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('cashNoMatchingWithdrawals')}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  pendingLinkCandidates.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td>{transaction.date}</td>
+                      <td>{buildBankLabel(transaction)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        {fmtAmount(transaction.amount)} {transaction.currency || 'RSD'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={saving}
+                          onClick={() => handleLinkPendingWithdrawal(transaction)}
+                        >
+                          {tr('cashLinkPendingWithdrawal')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </Modal>
 
-      <Modal isOpen={!!expenseModal} onClose={() => setExpenseModal(null)} title={expenseModal?.entryId ? tr('cashEditOperation') : tr('cashAddExpense')}>
+      <Modal
+        isOpen={!!expenseModal}
+        onClose={() => setExpenseModal(null)}
+        title={expenseModal?.entryId ? tr('cashEditOperation') : tr('cashAddExpense')}
+      >
         <form onSubmit={handleSaveExpense} className="card" style={{ padding: '1rem' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             {tr('cashCreateExpenseHint')}
           </div>
           <div className="form-group">
             <label className="form-label">{tr('date')}</label>
-            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
+            <DatePicker
+              value={expenseForm.date}
+              onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))}
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('description')}</label>
-            <input className="form-input" value={expenseForm.description} onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))} required />
+            <input
+              className="form-input"
+              value={expenseForm.description}
+              onChange={(event) =>
+                setExpenseForm((previous) => ({ ...previous, description: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('amount')}</label>
-            <input className="form-input" type="number" min="0" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm((previous) => ({ ...previous, amount: event.target.value }))} required />
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={expenseForm.amount}
+              onChange={(event) =>
+                setExpenseForm((previous) => ({ ...previous, amount: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('category')}</label>
-            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
+            <select
+              className="form-input"
+              value={expenseForm.category_id}
+              onChange={(event) => updateExpenseCategory(event.target.value)}
+            >
               <option value="">{tr('allCategories')}</option>
               {categories.map((category) => (
-                <option key={category.id} value={category.id}>{getCategoryLabel(category.id)}</option>
+                <option key={category.id} value={category.id}>
+                  {getCategoryLabel(category.id)}
+                </option>
               ))}
             </select>
           </div>
@@ -1432,14 +1713,26 @@ export default function CashRegister() {
             <>
               <div className="form-group">
                 <label className="form-label">{tr('project')}</label>
-                <ProjectSelect projects={projects} value={expenseForm.project_id} onChange={updateExpenseProject} allowEmpty emptyLabel={UI_DASH} />
+                <ProjectSelect
+                  projects={projects}
+                  value={expenseForm.project_id}
+                  onChange={updateExpenseProject}
+                  allowEmpty
+                  emptyLabel={UI_DASH}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('contracts')}</label>
-                <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+                <select
+                  className="form-input"
+                  value={expenseForm.contract_id}
+                  onChange={(event) => updateExpenseContract(event.target.value)}
+                >
                   <option value="">{UI_DASH}</option>
                   {expenseContracts.map((contract) => (
-                    <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                    <option key={contract.id} value={contract.id}>
+                      {buildContractLabel(contract)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1448,21 +1741,35 @@ export default function CashRegister() {
           {expenseUsesForcedProject && expenseContracts.length > 0 ? (
             <div className="form-group">
               <label className="form-label">{tr('contracts')}</label>
-              <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+              <select
+                className="form-input"
+                value={expenseForm.contract_id}
+                onChange={(event) => updateExpenseContract(event.target.value)}
+              >
                 <option value="">{UI_DASH}</option>
                 {expenseContracts.map((contract) => (
-                  <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                  <option key={contract.id} value={contract.id}>
+                    {buildContractLabel(contract)}
+                  </option>
                 ))}
               </select>
             </div>
           ) : null}
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={expenseForm.note}
+              onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))}
+            />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setExpenseModal(null)}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setExpenseModal(null)}>
+              {tr('cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? tr('loading') : tr('save')}
+            </button>
           </div>
         </form>
       </Modal>
@@ -1477,16 +1784,27 @@ export default function CashRegister() {
           <div className="worker-payout-section worker-payout-main-grid">
             <div className="form-group">
               <label className="form-label">{tr('worker')}</label>
-              <select className="form-input" value={workerPayoutForm.worker_id} onChange={(event) => updateWorkerPayoutWorker(event.target.value)} required>
+              <select
+                className="form-input"
+                value={workerPayoutForm.worker_id}
+                onChange={(event) => updateWorkerPayoutWorker(event.target.value)}
+                required
+              >
                 <option value="">{UI_DASH}</option>
                 {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>{worker.name}</option>
+                  <option key={worker.id} value={worker.id}>
+                    {worker.name}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutType')}</label>
-              <select className="form-input" value={workerPayoutForm.payout_type} onChange={(event) => updateWorkerPayoutType(event.target.value)}>
+              <select
+                className="form-input"
+                value={workerPayoutForm.payout_type}
+                onChange={(event) => updateWorkerPayoutType(event.target.value)}
+              >
                 <option value="regular">{tr('workerPayoutRegular')}</option>
                 <option value="weekly">{tr('workerPayoutWeekly')}</option>
                 <option value="monthly">{tr('workerPayoutMonthly')}</option>
@@ -1496,18 +1814,28 @@ export default function CashRegister() {
             </div>
             <div className="form-group">
               <label className="form-label">{tr('date')}</label>
-              <DatePicker value={workerPayoutForm.date} onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, date: value }))} required />
+              <DatePicker
+                value={workerPayoutForm.date}
+                onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, date: value }))}
+                required
+              />
             </div>
           </div>
 
           <div className="worker-payout-section worker-payout-trip-grid">
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPeriodStart')}</label>
-              <DatePicker value={workerPayoutForm.period_start} onChange={(value) => updateWorkerPayoutPeriod('period_start', value)} />
+              <DatePicker
+                value={workerPayoutForm.period_start}
+                onChange={(value) => updateWorkerPayoutPeriod('period_start', value)}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPeriodEnd')}</label>
-              <DatePicker value={workerPayoutForm.period_end} onChange={(value) => updateWorkerPayoutPeriod('period_end', value)} />
+              <DatePicker
+                value={workerPayoutForm.period_end}
+                onChange={(value) => updateWorkerPayoutPeriod('period_end', value)}
+              />
             </div>
             {workerPayoutForm.payout_type === 'regular' ? (
               <div className="record-field">
@@ -1527,19 +1855,51 @@ export default function CashRegister() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('workerPayoutLodgingNightRate')}</label>
-                  <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.lodgingNightRate)} value={workerPayoutForm.lodging_night_rate} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, lodging_night_rate: event.target.value }))} />
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder={String(workerPayoutPreview.lodgingNightRate)}
+                    value={workerPayoutForm.lodging_night_rate}
+                    onChange={(event) =>
+                      setWorkerPayoutForm((previous) => ({
+                        ...previous,
+                        lodging_night_rate: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
               </>
             ) : null}
             {workerPayoutForm.payout_type === 'trip_final' ? (
               <div className="form-group">
                 <label className="form-label">{tr('workerPayoutAdvancePaid')}</label>
-                <input className="form-input" type="number" min="0" step="0.01" value={workerPayoutForm.advance_paid} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, advance_paid: event.target.value }))} />
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={workerPayoutForm.advance_paid}
+                  onChange={(event) =>
+                    setWorkerPayoutForm((previous) => ({ ...previous, advance_paid: event.target.value }))
+                  }
+                />
               </div>
             ) : null}
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPayNow')}</label>
-              <input className="form-input" type="number" min="0" step="0.01" placeholder={String(workerPayoutPreview.cash)} value={workerPayoutForm.cash_paid_amount} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))} />
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder={String(workerPayoutPreview.cash)}
+                value={workerPayoutForm.cash_paid_amount}
+                onChange={(event) =>
+                  setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))
+                }
+              />
             </div>
           </div>
 
@@ -1559,10 +1919,14 @@ export default function CashRegister() {
           </div>
           {workerPayoutMathLines.length ? (
             <div className="worker-payout-calc">
-              <div className="record-field-label" style={{ marginBottom: '0.35rem' }}>{tr('workerPayoutCalculation')}</div>
+              <div className="record-field-label" style={{ marginBottom: '0.35rem' }}>
+                {tr('workerPayoutCalculation')}
+              </div>
               <div className="worker-payout-calc-lines">
                 {workerPayoutMathLines.map((line) => (
-                  <div key={line} className="worker-payout-calc-line">{line}</div>
+                  <div key={line} className="worker-payout-calc-line">
+                    {line}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1571,131 +1935,286 @@ export default function CashRegister() {
           <div className="worker-payout-section worker-payout-links-grid">
             <div className="form-group">
               <label className="form-label">{tr('category')}</label>
-              <select className="form-input" value={workerPayoutCategoryId} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, category_id: event.target.value }))}>
+              <select
+                className="form-input"
+                value={workerPayoutCategoryId}
+                onChange={(event) =>
+                  setWorkerPayoutForm((previous) => ({ ...previous, category_id: event.target.value }))
+                }
+              >
                 <option value="">{tr('allCategories')}</option>
                 {categories.map((category) => (
-                  <option key={category.id} value={category.id}>{getCategoryLabel(category.id)}</option>
+                  <option key={category.id} value={category.id}>
+                    {getCategoryLabel(category.id)}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">{tr('project')}</label>
-              <ProjectSelect projects={projects} value={workerPayoutProjectId} onChange={updateWorkerPayoutProject} allowEmpty emptyLabel={UI_DASH} />
+              <ProjectSelect
+                projects={projects}
+                value={workerPayoutProjectId}
+                onChange={updateWorkerPayoutProject}
+                allowEmpty
+                emptyLabel={UI_DASH}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">{tr('contracts')}</label>
-              <select className="form-input" value={workerPayoutForm.contract_id} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, contract_id: event.target.value }))}>
+              <select
+                className="form-input"
+                value={workerPayoutForm.contract_id}
+                onChange={(event) =>
+                  setWorkerPayoutForm((previous) => ({ ...previous, contract_id: event.target.value }))
+                }
+              >
                 <option value="">{UI_DASH}</option>
                 {workerPayoutContracts.map((contract) => (
-                  <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                  <option key={contract.id} value={contract.id}>
+                    {buildContractLabel(contract)}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={workerPayoutForm.note} onChange={(event) => setWorkerPayoutForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={workerPayoutForm.note}
+              onChange={(event) =>
+                setWorkerPayoutForm((previous) => ({ ...previous, note: event.target.value }))
+              }
+            />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setWorkerPayoutModal(null)}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={saving || !selectedWorker}>{saving ? tr('loading') : tr('save')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setWorkerPayoutModal(null)}>
+              {tr('cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !selectedWorker}>
+              {saving ? tr('loading') : tr('save')}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <Modal isOpen={!!pendingWithdrawalModal} onClose={() => setPendingWithdrawalModal(null)} title={pendingWithdrawalModal?.entryId ? tr('cashEditOperation') : tr('cashAddPendingWithdrawal')}>
+      <Modal
+        isOpen={!!pendingWithdrawalModal}
+        onClose={() => setPendingWithdrawalModal(null)}
+        title={pendingWithdrawalModal?.entryId ? tr('cashEditOperation') : tr('cashAddPendingWithdrawal')}
+      >
         <form onSubmit={handleSavePendingWithdrawal} className="card" style={{ padding: '1rem' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             {tr('cashPendingWithdrawalHint')}
           </div>
           <div className="form-group">
             <label className="form-label">{tr('date')}</label>
-            <DatePicker value={pendingWithdrawalForm.date} onChange={(value) => setPendingWithdrawalForm((previous) => ({ ...previous, date: value }))} required />
+            <DatePicker
+              value={pendingWithdrawalForm.date}
+              onChange={(value) => setPendingWithdrawalForm((previous) => ({ ...previous, date: value }))}
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('amount')}</label>
-            <input className="form-input" type="number" min="0" step="0.01" value={pendingWithdrawalForm.amount} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, amount: event.target.value }))} required />
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={pendingWithdrawalForm.amount}
+              onChange={(event) =>
+                setPendingWithdrawalForm((previous) => ({ ...previous, amount: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('valuta')}</label>
-            <input className="form-input" value={pendingWithdrawalForm.currency} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, currency: event.target.value.toUpperCase() }))} required />
+            <input
+              className="form-input"
+              value={pendingWithdrawalForm.currency}
+              onChange={(event) =>
+                setPendingWithdrawalForm((previous) => ({
+                  ...previous,
+                  currency: event.target.value.toUpperCase(),
+                }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('description')}</label>
-            <input className="form-input" value={pendingWithdrawalForm.description} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))} required />
+            <input
+              className="form-input"
+              value={pendingWithdrawalForm.description}
+              onChange={(event) =>
+                setPendingWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={pendingWithdrawalForm.note} onChange={(event) => setPendingWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={pendingWithdrawalForm.note}
+              onChange={(event) =>
+                setPendingWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))
+              }
+            />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setPendingWithdrawalModal(null)}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setPendingWithdrawalModal(null)}
+            >
+              {tr('cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? tr('loading') : tr('save')}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <Modal isOpen={!!adjustmentModal} onClose={() => setAdjustmentModal(null)} title={adjustmentModal?.entryId ? tr('cashEditOperation') : tr('cashAddAdjustment')}>
+      <Modal
+        isOpen={!!adjustmentModal}
+        onClose={() => setAdjustmentModal(null)}
+        title={adjustmentModal?.entryId ? tr('cashEditOperation') : tr('cashAddAdjustment')}
+      >
         <form onSubmit={handleSaveAdjustment} className="card" style={{ padding: '1rem' }}>
           <div className="form-group">
             <label className="form-label">{tr('date')}</label>
-            <DatePicker value={adjustmentForm.date} onChange={(value) => setAdjustmentForm((previous) => ({ ...previous, date: value }))} required />
+            <DatePicker
+              value={adjustmentForm.date}
+              onChange={(value) => setAdjustmentForm((previous) => ({ ...previous, date: value }))}
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('cashDirection')}</label>
-            <select className="form-input" value={adjustmentForm.direction} onChange={(event) => setAdjustmentForm((previous) => ({ ...previous, direction: event.target.value }))}>
+            <select
+              className="form-input"
+              value={adjustmentForm.direction}
+              onChange={(event) =>
+                setAdjustmentForm((previous) => ({ ...previous, direction: event.target.value }))
+              }
+            >
               <option value="in">{tr('cashDirectionIn')}</option>
               <option value="out">{tr('cashDirectionOut')}</option>
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">{tr('amount')}</label>
-            <input className="form-input" type="number" min="0" step="0.01" value={adjustmentForm.amount} onChange={(event) => setAdjustmentForm((previous) => ({ ...previous, amount: event.target.value }))} required />
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={adjustmentForm.amount}
+              onChange={(event) =>
+                setAdjustmentForm((previous) => ({ ...previous, amount: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('description')}</label>
-            <input className="form-input" value={adjustmentForm.description} onChange={(event) => setAdjustmentForm((previous) => ({ ...previous, description: event.target.value }))} required />
+            <input
+              className="form-input"
+              value={adjustmentForm.description}
+              onChange={(event) =>
+                setAdjustmentForm((previous) => ({ ...previous, description: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={adjustmentForm.note} onChange={(event) => setAdjustmentForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={adjustmentForm.note}
+              onChange={(event) =>
+                setAdjustmentForm((previous) => ({ ...previous, note: event.target.value }))
+              }
+            />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setAdjustmentModal(null)}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAdjustmentModal(null)}>
+              {tr('cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? tr('loading') : tr('save')}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <Modal isOpen={!!withdrawalModal} onClose={() => setWithdrawalModal(null)} title={tr('cashEditOperation')}>
+      <Modal
+        isOpen={!!withdrawalModal}
+        onClose={() => setWithdrawalModal(null)}
+        title={tr('cashEditOperation')}
+      >
         <form onSubmit={handleSaveWithdrawal} className="card" style={{ padding: '1rem' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             {tr('cashEditWithdrawalHint')}
           </div>
           <div className="form-group">
             <label className="form-label">{tr('description')}</label>
-            <input className="form-input" value={withdrawalForm.description} onChange={(event) => setWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))} required />
+            <input
+              className="form-input"
+              value={withdrawalForm.description}
+              onChange={(event) =>
+                setWithdrawalForm((previous) => ({ ...previous, description: event.target.value }))
+              }
+              required
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('project')}</label>
-            <ProjectSelect projects={projects} value={withdrawalForm.project_id} onChange={updateWithdrawalProject} allowEmpty emptyLabel={UI_DASH} />
+            <ProjectSelect
+              projects={projects}
+              value={withdrawalForm.project_id}
+              onChange={updateWithdrawalProject}
+              allowEmpty
+              emptyLabel={UI_DASH}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">{tr('contracts')}</label>
-            <select className="form-input" value={withdrawalForm.contract_id} onChange={(event) => updateWithdrawalContract(event.target.value)}>
+            <select
+              className="form-input"
+              value={withdrawalForm.contract_id}
+              onChange={(event) => updateWithdrawalContract(event.target.value)}
+            >
               <option value="">{UI_DASH}</option>
               {withdrawalContracts.map((contract) => (
-                <option key={contract.id} value={contract.id}>{buildContractLabel(contract)}</option>
+                <option key={contract.id} value={contract.id}>
+                  {buildContractLabel(contract)}
+                </option>
               ))}
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={withdrawalForm.note} onChange={(event) => setWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={withdrawalForm.note}
+              onChange={(event) =>
+                setWithdrawalForm((previous) => ({ ...previous, note: event.target.value }))
+              }
+            />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setWithdrawalModal(null)}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? tr('loading') : tr('save')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setWithdrawalModal(null)}>
+              {tr('cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? tr('loading') : tr('save')}
+            </button>
           </div>
         </form>
       </Modal>

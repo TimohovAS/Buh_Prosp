@@ -19,13 +19,12 @@ function saveStoredWidths(next) {
 }
 
 function getResizableTables() {
-  return Array.from(document.querySelectorAll('.table-wrap table'))
-    .filter((table) => {
-      const slot = table.closest('.route-cache-slot')
-      if (slot && !slot.classList.contains('active')) return false
-      if (table.querySelector('colgroup:not([data-resizable-columns="true"])')) return false
-      return true
-    })
+  return Array.from(document.querySelectorAll('.table-wrap table')).filter((table) => {
+    const slot = table.closest('.route-cache-slot')
+    if (slot && !slot.classList.contains('active')) return false
+    if (table.querySelector('colgroup:not([data-resizable-columns="true"])')) return false
+    return true
+  })
 }
 
 function getTableKey(table) {

@@ -70,8 +70,8 @@ function ProtectedRoute({ children }) {
 
 function PersistentPages() {
   const location = useLocation()
-  const activeRoute = APP_PAGE_ROUTES.find((route) =>
-    !!matchPath({ path: route.path, end: true }, location.pathname),
+  const activeRoute = APP_PAGE_ROUTES.find(
+    (route) => !!matchPath({ path: route.path, end: true }, location.pathname)
   )
   const [visitedRouteIds, setVisitedRouteIds] = useState(() => (activeRoute ? [activeRoute.id] : []))
 
@@ -84,21 +84,15 @@ function PersistentPages() {
     return <Navigate to="/" replace />
   }
 
-  return APP_PAGE_ROUTES
-    .filter((route) => visitedRouteIds.includes(route.id))
-    .map((route) => {
-      const PageComponent = route.Component
-      const isActive = route.id === activeRoute.id
-      return (
-        <div
-          key={route.id}
-          className={`route-cache-slot${isActive ? ' active' : ''}`}
-          aria-hidden={!isActive}
-        >
-          <PageComponent />
-        </div>
-      )
-    })
+  return APP_PAGE_ROUTES.filter((route) => visitedRouteIds.includes(route.id)).map((route) => {
+    const PageComponent = route.Component
+    const isActive = route.id === activeRoute.id
+    return (
+      <div key={route.id} className={`route-cache-slot${isActive ? ' active' : ''}`} aria-hidden={!isActive}>
+        <PageComponent />
+      </div>
+    )
+  })
 }
 
 function App() {
@@ -164,8 +158,7 @@ function App() {
     try {
       const updated = await api.auth.updateMe({ default_language: next })
       if (updated) setUser(updated)
-    } catch {
-    }
+    } catch {}
   }
 
   return (
