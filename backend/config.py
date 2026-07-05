@@ -1,5 +1,6 @@
 """Конфигурация приложения ProspEl."""
-from pydantic_settings import BaseSettings
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Literal
 
@@ -17,6 +18,7 @@ DEFAULT_DEV_CORS_ORIGINS = [
 
 class Settings(BaseSettings):
     """Настройки приложения."""
+
     app_name: str = "ProspEl"
     app_version: str = "2.1.0"
     app_env: Literal["dev", "prod"] = "dev"
@@ -37,8 +39,8 @@ class Settings(BaseSettings):
 
     # Лимиты по законодательству Сербии (RSD)
     income_limit_pausal: int = 6_000_000  # Порог выхода из паушального режима
-    income_limit_vat: int = 8_000_000     # Порог регистрации НДС
-    limit_warning_percent: float = 0.8     # 80% - предупреждение
+    income_limit_vat: int = 8_000_000  # Порог регистрации НДС
+    limit_warning_percent: float = 0.8  # 80% - предупреждение
 
     @field_validator("app_env", mode="before")
     @classmethod
@@ -88,9 +90,7 @@ class Settings(BaseSettings):
     def is_prod(self) -> bool:
         return self.app_env == "prod"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 @lru_cache()

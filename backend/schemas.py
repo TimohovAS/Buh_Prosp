@@ -1,11 +1,13 @@
 """Pydantic РЎРѓРЎвЂ¦Р ВµР СРЎвЂ№ Р Т‘Р В»РЎРЏ API."""
+
 from datetime import date, datetime
 from decimal import Decimal
 
 # Р С’Р В»Р С‘Р В°РЎРѓ Р Т‘Р В»РЎРЏ Р С‘Р В·Р В±Р ВµР В¶Р В°Р Р…Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂћР В»Р С‘Р С”РЎвЂљР В° Р С‘Р СР ВµР Р…Р С‘ Р С—Р С•Р В»РЎРЏ date РЎРѓ РЎвЂљР С‘Р С—Р С•Р С date
-DateType = date
 from typing import Literal, Optional
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, field_validator, model_validator
+
+DateType = date
 
 MAX_EMBLEM_DATA_URL_LENGTH = 350000
 
@@ -41,8 +43,7 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
@@ -82,16 +83,14 @@ class ClientResponse(ClientBase):
     is_archived: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientBrief(BaseModel):
     id: int
     name: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Project ---
@@ -134,8 +133,7 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectBrief(BaseModel):
@@ -143,8 +141,7 @@ class ProjectBrief(BaseModel):
     code: Optional[str] = None
     name: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Income ---
@@ -176,8 +173,7 @@ class IncomeItemResponse(IncomeItemBase):
     line_no: int
     total_amount: Decimal = Decimal("0.00")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncomeItemSuggestion(BaseModel):
@@ -200,7 +196,9 @@ class IncomeItemSuggestion(BaseModel):
 
 
 class IncomeBase(BaseModel):
-    issued_date: DateType = Field(serialization_alias="date")  # Р Т‘Р В°РЎвЂљР В° РЎРѓРЎвЂЎРЎвЂРЎвЂљР В° (Р Р† Р вЂР вЂќ: date)
+    issued_date: DateType = Field(
+        serialization_alias="date"
+    )  # Р Т‘Р В°РЎвЂљР В° РЎРѓРЎвЂЎРЎвЂРЎвЂљР В° (Р Р† Р вЂР вЂќ: date)
     due_date: Optional[DateType] = None  # Valuta / РЎРѓРЎР‚Р С•Р С” Р С•Р С—Р В»Р В°РЎвЂљРЎвЂ№
     invoice_number: str
     invoice_year: Optional[int] = None
@@ -220,9 +218,13 @@ class IncomeBase(BaseModel):
 
 
 class IncomeCreate(IncomeBase):
-    invoice_number: Optional[str] = None  # Р С—РЎС“РЎРѓРЎвЂљР С• = Р С—РЎР‚Р С‘РЎРѓР Р†Р С•Р С‘РЎвЂљРЎРЉ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘
+    invoice_number: Optional[str] = (
+        None  # Р С—РЎС“РЎРѓРЎвЂљР С• = Р С—РЎР‚Р С‘РЎРѓР Р†Р С•Р С‘РЎвЂљРЎРЉ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘
+    )
     invoice_year: Optional[int] = None
-    issued_date: Optional[DateType] = None  # Р С—РЎР‚Р С‘ Р С—РЎС“РЎРѓРЎвЂљР С• Р В±Р ВµРЎР‚РЎвЂРЎвЂљРЎРѓРЎРЏ date (backward compat)
+    issued_date: Optional[DateType] = (
+        None  # Р С—РЎР‚Р С‘ Р С—РЎС“РЎРѓРЎвЂљР С• Р В±Р ВµРЎР‚РЎвЂРЎвЂљРЎРѓРЎРЏ date (backward compat)
+    )
     status: Optional[str] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
@@ -275,7 +277,9 @@ class IncomeUpdate(BaseModel):
                 result[key] = None
         if "invoice_year" in result and (result["invoice_year"] == "" or result["invoice_year"] is None):
             result["invoice_year"] = None
-        if "contract_payment_type" in result and (result["contract_payment_type"] == "" or result["contract_payment_type"] is None):
+        if "contract_payment_type" in result and (
+            result["contract_payment_type"] == "" or result["contract_payment_type"] is None
+        ):
             result["contract_payment_type"] = None
         if result.get("contract_id") is None:
             result["contract_payment_type"] = None
@@ -288,6 +292,7 @@ class IncomeMarkPaid(BaseModel):
 
 class BulkAssignProject(BaseModel):
     """Р СљР В°РЎРѓРЎРѓР С•Р Р†Р С•Р Вµ Р Р…Р В°Р В·Р Р…Р В°РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР В°: ids + project_id (null = РЎРѓР Р…РЎРЏРЎвЂљРЎРЉ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљ)."""
+
     ids: list[int]
     project_id: Optional[int] = None
 
@@ -300,8 +305,7 @@ class IncomeResponse(IncomeBase):
     contract_number: Optional[str] = None
     items: list[IncomeItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncomePaymentTransactionResponse(BaseModel):
@@ -318,8 +322,7 @@ class IncomePaymentTransactionResponse(BaseModel):
     allocation_count: int = 1
     can_unlink: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectMovementItemResponse(BaseModel):
@@ -357,8 +360,7 @@ class PurchaseReceiptItemResponse(BaseModel):
     tax_base_amount: Optional[Decimal] = None
     vat_amount: Optional[Decimal] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseReceiptBase(BaseModel):
@@ -395,8 +397,7 @@ class PurchaseReceiptResponse(PurchaseReceiptBase):
     item_count: int = 0
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseReceiptDetailResponse(PurchaseReceiptResponse):
@@ -499,16 +500,17 @@ class IncomePaymentDetailsResponse(BaseModel):
     has_manual_payment: bool = False
     linked_transactions: list[IncomePaymentTransactionResponse] = Field(default_factory=list)
 
+
 class DashboardIncomeResponse(BaseModel):
     """Р Р€Р С—РЎР‚Р С•РЎвЂ°РЎвЂР Р…Р Р…РЎвЂ№Р в„– Р С•РЎвЂљР Р†Р ВµРЎвЂљ Р Т‘Р В»РЎРЏ Р С—Р В°Р Р…Р ВµР В»Р С‘."""
+
     id: int
     issued_date: DateType = Field(serialization_alias="date")
     invoice_number: str
     client_name: Optional[str] = None
     amount_rsd: Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Contract ---
@@ -529,8 +531,7 @@ class ContractItemResponse(ContractItemBase):
     amount: Decimal
     sort_order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContractBase(BaseModel):
@@ -580,8 +581,7 @@ class ContractResponse(ContractBase):
     total_expenses: Decimal = Decimal("0.00")
     profit: Decimal = Decimal("0.00")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Enterprise ---
@@ -621,16 +621,14 @@ class EnterpriseResponse(EnterpriseBase):
     id: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EnterpriseBrandResponse(BaseModel):
     name: Optional[str] = None
     emblem_data_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EfakturaSettingsBase(BaseModel):
@@ -677,8 +675,7 @@ class EfakturaImportHistoryItem(BaseModel):
     file_name: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EfakturaImportSummary(BaseModel):
@@ -716,6 +713,7 @@ class EfakturaImportResult(BaseModel):
 class EfakturaSyncResponse(EfakturaImportResult):
     fetched_count: int = 0
 
+
 # --- PaymentType, YearDecision, MonthlyObligation (Р СћР вЂ”: Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘) ---
 class PaymentTypeResponse(BaseModel):
     id: int
@@ -724,8 +722,7 @@ class PaymentTypeResponse(BaseModel):
     name_ru: Optional[str] = None
     sort_order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class YearDecisionBase(BaseModel):
@@ -774,8 +771,7 @@ class YearDecisionResponse(YearDecisionBase):
     payment_type_code: Optional[str] = None
     payment_type_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MonthlyObligationResponse(BaseModel):
@@ -791,8 +787,7 @@ class MonthlyObligationResponse(BaseModel):
     paid_date: Optional[DateType] = None
     payment_reference: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ObligationMarkPaid(BaseModel):
@@ -802,6 +797,7 @@ class ObligationMarkPaid(BaseModel):
 
 class IPSQRData(BaseModel):
     """Р вЂќР В°Р Р…Р Р…РЎвЂ№Р Вµ Р Т‘Р В»РЎРЏ IPS QR (NBS)."""
+
     payer: str
     recipient: str
     account: str
@@ -829,8 +825,7 @@ class ContributionRatesCreate(ContributionRatesBase):
 class ContributionRatesResponse(ContributionRatesBase):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Payment ---
@@ -860,8 +855,7 @@ class PaymentResponse(PaymentBase):
     paid_date: Optional[DateType] = None
     payment_reference: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Dashboard / Stats ---
@@ -914,6 +908,7 @@ class FinancePnlResponse(BaseModel):
 
 class UpcomingObligationItem(BaseModel):
     """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
+
     id: int
     payment_type_name: str
     amount: Decimal
@@ -924,6 +919,7 @@ class UpcomingObligationItem(BaseModel):
 
 class UpcomingPlannedItem(BaseModel):
     """Р СџРЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р Р…РЎвЂ№Р в„– Р С‘Р В»Р С‘ Р С—РЎР‚Р С‘Р В±Р В»Р С‘Р В¶Р В°РЎР‹РЎвЂ°Р С‘Р в„–РЎРѓРЎРЏ Р С—Р ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘."""
+
     planned_expense_id: int
     name: str
     amount: Decimal
@@ -939,7 +935,7 @@ class DashboardStats(BaseModel):
     year_expenses: Decimal
     month_expenses: Decimal
     balance_month: Decimal  # month_income - month_expenses
-    balance_year: Decimal   # year_income - year_expenses
+    balance_year: Decimal  # year_income - year_expenses
     balance_all_time: Decimal
     financial_result_all_time: Decimal
     planned_expenses_until_month_end: Decimal  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
@@ -994,8 +990,7 @@ class ExpenseItemResponse(ExpenseItemCreate):
     id: int
     line_no: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseCreate(ExpenseBase):
@@ -1043,8 +1038,7 @@ class ExpenseResponse(ExpenseBase):
     reversed_expense_id: Optional[int] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseDetailResponse(ExpenseResponse):
@@ -1053,6 +1047,7 @@ class ExpenseDetailResponse(ExpenseResponse):
 
 
 # --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
+
 
 class ExpenseDuplicateItem(BaseModel):
     id: int
@@ -1065,8 +1060,7 @@ class ExpenseDuplicateItem(BaseModel):
     category_id: Optional[int] = None
     status: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseDuplicateGroup(BaseModel):
@@ -1081,6 +1075,7 @@ class ExpenseDuplicateGroup(BaseModel):
 class ExpenseMergeRequest(BaseModel):
     keep_id: int
     merge_ids: list[int]
+
 
 class PlannedExpenseBase(BaseModel):
     name: str
@@ -1150,8 +1145,7 @@ class PlannedExpenseResponse(PlannedExpenseBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UpcomingPaymentItem(BaseModel):
@@ -1188,7 +1182,7 @@ class BankTransactionBase(BaseModel):
     purpose: Optional[str] = None
     bank_reference: Optional[str] = None
     status: str = "unmatched"  # unmatched | matched | ignored
-    matched_type: Optional[str] = None   # income | expense | obligation | cash
+    matched_type: Optional[str] = None  # income | expense | obligation | cash
     matched_id: Optional[int] = None
     project_id: Optional[int] = None
     raw_json: Optional[str] = None
@@ -1217,8 +1211,7 @@ class BankTransactionResponse(BankTransactionBase):
     loan_outstanding_amount: Optional[Decimal] = None
     loan_counterparty_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BankTransactionBulkAssignProject(BaseModel):
@@ -1265,8 +1258,7 @@ class CashBankWithdrawalCandidate(BaseModel):
     bank_reference: Optional[str] = None
     project_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CashSummaryResponse(BaseModel):
@@ -1399,8 +1391,7 @@ class WorkerResponse(WorkerBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkerPayoutCreate(BaseModel):
@@ -1436,7 +1427,14 @@ class WorkerPayoutCreate(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        for key in ("project_id", "contract_id", "category_id", "lodging_nights", "lodging_night_rate", "lodging_amount"):
+        for key in (
+            "project_id",
+            "contract_id",
+            "category_id",
+            "lodging_nights",
+            "lodging_night_rate",
+            "lodging_amount",
+        ):
             if key in result and (result[key] == "" or result[key] is None):
                 result[key] = None
         return result
@@ -1468,8 +1466,7 @@ class WorkerPayoutResponse(BaseModel):
     category_id: Optional[int] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkerPayoutCreateResponse(BaseModel):
@@ -1572,6 +1569,7 @@ class BankTransactionIncomeAllocationResponse(BaseModel):
 
 
 # ---------- TransactionCategory ----------
+
 
 class TransactionCategoryCreate(BaseModel):
     name_ru: str
@@ -1677,6 +1675,7 @@ class ServiceRestoreResponse(BaseModel):
 
 # --- IncomingInvoice ---
 
+
 class IncomingInvoiceBase(BaseModel):
     invoice_number: str
     date: DateType
@@ -1732,8 +1731,7 @@ class IncomingInvoiceResponse(IncomingInvoiceBase):
     project_name: Optional[str] = None
     project_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncomingInvoiceLinkSummary(BaseModel):
@@ -1750,8 +1748,7 @@ class IncomingInvoiceLinkSummary(BaseModel):
     project_code: Optional[str] = None
     description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncomingInvoiceAttachExpenseRequest(BaseModel):
@@ -1815,8 +1812,7 @@ class IncomingInvoiceSettlementResponse(BaseModel):
     income_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncomingInvoiceDetailResponse(IncomingInvoiceResponse):
@@ -1849,6 +1845,7 @@ class CounterpartyBalanceResponse(BaseModel):
 
 
 # --- Counterparty loans ---
+
 
 class CounterpartyLoanCreateFromBank(BaseModel):
     loan_type: str  # borrowed | issued
@@ -1901,8 +1898,7 @@ class CounterpartyLoanMovementResponse(BaseModel):
     bank_reference: Optional[str] = None
     bank_purpose: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CounterpartyLoanResponse(BaseModel):
@@ -1924,8 +1920,7 @@ class CounterpartyLoanResponse(BaseModel):
     outstanding_amount: Decimal = Decimal("0")
     movements: list[CounterpartyLoanMovementResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OwnerFundsMovementResponse(BaseModel):
@@ -1939,5 +1934,4 @@ class OwnerFundsMovementResponse(BaseModel):
     bank_reference: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
