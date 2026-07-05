@@ -13,7 +13,7 @@ def get_db_path() -> Path:
     url = get_settings().database_url
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            raw = url[len(prefix):]
+            raw = url[len(prefix) :]
             path = Path(raw)
             if not path.is_absolute():
                 return (ROOT_DIR / path).resolve()
@@ -89,9 +89,15 @@ def main() -> None:
             """
         )
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_purchase_receipts_qr_hash ON purchase_receipts(qr_hash)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS ix_purchase_receipts_invoice_number ON purchase_receipts(invoice_number)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS ix_purchase_receipts_receipt_datetime ON purchase_receipts(receipt_datetime)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS ix_purchase_receipt_items_receipt_id ON purchase_receipt_items(receipt_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_purchase_receipts_invoice_number ON purchase_receipts(invoice_number)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_purchase_receipts_receipt_datetime ON purchase_receipts(receipt_datetime)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_purchase_receipt_items_receipt_id ON purchase_receipt_items(receipt_id)"
+        )
         conn.commit()
         print("[v13] Receipt tables migration complete.")
     finally:

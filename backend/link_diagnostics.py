@@ -1,4 +1,5 @@
 """Read-only diagnostics for cross-entity accounting links."""
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -155,15 +156,9 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         settlement_sum_by_invoice[int(settlement.incoming_invoice_id)] += _decimal(settlement.amount)
 
     incoming_expense_ids = {
-        int(invoice.expense_id)
-        for invoice in incoming_invoices.values()
-        if invoice.expense_id is not None
+        int(invoice.expense_id) for invoice in incoming_invoices.values() if invoice.expense_id is not None
     }
-    receipt_expense_ids = {
-        int(receipt.expense_id)
-        for receipt in receipts.values()
-        if receipt.expense_id is not None
-    }
+    receipt_expense_ids = {int(receipt.expense_id) for receipt in receipts.values() if receipt.expense_id is not None}
     _check_bank_transactions(
         report,
         bank_transactions=bank_transactions,
@@ -200,7 +195,9 @@ async def build_link_diagnostics(db: AsyncSession, *, limit: int = 1000) -> dict
         incoming_expense_ids=incoming_expense_ids,
         receipt_expense_ids=receipt_expense_ids,
     )
-    _check_receipts(report, receipts=receipts, expenses=expenses, bank_transactions=bank_transactions, cash_entries=cash_entries)
+    _check_receipts(
+        report, receipts=receipts, expenses=expenses, bank_transactions=bank_transactions, cash_entries=cash_entries
+    )
     _check_cash_entries(report, cash_entries=cash_entries, expenses=expenses, bank_transactions=bank_transactions)
     await _check_efaktura_import_records(report, db)
     await _check_legacy_tables(report, db)
@@ -230,7 +227,13 @@ def _check_bank_transactions(
         tx_id = int(tx.id)
         if tx.status == "matched":
             if not tx.matched_type:
-                report.add("error", "bank_matched_without_type", "bank_transaction", tx_id, "Matched bank transaction has no matched_type.")
+                report.add(
+                    "error",
+                    "bank_matched_without_type",
+                    "bank_transaction",
+                    tx_id,
+                    "Matched bank transaction has no matched_type.",
+                )
                 continue
             if tx.matched_type not in BANK_MATCH_TYPES:
                 report.add(
@@ -377,7 +380,11 @@ def _check_loan_movements(
                 "counterparty_loan_movement",
                 movement_id,
                 "Loan movement is not linked back from its bank transaction.",
-                {"bank_transaction_id": movement.bank_transaction_id, "matched_type": transaction.matched_type, "matched_id": transaction.matched_id},
+                {
+                    "bank_transaction_id": movement.bank_transaction_id,
+                    "matched_type": transaction.matched_type,
+                    "matched_id": transaction.matched_id,
+                },
             )
 
 

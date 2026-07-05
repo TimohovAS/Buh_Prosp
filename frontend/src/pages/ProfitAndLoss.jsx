@@ -7,11 +7,7 @@ import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import { formatInteger as fmt } from '../utils/formatters'
 
-const MONTH_LABELS = [
-  '',
-  '01', '02', '03', '04', '05', '06',
-  '07', '08', '09', '10', '11', '12',
-]
+const MONTH_LABELS = ['', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
 
 export default function ProfitAndLoss() {
   const location = useLocation()
@@ -38,6 +34,7 @@ export default function ProfitAndLoss() {
         setError(e.message)
       })
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, isActivePage])
 
   const items = data?.items || []
@@ -69,7 +66,9 @@ export default function ProfitAndLoss() {
         {loading && !data ? (
           <div className="card">{tr('loading')}</div>
         ) : error ? (
-          <div className="card" style={{ color: 'var(--color-danger)' }}>{tr('loadError')}: {error}</div>
+          <div className="card" style={{ color: 'var(--color-danger)' }}>
+            {tr('loadError')}: {error}
+          </div>
         ) : (
           <>
             <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -77,7 +76,14 @@ export default function ProfitAndLoss() {
               <div style={{ color: 'var(--color-text-muted)' }}>{tr('pnlAccrualNote')}</div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '1rem',
+                marginBottom: '1.5rem',
+              }}
+            >
               <div className="card">
                 <div className="card-title">{tr('income')}</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue)} RSD</div>
@@ -92,7 +98,13 @@ export default function ProfitAndLoss() {
               </div>
               <div className="card">
                 <div className="card-title">{tr('profit')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: (totals.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                <div
+                  style={{
+                    fontSize: '1.25rem',
+                    fontWeight: 600,
+                    color: (totals.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                  }}
+                >
                   {fmt(totals.profit)} RSD
                 </div>
               </div>
@@ -114,7 +126,9 @@ export default function ProfitAndLoss() {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{tr('noData')}</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  {tr('noData')}
+                </div>
               )}
             </div>
 
@@ -134,7 +148,9 @@ export default function ProfitAndLoss() {
                   <tbody>
                     {items.length === 0 ? (
                       <tr>
-                        <td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noData')}</td>
+                        <td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>
+                          {tr('noData')}
+                        </td>
                       </tr>
                     ) : (
                       items.map((item) => (
@@ -143,7 +159,13 @@ export default function ProfitAndLoss() {
                           <td>{fmt(item.revenue)} RSD</td>
                           <td>{fmt(item.expenses)} RSD</td>
                           <td>{fmt(item.taxes)} RSD</td>
-                          <td style={{ color: item.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{fmt(item.profit)} RSD</td>
+                          <td
+                            style={{
+                              color: item.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                            }}
+                          >
+                            {fmt(item.profit)} RSD
+                          </td>
                         </tr>
                       ))
                     )}

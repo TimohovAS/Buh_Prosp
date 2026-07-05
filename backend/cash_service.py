@@ -23,7 +23,9 @@ def is_cash_transfer_expense(expense: Expense | None) -> bool:
 
 async def get_cash_balance(db: AsyncSession):
     total_in = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in"))
-    total_out = await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out"))
+    total_out = await db.scalar(
+        select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")
+    )
     return to_decimal(total_in or ZERO_DECIMAL) - to_decimal(total_out or ZERO_DECIMAL)
 
 
@@ -485,11 +487,7 @@ async def auto_link_pending_cash_withdrawals(
         used_pending_ids.add(int(entry.id))
         linked_count += 1
 
-    remaining_pending_entries = [
-        entry
-        for entry in pending_entries
-        if int(entry.id) not in used_pending_ids
-    ]
+    remaining_pending_entries = [entry for entry in pending_entries if int(entry.id) not in used_pending_ids]
     if not remaining_pending_entries:
         return linked_count
 

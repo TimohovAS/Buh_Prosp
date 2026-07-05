@@ -1,4 +1,5 @@
 """Сервис планируемых расходов — расчёт дат и сумм."""
+
 from datetime import date, timedelta
 import calendar
 from decimal import Decimal
@@ -100,9 +101,7 @@ def next_payment_dates(pe: "PlannedExpense", from_date: date, limit: int = 12) -
     return result[:limit]
 
 
-def payment_dates_in_range(
-    pe: "PlannedExpense", range_start: date, range_end: date, limit: int = 48
-) -> list[date]:
+def payment_dates_in_range(pe: "PlannedExpense", range_start: date, range_end: date, limit: int = 48) -> list[date]:
     """Даты платежей в диапазоне [range_start, range_end], включая просроченные."""
     result = []
     if not pe.is_active or pe.start_date > range_end:
@@ -226,9 +225,7 @@ async def sync_worker_payout_planned_payment(
     created here. Existing automatic marks for the same payout are rebuilt so
     editing a payout moves the reminder mark instead of leaving stale rows.
     """
-    await db.execute(
-        delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
-    )
+    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
 
     if payout.payout_type not in {"regular", "weekly", "monthly"}:
         return None
@@ -264,9 +261,7 @@ async def sync_worker_payout_planned_payment(
     paid_pairs = {(row[0], row[1]) for row in paid_result.fetchall()}
 
     unpaid_pairs = [
-        (planned, due_date)
-        for planned, due_date in candidate_pairs
-        if (planned.id, due_date) not in paid_pairs
+        (planned, due_date) for planned, due_date in candidate_pairs if (planned.id, due_date) not in paid_pairs
     ]
     if not unpaid_pairs:
         return None
@@ -290,5 +285,3 @@ async def sync_worker_payout_planned_payment(
     db.add(payment)
     await db.flush()
     return payment
-
-

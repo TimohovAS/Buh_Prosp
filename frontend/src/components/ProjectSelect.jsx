@@ -43,7 +43,7 @@ export default function ProjectSelect({
     [liveProjects, value]
   )
 
-  const selectedLabel = selectedProject ? buildProjectLabel(selectedProject) : (allowEmpty ? emptyLabel : '')
+  const selectedLabel = selectedProject ? buildProjectLabel(selectedProject) : allowEmpty ? emptyLabel : ''
   const inputValue = isOpen ? search : selectedLabel
 
   const filteredOptions = useMemo(() => {
@@ -140,7 +140,8 @@ export default function ProjectSelect({
     if (refreshPromiseRef.current) {
       return refreshPromiseRef.current
     }
-    const request = api.projects.list({ show_archived: true })
+    const request = api.projects
+      .list({ show_archived: true })
       .then((projectList) => {
         if (Array.isArray(projectList)) {
           setLiveProjects(projectFilter ? projectList.filter(projectFilter) : projectList)
@@ -211,57 +212,56 @@ export default function ProjectSelect({
         aria-expanded={isOpen}
         aria-required={required}
       />
-      {isOpen && dropdownStyle && createPortal(
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-        >
-          {filteredOptions.length === 0 ? (
-            <div style={{ padding: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-              {tr('noRecords')}
-            </div>
-          ) : (
-            filteredOptions.map((option, index) => {
-              const previous = filteredOptions[index - 1]
-              const showGroup = option.group && option.group !== previous?.group
-              return (
-                <div key={option.key}>
-                  {showGroup && (
-                    <div
+      {isOpen &&
+        dropdownStyle &&
+        createPortal(
+          <div ref={dropdownRef} style={dropdownStyle}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                {tr('noRecords')}
+              </div>
+            ) : (
+              filteredOptions.map((option, index) => {
+                const previous = filteredOptions[index - 1]
+                const showGroup = option.group && option.group !== previous?.group
+                return (
+                  <div key={option.key}>
+                    {showGroup && (
+                      <div
+                        style={{
+                          padding: '0.5rem 0.75rem 0.25rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: 'var(--color-text-muted)',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {option.group}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => commitValue(option.value)}
                       style={{
-                        padding: '0.5rem 0.75rem 0.25rem',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        color: 'var(--color-text-muted)',
-                        textTransform: 'uppercase',
+                        width: '100%',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: index === highlightedIndex ? 'rgba(59,130,246,0.16)' : 'transparent',
+                        color: 'var(--color-text)',
+                        padding: '0.65rem 0.75rem',
+                        cursor: 'pointer',
                       }}
                     >
-                      {option.group}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => commitValue(option.value)}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      border: 'none',
-                      background: index === highlightedIndex ? 'rgba(59,130,246,0.16)' : 'transparent',
-                      color: 'var(--color-text)',
-                      padding: '0.65rem 0.75rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </div>,
-        document.body
-      )}
+                      {option.label}
+                    </button>
+                  </div>
+                )
+              })
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

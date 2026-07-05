@@ -1,13 +1,14 @@
-﻿"""Р‘РёР·РЅРµСЃ-Р»РѕРіРёРєР° ProspEl."""
+"""Р‘РёР·РЅРµСЃ-Р»РѕРіРёРєР° ProspEl."""
+
 import calendar
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 import re
 from typing import Optional
-from sqlalchemy import select, func, and_, text
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import Income, Client, Enterprise
+from backend.models import Income, Expense
 from backend.config import get_settings
 from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.state_machine import ensure_expense_can_reverse, initialize_expense_status
@@ -20,28 +21,20 @@ async def get_income_total(
     year: Optional[int] = None,
     month: Optional[int] = None,
     start_date: Optional[date] = None,
-    end_date: Optional[date] = None
+    end_date: Optional[date] = None,
 ) -> Decimal:
     """РЎСѓРјРјР° РґРѕС…РѕРґРѕРІ Р·Р° РїРµСЂРёРѕРґ."""
     from datetime import date as date_type
     import calendar
 
-    q = (
-        select(func.coalesce(func.sum(Income.amount_rsd), 0))
-        .select_from(Income)
-        .where(Income.status != "cancelled")
-    )
+    q = select(func.coalesce(func.sum(Income.amount_rsd), 0)).select_from(Income).where(Income.status != "cancelled")
     if year and month:
         last_day = calendar.monthrange(year, month)[1]
         q = q.where(
-            Income.issued_date >= date_type(year, month, 1),
-            Income.issued_date <= date_type(year, month, last_day)
+            Income.issued_date >= date_type(year, month, 1), Income.issued_date <= date_type(year, month, last_day)
         )
     elif year:
-        q = q.where(
-            Income.issued_date >= date_type(year, 1, 1),
-            Income.issued_date <= date_type(year, 12, 31)
-        )
+        q = q.where(Income.issued_date >= date_type(year, 1, 1), Income.issued_date <= date_type(year, 12, 31))
     if start_date:
         q = q.where(Income.issued_date >= start_date)
     if end_date:
@@ -53,6 +46,7 @@ async def get_income_total(
 async def get_income_total_12_months(db: AsyncSession, as_of: date) -> Decimal:
     """Р”РѕС…РѕРґ Р·Р° РїРѕСЃР»РµРґРЅРёРµ 12 РјРµСЃСЏС†РµРІ (РґР»СЏ Р»РёРјРёС‚Р° 8 РјР»РЅ)."""
     from dateutil.relativedelta import relativedelta
+
     start = as_of - relativedelta(months=12)
     return await get_income_total(db, start_date=start, end_date=as_of)
 
@@ -95,8 +89,8 @@ def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
     """
     text = " ".join([str(p or "") for p in parts]).upper()
     patterns = [
-        r"\b20\d{2}-\d{1,6}\b",   # 2026-0008
-        r"\b\d{1,6}-20\d{2}\b",   # 008-2026
+        r"\b20\d{2}-\d{1,6}\b",  # 2026-0008
+        r"\b\d{1,6}-20\d{2}\b",  # 008-2026
     ]
     out: list[str] = []
     seen: set[str] = set()
@@ -157,6 +151,7 @@ async def allocate_next_invoice_number(db: AsyncSession, year: int) -> int:
 async def allocate_next_project_code(db: AsyncSession) -> str:
     """РђС‚РѕРјР°СЂРЅРѕ РІС‹РґРµР»РёС‚СЊ СЃР»РµРґСѓСЋС‰РёР№ РєРѕРґ РїСЂРѕРµРєС‚Р° (PR-YYYY-NNNN). Р‘РµР· РґСѓР±Р»РµР№ РїСЂРё РїР°СЂР°Р»Р»РµР»СЊРЅС‹С… Р·Р°РїСЂРѕСЃР°С…."""
     from datetime import date
+
     year = date.today().year
     # РђС‚РѕРјР°СЂРЅС‹Р№ increment (INSERT or UPDATE) + RETURNING
     r = await db.execute(
@@ -195,7 +190,6 @@ async def create_expense_reversal(
     Создать сторно расхода. Оригинал остаётся status=paid, получает reversed_expense_id.
     Сторно: amount=-original.amount, status=reversed, reversal_of_id=original.id.
     """
-    from backend.models import Expense
     ensure_expense_can_reverse(expense)
     rev_date = reverse_date or getattr(expense, "paid_date", None) or date.today()
     desc = f"Сторно: {(expense.description or '')[:450]}"
@@ -250,15 +244,17 @@ async def get_income_limit_status(db: AsyncSession, year: int) -> dict:
         "income_12m": income_12m_decimal,
         "limit_6m": limit_6m,
         "limit_8m": limit_8m,
-        "percent_6m": float(((year_income_decimal / limit_6m_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if limit_6m else 0,
-        "percent_8m": float(((income_12m_decimal / limit_8m_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if limit_8m else 0,
+        "percent_6m": float(((year_income_decimal / limit_6m_decimal) * Decimal("100")).quantize(MONEY_PLACES))
+        if limit_6m
+        else 0,
+        "percent_8m": float(((income_12m_decimal / limit_8m_decimal) * Decimal("100")).quantize(MONEY_PLACES))
+        if limit_8m
+        else 0,
         "warning_6m": year_income_decimal >= (limit_6m_decimal * warning_ratio),
         "warning_8m": income_12m_decimal >= (limit_8m_decimal * warning_ratio),
         "exceeded_6m": year_income_decimal > limit_6m_decimal,
         "exceeded_8m": income_12m_decimal > limit_8m_decimal,
     }
-
-
 
 
 async def get_finance_limits_overview(db: AsyncSession, as_of: Optional[date] = None) -> dict:
@@ -273,12 +269,10 @@ async def get_finance_limits_overview(db: AsyncSession, as_of: Optional[date] = 
     vat_limit_decimal = Decimal(str(vat_limit))
 
     annual_percent = (
-        float(((annual_total / annual_limit_decimal) * Decimal("100")).quantize(MONEY_PLACES))
-        if annual_limit else 0.0
+        float(((annual_total / annual_limit_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if annual_limit else 0.0
     )
     vat_percent = (
-        float(((rolling_12_total / vat_limit_decimal) * Decimal("100")).quantize(MONEY_PLACES))
-        if vat_limit else 0.0
+        float(((rolling_12_total / vat_limit_decimal) * Decimal("100")).quantize(MONEY_PLACES)) if vat_limit else 0.0
     )
 
     days_in_month = calendar.monthrange(current_date.year, current_date.month)[1]
@@ -290,7 +284,11 @@ async def get_finance_limits_overview(db: AsyncSession, as_of: Optional[date] = 
 
     start_of_year = date(current_date.year, 1, 1)
     elapsed_days = max(1, (current_date - start_of_year).days + 1)
-    daily_rate = (annual_total / Decimal(str(elapsed_days))).quantize(MONEY_PLACES) if annual_total > ZERO_DECIMAL else ZERO_DECIMAL
+    daily_rate = (
+        (annual_total / Decimal(str(elapsed_days))).quantize(MONEY_PLACES)
+        if annual_total > ZERO_DECIMAL
+        else ZERO_DECIMAL
+    )
 
     estimated_limit_date: Optional[str] = None
     if annual_total >= annual_limit_decimal:
@@ -333,5 +331,3 @@ async def get_finance_limits_overview(db: AsyncSession, as_of: Optional[date] = 
         "estimated_limit_date": estimated_limit_date,
         "risk": risk,
     }
-
-

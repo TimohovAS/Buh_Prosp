@@ -4,6 +4,7 @@ Helpers accept an optional `exc_cls` kwarg so service-layer callers can
 surface domain-specific exceptions (e.g. `ValueError` subclasses) while
 routers keep the default `HTTPException` behavior.
 """
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,7 @@ from backend.models import Contract, Project, TransactionCategory
 
 
 def _raise(exc_cls: type[Exception], message: str, status: int) -> None:
-    if exc_cls is HTTPException or (
-        isinstance(exc_cls, type) and issubclass(exc_cls, HTTPException)
-    ):
+    if exc_cls is HTTPException or (isinstance(exc_cls, type) and issubclass(exc_cls, HTTPException)):
         raise HTTPException(status, message)
     raise exc_cls(message)
 
@@ -56,15 +55,11 @@ async def get_contract_or_404(
     return contract
 
 
-async def get_category_or_none(
-    db: AsyncSession, category_id: int | None
-) -> TransactionCategory | None:
+async def get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:
     """Fetch a category by id or return None if id is None/missing."""
     if category_id is None:
         return None
-    result = await db.execute(
-        select(TransactionCategory).where(TransactionCategory.id == category_id)
-    )
+    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
     return result.scalar_one_or_none()
 
 
@@ -75,9 +70,7 @@ async def get_category_or_404(
     exc_cls: type[Exception] = HTTPException,
 ) -> TransactionCategory:
     """Fetch a category; raise `exc_cls` if missing."""
-    result = await db.execute(
-        select(TransactionCategory).where(TransactionCategory.id == category_id)
-    )
+    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
     category = result.scalar_one_or_none()
     if not category:
         _raise(exc_cls, "Category not found", 404)

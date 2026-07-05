@@ -136,7 +136,6 @@ def build_plan(con: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
     repairs: list[dict] = []
     unresolved: list[dict] = []
     for invoice in load_candidates(con):
-        invoice_id = int(invoice["invoice_id"])
         expense_id = int(invoice["expense_id"])
         expected_amount = dec(invoice["settled_amount"])
         bank_payments = find_bank_payments(con, expense_id, expected_amount)

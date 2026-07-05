@@ -29,8 +29,7 @@ function writeStoredBrand(value) {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeBrand(value)))
-  } catch {
-  }
+  } catch {}
 }
 
 function ensureFaviconLink() {
@@ -84,7 +83,8 @@ export function useEnterpriseBrand() {
 
     window.addEventListener(UPDATE_EVENT, handleBrandUpdate)
 
-    api.enterprise.branding()
+    api.enterprise
+      .branding()
       .then((response) => {
         const next = normalizeBrand(response)
         writeStoredBrand(next)

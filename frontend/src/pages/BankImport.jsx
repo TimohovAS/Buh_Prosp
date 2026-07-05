@@ -8,12 +8,12 @@ import { formatMoney2 as fmtMoney } from '../utils/formatters'
 export default function BankImport() {
   const location = useLocation()
   const isActivePage = location.pathname === '/bank-import'
-  const [files, setFiles] = useState([])
+  const [_files, setFiles] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
-  const [clients, setClients] = useState([])
+  const [_clients, setClients] = useState([])
   const [selections, setSelections] = useState({}) // idx -> { selected, type }
   const [parseMeta, setParseMeta] = useState([])
   const [skippedFiles, setSkippedFiles] = useState([])
@@ -25,7 +25,10 @@ export default function BankImport() {
   }, [isActivePage])
   useEffect(() => {
     if (!isActivePage) return
-    api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => setRecentFiles([]))
+    api.bankImport
+      .recentFiles(10)
+      .then((r) => setRecentFiles(r.items || []))
+      .catch(() => setRecentFiles([]))
   }, [isActivePage])
 
   const handleFileChange = async (e) => {
@@ -45,7 +48,7 @@ export default function BankImport() {
 
       // Набор хэшей файлов, которые были ранее импортированы
       const previouslyImportedHashes = new Set(
-        parsedFiles.filter(f => f.previously_imported).map(f => f.file_hash)
+        parsedFiles.filter((f) => f.previously_imported).map((f) => f.file_hash)
       )
 
       setTransactions(tx)
@@ -70,7 +73,10 @@ export default function BankImport() {
     const items = transactions
       .map((tx, i) => ({ tx, i, sel: selections[i] }))
       .filter(({ sel }) => sel?.selected)
-    if (items.length === 0) { console.error(tr('selectAtLeastOne')); return; }
+    if (items.length === 0) {
+      console.error(tr('selectAtLeastOne'))
+      return
+    }
     setApplying(true)
     setResult(null)
     try {
@@ -92,7 +98,10 @@ export default function BankImport() {
       setParseMeta([])
       setSkippedFiles([])
       // Всегда перезагружаем список файлов с сервера после применения
-      api.bankImport.recentFiles(10).then((r) => setRecentFiles(r.items || [])).catch(() => { })
+      api.bankImport
+        .recentFiles(10)
+        .then((r) => setRecentFiles(r.items || []))
+        .catch(() => {})
     } catch (e) {
       console.error(e)
     } finally {
@@ -103,14 +112,23 @@ export default function BankImport() {
   const setSelection = (idx, field, value) => {
     setSelections((s) => ({
       ...s,
-      [idx]: { ...(s[idx] || {}), selected: s[idx]?.selected ?? true, type: s[idx]?.type ?? transactions[idx]?.type, [field]: value },
+      [idx]: {
+        ...(s[idx] || {}),
+        selected: s[idx]?.selected ?? true,
+        type: s[idx]?.type ?? transactions[idx]?.type,
+        [field]: value,
+      },
     }))
   }
 
   const toggleSelect = (idx) => {
     setSelections((s) => ({
       ...s,
-      [idx]: { ...(s[idx] || {}), selected: !(s[idx]?.selected ?? true), type: s[idx]?.type ?? transactions[idx]?.type },
+      [idx]: {
+        ...(s[idx] || {}),
+        selected: !(s[idx]?.selected ?? true),
+        type: s[idx]?.type ?? transactions[idx]?.type,
+      },
     }))
   }
 
@@ -133,21 +151,23 @@ export default function BankImport() {
         <div className="card" style={{ marginBottom: '1rem' }}>
           <div className="form-group">
             <label className="form-label">{tr('bankImportFile')}</label>
-            <input
-              type="file"
-              multiple
-              accept=".xls,.xlsx"
-              onChange={handleFileChange}
-              disabled={loading}
-            />
-            {loading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{tr('loading')}...</span>}
+            <input type="file" multiple accept=".xls,.xlsx" onChange={handleFileChange} disabled={loading} />
+            {loading && (
+              <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>
+                {tr('loading')}...
+              </span>
+            )}
           </div>
           {skippedFiles && skippedFiles.length > 0 && (
             <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
-              <strong>{tr('bankImportSkippedFiles')} ({skippedFiles.length}):</strong>
+              <strong>
+                {tr('bankImportSkippedFiles')} ({skippedFiles.length}):
+              </strong>
               <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
                 {skippedFiles.map((sf, idx) => (
-                  <li key={idx}>{sf.file_name} - {sf.reason}</li>
+                  <li key={idx}>
+                    {sf.file_name} - {sf.reason}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -156,8 +176,17 @@ export default function BankImport() {
 
         {transactions.length > 0 && (
           <div className="card" style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0 }}>{tr('bankImportTransactions')} ({transactions.length})</h3>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1rem',
+              }}
+            >
+              <h3 style={{ margin: 0 }}>
+                {tr('bankImportTransactions')} ({transactions.length})
+              </h3>
               <button className="btn btn-primary" onClick={handleApply} disabled={applying}>
                 {applying ? tr('importing') : tr('importSelected')}
               </button>
@@ -244,7 +273,9 @@ export default function BankImport() {
         {result && (
           <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-success)' }}>
             <p style={{ margin: 0 }}>
-              {tr('bankImportCreated').replace('{income}', result.created_income).replace('{expense}', result.created_expense)}
+              {tr('bankImportCreated')
+                .replace('{income}', result.created_income)
+                .replace('{expense}', result.created_expense)}
               {!!result.matched_income_paid && (
                 <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>
                   {tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}
@@ -256,8 +287,12 @@ export default function BankImport() {
                 </span>
               )}
             </p>
-            <Link to="/income" style={{ marginTop: '0.5rem', display: 'inline-block' }}>{tr('bankImportToIncome')}</Link>
-            <Link to="/expenses" style={{ marginTop: '0.5rem', marginLeft: '1rem', display: 'inline-block' }}>{tr('bankImportToExpenses')}</Link>
+            <Link to="/income" style={{ marginTop: '0.5rem', display: 'inline-block' }}>
+              {tr('bankImportToIncome')}
+            </Link>
+            <Link to="/expenses" style={{ marginTop: '0.5rem', marginLeft: '1rem', display: 'inline-block' }}>
+              {tr('bankImportToExpenses')}
+            </Link>
           </div>
         )}
       </div>

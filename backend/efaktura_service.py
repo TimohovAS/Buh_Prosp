@@ -24,11 +24,10 @@ from backend.income_service import (
     to_number_year_format,
 )
 from backend.incoming_invoice_service import INCOMING_INVOICE_SOURCE, create_incoming_invoice
-from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomeItem, IncomingInvoice, Project
+from backend.models import Client, EfakturaImportRecord, Enterprise, Expense, Income, IncomeItem, IncomingInvoice
 from backend.state_machine import (
     cancel_income,
     cancel_incoming_invoice,
-    initialize_expense_status,
     initialize_income_status,
     initialize_incoming_invoice_status,
     reconcile_incoming_invoice_status,
@@ -157,9 +156,13 @@ def build_document_key(parsed: dict[str, Any], direction: str) -> str:
     invoice_number = to_number_year_format(parsed["invoice_number"], invoice_year)
     amount = Decimal(str(parsed["amount_rsd"]))
     if direction == "incoming":
-        counterparty_key = normalize_pib(parsed.get("supplier_pib")) or normalize_name(parsed.get("supplier_name")) or "unknown"
+        counterparty_key = (
+            normalize_pib(parsed.get("supplier_pib")) or normalize_name(parsed.get("supplier_name")) or "unknown"
+        )
     else:
-        counterparty_key = normalize_pib(parsed.get("customer_pib")) or normalize_name(parsed.get("customer_name")) or "unknown"
+        counterparty_key = (
+            normalize_pib(parsed.get("customer_pib")) or normalize_name(parsed.get("customer_name")) or "unknown"
+        )
     return f"{direction}|{invoice_number}|{parsed['issued_date'].isoformat()}|{amount}|{counterparty_key}"
 
 
@@ -235,10 +238,12 @@ async def handle_cancelled_outgoing_invoice(
     cancel_income(income)
     income.bank_reference = None
     income.note = "\n".join(
-        part for part in [
+        part
+        for part in [
             income.note,
             f"eFaktura API status: {status_text or 'cancelled/storned'}; income cancelled during sync.",
-        ] if part
+        ]
+        if part
     )
     await db.flush()
     return {"reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled"}
@@ -469,9 +474,7 @@ async def import_efaktura_documents(
     clients_by_pib, clients_by_name = build_client_lookup(clients)
 
     enterprise = await get_efaktura_enterprise(db)
-    has_enterprise_identity = bool(
-        enterprise and (normalize_pib(enterprise.pib) or normalize_name(enterprise.name))
-    )
+    has_enterprise_identity = bool(enterprise and (normalize_pib(enterprise.pib) or normalize_name(enterprise.name)))
     unassigned_project_id = await get_unassigned_project_id(db)
 
     created: list[dict[str, Any]] = []
@@ -509,17 +512,23 @@ async def import_efaktura_documents(
         if direction_hint in {"incoming", "outgoing"}:
             direction = direction_hint
         else:
-            supplier_is_enterprise = enterprise_matches_party(enterprise, parsed.get("supplier_name"), parsed.get("supplier_pib"))
-            customer_is_enterprise = enterprise_matches_party(enterprise, parsed.get("customer_name"), parsed.get("customer_pib"))
+            supplier_is_enterprise = enterprise_matches_party(
+                enterprise, parsed.get("supplier_name"), parsed.get("supplier_pib")
+            )
+            customer_is_enterprise = enterprise_matches_party(
+                enterprise, parsed.get("customer_name"), parsed.get("customer_pib")
+            )
             if customer_is_enterprise and not supplier_is_enterprise:
                 direction = "incoming"
             elif supplier_is_enterprise and not customer_is_enterprise:
                 direction = "outgoing"
             elif has_enterprise_identity:
-                errors.append({
-                    "file_name": file_name,
-                    "error": "Could not determine whether this eFaktura is incoming or outgoing for configured enterprise",
-                })
+                errors.append(
+                    {
+                        "file_name": file_name,
+                        "error": "Could not determine whether this eFaktura is incoming or outgoing for configured enterprise",
+                    }
+                )
                 continue
             else:
                 direction = "outgoing"
@@ -535,33 +544,41 @@ async def import_efaktura_documents(
                         invoice_year=invoice_year,
                         status_text=source_status_text,
                     )
-                skipped.append({
-                    "file_name": file_name,
-                    "invoice_number": normalized_invoice_number,
-                    "reason": cancel_result["reason"],
-                })
+                skipped.append(
+                    {
+                        "file_name": file_name,
+                        "invoice_number": normalized_invoice_number,
+                        "reason": cancel_result["reason"],
+                    }
+                )
             except Exception as exc:
-                errors.append({
-                    "file_name": file_name,
-                    "invoice_number": normalized_invoice_number,
-                    "error": str(exc),
-                })
+                errors.append(
+                    {
+                        "file_name": file_name,
+                        "invoice_number": normalized_invoice_number,
+                        "error": str(exc),
+                    }
+                )
             continue
 
         if source == "api" and pdf_content:
-            pdf_downloads.append({
-                "file_name": _build_pdf_download_name(parsed, direction=direction, external_id=external_id),
-                "content_type": "application/pdf",
-                "content_base64": base64.b64encode(pdf_content).decode("ascii"),
-            })
+            pdf_downloads.append(
+                {
+                    "file_name": _build_pdf_download_name(parsed, direction=direction, external_id=external_id),
+                    "content_type": "application/pdf",
+                    "content_base64": base64.b64encode(pdf_content).decode("ascii"),
+                }
+            )
 
         existing_record = await get_import_record_by_key(db, document_key)
         if existing_record:
-            skipped.append({
-                "file_name": file_name,
-                "invoice_number": normalized_invoice_number,
-                "reason": "Document already imported",
-            })
+            skipped.append(
+                {
+                    "file_name": file_name,
+                    "invoice_number": normalized_invoice_number,
+                    "reason": "Document already imported",
+                }
+            )
             continue
 
         matched_client = None
@@ -582,11 +599,13 @@ async def import_efaktura_documents(
                         parsed["issued_date"],
                         parsed["amount_rsd"],
                     ):
-                        skipped.append({
-                            "file_name": file_name,
-                            "invoice_number": normalized_invoice_number,
-                            "reason": "Incoming eFaktura already exists in expenses",
-                        })
+                        skipped.append(
+                            {
+                                "file_name": file_name,
+                                "invoice_number": normalized_invoice_number,
+                                "reason": "Incoming eFaktura already exists in expenses",
+                            }
+                        )
                         continue
 
                     supplier_client = None
@@ -633,22 +652,26 @@ async def import_efaktura_documents(
                         efaktura_rec.imported_record_id = invoice.expense_id or invoice.id
                     await db.flush()
 
-                    created.append({
-                        "file_name": file_name,
-                        "document_type": "expense",
-                        "expense_id": invoice.expense_id,
-                        "invoice_number": normalized_invoice_number,
-                        "counterparty_name": parsed.get("supplier_name"),
-                    })
+                    created.append(
+                        {
+                            "file_name": file_name,
+                            "document_type": "expense",
+                            "expense_id": invoice.expense_id,
+                            "invoice_number": normalized_invoice_number,
+                            "counterparty_name": parsed.get("supplier_name"),
+                        }
+                    )
                     created_expense_count += 1
                     continue
 
                 if await has_invoice_duplicate(db, normalized_invoice_number, invoice_year):
-                    skipped.append({
-                        "file_name": file_name,
-                        "invoice_number": normalized_invoice_number,
-                        "reason": "Invoice already exists in income",
-                    })
+                    skipped.append(
+                        {
+                            "file_name": file_name,
+                            "invoice_number": normalized_invoice_number,
+                            "reason": "Invoice already exists in income",
+                        }
+                    )
                     continue
 
                 income = Income(
@@ -694,20 +717,24 @@ async def import_efaktura_documents(
                     source=source,
                     file_name=file_name,
                 )
-                created.append({
-                    "file_name": file_name,
-                    "document_type": "income",
-                    "income_id": income.id,
-                    "invoice_number": income.invoice_number,
-                    "counterparty_name": income.client_name,
-                })
+                created.append(
+                    {
+                        "file_name": file_name,
+                        "document_type": "income",
+                        "income_id": income.id,
+                        "invoice_number": income.invoice_number,
+                        "counterparty_name": income.client_name,
+                    }
+                )
                 created_income_count += 1
         except Exception as exc:
-            errors.append({
-                "file_name": file_name,
-                "invoice_number": normalized_invoice_number,
-                "error": str(exc),
-            })
+            errors.append(
+                {
+                    "file_name": file_name,
+                    "invoice_number": normalized_invoice_number,
+                    "error": str(exc),
+                }
+            )
 
     await db.commit()
 
@@ -756,10 +783,14 @@ def _http_request(
     header_value: str,
     accept: str = "application/json, application/xml, text/xml;q=0.9, */*;q=0.8",
 ) -> tuple[bytes, str]:
-    request = Request(url, method=method, headers={
-        "Accept": accept,
-        header_name: header_value,
-    })
+    request = Request(
+        url,
+        method=method,
+        headers={
+            "Accept": accept,
+            header_name: header_value,
+        },
+    )
     with urlopen(request, timeout=60) as response:
         return response.read(), response.headers.get("Content-Type", "")
 
@@ -836,11 +867,13 @@ def _extract_document_refs(payload: Any) -> list[dict[str, Any]]:
                         "purchaseInvoiceStatus",
                     ),
                 )
-                output.append({
-                    "external_id": str(external_id),
-                    "source_status": source_status,
-                    "source_payload": item,
-                })
+                output.append(
+                    {
+                        "external_id": str(external_id),
+                        "source_status": source_status,
+                        "source_payload": item,
+                    }
+                )
         return output
     if isinstance(payload, dict):
         external_id = _case_insensitive_get(
@@ -866,11 +899,13 @@ def _extract_document_refs(payload: Any) -> list[dict[str, Any]]:
                     "purchaseInvoiceStatus",
                 ),
             )
-            return [{
-                "external_id": str(external_id),
-                "source_status": source_status,
-                "source_payload": payload,
-            }]
+            return [
+                {
+                    "external_id": str(external_id),
+                    "source_status": source_status,
+                    "source_payload": payload,
+                }
+            ]
         lowered_keys = {str(key).lower(): key for key in payload.keys()}
         for key in ("salesinvoiceids", "purchaseinvoiceids", "invoiceids"):
             actual_key = lowered_keys.get(key)
@@ -915,11 +950,13 @@ def _extract_status_change_refs(payload: Any) -> list[dict[str, Any]]:
                     "status",
                 ),
             )
-            output.append({
-                "external_id": str(external_id),
-                "source_status": source_status,
-                "source_payload": item,
-            })
+            output.append(
+                {
+                    "external_id": str(external_id),
+                    "source_status": source_status,
+                    "source_payload": item,
+                }
+            )
         return output
     if isinstance(payload, dict):
         lowered_keys = {str(key).lower(): key for key in payload.keys()}
@@ -955,10 +992,18 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         raise ValueError("eFaktura API key is not configured")
 
     base_url = get_effective_efaktura_setting(enterprise.efaktura_api_base_url, DEFAULT_EFAKTURA_API_BASE_URL)
-    incoming_list_path = get_effective_efaktura_setting(enterprise.efaktura_incoming_list_path, DEFAULT_EFAKTURA_INCOMING_LIST_PATH)
-    incoming_document_path = get_effective_efaktura_setting(enterprise.efaktura_incoming_document_path, DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH)
-    outgoing_list_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH)
-    outgoing_document_path = get_effective_efaktura_setting(enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH)
+    incoming_list_path = get_effective_efaktura_setting(
+        enterprise.efaktura_incoming_list_path, DEFAULT_EFAKTURA_INCOMING_LIST_PATH
+    )
+    incoming_document_path = get_effective_efaktura_setting(
+        enterprise.efaktura_incoming_document_path, DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH
+    )
+    outgoing_list_path = get_effective_efaktura_setting(
+        enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH
+    )
+    outgoing_document_path = get_effective_efaktura_setting(
+        enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH
+    )
     incoming_pdf_path = (getattr(enterprise, "efaktura_incoming_pdf_path", None) or "").strip()
     outgoing_pdf_path = (getattr(enterprise, "efaktura_outgoing_pdf_path", None) or "").strip()
 
@@ -1058,9 +1103,7 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
             source_status = document_ref.get("source_status")
             if direction == "outgoing":
                 source_status = (
-                    current_status_by_id.get(external_id)
-                    or outgoing_status_by_id.get(external_id)
-                    or source_status
+                    current_status_by_id.get(external_id) or outgoing_status_by_id.get(external_id) or source_status
                 )
                 if is_efaktura_cancelled_status(source_status):
                     continue
@@ -1100,25 +1143,31 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                         )
                         pdf_content = _maybe_pdf_bytes(raw_pdf, pdf_content_type)
                         if not pdf_content:
-                            download_errors.append({
-                                "file_name": f"{direction}-{external_id}.pdf",
-                                "error": f"PDF endpoint did not return a PDF ({pdf_content_type or 'unknown content type'})",
-                            })
+                            download_errors.append(
+                                {
+                                    "file_name": f"{direction}-{external_id}.pdf",
+                                    "error": f"PDF endpoint did not return a PDF ({pdf_content_type or 'unknown content type'})",
+                                }
+                            )
                     except Exception as exc:
-                        download_errors.append({
-                            "file_name": f"{direction}-{external_id}.pdf",
-                            "error": str(exc),
-                        })
-            documents.append({
-                "file_name": f"{direction}-{external_id}.xml",
-                "content": _extract_xml_bytes(raw_xml, content_type),
-                "pdf_content": pdf_content,
-                "download_errors": download_errors,
-                "external_id": external_id,
-                "source_status": source_status,
-                "source_payload": document_ref.get("source_payload"),
-                "direction_hint": direction,
-            })
+                        download_errors.append(
+                            {
+                                "file_name": f"{direction}-{external_id}.pdf",
+                                "error": str(exc),
+                            }
+                        )
+            documents.append(
+                {
+                    "file_name": f"{direction}-{external_id}.xml",
+                    "content": _extract_xml_bytes(raw_xml, content_type),
+                    "pdf_content": pdf_content,
+                    "download_errors": download_errors,
+                    "external_id": external_id,
+                    "source_status": source_status,
+                    "source_payload": document_ref.get("source_payload"),
+                    "direction_hint": direction,
+                }
+            )
 
     async def apply_cancelled_outgoing_status_changes() -> list[dict[str, Any]]:
         applied: list[dict[str, Any]] = []

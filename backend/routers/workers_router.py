@@ -1,4 +1,5 @@
 """Workers and cash payout helpers."""
+
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -68,7 +69,9 @@ async def _resolve_payout_links(
     category_id = data.category_id or worker.default_category_id or await _get_salary_category_id(db)
     project_id = data.project_id or worker.default_project_id
     contract_id = data.contract_id
-    project_id, contract_id, is_tax_related = await resolve_category_expense_links(db, category_id, project_id, contract_id)
+    project_id, contract_id, is_tax_related = await resolve_category_expense_links(
+        db, category_id, project_id, contract_id
+    )
 
     if not project_id:
         project_id = await get_unassigned_project_id(db)
@@ -122,16 +125,22 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
     weekly_rate = _dec(data.weekly_rate if data.weekly_rate is not None else worker.weekly_rate)
     monthly_rate = _dec(data.monthly_rate if data.monthly_rate is not None else worker.monthly_rate)
     trip_pricing_mode = data.trip_pricing_mode or worker.trip_pricing_mode or "allowances"
-    trip_work_day_rate = _dec(data.trip_work_day_rate if data.trip_work_day_rate is not None else worker.trip_work_day_rate)
+    trip_work_day_rate = _dec(
+        data.trip_work_day_rate if data.trip_work_day_rate is not None else worker.trip_work_day_rate
+    )
     if trip_work_day_rate <= ZERO_DECIMAL:
         trip_work_day_rate = regular_day_rate
     if trip_pricing_mode == "fixed_plus_lodging":
         trip_per_diem_rate = ZERO_DECIMAL
         trip_food_rate = ZERO_DECIMAL
     else:
-        trip_per_diem_rate = _dec(data.trip_per_diem_rate if data.trip_per_diem_rate is not None else worker.trip_per_diem_rate)
+        trip_per_diem_rate = _dec(
+            data.trip_per_diem_rate if data.trip_per_diem_rate is not None else worker.trip_per_diem_rate
+        )
         trip_food_rate = _dec(data.trip_food_rate if data.trip_food_rate is not None else worker.trip_food_rate)
-    trip_advance_day_rate = _dec(data.trip_advance_day_rate if data.trip_advance_day_rate is not None else worker.trip_advance_day_rate)
+    trip_advance_day_rate = _dec(
+        data.trip_advance_day_rate if data.trip_advance_day_rate is not None else worker.trip_advance_day_rate
+    )
 
     if payout_type.startswith("trip") and period_days is not None:
         lodging_nights = max(period_days - Decimal(1), ZERO_DECIMAL)
@@ -139,8 +148,12 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         lodging_nights = _dec(data.lodging_nights)
     else:
         lodging_nights = max(trip_days + Decimal(int(worker.lodging_nights_offset or 0)), ZERO_DECIMAL)
-    lodging_night_rate = _dec(data.lodging_night_rate if data.lodging_night_rate is not None else worker.lodging_night_rate)
-    lodging_amount = lodging_nights * lodging_night_rate if data.lodging_night_rate is not None else _dec(data.lodging_amount)
+    lodging_night_rate = _dec(
+        data.lodging_night_rate if data.lodging_night_rate is not None else worker.lodging_night_rate
+    )
+    lodging_amount = (
+        lodging_nights * lodging_night_rate if data.lodging_night_rate is not None else _dec(data.lodging_amount)
+    )
     if data.lodging_amount is None and data.lodging_night_rate is None:
         lodging_amount = lodging_nights * lodging_night_rate
 
@@ -319,9 +332,7 @@ async def get_worker_payout(
     current_user: User = Depends(get_current_user_required),
 ):
     result = await db.execute(
-        select(WorkerPayout)
-        .options(selectinload(WorkerPayout.worker))
-        .where(WorkerPayout.id == payout_id)
+        select(WorkerPayout).options(selectinload(WorkerPayout.worker)).where(WorkerPayout.id == payout_id)
     )
     payout = result.scalar_one_or_none()
     if not payout:

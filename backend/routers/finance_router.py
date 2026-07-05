@@ -1,4 +1,5 @@
 """Роутер финансовых отчётов (accrual/cash)."""
+
 from datetime import date
 from typing import Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,7 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.database import get_db
 from backend.models import User
 from backend.auth import get_current_user_required
-from backend.finance_service import get_finance_summary, get_accounts_receivable, get_cashflow, get_finance_by_project, get_finance_pnl, get_finance_pnl_years, get_project_movements
+from backend.finance_service import (
+    get_finance_summary,
+    get_accounts_receivable,
+    get_cashflow,
+    get_finance_by_project,
+    get_finance_pnl,
+    get_finance_pnl_years,
+    get_project_movements,
+)
 from backend.schemas import FinanceLimitsResponse, FinancePnlResponse, ProjectMovementsResponse
 from backend.services import get_finance_limits_overview
 from sqlalchemy.ext.asyncio import AsyncSession

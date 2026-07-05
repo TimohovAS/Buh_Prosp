@@ -1,4 +1,5 @@
 """Централизованные правила переходов статусов для активного runtime."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -262,7 +263,9 @@ def refresh_obligation_due_status(obligation: Any, *, today: date | None = None)
 def restore_obligation_after_payment_reset(obligation: Any, *, today: date | None = None) -> str:
     current = _ensure_known_status("MonthlyObligation", getattr(obligation, "status", None), OBLIGATION_STATUSES)
     if current != "paid":
-        raise InvalidStatusTransition("MonthlyObligation: only paid obligations can be reset via the payment-reset service.")
+        raise InvalidStatusTransition(
+            "MonthlyObligation: only paid obligations can be reset via the payment-reset service."
+        )
     resolved_today = today or date.today()
     target = "overdue" if getattr(obligation, "deadline", None) and obligation.deadline < resolved_today else "unpaid"
     obligation.status = target

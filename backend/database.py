@@ -1,4 +1,5 @@
 """Подключение к базе данных и сессии."""
+
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -24,6 +25,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 class Base(DeclarativeBase):
     """Базовый класс для моделей."""
+
     pass
 
 
@@ -42,6 +44,7 @@ async def get_db():
 async def init_db():
     """Инициализация таблиц БД (создание по моделям)."""
     import backend.models  # noqa: F401 — регистрируем модели в Base.metadata
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_income_due_date_column)

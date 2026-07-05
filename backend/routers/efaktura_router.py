@@ -84,10 +84,12 @@ async def import_efaktura_xml(
         raise HTTPException(400, "No XML files selected")
     documents = []
     for upload in files:
-        documents.append({
-            "file_name": upload.filename or "unknown.xml",
-            "content": await upload.read(),
-        })
+        documents.append(
+            {
+                "file_name": upload.filename or "unknown.xml",
+                "content": await upload.read(),
+            }
+        )
     return await import_efaktura_documents(db, user_id=current_user.id, documents=documents, source="xml")
 
 

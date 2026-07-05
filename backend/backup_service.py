@@ -1,4 +1,5 @@
 """Сервис резервного копирования и восстановления SQLite."""
+
 from __future__ import annotations
 
 import asyncio
@@ -88,9 +89,15 @@ def _effective_backup_settings_sync() -> dict[str, Any]:
     return {
         "backup_dir": _as_string(overrides.get("backup_dir"), settings.backup_dir),
         "auto_enabled": _as_bool(overrides.get("backup_auto_enabled"), settings.backup_auto_enabled),
-        "auto_interval_hours": _as_int(overrides.get("backup_auto_interval_hours"), settings.backup_auto_interval_hours),
-        "auto_retention_count": _as_int(overrides.get("backup_auto_retention_count"), settings.backup_auto_retention_count),
-        "manual_retention_count": _as_int(overrides.get("backup_manual_retention_count"), settings.backup_manual_retention_count),
+        "auto_interval_hours": _as_int(
+            overrides.get("backup_auto_interval_hours"), settings.backup_auto_interval_hours
+        ),
+        "auto_retention_count": _as_int(
+            overrides.get("backup_auto_retention_count"), settings.backup_auto_retention_count
+        ),
+        "manual_retention_count": _as_int(
+            overrides.get("backup_manual_retention_count"), settings.backup_manual_retention_count
+        ),
         "pre_restore_retention_count": _as_int(
             overrides.get("backup_pre_restore_retention_count"),
             settings.backup_pre_restore_retention_count,
@@ -216,8 +223,10 @@ def _create_backup_sync(kind: str) -> dict[str, Any]:
         # NB: contextlib.closing wraps sqlite3.Connection so .close() actually
         # runs. Without it the snapshot DB file stays locked on Windows and
         # tempfile cleanup raises WinError 32.
-        with closing(sqlite3.connect(str(db_path))) as source_conn, \
-                closing(sqlite3.connect(str(snapshot_path))) as snapshot_conn:
+        with (
+            closing(sqlite3.connect(str(db_path))) as source_conn,
+            closing(sqlite3.connect(str(snapshot_path))) as snapshot_conn,
+        ):
             source_conn.backup(snapshot_conn)
 
         db_size_bytes = snapshot_path.stat().st_size
@@ -259,8 +268,10 @@ def _restore_backup_sync(backup_path: Path, db_path: Path) -> None:
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
         _cleanup_auxiliary_sqlite_files(db_path)
-        with closing(sqlite3.connect(str(snapshot_path))) as source_conn, \
-                closing(sqlite3.connect(str(db_path))) as target_conn:
+        with (
+            closing(sqlite3.connect(str(snapshot_path))) as source_conn,
+            closing(sqlite3.connect(str(db_path))) as target_conn,
+        ):
             source_conn.backup(target_conn)
         _cleanup_auxiliary_sqlite_files(db_path)
 

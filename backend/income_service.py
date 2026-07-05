@@ -1,4 +1,5 @@
 """Сервисный слой для доходов (КПО) и обработки eFaktura."""
+
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -35,16 +36,16 @@ def _extract_party_info(invoice: ET.Element, path: str) -> tuple[Optional[str], 
             default="",
             namespaces=EF_NS,
         )
-    ) or normalize_whitespace(
-        invoice.findtext(f"{path}/cac:Party/cbc:EndpointID", default="", namespaces=EF_NS)
-    )
+    ) or normalize_whitespace(invoice.findtext(f"{path}/cac:Party/cbc:EndpointID", default="", namespaces=EF_NS))
     return name, normalize_pib(tax_id)
+
 
 def normalize_whitespace(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
     compact = " ".join(value.split()).strip()
     return compact or None
+
 
 def normalize_pib(value: Optional[str]) -> Optional[str]:
     if not value:
@@ -54,13 +55,16 @@ def normalize_pib(value: Optional[str]) -> Optional[str]:
         return None
     return digits[-9:] if len(digits) > 9 else digits
 
+
 def normalize_name(value: Optional[str]) -> Optional[str]:
     text = normalize_whitespace(value)
     return text.lower() if text else None
 
+
 def _decimal_from_xml(value: Optional[str]) -> Decimal:
-    normalized = (value or "0").replace("\u00A0", "").replace(" ", "").replace(",", ".")
+    normalized = (value or "0").replace("\u00a0", "").replace(" ", "").replace(",", ".")
     return to_decimal(Decimal(normalized))
+
 
 def _unit_from_ubl(value: Optional[str]) -> str:
     normalized = (value or "").strip().upper()
@@ -69,6 +73,7 @@ def _unit_from_ubl(value: Optional[str]) -> str:
         "DAY": "dan",
         "HUR": "sat",
     }.get(normalized, normalized.lower() or "kom")
+
 
 def parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Optional[int]]:
     """
@@ -86,6 +91,7 @@ def parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Opt
         return int(m_num_first.group(2)), int(m_num_first.group(1))
     return None, None
 
+
 def invoice_identity(invoice_number: Optional[str], invoice_year: Optional[int]) -> tuple[Optional[int], str]:
     """
     Нормализованный ключ фактуры для сравнения дублей.
@@ -98,14 +104,16 @@ def invoice_identity(invoice_number: Optional[str], invoice_year: Optional[int])
         return year_key, str(serial)
     return year_key, raw
 
+
 def to_number_year_format(invoice_number: Optional[str], fallback_year: Optional[int] = None) -> str:
     """Привести распознанный номер к формату NNNN-YYYY."""
-    raw = (normalize_whitespace(invoice_number) or "")
+    raw = normalize_whitespace(invoice_number) or ""
     parsed_year, serial = parse_invoice_number_parts(raw)
     year_val = parsed_year if parsed_year is not None else fallback_year
     if serial is not None and year_val is not None:
         return f"{serial:04d}-{year_val}"
     return raw
+
 
 async def has_invoice_duplicate(
     db: AsyncSession,
@@ -138,6 +146,7 @@ async def has_invoice_duplicate(
         if ex_year == target_year and ex_key == target_key:
             return True
     return False
+
 
 def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
     try:
@@ -195,9 +204,12 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         unit_code = quantity_node.attrib.get("unitCode") if quantity_node is not None else None
         price_text = normalize_whitespace(line.findtext("cac:Price/cbc:PriceAmount", default="", namespaces=EF_NS))
         line_total_text = normalize_whitespace(line.findtext("cbc:LineExtensionAmount", default="", namespaces=EF_NS))
-        tax_category = normalize_whitespace(
-            line.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:ID", default="O", namespaces=EF_NS)
-        ) or "O"
+        tax_category = (
+            normalize_whitespace(
+                line.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:ID", default="O", namespaces=EF_NS)
+            )
+            or "O"
+        )
         tax_rate_text = normalize_whitespace(
             line.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:Percent", default="0", namespaces=EF_NS)
         )
@@ -209,21 +221,25 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
                 tax_rate = _decimal_from_xml(tax_rate_text or "0")
             except (InvalidOperation, ValueError) as exc:
                 raise ValueError(f"{file_name}: invalid invoice line #{index}") from exc
-            items.append({
-                "line_no": index,
-                "name": line_name,
-                "quantity": quantity,
-                "unit": _unit_from_ubl(unit_code),
-                "unit_price": unit_price,
-                "total_amount": total_amount,
-                "tax_category": tax_category,
-                "tax_rate": tax_rate,
-            })
+            items.append(
+                {
+                    "line_no": index,
+                    "name": line_name,
+                    "quantity": quantity,
+                    "unit": _unit_from_ubl(unit_code),
+                    "unit_price": unit_price,
+                    "total_amount": total_amount,
+                    "tax_category": tax_category,
+                    "tax_rate": tax_rate,
+                }
+            )
     description = "; ".join(line_titles) if line_titles else f"eFaktura {invoice_number}"
     if len(description) > 500:
         description = f"{description[:497]}..."
 
-    currency = normalize_whitespace(invoice.findtext("cbc:DocumentCurrencyCode", default="RSD", namespaces=EF_NS)) or "RSD"
+    currency = (
+        normalize_whitespace(invoice.findtext("cbc:DocumentCurrencyCode", default="RSD", namespaces=EF_NS)) or "RSD"
+    )
 
     return {
         "invoice_number": to_number_year_format(invoice_number, issue_date.year),
@@ -239,6 +255,7 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         "description": description,
         "items": items,
     }
+
 
 def invoice_year_from_number(invoice_number: str) -> Optional[int]:
     """Год из номера YYYY-NNNN или NNNN-YYYY."""

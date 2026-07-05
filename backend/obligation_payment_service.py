@@ -1,4 +1,5 @@
 """Логика оплаты и отмены оплаты обязательных платежей."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -134,5 +135,3 @@ async def reset_obligation_payment(
     obligation.payment_reference = None
     obligation.payment_method = "manual"
     await db.flush()
-
-

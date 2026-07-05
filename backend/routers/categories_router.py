@@ -1,4 +1,5 @@
-﻿"""Роутер справочника категорий доходов и расходов."""
+"""Роутер справочника категорий доходов и расходов."""
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -70,9 +71,7 @@ async def update_category(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    result = await db.execute(
-        select(TransactionCategory).where(TransactionCategory.id == category_id)
-    )
+    result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
     category = result.scalar_one_or_none()
     if not category:
         raise HTTPException(404, "Категория не найдена")

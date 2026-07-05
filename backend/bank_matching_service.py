@@ -26,12 +26,16 @@ from backend.models import (
     IncomingInvoice,
     IncomingInvoiceSettlement,
     MonthlyObligation,
-    Project,
     PurchaseReceipt,
 )
 from backend.receipt_service import sync_receipt_for_expense_match, sync_receipt_for_expense_unmatch
 from backend.services import _extract_invoice_candidates, _normalize_invoice_number
-from backend.state_machine import mark_expense_paid, reconcile_income_payment_state, reconcile_incoming_invoice_status, reopen_expense_for_unmatch
+from backend.state_machine import (
+    mark_expense_paid,
+    reconcile_income_payment_state,
+    reconcile_incoming_invoice_status,
+    reopen_expense_for_unmatch,
+)
 
 MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
 MATCH_TYPE_OWNER_FUNDS = "owner_funds"
@@ -71,7 +75,9 @@ def _matches_receipt_seller(tx: BankTransaction, receipt: PurchaseReceipt) -> bo
     return common >= 2 or seller_norm in counterparty_norm or counterparty_norm in seller_norm
 
 
-async def _suggest_receipt_expense_matches(db: AsyncSession, tx: BankTransaction) -> list[tuple[tuple[int, float, int], dict]]:
+async def _suggest_receipt_expense_matches(
+    db: AsyncSession, tx: BankTransaction
+) -> list[tuple[tuple[int, float, int], dict]]:
     window_start = tx.date - timedelta(days=31)
     window_end = tx.date + timedelta(days=7)
     result = await db.execute(
@@ -231,27 +237,29 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
         elif reference_match or account_match:
             score_value = 60
 
-        scored.append((
+        scored.append(
             (
-                0 if section == "suggested" else 1,
-                float(amount_diff),
-                int(obligation.id),
-            ),
-            {
-                "id": obligation.id,
-                "type": "obligation",
-                "invoice_number": None,
-                "client_name": getattr(decision, "recipient_account", None),
-                "description": _build_obligation_description(obligation),
-                "amount": to_decimal(obligation.amount or ZERO_DECIMAL),
-                "amount_full": None,
-                "amount_paid": None,
-                "date": str(obligation.deadline),
-                "status": obligation.status,
-                "score": score_value,
-                "section": section,
-            },
-        ))
+                (
+                    0 if section == "suggested" else 1,
+                    float(amount_diff),
+                    int(obligation.id),
+                ),
+                {
+                    "id": obligation.id,
+                    "type": "obligation",
+                    "invoice_number": None,
+                    "client_name": getattr(decision, "recipient_account", None),
+                    "description": _build_obligation_description(obligation),
+                    "amount": to_decimal(obligation.amount or ZERO_DECIMAL),
+                    "amount_full": None,
+                    "amount_paid": None,
+                    "date": str(obligation.deadline),
+                    "status": obligation.status,
+                    "score": score_value,
+                    "section": section,
+                },
+            )
+        )
 
     scored.sort(key=lambda item: item[0])
     return [item for _, item in scored]
@@ -301,18 +309,15 @@ async def _build_income_payment_summary_map(
 
     summary: dict[int, dict] = {}
 
-    direct_query = (
-        select(
-            BankTransaction.id,
-            BankTransaction.matched_id,
-            BankTransaction.date,
-            BankTransaction.amount,
-            BankTransaction.bank_reference,
-        )
-        .where(
-            BankTransaction.status == "matched",
-            BankTransaction.matched_type == "income",
-        )
+    direct_query = select(
+        BankTransaction.id,
+        BankTransaction.matched_id,
+        BankTransaction.date,
+        BankTransaction.amount,
+        BankTransaction.bank_reference,
+    ).where(
+        BankTransaction.status == "matched",
+        BankTransaction.matched_type == "income",
     )
     if normalized_income_ids:
         direct_query = direct_query.where(BankTransaction.matched_id.in_(normalized_income_ids))
@@ -428,10 +433,7 @@ async def get_income_linked_payment_entries(db: AsyncSession, income_id: int) ->
     if allocation_rows:
         tx_ids = [int(tx.id) for _, tx in allocation_rows]
         stats = await get_bank_transaction_allocation_stats(db, tx_ids)
-        allocation_count_map = {
-            tx_id: int(info.get("allocation_count", 0))
-            for tx_id, info in stats.items()
-        }
+        allocation_count_map = {tx_id: int(info.get("allocation_count", 0)) for tx_id, info in stats.items()}
 
     entries: list[dict] = []
     for tx in direct_transactions:
@@ -622,7 +624,7 @@ async def _suggest_income_matches(
         picked_ids.add(income.id)
 
     counterparty_matches.sort(key=lambda item: item[0][2])
-    for score, income, remaining in counterparty_matches:
+    for _score, income, remaining in counterparty_matches:
         if income.id in picked_ids:
             continue
         result.append(make_income_item(income, remaining, None, "counterparty"))
@@ -757,7 +759,9 @@ async def get_income_allocation_editor_state(db: AsyncSession, tx: BankTransacti
     elif tx.status == "matched" and tx.matched_type == "income" and tx.matched_id:
         income = income_map.get(int(tx.matched_id))
         if income:
-            available_amount = to_decimal(candidate_map.get(int(income.id), {}).get("amount", tx.amount or ZERO_DECIMAL))
+            available_amount = to_decimal(
+                candidate_map.get(int(income.id), {}).get("amount", tx.amount or ZERO_DECIMAL)
+            )
             allocations.append(
                 _build_income_allocation_line(
                     income,
@@ -932,9 +936,7 @@ async def detach_income_transaction_link(
 
 
 async def _find_incoming_invoice_by_expense(db: AsyncSession, expense_id: int) -> IncomingInvoice | None:
-    result = await db.execute(
-        select(IncomingInvoice).where(IncomingInvoice.expense_id == expense_id)
-    )
+    result = await db.execute(select(IncomingInvoice).where(IncomingInvoice.expense_id == expense_id))
     return result.scalar_one_or_none()
 
 
@@ -968,7 +970,9 @@ async def _ensure_expense_can_reclassify_to_owner_funds(
         raise ValueError("This expense is linked to cash register entries")
 
     recurring_payment_result = await db.execute(
-        select(func.count()).select_from(BankTransaction).where(
+        select(func.count())
+        .select_from(BankTransaction)
+        .where(
             BankTransaction.matched_type == "expense",
             BankTransaction.matched_id == expense.id,
             BankTransaction.id != tx.id,
@@ -1070,9 +1074,7 @@ async def _sync_incoming_invoice_on_unmatch(db: AsyncSession, expense: Expense, 
         await db.delete(settlement)
         await db.flush()
     all_q = await db.execute(
-        select(IncomingInvoiceSettlement).where(
-            IncomingInvoiceSettlement.incoming_invoice_id == invoice.id
-        )
+        select(IncomingInvoiceSettlement).where(IncomingInvoiceSettlement.incoming_invoice_id == invoice.id)
     )
     all_settlements = list(all_q.scalars().all())
     total = sum((to_decimal(s.amount) for s in all_settlements), ZERO_DECIMAL)
@@ -1155,8 +1157,10 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
 
     if not tx:
         raise ValueError("BankTransaction not found")
-    if tx.status != "matched" or not tx.matched_type or (
-        tx.matched_type not in {MATCH_TYPE_INCOME_ALLOCATION, MATCH_TYPE_OWNER_FUNDS} and not tx.matched_id
+    if (
+        tx.status != "matched"
+        or not tx.matched_type
+        or (tx.matched_type not in {MATCH_TYPE_INCOME_ALLOCATION, MATCH_TYPE_OWNER_FUNDS} and not tx.matched_id)
     ):
         raise ValueError("Transaction is not matched")
 

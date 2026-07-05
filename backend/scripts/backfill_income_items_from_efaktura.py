@@ -1,4 +1,5 @@
 """Backfill old Income.items from outgoing eFaktura XML documents."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -155,8 +156,12 @@ async def load_api_config(db) -> EfakturaApiConfig:
     header_prefix = enterprise.efaktura_api_key_prefix or ""
     return EfakturaApiConfig(
         base_url=get_effective_efaktura_setting(enterprise.efaktura_api_base_url, DEFAULT_EFAKTURA_API_BASE_URL),
-        list_path=get_effective_efaktura_setting(enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH),
-        document_path=get_effective_efaktura_setting(enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH),
+        list_path=get_effective_efaktura_setting(
+            enterprise.efaktura_outgoing_list_path, DEFAULT_EFAKTURA_OUTGOING_LIST_PATH
+        ),
+        document_path=get_effective_efaktura_setting(
+            enterprise.efaktura_outgoing_document_path, DEFAULT_EFAKTURA_OUTGOING_DOCUMENT_PATH
+        ),
         header_name=header_name,
         header_value=f"{header_prefix}{enterprise.efaktura_api_key}",
     )
@@ -309,7 +314,9 @@ def validate_parsed_for_income(parsed: dict[str, Any], income: Income) -> list[s
     return warnings
 
 
-async def backfill_from_xml(db, *, candidate: Candidate, xml_bytes: bytes, args, external_id: str | None) -> dict[str, Any]:
+async def backfill_from_xml(
+    db, *, candidate: Candidate, xml_bytes: bytes, args, external_id: str | None
+) -> dict[str, Any]:
     income = candidate.income
     parsed = parse_efaktura_invoice(xml_bytes, f"outgoing-{external_id or income.id}.xml")
     items = items_from_parsed(parsed)
@@ -317,7 +324,9 @@ async def backfill_from_xml(db, *, candidate: Candidate, xml_bytes: bytes, args,
         return {"status": "skipped", "reason": "XML has no invoice lines"}
 
     warnings = validate_parsed_for_income(parsed, income)
-    blocking_warnings = [warning for warning in warnings if "invoice number mismatch" in warning or "date mismatch" in warning]
+    blocking_warnings = [
+        warning for warning in warnings if "invoice number mismatch" in warning or "date mismatch" in warning
+    ]
     if blocking_warnings and not args.allow_mismatch:
         return {"status": "skipped", "reason": "; ".join(blocking_warnings), "warnings": warnings}
 
@@ -330,7 +339,9 @@ async def backfill_from_xml(db, *, candidate: Candidate, xml_bytes: bytes, args,
 
     if args.save_xml_dir:
         args.save_xml_dir.mkdir(parents=True, exist_ok=True)
-        file_name = f"income-{income.id}_{safe_file_part(income.invoice_number)}_{safe_file_part(external_id or 'no-id')}.xml"
+        file_name = (
+            f"income-{income.id}_{safe_file_part(income.invoice_number)}_{safe_file_part(external_id or 'no-id')}.xml"
+        )
         (args.save_xml_dir / file_name).write_bytes(xml_bytes)
 
     if not args.dry_run:
@@ -524,16 +535,40 @@ def build_parser() -> argparse.ArgumentParser:
         description="Download outgoing eFaktura XML documents and backfill income_items for old Income records.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Download and parse XML, but do not write income_items.")
-    parser.add_argument("--scan-api", action="store_true", help="Also scan outgoing sales invoices by date range and match Income without import records.")
+    parser.add_argument(
+        "--scan-api",
+        action="store_true",
+        help="Also scan outgoing sales invoices by date range and match Income without import records.",
+    )
     parser.add_argument("--from-date", type=parse_date, help="Only process Income issued on or after YYYY-MM-DD.")
     parser.add_argument("--to-date", type=parse_date, help="Only process Income issued on or before YYYY-MM-DD.")
-    parser.add_argument("--income-id", type=int, action="append", help="Process only this Income id. Can be passed multiple times.")
-    parser.add_argument("--limit", type=int, default=0, help="Maximum records to update/check. 0 means no limit for record mode.")
-    parser.add_argument("--replace-legacy", action="store_true", help="Replace a single legacy full-invoice item if it is detected.")
-    parser.add_argument("--replace-existing", action="store_true", help="Replace existing income_items. Use only after manual review.")
-    parser.add_argument("--allow-mismatch", action="store_true", help="Allow XML number/date mismatch when an import record points to the Income.")
-    parser.add_argument("--allow-line-total-mismatch", action="store_true", help="Write XML lines even when their total differs from the Income amount.")
-    parser.add_argument("--clear-line-total-mismatches", action="store_true", help="Clear existing income_items whose line total differs from Income.amount_rsd. Use with --income-id for targeted repair.")
+    parser.add_argument(
+        "--income-id", type=int, action="append", help="Process only this Income id. Can be passed multiple times."
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Maximum records to update/check. 0 means no limit for record mode."
+    )
+    parser.add_argument(
+        "--replace-legacy", action="store_true", help="Replace a single legacy full-invoice item if it is detected."
+    )
+    parser.add_argument(
+        "--replace-existing", action="store_true", help="Replace existing income_items. Use only after manual review."
+    )
+    parser.add_argument(
+        "--allow-mismatch",
+        action="store_true",
+        help="Allow XML number/date mismatch when an import record points to the Income.",
+    )
+    parser.add_argument(
+        "--allow-line-total-mismatch",
+        action="store_true",
+        help="Write XML lines even when their total differs from the Income amount.",
+    )
+    parser.add_argument(
+        "--clear-line-total-mismatches",
+        action="store_true",
+        help="Clear existing income_items whose line total differs from Income.amount_rsd. Use with --income-id for targeted repair.",
+    )
     parser.add_argument("--save-xml-dir", type=Path, help="Optional directory to save downloaded XML files for audit.")
     return parser
 

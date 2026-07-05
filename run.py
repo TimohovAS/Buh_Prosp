@@ -1,4 +1,5 @@
 """Запуск сервера ProspEl."""
+
 import sys
 import socket
 from pathlib import Path
@@ -18,6 +19,7 @@ if __name__ == "__main__":
         print("ВНИМАНИЕ: Порт 8000 уже занят. Запущено несколько backend?")
         print("Выполните stop_backend.bat перед запуском.")
     import uvicorn
+
     uvicorn.run(
         "backend.main:app",
         host="127.0.0.1",

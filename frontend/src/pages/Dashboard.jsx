@@ -57,7 +57,9 @@ function getRollingLimitRisk(current, limit, percent) {
 
 function LimitForecastCard({ title, current, limit, percent, risk, forecast = null, estimate = null }) {
   const tone = getRiskTone(risk)
-  const cardClass = tone ? `card dashboard-limit-card dashboard-limit-card--${tone}` : 'card dashboard-limit-card'
+  const cardClass = tone
+    ? `card dashboard-limit-card dashboard-limit-card--${tone}`
+    : 'card dashboard-limit-card'
   const fillClass = tone
   const percentClass = fillClass ? `dashboard-limit-percent ${fillClass}` : 'dashboard-limit-percent'
 
@@ -65,7 +67,9 @@ function LimitForecastCard({ title, current, limit, percent, risk, forecast = nu
     <div className={cardClass}>
       <div className="card-title">{title}</div>
       <div className="dashboard-limit-head">
-        <div className="dashboard-limit-current">{fmt(current)} / {fmt(limit)} RSD</div>
+        <div className="dashboard-limit-current">
+          {fmt(current)} / {fmt(limit)} RSD
+        </div>
         <div className={percentClass}>{percent.toFixed(1)}%</div>
       </div>
       <div className="progress-bar">
@@ -88,7 +92,7 @@ function LimitForecastCard({ title, current, limit, percent, risk, forecast = nu
   )
 }
 
-function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
+function IncomeExpensePie({ title, income, expenses }) {
   const data = [
     { name: tr('income'), value: income ?? 0, color: 'var(--color-success)' },
     { name: tr('expenses'), value: expenses ?? 0, color: 'var(--color-danger)' },
@@ -127,7 +131,6 @@ function IncomeExpensePie({ title, income, expenses, onExpensesClick }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
-
     </section>
   )
 }
@@ -156,7 +159,13 @@ export default function Dashboard() {
   }, [isActivePage])
 
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
-  if (!data) return <div style={{ padding: '2rem', color: 'var(--color-danger)' }}>{tr('loadError')}{error ? `: ${error}` : ''}</div>
+  if (!data)
+    return (
+      <div style={{ padding: '2rem', color: 'var(--color-danger)' }}>
+        {tr('loadError')}
+        {error ? `: ${error}` : ''}
+      </div>
+    )
 
   const lim = data.income_limit_status
   const limitsData = limits || {
@@ -174,12 +183,12 @@ export default function Dashboard() {
     limitsData.annual_total,
     limitsData.annual_limit,
     limitsData.annual_percent,
-    limitsData.forecast_year_end ?? limitsData.annual_total,
+    limitsData.forecast_year_end ?? limitsData.annual_total
   )
   const rollingRisk = getRollingLimitRisk(
     limitsData.rolling_12_total,
     limitsData.vat_limit,
-    limitsData.vat_percent,
+    limitsData.vat_percent
   )
 
   return (
@@ -213,7 +222,9 @@ export default function Dashboard() {
           />
           <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>
-            <div className="dashboard-summary-label">{tr('plannedExpenses')} + {tr('payments')}</div>
+            <div className="dashboard-summary-label">
+              {tr('plannedExpenses')} + {tr('payments')}
+            </div>
             <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
               {fmtCurrency(data.planned_expenses_until_month_end)}
             </div>
@@ -277,22 +288,48 @@ export default function Dashboard() {
               borderStyle: 'solid',
             }}
           >
-            <div className="card-title" style={{ color: data.upcoming_planned_expenses.some((item) => item.status === 'overdue') ? 'var(--color-danger)' : 'var(--color-warning)' }}>
+            <div
+              className="card-title"
+              style={{
+                color: data.upcoming_planned_expenses.some((item) => item.status === 'overdue')
+                  ? 'var(--color-danger)'
+                  : 'var(--color-warning)',
+              }}
+            >
               {data.upcoming_planned_expenses.some((item) => item.status === 'overdue')
                 ? `${UI_WARNING} ${tr('obligationsOverdue')} | ${tr('plannedExpenses')}`
                 : `${UI_WARNING} ${tr('obligationsDueSoon')} | ${tr('plannedExpenses')}`}
             </div>
             <div style={{ marginBottom: '0.75rem' }}>
               {data.upcoming_planned_expenses.map((item, index) => (
-                <div key={`${item.planned_expense_id}-${item.due_date}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <div
+                  key={`${item.planned_expense_id}-${item.due_date}-${index}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    marginBottom: '0.5rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <span>
                     <strong>{item.name}</strong> | {fmt(item.amount)} {item.currency}
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+                    <span
+                      style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}
+                    >
                       ({item.due_date.split('-').reverse().join('.')})
                     </span>
                   </span>
-                  <span style={{ color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)', fontWeight: 600, fontSize: '0.9rem' }}>
-                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}{formatObligationDays(item.days_until, tr)}
+                  <span
+                    style={{
+                      color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
+                    {formatObligationDays(item.days_until, tr)}
                   </span>
                 </div>
               ))}
@@ -315,22 +352,48 @@ export default function Dashboard() {
               borderStyle: 'solid',
             }}
           >
-            <div className="card-title" style={{ color: data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue') ? 'var(--color-danger)' : 'var(--color-warning)' }}>
+            <div
+              className="card-title"
+              style={{
+                color: data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue')
+                  ? 'var(--color-danger)'
+                  : 'var(--color-warning)',
+              }}
+            >
               {data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue')
                 ? `${UI_WARNING} ${tr('obligationsOverdue')}`
                 : `${UI_WARNING} ${tr('obligationsDueSoon')}`}
             </div>
             <div style={{ marginBottom: '0.75rem' }}>
               {data.upcoming_unpaid_obligations.map((item) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    marginBottom: '0.5rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <span>
                     <strong>{item.payment_type_name}</strong> | {fmt(item.amount)} RSD
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+                    <span
+                      style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}
+                    >
                       ({item.deadline.split('-').reverse().join('.')})
                     </span>
                   </span>
-                  <span style={{ color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)', fontWeight: 600, fontSize: '0.9rem' }}>
-                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}{formatObligationDays(item.days_until, tr)}
+                  <span
+                    style={{
+                      color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
+                    {formatObligationDays(item.days_until, tr)}
                   </span>
                 </div>
               ))}
@@ -355,7 +418,11 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {data.recent_incomes.length === 0 ? (
-                  <tr><td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr>
+                    <td colSpan={4} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('noRecords')}
+                    </td>
+                  </tr>
                 ) : (
                   data.recent_incomes.map((item) => (
                     <tr key={item.id}>
@@ -369,7 +436,13 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-          <Link to="/income" className="dashboard-link" style={{ marginTop: '1rem', display: 'inline-block' }}>{tr('income')} {UI_ARROW}</Link>
+          <Link
+            to="/income"
+            className="dashboard-link"
+            style={{ marginTop: '1rem', display: 'inline-block' }}
+          >
+            {tr('income')} {UI_ARROW}
+          </Link>
         </div>
       </div>
     </>

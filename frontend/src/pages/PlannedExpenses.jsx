@@ -10,7 +10,12 @@ import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import { findUnassignedProject } from '../utils/entityLabels'
-import { UI_DASH, formatDateSr as formatDate, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import {
+  UI_DASH,
+  formatDateSr as formatDate,
+  formatInteger as fmtAmount,
+  todayIso,
+} from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 
 const PERIODS = [
@@ -45,16 +50,12 @@ const WORKER_CATEGORY_MARKERS = ['зарп', 'zarad', 'salary', 'услуг', 'u
 
 const isWorkerLinkedCategory = (category) => {
   if (!category) return false
-  const text = typeof category === 'string'
-    ? category
-    : [
-        category.name_ru,
-        category.name_sr,
-        category.name,
-        category.label,
-        category.value,
-        category.category,
-      ].filter(Boolean).join(' ')
+  const text =
+    typeof category === 'string'
+      ? category
+      : [category.name_ru, category.name_sr, category.name, category.label, category.value, category.category]
+          .filter(Boolean)
+          .join(' ')
   const normalized = text.toLowerCase()
   return WORKER_CATEGORY_MARKERS.some((marker) => normalized.includes(marker))
 }
@@ -68,7 +69,7 @@ export default function PlannedExpenses() {
   const [upcomingDays, setUpcomingDaysState] = useState(() => {
     const saved = localStorage.getItem('prospel_upcoming_days')
     const n = saved ? parseInt(saved, 10) : 60
-    return (n === 30 || n === 60 || n === 90) ? n : 60
+    return n === 30 || n === 60 || n === 90 ? n : 60
   })
   const setUpcomingDays = (v) => {
     setUpcomingDaysState(v)
@@ -111,7 +112,10 @@ export default function PlannedExpenses() {
     if (filterActive === 'active') params.is_active = true
     else if (filterActive === 'inactive') params.is_active = false
     if (filterCategory) params.category_id = filterCategory
-    api.plannedExpenses.list(params).then(setItems).finally(() => setLoading(false))
+    api.plannedExpenses
+      .list(params)
+      .then(setItems)
+      .finally(() => setLoading(false))
   }
 
   const loadUpcoming = () => {
@@ -121,16 +125,21 @@ export default function PlannedExpenses() {
   useEffect(() => {
     if (!isActivePage) return
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterActive, filterCategory, isActivePage])
   useEffect(() => {
     if (!isActivePage) return
     loadUpcoming()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upcomingDays, items.length, isActivePage])
   useEffect(() => {
     if (!isActivePage) return
     api.projects.list({ show_archived: true }).then(setProjects)
     api.categories.list({ category_type: 'expense' }).then(setApiCategories)
-    api.workers.list().then(setWorkers).catch(() => setWorkers([]))
+    api.workers
+      .list()
+      .then(setWorkers)
+      .catch(() => setWorkers([]))
   }, [isActivePage])
 
   const openAdd = () => {
@@ -195,10 +204,14 @@ export default function PlannedExpenses() {
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
         project_id: categoryDefaultProjectId
           ? parseInt(categoryDefaultProjectId, 10)
-          : (form.project_id ? parseInt(form.project_id, 10) : (unassignedProject ? unassignedProject.id : null)),
+          : form.project_id
+            ? parseInt(form.project_id, 10)
+            : unassignedProject
+              ? unassignedProject.id
+              : null,
         worker_id: shouldLinkWorker && form.worker_id ? parseInt(form.worker_id, 10) : null,
         period: form.period || 'monthly',
-        payment_day: form.period === 'weekly' ? null : (parseInt(form.payment_day) || 1),
+        payment_day: form.period === 'weekly' ? null : parseInt(form.payment_day) || 1,
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
         start_date: form.start_date,
         end_date: form.end_date || null,
@@ -271,9 +284,11 @@ export default function PlannedExpenses() {
   const filteredItems = items.filter((i) => {
     if (!search) return true
     const s = search.toLowerCase()
-    return (i.name || '').toLowerCase().includes(s) ||
+    return (
+      (i.name || '').toLowerCase().includes(s) ||
       (i.description || '').toLowerCase().includes(s) ||
       amountSearchHay(i.amount).includes(s)
+    )
   })
 
   const totalMonthly = items
@@ -288,8 +303,6 @@ export default function PlannedExpenses() {
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
-  const commercialProjects = projects.filter(p => !p.is_internal && p.status !== 'archived')
-  const internalProjects = projects.filter(p => p.is_internal && p.status !== 'archived')
   const {
     getCategoryById,
     getCategoryDefaultProjectId,
@@ -300,60 +313,66 @@ export default function PlannedExpenses() {
     const resolved = getResolvedCategoryLabel(item, '')
     if (resolved) return resolved
     const legacy = CATEGORIES.find((c) => c.value === item.category)
-    return legacy ? tr(legacy.label) : (item.category || UI_DASH)
+    return legacy ? tr(legacy.label) : item.category || UI_DASH
   }
-  const selectedFormCategory = form.category_id
-    ? getCategoryById(form.category_id)
-    : form.category
+  const selectedFormCategory = form.category_id ? getCategoryById(form.category_id) : form.category
   const showWorkerField = isWorkerLinkedCategory(selectedFormCategory)
-  const getWorkerName = (workerId) => workers.find((worker) => Number(worker.id) === Number(workerId))?.name || ''
+  const getWorkerName = (workerId) =>
+    workers.find((worker) => Number(worker.id) === Number(workerId))?.name || ''
 
   return (
     <>
       <PageHeader
         title={tr('plannedExpenses')}
-        actions={(
+        actions={
           <>
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
-            value={filterActive}
-            onChange={(e) => setFilterActive(e.target.value)}
-          >
-            <option value="active">{tr('plannedFilterActive')}</option>
-            <option value="inactive">{tr('plannedFilterInactive')}</option>
-            <option value="all">{tr('plannedFilterAll')}</option>
-          </select>
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            <option value="">{'\u2014'}</option>
-            {apiCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {lang === 'ru' ? c.name_ru : c.name_sr}
-              </option>
-            ))}
-          </select>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 180 }}
-          />
-          <button className="btn btn-primary" onClick={openAdd}>
-            {tr('add')}
-          </button>
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={filterActive}
+              onChange={(e) => setFilterActive(e.target.value)}
+            >
+              <option value="active">{tr('plannedFilterActive')}</option>
+              <option value="inactive">{tr('plannedFilterInactive')}</option>
+              <option value="all">{tr('plannedFilterAll')}</option>
+            </select>
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+            >
+              <option value="">{'\u2014'}</option>
+              {apiCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {lang === 'ru' ? c.name_ru : c.name_sr}
+                </option>
+              ))}
+            </select>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 180 }}
+            />
+            <button className="btn btn-primary" onClick={openAdd}>
+              {tr('add')}
+            </button>
           </>
-        )}
+        }
       />
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {/* Upcoming payments */}
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+            }}
+          >
             <h3 style={{ margin: 0, fontSize: '1rem' }}>{tr('plannedUpcoming')}</h3>
             <select
               className="form-input"
@@ -399,25 +418,29 @@ export default function PlannedExpenses() {
                       <td>{getWorkerName(u.worker_id) || UI_DASH}</td>
                       <td>
                         <SharedStatusBadge
-                          tone={u.is_paid ? 'success' : (new Date(u.due_date + 'T12:00:00') < new Date() ? 'danger' : 'warning')}
+                          tone={
+                            u.is_paid
+                              ? 'success'
+                              : new Date(u.due_date + 'T12:00:00') < new Date()
+                                ? 'danger'
+                                : 'warning'
+                          }
                           style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
                         >
-                          {u.is_paid ? tr('paid') : (new Date(u.due_date + 'T12:00:00') < new Date() ? tr('obligationsOverdue') : tr('unpaid'))}
+                          {u.is_paid
+                            ? tr('paid')
+                            : new Date(u.due_date + 'T12:00:00') < new Date()
+                              ? tr('obligationsOverdue')
+                              : tr('unpaid')}
                         </SharedStatusBadge>
                       </td>
                       <td>
                         {u.is_paid ? (
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => handleMarkUnpaid(u)}
-                          >
+                          <button className="btn btn-sm btn-secondary" onClick={() => handleMarkUnpaid(u)}>
                             {tr('markUnpaid')}
                           </button>
                         ) : (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => openPaidModal(u)}
-                          >
+                          <button className="btn btn-sm btn-primary" onClick={() => openPaidModal(u)}>
                             {tr('markPaid')}
                           </button>
                         )}
@@ -479,7 +502,7 @@ export default function PlannedExpenses() {
                       <td>
                         {i.period === 'weekly'
                           ? tr(DAYS_OF_WEEK.find((d) => d.value === i.payment_day_of_week)?.label || 'dayMon')
-                          : i.payment_day ?? '\u2014'}
+                          : (i.payment_day ?? '\u2014')}
                       </td>
                       <td>
                         <SharedStatusBadge
@@ -551,7 +574,9 @@ export default function PlannedExpenses() {
                 <button type="button" className="btn btn-secondary" onClick={() => setPaidModal(null)}>
                   {tr('cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">{tr('save')}</button>
+                <button type="submit" className="btn btn-primary">
+                  {tr('save')}
+                </button>
               </div>
             </form>
           </>
@@ -617,39 +642,41 @@ export default function PlannedExpenses() {
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('category')}</label>
-                  <select
-                    className="form-input"
-                    value={form.category_id}
-                    onChange={(e) => {
-                      const cid = e.target.value
-                      const cat = apiCategories.find(c => String(c.id) === cid)
-                      const defaultProjectId = cat?.default_project_id ? String(cat.default_project_id) : ''
-                      setForm({
-                        ...form,
-                        category_id: cid,
-                        category: cat ? cat.name_ru : '',
-                        project_id: defaultProjectId || form.project_id,
-                        worker_id: isWorkerLinkedCategory(cat) ? form.worker_id : '',
-                      })
-                    }}
-                  >
+                <select
+                  className="form-input"
+                  value={form.category_id}
+                  onChange={(e) => {
+                    const cid = e.target.value
+                    const cat = apiCategories.find((c) => String(c.id) === cid)
+                    const defaultProjectId = cat?.default_project_id ? String(cat.default_project_id) : ''
+                    setForm({
+                      ...form,
+                      category_id: cid,
+                      category: cat ? cat.name_ru : '',
+                      project_id: defaultProjectId || form.project_id,
+                      worker_id: isWorkerLinkedCategory(cat) ? form.worker_id : '',
+                    })
+                  }}
+                >
                   <option value="">{UI_DASH}</option>
                   {apiCategories.map((c) => (
-                    <option key={c.id} value={c.id}>{lang === 'ru' ? c.name_ru : c.name_sr}</option>
+                    <option key={c.id} value={c.id}>
+                      {lang === 'ru' ? c.name_ru : c.name_sr}
+                    </option>
                   ))}
                 </select>
               </div>
-                {!usesCategoryProject(form.category_id) ? (
-                  <div className="form-group">
-                    <label className="form-label">{tr('project')}</label>
-                    <ProjectSelect
-                      projects={projects}
-                      value={form.project_id}
-                      onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
-                      required
-                    />
-                  </div>
-                ) : null}
+              {!usesCategoryProject(form.category_id) ? (
+                <div className="form-group">
+                  <label className="form-label">{tr('project')}</label>
+                  <ProjectSelect
+                    projects={projects}
+                    value={form.project_id}
+                    onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
+                    required
+                  />
+                </div>
+              ) : null}
               {showWorkerField ? (
                 <div className="form-group">
                   <label className="form-label">{tr('worker')}</label>
@@ -660,7 +687,9 @@ export default function PlannedExpenses() {
                   >
                     <option value="">{UI_DASH}</option>
                     {workers.map((worker) => (
-                      <option key={worker.id} value={worker.id}>{worker.name}</option>
+                      <option key={worker.id} value={worker.id}>
+                        {worker.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -719,10 +748,7 @@ export default function PlannedExpenses() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">{tr('plannedEndDate')}</label>
-                  <DatePicker
-                    value={form.end_date}
-                    onChange={(v) => setForm({ ...form, end_date: v })}
-                  />
+                  <DatePicker value={form.end_date} onChange={(v) => setForm({ ...form, end_date: v })} />
                 </div>
               </div>
               <div className="form-group">

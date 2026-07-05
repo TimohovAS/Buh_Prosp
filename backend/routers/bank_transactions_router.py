@@ -35,7 +35,16 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
-from backend.models import BankTransaction, Contract, CounterpartyLoan, CounterpartyLoanMovement, Expense, Income, Project, PurchaseReceipt, TransactionCategory, User
+from backend.models import (
+    BankTransaction,
+    CounterpartyLoan,
+    CounterpartyLoanMovement,
+    Expense,
+    Income,
+    PurchaseReceipt,
+    TransactionCategory,
+    User,
+)
 from backend.receipt_service import sync_receipt_for_expense_match
 from backend.schemas import (
     BankTransactionBulkAssignProject,
@@ -234,9 +243,7 @@ async def _resolve_effective_project_ids(
 
 async def _resolve_loan_summaries(db: AsyncSession, transactions: list[BankTransaction]) -> dict[int, dict]:
     movement_ids = [
-        int(tx.matched_id)
-        for tx in transactions
-        if tx.matched_type == MATCH_TYPE_LOAN_MOVEMENT and tx.matched_id
+        int(tx.matched_id) for tx in transactions if tx.matched_type == MATCH_TYPE_LOAN_MOVEMENT and tx.matched_id
     ]
     if not movement_ids:
         return {}
@@ -323,7 +330,9 @@ async def list_bank_transactions(
         import calendar
 
         last_day = calendar.monthrange(year, month)[1]
-        query = query.where(BankTransaction.date >= date(year, month, 1), BankTransaction.date <= date(year, month, last_day))
+        query = query.where(
+            BankTransaction.date >= date(year, month, 1), BankTransaction.date <= date(year, month, last_day)
+        )
     query = query.order_by(desc(BankTransaction.date), desc(BankTransaction.id))
     result = await db.execute(query)
     items = list(result.scalars().all())
@@ -702,4 +711,3 @@ async def bulk_assign_project(
 
     await db.commit()
     return {"message": f"Project assigned to {len(items)} transactions"}
-

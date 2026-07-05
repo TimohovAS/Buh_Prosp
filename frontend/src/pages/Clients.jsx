@@ -17,13 +17,10 @@ export default function Clients() {
   const [loading, setLoading] = useState(true)
   const [detailModal, setDetailModal] = useState(null)
   const [modal, setModal] = useState(null)
-  const {
-    search,
-    setSearch,
-    sortCol,
-    sortAsc,
-    toggleSort,
-  } = useListPageState({ initialSortCol: 'name', initialSortAsc: true })
+  const { search, setSearch, sortCol, sortAsc, toggleSort } = useListPageState({
+    initialSortCol: 'name',
+    initialSortAsc: true,
+  })
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -35,12 +32,16 @@ export default function Clients() {
 
   const load = () => {
     setLoading(true)
-    api.clients.list({ search, archived: false }).then(setItems).finally(() => setLoading(false))
+    api.clients
+      .list({ search, archived: false })
+      .then(setItems)
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     if (!isActivePage) return
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, isActivePage])
 
   const openAdd = () => {
@@ -105,25 +106,26 @@ export default function Clients() {
     })
   }, [items, sortCol, sortAsc])
 
-  const getClientTypeLabel = (client) => client.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')
+  const getClientTypeLabel = (client) =>
+    client.client_type === 'legal' ? tr('legalEntity') : tr('individualEntity')
 
   return (
     <>
       <PageHeader
         title={tr('clients')}
-        actions={(
+        actions={
           <>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 200 }}
-          />
-          <button className="btn btn-primary" onClick={openAdd}>
-            {tr('add')}
-          </button>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 200 }}
+            />
+            <button className="btn btn-primary" onClick={openAdd}>
+              {tr('add')}
+            </button>
           </>
-        )}
+        }
       />
 
       <div className="page-body">
@@ -132,18 +134,34 @@ export default function Clients() {
             <table>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>{tr('name')} <SortIndicator active={sortCol === 'name'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('address')}>{tr('address')} <SortIndicator active={sortCol === 'address'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('pib')}>{tr('pib')} <SortIndicator active={sortCol === 'pib'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('maticni_broj')}>{tr('maticniBroj')} <SortIndicator active={sortCol === 'maticni_broj'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_type')}>{tr('type')} <SortIndicator active={sortCol === 'client_type'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>
+                    {tr('name')} <SortIndicator active={sortCol === 'name'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('address')}>
+                    {tr('address')} <SortIndicator active={sortCol === 'address'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('pib')}>
+                    {tr('pib')} <SortIndicator active={sortCol === 'pib'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('maticni_broj')}>
+                    {tr('maticniBroj')} <SortIndicator active={sortCol === 'maticni_broj'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_type')}>
+                    {tr('type')} <SortIndicator active={sortCol === 'client_type'} asc={sortAsc} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5}>{tr('loading')}</td></tr>
+                  <tr>
+                    <td colSpan={5}>{tr('loading')}</td>
+                  </tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>{tr('noClients')}</td></tr>
+                  <tr>
+                    <td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('noClients')}
+                    </td>
+                  </tr>
                 ) : (
                   sorted.map((client) => (
                     <tr
@@ -159,7 +177,9 @@ export default function Clients() {
                       tabIndex={0}
                     >
                       <td>{client.name}</td>
-                      <td><span className="record-cell-ellipsis">{client.address || UI_DASH}</span></td>
+                      <td>
+                        <span className="record-cell-ellipsis">{client.address || UI_DASH}</span>
+                      </td>
                       <td>{client.pib || UI_DASH}</td>
                       <td>{client.maticni_broj || UI_DASH}</td>
                       <td>{getClientTypeLabel(client)}</td>
@@ -175,46 +195,62 @@ export default function Clients() {
       <EntityDetailModal
         isOpen={!!detailModal}
         onClose={() => setDetailModal(null)}
-        title={detailModal ? `${tr('client')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}` : tr('client')}
+        title={
+          detailModal
+            ? `${tr('client')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}`
+            : tr('client')
+        }
         maxWidth="860px"
-        details={detailModal ? (
-          <div className="record-field-grid">
-            <div className="record-field full">
-              <span className="record-field-label">{tr('name')}</span>
-              <span className="record-field-value">{detailModal.name || UI_DASH}</span>
+        details={
+          detailModal ? (
+            <div className="record-field-grid">
+              <div className="record-field full">
+                <span className="record-field-label">{tr('name')}</span>
+                <span className="record-field-value">{detailModal.name || UI_DASH}</span>
+              </div>
+              <div className="record-field full">
+                <span className="record-field-label">{tr('address')}</span>
+                <div className="record-field-text">{detailModal.address || UI_DASH}</div>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('pib')}</span>
+                <span className="record-field-value">{detailModal.pib || UI_DASH}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('maticniBroj')}</span>
+                <span className="record-field-value">{detailModal.maticni_broj || UI_DASH}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('type')}</span>
+                <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('contact')}</span>
+                <span className="record-field-value">{detailModal.contact || UI_DASH}</span>
+              </div>
             </div>
-            <div className="record-field full">
-              <span className="record-field-label">{tr('address')}</span>
-              <div className="record-field-text">{detailModal.address || UI_DASH}</div>
+          ) : null
+        }
+        actions={
+          detailModal ? (
+            <div className="record-actions-grid">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => openEditFromDetail(detailModal)}
+              >
+                {tr('edit')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => handleDeleteFromDetail(detailModal)}
+              >
+                {tr('delete')}
+              </button>
             </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('pib')}</span>
-              <span className="record-field-value">{detailModal.pib || UI_DASH}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('maticniBroj')}</span>
-              <span className="record-field-value">{detailModal.maticni_broj || UI_DASH}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('type')}</span>
-              <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('contact')}</span>
-              <span className="record-field-value">{detailModal.contact || UI_DASH}</span>
-            </div>
-          </div>
-        ) : null}
-        actions={detailModal ? (
-          <div className="record-actions-grid">
-            <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
-              {tr('edit')}
-            </button>
-            <button type="button" className="btn btn-danger" onClick={() => handleDeleteFromDetail(detailModal)}>
-              {tr('delete')}
-            </button>
-          </div>
-        ) : null}
+          ) : null
+        }
       />
 
       <Modal
@@ -224,70 +260,72 @@ export default function Clients() {
       >
         {modal ? (
           <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">{tr('name')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('address')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.address}
-                  onChange={(event) => setForm({ ...form, address: event.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('pib')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.pib}
-                  onChange={(event) => setForm({ ...form, pib: event.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('maticniBroj')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.maticni_broj}
-                  onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('contact')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.contact}
-                  onChange={(event) => setForm({ ...form, contact: event.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('type')}</label>
-                <select
-                  className="form-input"
-                  value={form.client_type}
-                  onChange={(event) => setForm({ ...form, client_type: event.target.value })}
-                >
-                  <option value="legal">{tr('legalEntity')}</option>
-                  <option value="individual">{tr('individualEntity')}</option>
-                </select>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
-                  {tr('cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary">{tr('save')}</button>
-              </div>
-            </form>
+            <div className="form-group">
+              <label className="form-label">{tr('name')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('address')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.address}
+                onChange={(event) => setForm({ ...form, address: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('pib')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.pib}
+                onChange={(event) => setForm({ ...form, pib: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('maticniBroj')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.maticni_broj}
+                onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('contact')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.contact}
+                onChange={(event) => setForm({ ...form, contact: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('type')}</label>
+              <select
+                className="form-input"
+                value={form.client_type}
+                onChange={(event) => setForm({ ...form, client_type: event.target.value })}
+              >
+                <option value="legal">{tr('legalEntity')}</option>
+                <option value="individual">{tr('individualEntity')}</option>
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
+            </div>
+          </form>
         ) : null}
       </Modal>
     </>

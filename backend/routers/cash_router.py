@@ -23,12 +23,10 @@ from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
     BankTransaction,
     CashEntry,
-    Contract,
     Expense,
     ExpenseItem,
     IncomingInvoice,
     IncomingInvoiceSettlement,
-    Project,
     PlannedExpensePayment,
     PurchaseReceipt,
     TransactionCategory,
@@ -77,16 +75,10 @@ async def _resolve_expense_links(
 
 async def _get_cash_totals(db: AsyncSession):
     total_in = to_decimal(
-        await db.scalar(
-            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in")
-        )
-        or 0
+        await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in")) or 0
     )
     total_out = to_decimal(
-        await db.scalar(
-            select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")
-        )
-        or 0
+        await db.scalar(select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")) or 0
     )
     return total_in - total_out, total_in, total_out
 
@@ -167,7 +159,9 @@ def _is_generated_worker_payout_note(note: str | None) -> bool:
     return bool(note and note.strip().startswith("days="))
 
 
-def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout: WorkerPayout | None = None) -> CashEntryResponse:
+def _serialize_cash_entry(
+    entry: CashEntry, balance_after: float, worker_payout: WorkerPayout | None = None
+) -> CashEntryResponse:
     bank_transaction = getattr(entry, "bank_transaction", None)
     expense = getattr(entry, "expense", None)
     worker_payout_id = getattr(worker_payout, "id", None)
@@ -188,8 +182,12 @@ def _serialize_cash_entry(entry: CashEntry, balance_after: float, worker_payout:
         worker_payout_worker_name=getattr(getattr(worker_payout, "worker", None), "name", None),
         worker_payout_period_start=getattr(worker_payout, "period_start", None),
         worker_payout_period_end=getattr(worker_payout, "period_end", None),
-        worker_payout_gross_amount=to_decimal(getattr(worker_payout, "gross_amount", None) or ZERO_DECIMAL) if worker_payout else None,
-        worker_payout_remaining_amount=to_decimal(getattr(worker_payout, "remaining_amount", None) or ZERO_DECIMAL) if worker_payout else None,
+        worker_payout_gross_amount=to_decimal(getattr(worker_payout, "gross_amount", None) or ZERO_DECIMAL)
+        if worker_payout
+        else None,
+        worker_payout_remaining_amount=to_decimal(getattr(worker_payout, "remaining_amount", None) or ZERO_DECIMAL)
+        if worker_payout
+        else None,
         bank_reference=getattr(bank_transaction, "bank_reference", None),
         counterparty_name=getattr(bank_transaction, "counterparty_name", None),
         purpose=getattr(bank_transaction, "purpose", None),
@@ -224,8 +222,7 @@ def _signed_entry_amount(direction: str, amount):
 
 async def _get_balance_after_entry(db: AsyncSession, entry_id: int):
     result = await db.execute(
-        select(CashEntry.id, CashEntry.direction, CashEntry.amount)
-        .order_by(CashEntry.date.asc(), CashEntry.id.asc())
+        select(CashEntry.id, CashEntry.direction, CashEntry.amount).order_by(CashEntry.date.asc(), CashEntry.id.asc())
     )
     balance = ZERO_DECIMAL
     for current_id, direction, amount in result.fetchall():
@@ -243,7 +240,9 @@ async def _serialize_refreshed_entry(db: AsyncSession, entry_id: int) -> CashEnt
         .where(WorkerPayout.cash_entry_id == entry_id)
         .limit(1)
     )
-    return _serialize_cash_entry(entry, await _get_balance_after_entry(db, entry_id), payout_result.scalar_one_or_none())
+    return _serialize_cash_entry(
+        entry, await _get_balance_after_entry(db, entry_id), payout_result.scalar_one_or_none()
+    )
 
 
 async def _build_cash_summary(
@@ -276,14 +275,10 @@ async def _build_cash_summary(
         payout_result = await db.execute(
             select(WorkerPayout)
             .options(selectinload(WorkerPayout.worker))
-            .where(
-                WorkerPayout.cash_entry_id.in_([entry.id for entry in entries])
-            )
+            .where(WorkerPayout.cash_entry_id.in_([entry.id for entry in entries]))
         )
         payout_by_entry_id = {
-            int(payout.cash_entry_id): payout
-            for payout in payout_result.scalars().all()
-            if payout.cash_entry_id
+            int(payout.cash_entry_id): payout for payout in payout_result.scalars().all() if payout.cash_entry_id
         }
 
     running_balance = await _get_balance_before_entry(db, entries[0]) if entries else ZERO_DECIMAL
@@ -307,8 +302,7 @@ async def _build_cash_summary(
     )
     available_withdrawals_result = await db.execute(withdrawals_query)
     available_withdrawals = [
-        CashBankWithdrawalCandidate.model_validate(item)
-        for item in available_withdrawals_result.scalars().all()
+        CashBankWithdrawalCandidate.model_validate(item) for item in available_withdrawals_result.scalars().all()
     ]
 
     return CashSummaryResponse(
@@ -406,14 +400,18 @@ async def update_cash_entry(
             current_contract = await get_contract_or_404(db, expense.contract_id)
             if current_contract.project_id != desired_project_id:
                 desired_contract_id = None
-        desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
+        desired_project_id, desired_contract_id = await _resolve_expense_links(
+            db, desired_project_id, desired_contract_id
+        )
 
         category_id = payload.get("category_id", expense.category_id)
         category_name = expense.category
         if "category_id" in payload:
             category_name = None
             if category_id is not None:
-                category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+                category_result = await db.execute(
+                    select(TransactionCategory).where(TransactionCategory.id == category_id)
+                )
                 category = category_result.scalar_one_or_none()
                 if not category:
                     raise HTTPException(404, "Category not found")
@@ -448,7 +446,9 @@ async def update_cash_entry(
         forbidden_fields = {"direction", "category_id", "project_id", "contract_id"}
         invalid = sorted(field for field in forbidden_fields if field in payload)
         if invalid:
-            raise HTTPException(400, "Pending cash withdrawals only support date, amount, currency, description and note")
+            raise HTTPException(
+                400, "Pending cash withdrawals only support date, amount, currency, description and note"
+            )
 
         amount = to_decimal(payload.get("amount", entry.amount) or ZERO_DECIMAL)
         description = payload.get("description", entry.description)
@@ -477,7 +477,9 @@ async def update_cash_entry(
         desired_contract_id = payload.get("contract_id", getattr(expense, "contract_id", None))
         if not desired_project_id:
             desired_project_id = await get_unassigned_project_id(db)
-        desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
+        desired_project_id, desired_contract_id = await _resolve_expense_links(
+            db, desired_project_id, desired_contract_id
+        )
 
         note = payload.get("note", getattr(expense, "note", entry.note))
         if expense:
@@ -525,7 +527,9 @@ async def delete_cash_expense_entry(
     if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
         raise HTTPException(400, "Reversed expenses cannot be deleted from the cash register")
 
-    invoice_result = await db.execute(select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1))
+    invoice_result = await db.execute(
+        select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1)
+    )
     if invoice_result.scalar_one_or_none():
         raise HTTPException(400, "This cash expense is linked to an incoming invoice")
 
@@ -681,7 +685,9 @@ async def create_cash_expense(
 
     category_name = (data.category or "").strip() or None
     if data.category_id is not None:
-        category_result = await db.execute(select(TransactionCategory).where(TransactionCategory.id == data.category_id))
+        category_result = await db.execute(
+            select(TransactionCategory).where(TransactionCategory.id == data.category_id)
+        )
         category = category_result.scalar_one_or_none()
         if not category:
             raise HTTPException(404, "Category not found")

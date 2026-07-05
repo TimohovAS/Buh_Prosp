@@ -1,5 +1,5 @@
 """Legacy-роутер платежей (изолирован, не подключён в active runtime)."""
-from datetime import date
+
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -19,18 +19,13 @@ async def _legacy_get_or_create_payment(
     month: int,
 ) -> Optional[Payment]:
     """Legacy helper для старого /payments API."""
-    result = await db.execute(
-        select(Payment).where(Payment.year == year, Payment.month == month)
-    )
+    result = await db.execute(select(Payment).where(Payment.year == year, Payment.month == month))
     payment = result.scalar_one_or_none()
     if payment:
         return payment
 
     rates_result = await db.execute(
-        select(ContributionRates).where(
-            ContributionRates.year == year,
-            ContributionRates.is_active == True
-        )
+        select(ContributionRates).where(ContributionRates.year == year, ContributionRates.is_active == True)
     )
     rates = rates_result.scalar_one_or_none()
     if not rates:
@@ -62,9 +57,7 @@ async def list_payments(
     for m in range(1, 13):
         await _legacy_get_or_create_payment(db, year, m)
     await db.commit()
-    r = await db.execute(
-        select(Payment).where(Payment.year == year).order_by(Payment.month)
-    )
+    r = await db.execute(select(Payment).where(Payment.year == year).order_by(Payment.month))
     payments = r.scalars().all()
     return [PaymentResponse.model_validate(p) for p in payments]
 

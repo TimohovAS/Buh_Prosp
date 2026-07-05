@@ -86,14 +86,17 @@ async def _resolve_counterparty_name(
     return name
 
 
-async def reconcile_loan_status(db: AsyncSession, loan: CounterpartyLoan, *, exclude_movement_id: int | None = None) -> None:
+async def reconcile_loan_status(
+    db: AsyncSession, loan: CounterpartyLoan, *, exclude_movement_id: int | None = None
+) -> None:
     _, _, outstanding = loan_totals(loan, exclude_movement_id=exclude_movement_id)
     # Final invariant: no mutation path may leave a loan over-repaid.
     if outstanding < ZERO_DECIMAL:
         raise ValueError("Repayment cannot exceed outstanding loan amount")
     if loan.status != "cancelled":
         remaining_movements = [
-            movement for movement in (loan.movements or [])
+            movement
+            for movement in (loan.movements or [])
             if exclude_movement_id is None or int(movement.id) != int(exclude_movement_id)
         ]
         loan.status = "repaid" if outstanding == ZERO_DECIMAL and remaining_movements else "open"

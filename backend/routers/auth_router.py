@@ -1,4 +1,5 @@
 """Роутер аутентификации."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -7,9 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import User
-from backend.schemas import UserCreate, UserResponse, Token
-from backend.auth import get_password_hash, create_access_token, verify_password, require_admin, get_current_user_required
-from backend.models import UserRole
+from backend.schemas import UserResponse, Token
+from backend.auth import create_access_token, verify_password, get_current_user_required
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,10 +19,7 @@ class MeUpdate(BaseModel):
 
 
 @router.post("/login")
-async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
-):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     """Вход в систему."""
     result = await db.execute(select(User).where(User.username == form_data.username, User.is_active == True))
     user = result.scalar_one_or_none()
@@ -38,8 +35,8 @@ async def login(
             role=user.role,
             default_language=user.default_language or "sr",
             is_active=user.is_active,
-            created_at=user.created_at
-        )
+            created_at=user.created_at,
+        ),
     )
 
 

@@ -1,4 +1,5 @@
 """Migration v8: convert money columns from FLOAT to NUMERIC(14,2) for SQLite."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -16,7 +17,7 @@ def get_db_path() -> Path:
     url = get_settings().database_url
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            raw = url[len(prefix):]
+            raw = url[len(prefix) :]
             path = Path(raw)
             if not path.is_absolute():
                 return (ROOT_DIR / path).resolve()
@@ -38,7 +39,9 @@ def columns_are_numeric(cursor: sqlite3.Cursor, table: str, money_columns: list[
     return all("NUMERIC" in info.get(column.lower(), "") for column in money_columns)
 
 
-def rebuild_table(cursor: sqlite3.Cursor, table: str, money_columns: list[str], create_sql: str, insert_sql: str) -> None:
+def rebuild_table(
+    cursor: sqlite3.Cursor, table: str, money_columns: list[str], create_sql: str, insert_sql: str
+) -> None:
     if not table_exists(cursor, table):
         print(f"[v8] Table {table} not found, skipping.")
         return

@@ -1,5 +1,6 @@
 """Парсер банковских изводов (формат Alta Banka .xls)."""
-from io import BytesIO
+
+import json
 from typing import Any
 
 import xlrd
@@ -30,8 +31,6 @@ def _parse_date(s: Any) -> str | None:
                 pass
     return None
 
-
-import json
 
 def parse_izvod_xls(content: bytes) -> list[dict]:
     """
@@ -78,16 +77,18 @@ def parse_izvod_xls(content: bytes) -> list[dict]:
             "c26_credit": str(c26),
         }
 
-        result.append({
-            "date": date_val,
-            "reference": str(c2).strip() if c2 else "",
-            "description": (str(c5).strip() or "")[:500],
-            "payer_beneficiary": (str(c9).replace("\n", " ").strip() or "")[:200],
-            "type": tx_type,
-            "amount": round(amount, 2),
-            "debit": round(debit, 2),
-            "credit": round(credit, 2),
-            "raw_json": json.dumps(raw_row, ensure_ascii=False)
-        })
+        result.append(
+            {
+                "date": date_val,
+                "reference": str(c2).strip() if c2 else "",
+                "description": (str(c5).strip() or "")[:500],
+                "payer_beneficiary": (str(c9).replace("\n", " ").strip() or "")[:200],
+                "type": tx_type,
+                "amount": round(amount, 2),
+                "debit": round(debit, 2),
+                "credit": round(credit, 2),
+                "raw_json": json.dumps(raw_row, ensure_ascii=False),
+            }
+        )
 
     return result

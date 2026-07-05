@@ -13,7 +13,13 @@ import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
-import { buildContractLabel, contractMatchesProject, filterContractsForProject, findUnassignedProject, getContractLabelById, getProjectName as resolveProjectName } from '../utils/entityLabels'
+import {
+  contractMatchesProject,
+  filterContractsForProject,
+  findUnassignedProject,
+  getContractLabelById,
+  getProjectName as resolveProjectName,
+} from '../utils/entityLabels'
 import { UI_DASH, todayIso, formatMoney2 as formatMoney } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
 
@@ -48,18 +54,17 @@ export default function BankTransactions() {
   const [loading, setLoading] = useState(true)
 
   const lang = getLang()
-  const { currentYear, year, setYear, availableYears, applyAvailableYears } = useAvailableYears({ initialYear: '' })
+  const { year, setYear, availableYears, applyAvailableYears } = useAvailableYears({
+    initialYear: '',
+  })
   const [month, setMonth] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [directionFilter, setDirectionFilter] = useState('all')
   const [pendingBankReferenceOpen, setPendingBankReferenceOpen] = useState(null)
-  const {
-    search,
-    setSearch,
-    sortCol,
-    sortAsc,
-    toggleSort,
-  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
+  const { search, setSearch, sortCol, sortAsc, toggleSort } = useListPageState({
+    initialSortCol: 'date',
+    initialSortAsc: false,
+  })
 
   const [selectedIds, setSelectedIds] = useState([])
   const [modalAssign, setModalAssign] = useState(false)
@@ -98,13 +103,9 @@ export default function BankTransactions() {
     loan_id: '',
   })
 
-
   const unassignedProject = findUnassignedProject(projects)
   const cashProject = projects.find((project) => project.code === 'INT-CASH') || null
-  const commercialProjects = projects.filter((project) => !project.is_internal && project.status !== 'archived')
-  const internalProjects = projects.filter((project) => project.is_internal && project.status !== 'archived')
   const {
-    getCategoryById: getExpenseCategoryById,
     getCategoryDefaultProjectId: getExpenseCategoryDefaultProjectId,
     usesCategoryProject: expenseUsesDefaultProject,
     getCategoryLabel: getResolvedCategoryLabel,
@@ -193,20 +194,22 @@ export default function BankTransactions() {
     }
 
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, directionFilter, year, month, search, isActivePage, location.search])
 
   useEffect(() => {
     if (!isActivePage) return
 
-    const deepLink = location.state && typeof location.state === 'object'
-      ? {
-          bankReference: location.state.openBankReference || '',
-          year: location.state.openBankYear ? Number(location.state.openBankYear) : '',
-          month: location.state.openBankMonth || '',
-          direction: location.state.openBankDirection || 'all',
-          status: location.state.openBankStatus || 'all',
-        }
-      : null
+    const deepLink =
+      location.state && typeof location.state === 'object'
+        ? {
+            bankReference: location.state.openBankReference || '',
+            year: location.state.openBankYear ? Number(location.state.openBankYear) : '',
+            month: location.state.openBankMonth || '',
+            direction: location.state.openBankDirection || 'all',
+            status: location.state.openBankStatus || 'all',
+          }
+        : null
 
     if (!deepLink?.bankReference) return
 
@@ -219,19 +222,32 @@ export default function BankTransactions() {
     if (search !== '') setSearch('')
 
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-  }, [directionFilter, isActivePage, location.pathname, location.search, location.state, month, navigate, search, statusFilter, year])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    directionFilter,
+    isActivePage,
+    location.pathname,
+    location.search,
+    location.state,
+    month,
+    navigate,
+    search,
+    statusFilter,
+    year,
+  ])
 
   useEffect(() => {
     if (!isActivePage || loading || !pendingBankReferenceOpen?.bankReference) return
 
-    const filtersAligned = (
+    const filtersAligned =
       year === pendingBankReferenceOpen.year &&
       month === pendingBankReferenceOpen.month &&
       directionFilter === pendingBankReferenceOpen.direction &&
       statusFilter === pendingBankReferenceOpen.status &&
       search === ''
+    const matchedTransaction = data.find(
+      (transaction) => transaction.bank_reference === pendingBankReferenceOpen.bankReference
     )
-    const matchedTransaction = data.find((transaction) => transaction.bank_reference === pendingBankReferenceOpen.bankReference)
     if (!matchedTransaction) {
       if (filtersAligned) setPendingBankReferenceOpen(null)
       return
@@ -239,21 +255,33 @@ export default function BankTransactions() {
 
     openTransactionModal(matchedTransaction)
     setPendingBankReferenceOpen(null)
-  }, [data, directionFilter, isActivePage, loading, month, pendingBankReferenceOpen, search, statusFilter, year])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    data,
+    directionFilter,
+    isActivePage,
+    loading,
+    month,
+    pendingBankReferenceOpen,
+    search,
+    statusFilter,
+    year,
+  ])
 
   const displayed = useMemo(() => {
     const query = search.trim().toLowerCase()
     let rows = data
 
     if (query) {
-      rows = data.filter((transaction) =>
-        (transaction.date || '').toLowerCase().includes(query) ||
-        (transaction.counterparty_name || '').toLowerCase().includes(query) ||
-        (transaction.purpose || '').toLowerCase().includes(query) ||
-        (transaction.bank_reference || '').toLowerCase().includes(query) ||
-        String(transaction.amount || '').includes(query) ||
-        (transaction.status || '').toLowerCase().includes(query) ||
-        getProjectName(transaction.project_id).toLowerCase().includes(query)
+      rows = data.filter(
+        (transaction) =>
+          (transaction.date || '').toLowerCase().includes(query) ||
+          (transaction.counterparty_name || '').toLowerCase().includes(query) ||
+          (transaction.purpose || '').toLowerCase().includes(query) ||
+          (transaction.bank_reference || '').toLowerCase().includes(query) ||
+          String(transaction.amount || '').includes(query) ||
+          (transaction.status || '').toLowerCase().includes(query) ||
+          getProjectName(transaction.project_id).toLowerCase().includes(query)
       )
     }
 
@@ -264,6 +292,7 @@ export default function BankTransactions() {
       if (leftValue > rightValue) return sortAsc ? 1 : -1
       return 0
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, search, sortAsc, sortCol, projects])
 
   const selectedTransactions = useMemo(() => {
@@ -272,25 +301,34 @@ export default function BankTransactions() {
     const displayedIdSet = new Set(displayed.map((transaction) => transaction.id))
     return [
       ...displayed.filter((transaction) => selectedIdSet.has(transaction.id)),
-      ...data.filter((transaction) => selectedIdSet.has(transaction.id) && !displayedIdSet.has(transaction.id)),
+      ...data.filter(
+        (transaction) => selectedIdSet.has(transaction.id) && !displayedIdSet.has(transaction.id)
+      ),
     ]
   }, [data, displayed, selectedIds])
 
   const selectedTotals = useMemo(() => {
-    return selectedTransactions.reduce((totals, transaction) => {
-      const amount = Math.abs(Number(transaction.amount || 0))
-      if (transaction.direction === 'in') totals.in += amount
-      else totals.out += amount
-      totals.net += transaction.direction === 'in' ? amount : -amount
-      return totals
-    }, { in: 0, out: 0, net: 0 })
+    return selectedTransactions.reduce(
+      (totals, transaction) => {
+        const amount = Math.abs(Number(transaction.amount || 0))
+        if (transaction.direction === 'in') totals.in += amount
+        else totals.out += amount
+        totals.net += transaction.direction === 'in' ? amount : -amount
+        return totals
+      },
+      { in: 0, out: 0, net: 0 }
+    )
   }, [selectedTransactions])
 
   const buildExpenseForm = (transaction) => ({
     date: transaction?.date || todayIso(),
     description: transaction?.purpose || transaction?.counterparty_name || '',
     category_id: '',
-    project_id: transaction?.project_id ? String(transaction.project_id) : (unassignedProject ? String(unassignedProject.id) : ''),
+    project_id: transaction?.project_id
+      ? String(transaction.project_id)
+      : unassignedProject
+        ? String(unassignedProject.id)
+        : '',
     contract_id: '',
     note: '',
   })
@@ -298,7 +336,9 @@ export default function BankTransactions() {
   const resetTransactionWorkflow = (transaction = null) => {
     setSuggestLoading(false)
     setMatchError('')
-    setMatchTab(transaction?.direction === 'out' ? 'link' : (transaction?.status === 'matched' ? 'allocate' : 'link'))
+    setMatchTab(
+      transaction?.direction === 'out' ? 'link' : transaction?.status === 'matched' ? 'allocate' : 'link'
+    )
     setAllInvoiceSearch('')
     setSuggestions([])
     setAllocationLines([])
@@ -332,7 +372,9 @@ export default function BankTransactions() {
   }
 
   const toggleSelect = (id) => {
-    setSelectedIds((previous) => previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id])
+    setSelectedIds((previous) =>
+      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id]
+    )
   }
 
   const toggleSelectAll = () => {
@@ -349,13 +391,15 @@ export default function BankTransactions() {
   const getTransactionStatusLabel = (transaction) => {
     if (transaction?.status === 'matched') {
       if (transaction.matched_type === 'income_allocation') {
-        const label = transaction.allocation_remaining > 0
-          ? tr('bankTxAllocationPartialStatus')
-          : tr('bankTxAllocationFullStatus')
+        const label =
+          transaction.allocation_remaining > 0
+            ? tr('bankTxAllocationPartialStatus')
+            : tr('bankTxAllocationFullStatus')
         const count = transaction.allocation_count ? ` (${transaction.allocation_count})` : ''
-        const remaining = transaction.allocation_remaining > 0
-          ? ` - ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}`
-          : ''
+        const remaining =
+          transaction.allocation_remaining > 0
+            ? ` - ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}`
+            : ''
         return `${label}${count}${remaining}`
       }
       if (transaction.matched_type === 'owner_funds') return getOwnerFundsStatusLabel(transaction)
@@ -371,9 +415,17 @@ export default function BankTransactions() {
 
     const columns = [
       { label: tr('date'), type: 'text', value: (transaction) => transaction.date || '' },
-      { label: tr('bankTxCounterparty'), type: 'text', value: (transaction) => transaction.counterparty_name || '' },
+      {
+        label: tr('bankTxCounterparty'),
+        type: 'text',
+        value: (transaction) => transaction.counterparty_name || '',
+      },
       { label: tr('bankTxPurpose'), type: 'text', value: (transaction) => transaction.purpose || '' },
-      { label: tr('bankTxReference'), type: 'text', value: (transaction) => transaction.bank_reference || '' },
+      {
+        label: tr('bankTxReference'),
+        type: 'text',
+        value: (transaction) => transaction.bank_reference || '',
+      },
       { label: tr('project'), type: 'text', value: (transaction) => getProjectName(transaction.project_id) },
       { label: tr('cashDirection'), type: 'text', value: getTransactionDirectionLabel },
       {
@@ -388,9 +440,7 @@ export default function BankTransactions() {
       { label: tr('status'), type: 'text', value: getTransactionStatusLabel },
     ]
 
-    const header = columns
-      .map((column) => `<th>${escapeExcelHtml(column.label)}</th>`)
-      .join('')
+    const header = columns.map((column) => `<th>${escapeExcelHtml(column.label)}</th>`).join('')
     const body = selectedTransactions
       .map((transaction) => {
         const cells = columns.map((column) => {
@@ -432,12 +482,10 @@ export default function BankTransactions() {
     URL.revokeObjectURL(url)
   }
 
-
   const handleBulkAssign = async () => {
     if (selectedIds.length === 0) return
-    const projectId = assignProjectId === '' || assignProjectId === '_none'
-      ? null
-      : parseInt(assignProjectId, 10)
+    const projectId =
+      assignProjectId === '' || assignProjectId === '_none' ? null : parseInt(assignProjectId, 10)
     try {
       await api.bankTransactions.bulkAssignProject({ ids: selectedIds, project_id: projectId })
       setModalAssign(false)
@@ -460,9 +508,12 @@ export default function BankTransactions() {
   }
 
   const handleClassifyOwnerFunds = async (transaction) => {
-    const confirmMessage = transaction?.status === 'matched' && transaction?.matched_type === 'expense'
-      ? tr('bankTxOwnerFundsConvertConfirm')
-      : (transaction?.direction === 'in' ? tr('bankTxOwnerFundsConfirmIn') : tr('bankTxOwnerFundsConfirmOut'))
+    const confirmMessage =
+      transaction?.status === 'matched' && transaction?.matched_type === 'expense'
+        ? tr('bankTxOwnerFundsConvertConfirm')
+        : transaction?.direction === 'in'
+          ? tr('bankTxOwnerFundsConfirmIn')
+          : tr('bankTxOwnerFundsConfirmOut')
     if (!confirm(confirmMessage)) return
     try {
       await api.bankTransactions.classifyOwnerFunds(transaction.id)
@@ -501,9 +552,12 @@ export default function BankTransactions() {
         api.counterpartyLoans.list({ loan_type: loanType, status: 'open' }),
       ])
       setLoanClients(clients.filter((client) => !client.is_archived))
-      const matchingLoans = loans.filter((loan) => (loan.currency || 'RSD') === (transaction.currency || 'RSD'))
+      const matchingLoans = loans.filter(
+        (loan) => (loan.currency || 'RSD') === (transaction.currency || 'RSD')
+      )
       setLoanCandidates(matchingLoans)
-      if (isRepayment && matchingLoans.length === 1) setLoanForm((current) => ({ ...current, loan_id: String(matchingLoans[0].id) }))
+      if (isRepayment && matchingLoans.length === 1)
+        setLoanForm((current) => ({ ...current, loan_id: String(matchingLoans[0].id) }))
     } catch (error) {
       setLoanError(error.message)
     }
@@ -566,27 +620,22 @@ export default function BankTransactions() {
     return type || ''
   }
 
-  const isEditableIncomeTransaction = (transaction) => (
+  const isEditableIncomeTransaction = (transaction) =>
     transaction?.direction === 'in' &&
     transaction?.status === 'matched' &&
     ['income', 'income_allocation'].includes(transaction?.matched_type)
-  )
 
-  const isOwnerFundsTransaction = (transaction) => (
+  const isOwnerFundsTransaction = (transaction) =>
     transaction?.status === 'matched' && transaction?.matched_type === 'owner_funds'
-  )
 
-  const isLoanTransaction = (transaction) => (
+  const isLoanTransaction = (transaction) =>
     transaction?.status === 'matched' && transaction?.matched_type === 'loan_movement'
-  )
 
-  const canConvertExpenseToOwnerFunds = (transaction) => (
+  const canConvertExpenseToOwnerFunds = (transaction) =>
     transaction?.status === 'matched' && transaction?.matched_type === 'expense'
-  )
 
-  const getOwnerFundsStatusLabel = (transaction) => (
+  const getOwnerFundsStatusLabel = (transaction) =>
     transaction?.direction === 'in' ? tr('bankTxOwnerFundsInStatus') : tr('bankTxOwnerFundsOutStatus')
-  )
 
   const getAllocationTotals = (lines = allocationLines) => {
     const allocated = lines.reduce((sum, line) => sum + parseMoneyInput(line.amount), 0)
@@ -627,7 +676,9 @@ export default function BankTransactions() {
           referenceDataPromise,
         ])
         setSuggestions(response)
-        const hasLinkOptions = response.some((item) => item.type === 'obligation' && item.section === 'suggested')
+        const hasLinkOptions = response.some(
+          (item) => item.type === 'obligation' && item.section === 'suggested'
+        )
         setMatchTab(requestedTab || (hasLinkOptions ? 'link' : 'create'))
       } else {
         const [response] = await Promise.all([
@@ -635,21 +686,23 @@ export default function BankTransactions() {
           referenceDataPromise,
         ])
         setSuggestions(response.candidates || [])
-        setAllocationLines((response.allocations || []).map((item) => ({
-          income_id: item.income_id,
-          invoice_number: item.invoice_number,
-          client_name: item.client_name,
-          description: item.description,
-          date: item.date,
-          status: item.status,
-          amount_full: item.amount_full,
-          amount_paid: item.amount_paid,
-          available_amount: item.available_amount,
-          allocated_amount: item.allocated_amount,
-          project_name: item.project_name,
-          project_code: item.project_code,
-          amount: String(item.allocated_amount ?? ''),
-        })))
+        setAllocationLines(
+          (response.allocations || []).map((item) => ({
+            income_id: item.income_id,
+            invoice_number: item.invoice_number,
+            client_name: item.client_name,
+            description: item.description,
+            date: item.date,
+            status: item.status,
+            amount_full: item.amount_full,
+            amount_paid: item.amount_paid,
+            available_amount: item.available_amount,
+            allocated_amount: item.allocated_amount,
+            project_name: item.project_name,
+            project_code: item.project_code,
+            amount: String(item.allocated_amount ?? ''),
+          }))
+        )
         setMatchTab(requestedTab || (activeTransaction.status === 'matched' ? 'allocate' : 'link'))
       }
     } catch (error) {
@@ -703,11 +756,11 @@ export default function BankTransactions() {
   }
 
   const updateAllocationAmount = (incomeId, value) => {
-    setAllocationLines((previous) => previous.map((line) => (
-      String(line.income_id) !== String(incomeId)
-        ? line
-        : { ...line, amount: value }
-    )))
+    setAllocationLines((previous) =>
+      previous.map((line) =>
+        String(line.income_id) !== String(incomeId) ? line : { ...line, amount: value }
+      )
+    )
   }
 
   const removeAllocationLine = (incomeId) => {
@@ -739,7 +792,9 @@ export default function BankTransactions() {
 
   const updateExpenseProject = (projectId) => {
     setExpenseForm((previous) => {
-      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const selectedContract = previous.contract_id
+        ? contracts.find((contract) => String(contract.id) === String(previous.contract_id))
+        : null
       const keepContract = contractMatchesProject(selectedContract, projectId)
       return {
         ...previous,
@@ -776,11 +831,21 @@ export default function BankTransactions() {
       }
 
       const wasCashCategory = previous.category_id === CASH_CATEGORY_VALUE
-      const fallbackProjectId = matchTx?.project_id ? String(matchTx.project_id) : (unassignedProject ? String(unassignedProject.id) : '')
+      const fallbackProjectId = matchTx?.project_id
+        ? String(matchTx.project_id)
+        : unassignedProject
+          ? String(unassignedProject.id)
+          : ''
       const defaultProjectId = getExpenseCategoryDefaultProjectId(categoryId)
-      const selectedContract = previous.contract_id ? contracts.find((contract) => String(contract.id) === String(previous.contract_id)) : null
+      const selectedContract = previous.contract_id
+        ? contracts.find((contract) => String(contract.id) === String(previous.contract_id))
+        : null
       const nextProjectId = defaultProjectId || (wasCashCategory ? fallbackProjectId : previous.project_id)
-      const keepContract = selectedContract && (!nextProjectId || String(selectedContract.project_id) === String(nextProjectId) || selectedContract.project_id == null)
+      const keepContract =
+        selectedContract &&
+        (!nextProjectId ||
+          String(selectedContract.project_id) === String(nextProjectId) ||
+          selectedContract.project_id == null)
       return {
         ...previous,
         category_id: categoryId,
@@ -802,13 +867,24 @@ export default function BankTransactions() {
         date: expenseForm.date,
         description: expenseForm.description.trim(),
         category: isCashCategorySelected ? 'cash' : null,
-        category_id: expenseForm.category_id && !isCashCategorySelected ? parseInt(expenseForm.category_id, 10) : null,
+        category_id:
+          expenseForm.category_id && !isCashCategorySelected ? parseInt(expenseForm.category_id, 10) : null,
         project_id: isCashCategorySelected
-          ? (cashProject ? cashProject.id : null)
-          : (categoryDefaultProjectId
+          ? cashProject
+            ? cashProject.id
+            : null
+          : categoryDefaultProjectId
             ? parseInt(categoryDefaultProjectId, 10)
-            : (expenseForm.project_id ? parseInt(expenseForm.project_id, 10) : (unassignedProject ? unassignedProject.id : null))),
-        contract_id: isCashCategorySelected ? null : (expenseForm.contract_id ? parseInt(expenseForm.contract_id, 10) : null),
+            : expenseForm.project_id
+              ? parseInt(expenseForm.project_id, 10)
+              : unassignedProject
+                ? unassignedProject.id
+                : null,
+        contract_id: isCashCategorySelected
+          ? null
+          : expenseForm.contract_id
+            ? parseInt(expenseForm.contract_id, 10)
+            : null,
         note: expenseForm.note?.trim() || null,
       })
       await loadData({ preserveScroll: true })
@@ -834,20 +910,33 @@ export default function BankTransactions() {
             {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
             {item.score != null ? <span className="bank-match-item-subtle">{item.score}%</span> : null}
           </div>
-          {item.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{item.client_name}</div> : null}
+          {item.client_name ? (
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>
+              {item.client_name}
+            </div>
+          ) : null}
           {item.description ? <div className="bank-match-item-body">{item.description}</div> : null}
           <div className="bank-match-item-amount">
             {isPartial ? (
               <>
-                <span>{tr('partial')}: {amount.toLocaleString('sr-RS')} RSD</span>
-                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> / {fullAmount.toLocaleString('sr-RS')} RSD</span>
+                <span>
+                  {tr('partial')}: {amount.toLocaleString('sr-RS')} RSD
+                </span>
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                  {' '}
+                  / {fullAmount.toLocaleString('sr-RS')} RSD
+                </span>
               </>
             ) : (
               <span>{amount.toLocaleString('sr-RS')} RSD</span>
             )}
           </div>
         </div>
-        <button className="btn btn-sm btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => performMatch(item.id, item.type)}>
+        <button
+          className="btn btn-sm btn-primary"
+          style={{ whiteSpace: 'nowrap' }}
+          onClick={() => performMatch(item.id, item.type)}
+        >
           {tr('bankTxMatchBtn')}
         </button>
       </div>
@@ -868,13 +957,22 @@ export default function BankTransactions() {
             <span>{label}</span>
             {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
           </div>
-          {item.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{item.client_name}</div> : null}
+          {item.client_name ? (
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>
+              {item.client_name}
+            </div>
+          ) : null}
           {item.description ? <div className="bank-match-item-body">{item.description}</div> : null}
           <div className="bank-match-item-amount">
             {isPartial ? (
               <>
-                <span>{tr('bankTxAvailableAmount')}: {formatMoney(amount)} RSD</span>
-                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> / {formatMoney(fullAmount)} RSD</span>
+                <span>
+                  {tr('bankTxAvailableAmount')}: {formatMoney(amount)} RSD
+                </span>
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                  {' '}
+                  / {formatMoney(fullAmount)} RSD
+                </span>
               </>
             ) : (
               <span>{formatMoney(amount)} RSD</span>
@@ -904,13 +1002,18 @@ export default function BankTransactions() {
           <div className="bank-match-summary-title">{transaction.counterparty_name || UI_DASH}</div>
           <div className="bank-match-summary-purpose">{transaction.purpose || UI_DASH}</div>
           <div className="bank-match-summary-meta">
-            <span>{tr('date')}: {transaction.date || UI_DASH}</span>
-            <span>{tr('bankTxReference')}: {transaction.bank_reference || UI_DASH}</span>
+            <span>
+              {tr('date')}: {transaction.date || UI_DASH}
+            </span>
+            <span>
+              {tr('bankTxReference')}: {transaction.bank_reference || UI_DASH}
+            </span>
           </div>
         </div>
         <div>
           <div className={`bank-match-summary-amount ${amountClassName}`}>
-            {transaction.direction === 'in' ? '+' : '-'}{amount.toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
+            {transaction.direction === 'in' ? '+' : '-'}
+            {amount.toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
           </div>
           <div className="bank-match-summary-project">
             {tr('project')}: {getProjectName(transaction.project_id)}
@@ -925,10 +1028,16 @@ export default function BankTransactions() {
     if (transaction.status === 'matched') {
       if (transaction.matched_type === 'income_allocation') {
         return (
-          <span className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}>
-            {transaction.allocation_remaining > 0 ? tr('bankTxAllocationPartialStatus') : tr('bankTxAllocationFullStatus')}
+          <span
+            className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}
+          >
+            {transaction.allocation_remaining > 0
+              ? tr('bankTxAllocationPartialStatus')
+              : tr('bankTxAllocationFullStatus')}
             {transaction.allocation_count ? ` (${transaction.allocation_count})` : ''}
-            {transaction.allocation_remaining > 0 ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}` : ''}
+            {transaction.allocation_remaining > 0
+              ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}`
+              : ''}
           </span>
         )
       }
@@ -938,7 +1047,11 @@ export default function BankTransactions() {
       if (transaction.matched_type === 'loan_movement') {
         return <span className="badge badge-success">{getLoanMovementStatusLabel(transaction)}</span>
       }
-      return <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
+      return (
+        <span className="badge badge-success">
+          {tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})
+        </span>
+      )
     }
     return <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
   }
@@ -950,35 +1063,110 @@ export default function BankTransactions() {
     if (transaction.status !== 'matched') {
       if (transaction.direction === 'in') {
         actions.push(
-          { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
-          { key: 'allocate', label: tr('bankTxAllocateMode'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'allocate') },
-          { key: 'loan-receive', label: tr('loanReceive'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'receiveBorrowed') },
-          { key: 'loan-repayment-in', label: tr('loanReceiveRepayment'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'repayIssued') },
-          { key: 'owner-funds-in', label: tr('bankTxOwnerFundsMarkIn'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
+          {
+            key: 'link',
+            label: tr('bankTxMatchBtn'),
+            className: 'btn btn-primary',
+            onClick: () => openMatchModal(transaction, 'link'),
+          },
+          {
+            key: 'allocate',
+            label: tr('bankTxAllocateMode'),
+            className: 'btn btn-secondary',
+            onClick: () => openMatchModal(transaction, 'allocate'),
+          },
+          {
+            key: 'loan-receive',
+            label: tr('loanReceive'),
+            className: 'btn btn-secondary',
+            onClick: () => openLoanOperation(transaction, 'receiveBorrowed'),
+          },
+          {
+            key: 'loan-repayment-in',
+            label: tr('loanReceiveRepayment'),
+            className: 'btn btn-secondary',
+            onClick: () => openLoanOperation(transaction, 'repayIssued'),
+          },
+          {
+            key: 'owner-funds-in',
+            label: tr('bankTxOwnerFundsMarkIn'),
+            className: 'btn btn-secondary',
+            onClick: () => handleClassifyOwnerFunds(transaction),
+          }
         )
       } else {
         actions.push(
-          { key: 'link', label: tr('bankTxMatchBtn'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'link') },
-          { key: 'create', label: tr('bankTxCreateExpense'), className: 'btn btn-secondary', onClick: () => openMatchModal(transaction, 'create') },
-          { key: 'loan-issue', label: tr('loanIssue'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'issueLoan') },
-          { key: 'loan-repayment-out', label: tr('loanRepayBorrowed'), className: 'btn btn-secondary', onClick: () => openLoanOperation(transaction, 'repayBorrowed') },
-          { key: 'owner-funds-out', label: tr('bankTxOwnerFundsMarkOut'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) },
+          {
+            key: 'link',
+            label: tr('bankTxMatchBtn'),
+            className: 'btn btn-primary',
+            onClick: () => openMatchModal(transaction, 'link'),
+          },
+          {
+            key: 'create',
+            label: tr('bankTxCreateExpense'),
+            className: 'btn btn-secondary',
+            onClick: () => openMatchModal(transaction, 'create'),
+          },
+          {
+            key: 'loan-issue',
+            label: tr('loanIssue'),
+            className: 'btn btn-secondary',
+            onClick: () => openLoanOperation(transaction, 'issueLoan'),
+          },
+          {
+            key: 'loan-repayment-out',
+            label: tr('loanRepayBorrowed'),
+            className: 'btn btn-secondary',
+            onClick: () => openLoanOperation(transaction, 'repayBorrowed'),
+          },
+          {
+            key: 'owner-funds-out',
+            label: tr('bankTxOwnerFundsMarkOut'),
+            className: 'btn btn-secondary',
+            onClick: () => handleClassifyOwnerFunds(transaction),
+          }
         )
       }
     } else {
       if (isEditableIncomeTransaction(transaction)) {
-        actions.push({ key: 'edit', label: tr('edit'), className: 'btn btn-primary', onClick: () => openMatchModal(transaction, 'allocate') })
+        actions.push({
+          key: 'edit',
+          label: tr('edit'),
+          className: 'btn btn-primary',
+          onClick: () => openMatchModal(transaction, 'allocate'),
+        })
       }
       if (canConvertExpenseToOwnerFunds(transaction)) {
-        actions.push({ key: 'convert-owner-funds', label: tr('bankTxOwnerFundsConvert'), className: 'btn btn-secondary', onClick: () => handleClassifyOwnerFunds(transaction) })
+        actions.push({
+          key: 'convert-owner-funds',
+          label: tr('bankTxOwnerFundsConvert'),
+          className: 'btn btn-secondary',
+          onClick: () => handleClassifyOwnerFunds(transaction),
+        })
       }
       if (isOwnerFundsTransaction(transaction)) {
-        actions.push({ key: 'document', label: tr('bankTxOwnerFundsDocument'), className: 'btn btn-secondary', onClick: () => handleDownloadOwnerFundsDocument(transaction.id) })
+        actions.push({
+          key: 'document',
+          label: tr('bankTxOwnerFundsDocument'),
+          className: 'btn btn-secondary',
+          onClick: () => handleDownloadOwnerFundsDocument(transaction.id),
+        })
       }
       if (isLoanTransaction(transaction) && transaction.loan_id) {
-        actions.push({ key: 'open-loan', label: tr('openLoan'), className: 'btn btn-secondary', onClick: () => navigate(`/counterparty-loans?open=${transaction.loan_id}`) })
+        actions.push({
+          key: 'open-loan',
+          label: tr('openLoan'),
+          className: 'btn btn-secondary',
+          onClick: () => navigate(`/counterparty-loans?open=${transaction.loan_id}`),
+        })
       }
-      actions.push({ key: 'unmatch', label: tr('bankTxUnmatchBtn'), className: 'btn btn-danger', onClick: () => handleUnmatch(transaction.id) })
+      actions.push({
+        key: 'unmatch',
+        label: tr('bankTxUnmatchBtn'),
+        className: 'btn btn-danger',
+        onClick: () => handleUnmatch(transaction.id),
+      })
     }
 
     return (
@@ -992,8 +1180,11 @@ export default function BankTransactions() {
               </div>
               <div className="bank-transaction-field">
                 <span className="bank-transaction-field-label">{tr('amount')}</span>
-                <strong className={`bank-transaction-field-value ${transaction.direction === 'in' ? 'positive' : 'negative'}`}>
-                  {transaction.direction === 'in' ? '+' : '-'}{formatMoney(transaction.amount)} {transaction.currency || 'RSD'}
+                <strong
+                  className={`bank-transaction-field-value ${transaction.direction === 'in' ? 'positive' : 'negative'}`}
+                >
+                  {transaction.direction === 'in' ? '+' : '-'}
+                  {formatMoney(transaction.amount)} {transaction.currency || 'RSD'}
                 </strong>
               </div>
               <div className="bank-transaction-field">
@@ -1006,7 +1197,9 @@ export default function BankTransactions() {
               </div>
               <div className="bank-transaction-field full">
                 <span className="bank-transaction-field-label">{tr('bankTxCounterparty')}</span>
-                <span className="bank-transaction-field-value">{transaction.counterparty_name || UI_DASH}</span>
+                <span className="bank-transaction-field-value">
+                  {transaction.counterparty_name || UI_DASH}
+                </span>
               </div>
               <div className="bank-transaction-field full">
                 <span className="bank-transaction-field-label">{tr('bankTxPurpose')}</span>
@@ -1050,19 +1243,33 @@ export default function BankTransactions() {
     const byCounterparty = suggestions.filter((item) => item.section === 'counterparty')
     const allInvoices = suggestions.filter((item) => item.section === 'all' || !item.section)
     const query = allInvoiceSearch.trim().toLowerCase()
-    const filteredAll = allInvoices.filter((item) =>
-      !query ||
-      String(item.description || '').toLowerCase().includes(query) ||
-      String(item.client_name || '').toLowerCase().includes(query) ||
-      String(item.invoice_number || '').toLowerCase().includes(query) ||
-      String(item.amount || '').includes(query)
+    const filteredAll = allInvoices.filter(
+      (item) =>
+        !query ||
+        String(item.description || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.client_name || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.invoice_number || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.amount || '').includes(query)
     )
-    const filteredAllocationCandidates = suggestions.filter((item) =>
-      !query ||
-      String(item.description || '').toLowerCase().includes(query) ||
-      String(item.client_name || '').toLowerCase().includes(query) ||
-      String(item.invoice_number || '').toLowerCase().includes(query) ||
-      String(item.amount || '').includes(query)
+    const filteredAllocationCandidates = suggestions.filter(
+      (item) =>
+        !query ||
+        String(item.description || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.client_name || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.invoice_number || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.amount || '').includes(query)
     )
     const totals = getAllocationTotals()
     const hasInvalidAllocation = allocationLines.some((line) => parseMoneyInput(line.amount) <= 0)
@@ -1071,7 +1278,15 @@ export default function BankTransactions() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {suggested.length > 0 && (
           <div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+            <div
+              style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--color-text-muted)',
+                marginBottom: '0.4rem',
+                textTransform: 'uppercase',
+              }}
+            >
               {tr('bankTxAutoFound')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -1082,7 +1297,15 @@ export default function BankTransactions() {
 
         {byCounterparty.length > 0 && (
           <div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+            <div
+              style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--color-text-muted)',
+                marginBottom: '0.4rem',
+                textTransform: 'uppercase',
+              }}
+            >
               {tr('bankTxCounterpartyInvoices')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -1092,7 +1315,15 @@ export default function BankTransactions() {
         )}
 
         <div>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+          <div
+            style={{
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              color: 'var(--color-text-muted)',
+              marginBottom: '0.4rem',
+              textTransform: 'uppercase',
+            }}
+          >
             {tr('bankTxAllOpenInvoices')}
           </div>
           <SearchInput
@@ -1101,12 +1332,24 @@ export default function BankTransactions() {
             onChange={setAllInvoiceSearch}
             style={{ width: '100%', marginBottom: '0.5rem' }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 260, overflowY: 'auto' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.35rem',
+              maxHeight: 260,
+              overflowY: 'auto',
+            }}
+          >
             {filteredAll.length === 0 && allInvoices.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoOpenInvoices')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoOpenInvoices')}
+              </p>
             )}
             {filteredAll.length === 0 && allInvoices.length > 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoInvoicesFound')}
+              </p>
             )}
             {filteredAll.map(renderSuggestionCard)}
           </div>
@@ -1129,7 +1372,9 @@ export default function BankTransactions() {
             </div>
             <div className="bank-allocation-summary-item">
               <span>{tr('bankTxAllocationRemaining')}</span>
-              <strong className={totals.remaining > 0 ? 'warning' : 'success'}>{formatMoney(totals.remaining)} RSD</strong>
+              <strong className={totals.remaining > 0 ? 'warning' : 'success'}>
+                {formatMoney(totals.remaining)} RSD
+              </strong>
             </div>
           </div>
 
@@ -1146,49 +1391,69 @@ export default function BankTransactions() {
 
           <div className="bank-match-list">
             {allocationLines.length === 0 ? (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>{tr('bankTxAllocationEmpty')}</p>
-            ) : allocationLines.map((line) => (
-              <div key={`selected-${line.income_id}`} className="bank-match-item selected">
-                <div style={{ minWidth: 0 }}>
-                  <div className="bank-match-item-title">
-                    <span>{line.invoice_number}</span>
-                    {line.date ? <span className="bank-match-item-subtle">{line.date}</span> : null}
-                  </div>
-                  {line.client_name ? <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>{line.client_name}</div> : null}
-                  {line.description ? <div className="bank-match-item-body">{line.description}</div> : null}
-                  <div className="bank-match-item-body">
-                    {tr('bankTxAvailableAmount')}: {formatMoney(line.available_amount)} RSD
-                  </div>
-                  {(line.project_name || line.project_code) ? (
-                    <div className="bank-match-item-subtle" style={{ marginTop: '0.25rem' }}>
-                      {tr('project')}: {line.project_name || UI_DASH}{line.project_code ? ` (${line.project_code})` : ''}
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
+                {tr('bankTxAllocationEmpty')}
+              </p>
+            ) : (
+              allocationLines.map((line) => (
+                <div key={`selected-${line.income_id}`} className="bank-match-item selected">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="bank-match-item-title">
+                      <span>{line.invoice_number}</span>
+                      {line.date ? <span className="bank-match-item-subtle">{line.date}</span> : null}
                     </div>
-                  ) : null}
+                    {line.client_name ? (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>
+                        {line.client_name}
+                      </div>
+                    ) : null}
+                    {line.description ? <div className="bank-match-item-body">{line.description}</div> : null}
+                    <div className="bank-match-item-body">
+                      {tr('bankTxAvailableAmount')}: {formatMoney(line.available_amount)} RSD
+                    </div>
+                    {line.project_name || line.project_code ? (
+                      <div className="bank-match-item-subtle" style={{ marginTop: '0.25rem' }}>
+                        {tr('project')}: {line.project_name || UI_DASH}
+                        {line.project_code ? ` (${line.project_code})` : ''}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="bank-allocation-line-actions">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="form-input bank-allocation-amount-input"
+                      value={line.amount}
+                      onChange={(event) => updateAllocationAmount(line.income_id, event.target.value)}
+                    />
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      type="button"
+                      onClick={() => removeAllocationLine(line.income_id)}
+                    >
+                      {tr('delete')}
+                    </button>
+                  </div>
                 </div>
-                <div className="bank-allocation-line-actions">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="form-input bank-allocation-amount-input"
-                    value={line.amount}
-                    onChange={(event) => updateAllocationAmount(line.income_id, event.target.value)}
-                  />
-                  <button className="btn btn-sm btn-secondary" type="button" onClick={() => removeAllocationLine(line.income_id)}>
-                    {tr('delete')}
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
+            <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>
+              {tr('cancel')}
+            </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={saveAllocation}
-              disabled={allocationSaving || allocationLines.length === 0 || hasInvalidAllocation || totals.overAllocated > 0}
+              disabled={
+                allocationSaving ||
+                allocationLines.length === 0 ||
+                hasInvalidAllocation ||
+                totals.overAllocated > 0
+              }
             >
               {allocationSaving ? tr('loading') : tr('save')}
             </button>
@@ -1205,7 +1470,9 @@ export default function BankTransactions() {
           />
           <div className="bank-match-list">
             {filteredAllocationCandidates.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoInvoicesFound')}
+              </p>
             )}
             {filteredAllocationCandidates.map(renderAllocationCandidateCard)}
           </div>
@@ -1253,13 +1520,22 @@ export default function BankTransactions() {
     const suggested = suggestions.filter((item) => item.section === 'suggested')
     const allLinkCandidates = suggestions.filter((item) => item.section === 'all' || !item.section)
     const query = allInvoiceSearch.trim().toLowerCase()
-    const filteredLinkCandidates = allLinkCandidates.filter((item) =>
-      !query ||
-      String(item.description || '').toLowerCase().includes(query) ||
-      String(item.client_name || '').toLowerCase().includes(query) ||
-      String(item.invoice_number || '').toLowerCase().includes(query) ||
-      String(item.date || '').toLowerCase().includes(query) ||
-      String(item.amount || '').includes(query)
+    const filteredLinkCandidates = allLinkCandidates.filter(
+      (item) =>
+        !query ||
+        String(item.description || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.client_name || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.invoice_number || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.date || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(item.amount || '').includes(query)
     )
 
     const renderLinkPanel = () => (
@@ -1267,14 +1543,14 @@ export default function BankTransactions() {
         {suggested.length > 0 ? (
           <div className="bank-match-panel">
             <div className="bank-match-panel-title">{tr('bankTxAutoFound')}</div>
-            <div className="bank-match-list">
-              {suggested.map(renderSuggestionCard)}
-            </div>
+            <div className="bank-match-list">{suggested.map(renderSuggestionCard)}</div>
           </div>
         ) : null}
 
         <div className="bank-match-panel">
-          <div className="bank-match-panel-title">{tr('bankTxExistingExpenses')} / {tr('bankTxOpenObligations')}</div>
+          <div className="bank-match-panel-title">
+            {tr('bankTxExistingExpenses')} / {tr('bankTxOpenObligations')}
+          </div>
           <SearchInput
             placeholder={tr('bankTxSearchInvoices')}
             value={allInvoiceSearch}
@@ -1283,10 +1559,14 @@ export default function BankTransactions() {
           />
           <div className="bank-match-list">
             {allLinkCandidates.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoInvoicesFound')}
+              </p>
             )}
             {filteredLinkCandidates.length === 0 && allLinkCandidates.length > 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoInvoicesFound')}
+              </p>
             )}
             {filteredLinkCandidates.map(renderSuggestionCard)}
           </div>
@@ -1302,11 +1582,17 @@ export default function BankTransactions() {
         <div className="bank-match-form-grid">
           <div className="form-group">
             <label className="form-label">{tr('category')}</label>
-            <select className="form-input" value={expenseForm.category_id} onChange={(event) => updateExpenseCategory(event.target.value)}>
+            <select
+              className="form-input"
+              value={expenseForm.category_id}
+              onChange={(event) => updateExpenseCategory(event.target.value)}
+            >
               <option value="">{UI_DASH}</option>
               <option value={CASH_CATEGORY_VALUE}>{tr('cashCategoryOption')}</option>
               {categories.map((category) => (
-                <option key={category.id} value={category.id}>{getCategoryName(category.id)}</option>
+                <option key={category.id} value={category.id}>
+                  {getCategoryName(category.id)}
+                </option>
               ))}
             </select>
           </div>
@@ -1326,10 +1612,16 @@ export default function BankTransactions() {
           {!isCashCategorySelected && filteredContracts.length > 0 ? (
             <div className="form-group full">
               <label className="form-label">{tr('contract')}</label>
-              <select className="form-input" value={expenseForm.contract_id} onChange={(event) => updateExpenseContract(event.target.value)}>
+              <select
+                className="form-input"
+                value={expenseForm.contract_id}
+                onChange={(event) => updateExpenseContract(event.target.value)}
+              >
                 <option value="">{`${UI_DASH} ${tr('withoutContract')} ${UI_DASH}`}</option>
                 {filteredContracts.map((contract) => (
-                  <option key={contract.id} value={contract.id}>{getContractLabel(contract.id)}</option>
+                  <option key={contract.id} value={contract.id}>
+                    {getContractLabel(contract.id)}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1337,7 +1629,11 @@ export default function BankTransactions() {
 
           <div className="form-group">
             <label className="form-label">{tr('date')}</label>
-            <DatePicker value={expenseForm.date} onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))} required />
+            <DatePicker
+              value={expenseForm.date}
+              onChange={(value) => setExpenseForm((previous) => ({ ...previous, date: value }))}
+              required
+            />
           </div>
 
           <div className="form-group">
@@ -1350,20 +1646,30 @@ export default function BankTransactions() {
             <input
               className="form-input"
               value={expenseForm.description}
-              onChange={(event) => setExpenseForm((previous) => ({ ...previous, description: event.target.value }))}
+              onChange={(event) =>
+                setExpenseForm((previous) => ({ ...previous, description: event.target.value }))
+              }
               required
             />
           </div>
 
           <div className="form-group full">
             <label className="form-label">{tr('note')}</label>
-            <input className="form-input" value={expenseForm.note} onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))} />
+            <input
+              className="form-input"
+              value={expenseForm.note}
+              onChange={(event) => setExpenseForm((previous) => ({ ...previous, note: event.target.value }))}
+            />
           </div>
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>{tr('cancel')}</button>
-          <button type="submit" className="btn btn-primary" disabled={expenseSaving}>{expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}</button>
+          <button type="button" className="btn btn-secondary" onClick={closeMatchModal}>
+            {tr('cancel')}
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={expenseSaving}>
+            {expenseSaving ? tr('loading') : tr('bankTxCreateAndMatch')}
+          </button>
         </div>
       </form>
     )
@@ -1397,7 +1703,8 @@ export default function BankTransactions() {
   const selectedLoanCandidate = loanCandidates.find((loan) => String(loan.id) === String(loanForm.loan_id))
   const loanOperationAmount = Number(loanModal?.transaction?.amount || 0)
   const loanBalanceAfter = selectedLoanCandidate
-    ? Number(selectedLoanCandidate.outstanding_amount || 0) + (loanModal?.isRepayment ? -loanOperationAmount : loanOperationAmount)
+    ? Number(selectedLoanCandidate.outstanding_amount || 0) +
+      (loanModal?.isRepayment ? -loanOperationAmount : loanOperationAmount)
     : null
   const loanRepaymentExceeds = !!loanModal?.isRepayment && loanBalanceAfter != null && loanBalanceAfter < 0
 
@@ -1406,50 +1713,68 @@ export default function BankTransactions() {
       <PageHeader
         title={tr('bankTransactions')}
         subtitle={tr('bankTxOpenHint')}
-        actions={(
+        actions={
           <>
-          <YearFilterSelect
-            value={year}
-            availableYears={availableYears}
-            onChange={(nextYear) => {
-              setYear(nextYear)
-              setMonth('')
-            }}
-          />
-          <select className="form-input" style={{ width: 'auto' }} value={month} onChange={(event) => setMonth(event.target.value)} disabled={!year}>
-            <option value="">{tr('allMonths')}</option>
-            {MONTHS.map((value) => (
-              <option key={value} value={value}>{String(value).padStart(2, '0')}</option>
-            ))}
-          </select>
-          <select className="form-input" style={{ width: 'auto' }} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">{tr('filterAll')}</option>
-            <option value="unmatched">{tr('bankTxUnmatched')}</option>
-            <option value="matched">{tr('bankTxMatched')}</option>
-          </select>
-          <select className="form-input" style={{ width: 'auto' }} value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)}>
-            <option value="all">{tr('filterAll')}</option>
-            <option value="in">{tr('bankTxDirectionIn')}</option>
-            <option value="out">{tr('bankTxDirectionOut')}</option>
-          </select>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ minWidth: 180 }}
-          />
-          {selectedIds.length > 0 && (
-            <>
-              <button className="btn btn-secondary" onClick={handleExportSelectedExcel}>
-                {tr('bankTxExportSelectedExcel')} ({selectedIds.length})
-              </button>
-              <button className="btn btn-secondary" onClick={openAssignModal}>
-                {tr('assignProject')} ({selectedIds.length})
-              </button>
-            </>
-          )}
+            <YearFilterSelect
+              value={year}
+              availableYears={availableYears}
+              onChange={(nextYear) => {
+                setYear(nextYear)
+                setMonth('')
+              }}
+            />
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+              disabled={!year}
+            >
+              <option value="">{tr('allMonths')}</option>
+              {MONTHS.map((value) => (
+                <option key={value} value={value}>
+                  {String(value).padStart(2, '0')}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">{tr('filterAll')}</option>
+              <option value="unmatched">{tr('bankTxUnmatched')}</option>
+              <option value="matched">{tr('bankTxMatched')}</option>
+            </select>
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={directionFilter}
+              onChange={(event) => setDirectionFilter(event.target.value)}
+            >
+              <option value="all">{tr('filterAll')}</option>
+              <option value="in">{tr('bankTxDirectionIn')}</option>
+              <option value="out">{tr('bankTxDirectionOut')}</option>
+            </select>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ minWidth: 180 }}
+            />
+            {selectedIds.length > 0 && (
+              <>
+                <button className="btn btn-secondary" onClick={handleExportSelectedExcel}>
+                  {tr('bankTxExportSelectedExcel')} ({selectedIds.length})
+                </button>
+                <button className="btn btn-secondary" onClick={openAssignModal}>
+                  {tr('assignProject')} ({selectedIds.length})
+                </button>
+              </>
+            )}
           </>
-        )}
+        }
       />
 
       <div className="page-body" ref={pageBodyRef}>
@@ -1458,8 +1783,16 @@ export default function BankTransactions() {
             count={selectedTransactions.length}
             items={[
               { label: tr('selectedIn'), value: `+${formatMoney(selectedTotals.in)} RSD`, tone: 'positive' },
-              { label: tr('selectedOut'), value: `-${formatMoney(selectedTotals.out)} RSD`, tone: 'negative' },
-              { label: tr('selectedNet'), value: `${selectedTotals.net >= 0 ? '+' : '-'}${formatMoney(Math.abs(selectedTotals.net))} RSD`, tone: selectedTotals.net >= 0 ? 'positive' : 'negative' },
+              {
+                label: tr('selectedOut'),
+                value: `-${formatMoney(selectedTotals.out)} RSD`,
+                tone: 'negative',
+              },
+              {
+                label: tr('selectedNet'),
+                value: `${selectedTotals.net >= 0 ? '+' : '-'}${formatMoney(Math.abs(selectedTotals.net))} RSD`,
+                tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
+              },
             ]}
           />
           <div className="table-wrap">
@@ -1467,21 +1800,45 @@ export default function BankTransactions() {
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
-                    <input type="checkbox" checked={displayed.length > 0 && selectedIds.length === displayed.length} onChange={toggleSelectAll} />
+                    <input
+                      type="checkbox"
+                      checked={displayed.length > 0 && selectedIds.length === displayed.length}
+                      onChange={toggleSelectAll}
+                    />
                   </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('bankTxCounterparty')} <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>{tr('bankTxPurpose')} / {tr('bankTxReference')} <SortIndicator active={sortCol === 'purpose'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>{tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} /></th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>{tr('status')} <SortIndicator active={sortCol === 'status'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>
+                    {tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>
+                    {tr('bankTxCounterparty')}{' '}
+                    <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('purpose')}>
+                    {tr('bankTxPurpose')} / {tr('bankTxReference')}{' '}
+                    <SortIndicator active={sortCol === 'purpose'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('project_id')}>
+                    {tr('project')} <SortIndicator active={sortCol === 'project_id'} asc={sortAsc} />
+                  </th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
+                    {tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>
+                    {tr('status')} <SortIndicator active={sortCol === 'status'} asc={sortAsc} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7}>{tr('loading')}</td></tr>
+                  <tr>
+                    <td colSpan={7}>{tr('loading')}</td>
+                  </tr>
                 ) : displayed.length === 0 ? (
-                  <tr><td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</td></tr>
+                  <tr>
+                    <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('noRecords')}
+                    </td>
+                  </tr>
                 ) : (
                   displayed.map((transaction) => (
                     <tr
@@ -1508,28 +1865,57 @@ export default function BankTransactions() {
                       <td>{transaction.counterparty_name || UI_DASH}</td>
                       <td style={{ maxWidth: 320 }}>
                         <div className="bank-transaction-open">
-                          <span className="bank-transaction-open-title">{transaction.purpose || UI_DASH}</span>
-                          {transaction.bank_reference ? <span className="bank-transaction-open-meta">Ref: {transaction.bank_reference}</span> : null}
+                          <span className="bank-transaction-open-title">
+                            {transaction.purpose || UI_DASH}
+                          </span>
+                          {transaction.bank_reference ? (
+                            <span className="bank-transaction-open-meta">
+                              Ref: {transaction.bank_reference}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
-                      <td title={getProjectName(transaction.project_id)}>{getProjectName(transaction.project_id)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: transaction.direction === 'in' ? 'var(--color-success)' : 'var(--color-text)' }}>
-                        {transaction.direction === 'in' ? '+' : '-'}{Number(transaction.amount || 0).toLocaleString('sr-RS')} {transaction.currency || 'RSD'}
+                      <td title={getProjectName(transaction.project_id)}>
+                        {getProjectName(transaction.project_id)}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          fontWeight: 700,
+                          color:
+                            transaction.direction === 'in' ? 'var(--color-success)' : 'var(--color-text)',
+                        }}
+                      >
+                        {transaction.direction === 'in' ? '+' : '-'}
+                        {Number(transaction.amount || 0).toLocaleString('sr-RS')}{' '}
+                        {transaction.currency || 'RSD'}
                       </td>
                       <td>
                         {transaction.status === 'matched' ? (
                           transaction.matched_type === 'income_allocation' ? (
-                            <span className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}>
-                              {transaction.allocation_remaining > 0 ? tr('bankTxAllocationPartialStatus') : tr('bankTxAllocationFullStatus')}
+                            <span
+                              className={`badge ${transaction.allocation_remaining > 0 ? 'badge-warning' : 'badge-success'}`}
+                            >
+                              {transaction.allocation_remaining > 0
+                                ? tr('bankTxAllocationPartialStatus')
+                                : tr('bankTxAllocationFullStatus')}
                               {transaction.allocation_count ? ` (${transaction.allocation_count})` : ''}
-                              {transaction.allocation_remaining > 0 ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}` : ''}
+                              {transaction.allocation_remaining > 0
+                                ? ` • ${tr('bankTxAllocationRemainingShort')} ${formatMoney(transaction.allocation_remaining)}`
+                                : ''}
                             </span>
                           ) : transaction.matched_type === 'owner_funds' ? (
-                            <span className="badge badge-success">{getOwnerFundsStatusLabel(transaction)}</span>
+                            <span className="badge badge-success">
+                              {getOwnerFundsStatusLabel(transaction)}
+                            </span>
                           ) : transaction.matched_type === 'loan_movement' ? (
-                            <span className="badge badge-success">{getLoanMovementStatusLabel(transaction)}</span>
+                            <span className="badge badge-success">
+                              {getLoanMovementStatusLabel(transaction)}
+                            </span>
                           ) : (
-                            <span className="badge badge-success">{tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})</span>
+                            <span className="badge badge-success">
+                              {tr('bankTxMatched')} ({getMatchedTypeLabel(transaction.matched_type)})
+                            </span>
                           )
                         ) : (
                           <span className="badge badge-warning">{tr('bankTxUnmatched')}</span>
@@ -1544,13 +1930,13 @@ export default function BankTransactions() {
         </div>
       </div>
 
-        <Modal
-          isOpen={!!matchTx}
-          onClose={closeMatchModal}
-          title={transactionModalMode === 'workflow' ? tr('bankTxMatchTitle') : tr('bankTxDetailsTitle')}
-          className={matchTx ? 'bank-match-modal' : ''}
-          maxWidth={matchTx ? '980px' : '700px'}
-        >
+      <Modal
+        isOpen={!!matchTx}
+        onClose={closeMatchModal}
+        title={transactionModalMode === 'workflow' ? tr('bankTxMatchTitle') : tr('bankTxDetailsTitle')}
+        className={matchTx ? 'bank-match-modal' : ''}
+        maxWidth={matchTx ? '980px' : '700px'}
+      >
         {matchTx && (
           <div className="bank-match-layout">
             {renderMatchSummary(matchTx)}
@@ -1560,7 +1946,11 @@ export default function BankTransactions() {
             ) : (
               <>
                 <div className="bank-transaction-workflow-toolbar">
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTransactionModalMode('overview')}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setTransactionModalMode('overview')}
+                  >
                     {tr('bankTxBackToDetails')}
                   </button>
                 </div>
@@ -1582,9 +1972,15 @@ export default function BankTransactions() {
       <Modal
         isOpen={!!loanModal}
         onClose={closeLoanModal}
-        title={loanModal?.isRepayment
-          ? (loanModal.loanType === 'borrowed' ? tr('loanRepayBorrowed') : tr('loanReceiveRepayment'))
-          : (loanModal?.loanType === 'borrowed' ? tr('loanReceive') : tr('loanIssue'))}
+        title={
+          loanModal?.isRepayment
+            ? loanModal.loanType === 'borrowed'
+              ? tr('loanRepayBorrowed')
+              : tr('loanReceiveRepayment')
+            : loanModal?.loanType === 'borrowed'
+              ? tr('loanReceive')
+              : tr('loanIssue')
+        }
         className="loan-operation-modal"
         maxWidth="760px"
       >
@@ -1593,17 +1989,23 @@ export default function BankTransactions() {
             <div className="loan-operation-summary">
               <div>
                 <span>{tr('amount')}</span>
-                <strong>{formatMoney(loanOperationAmount)} {loanModal.transaction.currency || 'RSD'}</strong>
+                <strong>
+                  {formatMoney(loanOperationAmount)} {loanModal.transaction.currency || 'RSD'}
+                </strong>
               </div>
               {selectedLoanCandidate ? (
                 <>
                   <div>
                     <span>{tr('loanOutstanding')}</span>
-                    <strong>{formatMoney(selectedLoanCandidate.outstanding_amount)} {selectedLoanCandidate.currency}</strong>
+                    <strong>
+                      {formatMoney(selectedLoanCandidate.outstanding_amount)} {selectedLoanCandidate.currency}
+                    </strong>
                   </div>
                   <div>
                     <span>{tr('loanAfterMovement')}</span>
-                    <strong className={loanRepaymentExceeds ? 'negative' : ''}>{formatMoney(loanBalanceAfter)} {selectedLoanCandidate.currency}</strong>
+                    <strong className={loanRepaymentExceeds ? 'negative' : ''}>
+                      {formatMoney(loanBalanceAfter)} {selectedLoanCandidate.currency}
+                    </strong>
                   </div>
                 </>
               ) : null}
@@ -1611,74 +2013,128 @@ export default function BankTransactions() {
             {loanModal.isRepayment ? (
               <div className="form-group">
                 <label className="form-label">{tr('loanSelectOpen')}</label>
-                <select className="form-input" value={loanForm.loan_id} onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })} required>
+                <select
+                  className="form-input"
+                  value={loanForm.loan_id}
+                  onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })}
+                  required
+                >
                   <option value="">{UI_DASH}</option>
                   {loanCandidates.map((loan) => (
                     <option key={loan.id} value={loan.id}>
-                      {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} / {formatMoney(loan.outstanding_amount)} {loan.currency}
+                      {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} /{' '}
+                      {formatMoney(loan.outstanding_amount)} {loan.currency}
                     </option>
                   ))}
                 </select>
-                {loanCandidates.length === 0 ? <p className="bank-match-form-note">{tr('loanNoOpen')}</p> : null}
+                {loanCandidates.length === 0 ? (
+                  <p className="bank-match-form-note">{tr('loanNoOpen')}</p>
+                ) : null}
               </div>
             ) : (
               <>
-              {loanCandidates.length > 0 ? (
-                <div className="form-group">
-                  <label className="form-label">{tr('loanSelectExisting')}</label>
-                  <select className="form-input" value={loanForm.loan_id} onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })}>
-                    <option value="">{tr('loanNew')}</option>
-                    {loanCandidates.map((loan) => (
-                      <option key={loan.id} value={loan.id}>
-                        {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} / {formatMoney(loan.outstanding_amount)} {loan.currency}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              {!loanForm.loan_id ? <div className="loan-operation-fields">
-                <div className="form-group">
-                  <label className="form-label">{tr('counterpartyName')}</label>
-                  <input className="form-input" value={loanForm.counterparty_name} onChange={(event) => setLoanForm({ ...loanForm, counterparty_name: event.target.value })} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('client')}</label>
-                  <select
-                    className="form-input"
-                    value={loanForm.client_id}
-                    onChange={(event) => {
-                      const client = loanClients.find((item) => String(item.id) === event.target.value)
-                      setLoanForm({ ...loanForm, client_id: event.target.value, counterparty_name: client?.name || loanForm.counterparty_name })
-                    }}
-                  >
-                    <option value="">{UI_DASH}</option>
-                    {loanClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('loanAgreementNumber')}</label>
-                  <input className="form-input" value={loanForm.agreement_number} onChange={(event) => setLoanForm({ ...loanForm, agreement_number: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('loanAgreementDate')}</label>
-                  <DatePicker value={loanForm.agreement_date} onChange={(value) => setLoanForm({ ...loanForm, agreement_date: value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('loanDueDate')}</label>
-                  <DatePicker value={loanForm.due_date} onChange={(value) => setLoanForm({ ...loanForm, due_date: value })} />
-                </div>
-              </div> : null}
+                {loanCandidates.length > 0 ? (
+                  <div className="form-group">
+                    <label className="form-label">{tr('loanSelectExisting')}</label>
+                    <select
+                      className="form-input"
+                      value={loanForm.loan_id}
+                      onChange={(event) => setLoanForm({ ...loanForm, loan_id: event.target.value })}
+                    >
+                      <option value="">{tr('loanNew')}</option>
+                      {loanCandidates.map((loan) => (
+                        <option key={loan.id} value={loan.id}>
+                          {loan.counterparty_name} / {loan.agreement_number || `#${loan.id}`} /{' '}
+                          {formatMoney(loan.outstanding_amount)} {loan.currency}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {!loanForm.loan_id ? (
+                  <div className="loan-operation-fields">
+                    <div className="form-group">
+                      <label className="form-label">{tr('counterpartyName')}</label>
+                      <input
+                        className="form-input"
+                        value={loanForm.counterparty_name}
+                        onChange={(event) =>
+                          setLoanForm({ ...loanForm, counterparty_name: event.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('client')}</label>
+                      <select
+                        className="form-input"
+                        value={loanForm.client_id}
+                        onChange={(event) => {
+                          const client = loanClients.find((item) => String(item.id) === event.target.value)
+                          setLoanForm({
+                            ...loanForm,
+                            client_id: event.target.value,
+                            counterparty_name: client?.name || loanForm.counterparty_name,
+                          })
+                        }}
+                      >
+                        <option value="">{UI_DASH}</option>
+                        {loanClients.map((client) => (
+                          <option key={client.id} value={client.id}>
+                            {client.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('loanAgreementNumber')}</label>
+                      <input
+                        className="form-input"
+                        value={loanForm.agreement_number}
+                        onChange={(event) =>
+                          setLoanForm({ ...loanForm, agreement_number: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('loanAgreementDate')}</label>
+                      <DatePicker
+                        value={loanForm.agreement_date}
+                        onChange={(value) => setLoanForm({ ...loanForm, agreement_date: value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{tr('loanDueDate')}</label>
+                      <DatePicker
+                        value={loanForm.due_date}
+                        onChange={(value) => setLoanForm({ ...loanForm, due_date: value })}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
             <div className="form-group">
               <label className="form-label">{tr('note')}</label>
-              <textarea className="form-input" value={loanForm.note} onChange={(event) => setLoanForm({ ...loanForm, note: event.target.value })} />
+              <textarea
+                className="form-input"
+                value={loanForm.note}
+                onChange={(event) => setLoanForm({ ...loanForm, note: event.target.value })}
+              />
             </div>
-            {loanRepaymentExceeds ? <div style={{ color: 'var(--color-danger)' }}>{tr('loanRepaymentExceeds')}</div> : null}
+            {loanRepaymentExceeds ? (
+              <div style={{ color: 'var(--color-danger)' }}>{tr('loanRepaymentExceeds')}</div>
+            ) : null}
             {loanError ? <div style={{ color: 'var(--color-danger)' }}>{loanError}</div> : null}
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={closeLoanModal}>{tr('cancel')}</button>
-              <button type="submit" className="btn btn-primary" disabled={loanSaving || loanRepaymentExceeds || (loanModal.isRepayment && !loanForm.loan_id)}>
+              <button type="button" className="btn btn-secondary" onClick={closeLoanModal}>
+                {tr('cancel')}
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={loanSaving || loanRepaymentExceeds || (loanModal.isRepayment && !loanForm.loan_id)}
+              >
                 {loanSaving ? tr('loading') : tr('save')}
               </button>
             </div>
@@ -1686,7 +2142,14 @@ export default function BankTransactions() {
         ) : null}
       </Modal>
 
-      <Modal isOpen={modalAssign} onClose={() => { setModalAssign(false); setAssignProjectId('') }} title={tr('assignProject')}>
+      <Modal
+        isOpen={modalAssign}
+        onClose={() => {
+          setModalAssign(false)
+          setAssignProjectId('')
+        }}
+        title={tr('assignProject')}
+      >
         <div className="form-group">
           <label className="form-label">{tr('project')}</label>
           <ProjectSelect
@@ -1698,8 +2161,18 @@ export default function BankTransactions() {
           />
         </div>
         <div className="modal-actions">
-          <button className="btn btn-secondary" onClick={() => { setModalAssign(false); setAssignProjectId('') }}>{tr('cancel')}</button>
-          <button className="btn btn-primary" onClick={handleBulkAssign}>{tr('save')}</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setModalAssign(false)
+              setAssignProjectId('')
+            }}
+          >
+            {tr('cancel')}
+          </button>
+          <button className="btn btn-primary" onClick={handleBulkAssign}>
+            {tr('save')}
+          </button>
         </div>
       </Modal>
     </>

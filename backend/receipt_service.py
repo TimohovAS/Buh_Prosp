@@ -10,7 +10,7 @@ from http.cookiejar import CookieJar
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-from sqlalchemy import String, cast, delete, func, or_, select
+from sqlalchemy import String, cast, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -137,7 +137,7 @@ def _parse_decimal(value: object) -> Decimal:
     text = str(value).strip()
     if not text:
         return ZERO_DECIMAL
-    normalized = text.replace("\u00A0", " ").replace(" ", "").replace(".", "").replace(",", ".")
+    normalized = text.replace("\u00a0", " ").replace(" ", "").replace(".", "").replace(",", ".")
     normalized = re.sub(r"[^0-9.\-]", "", normalized)
     if normalized in {"", "-", ".", "-."}:
         return ZERO_DECIMAL
@@ -283,7 +283,9 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
         is_valid=True,
         raw_html=page_html,
         raw_specifications_json=json.dumps(specs_payload, ensure_ascii=False),
-        raw_recapitulation_json=json.dumps(recapitulation_payload, ensure_ascii=False) if recapitulation_payload is not None else None,
+        raw_recapitulation_json=json.dumps(recapitulation_payload, ensure_ascii=False)
+        if recapitulation_payload is not None
+        else None,
         items=items,
     )
 
@@ -306,9 +308,7 @@ async def _resolve_category_links(
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None, bool]:
-    return await resolve_category_expense_links(
-        db, category_id, project_id, contract_id, exc_cls=ReceiptImportError
-    )
+    return await resolve_category_expense_links(db, category_id, project_id, contract_id, exc_cls=ReceiptImportError)
 
 
 async def _resolve_expense_links(
@@ -408,11 +408,15 @@ async def _ensure_receipt_generated_expense_can_delete(db: AsyncSession, expense
     if getattr(expense, "reversal_of_id", None) or getattr(expense, "reversed_expense_id", None):
         raise ReceiptImportError("Reversed expenses cannot be deleted together with the receipt")
 
-    invoice_result = await db.execute(select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1))
+    invoice_result = await db.execute(
+        select(IncomingInvoice.id).where(IncomingInvoice.expense_id == expense.id).limit(1)
+    )
     if invoice_result.scalar_one_or_none():
         raise ReceiptImportError("This receipt expense is linked to an incoming invoice")
 
-    obligation_result = await db.execute(select(MonthlyObligation.id).where(MonthlyObligation.expense_id == expense.id).limit(1))
+    obligation_result = await db.execute(
+        select(MonthlyObligation.id).where(MonthlyObligation.expense_id == expense.id).limit(1)
+    )
     if obligation_result.scalar_one_or_none():
         raise ReceiptImportError("This receipt expense is linked to a tax or obligation payment")
 
@@ -426,7 +430,9 @@ async def _get_cash_entry_by_id(db: AsyncSession, cash_entry_id: int) -> CashEnt
     return result.scalar_one_or_none()
 
 
-async def _sync_receipt_status_for_expense(db: AsyncSession, receipt: PurchaseReceipt, expense: Expense | None = None) -> None:
+async def _sync_receipt_status_for_expense(
+    db: AsyncSession, receipt: PurchaseReceipt, expense: Expense | None = None
+) -> None:
     linked_expense = expense
     if linked_expense is None and receipt.expense_id:
         expense_result = await db.execute(select(Expense).where(Expense.id == receipt.expense_id))
@@ -510,7 +516,11 @@ async def import_receipt_from_qr(
     qr_hash = _hash_value(normalized_url)
     existing_result = await db.execute(
         select(PurchaseReceipt)
-        .options(selectinload(PurchaseReceipt.project), selectinload(PurchaseReceipt.expense), selectinload(PurchaseReceipt.items))
+        .options(
+            selectinload(PurchaseReceipt.project),
+            selectinload(PurchaseReceipt.expense),
+            selectinload(PurchaseReceipt.items),
+        )
         .where(PurchaseReceipt.qr_hash == qr_hash)
     )
     existing = existing_result.scalar_one_or_none()
@@ -593,7 +603,9 @@ async def get_receipt_expense_candidates(
             PurchaseReceipt.expense_id.is_not(None),
         )
     )
-    occupied_expense_ids = {int(expense_id) for (expense_id,) in other_linked_result.fetchall() if expense_id is not None}
+    occupied_expense_ids = {
+        int(expense_id) for (expense_id,) in other_linked_result.fetchall() if expense_id is not None
+    }
     receipt_date = coerce_date(receipt.receipt_datetime)
 
     query = (

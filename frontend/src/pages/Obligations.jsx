@@ -32,10 +32,11 @@ const STATUS_FILTERS = [
 export default function Obligations() {
   const location = useLocation()
   const isActivePage = location.pathname === '/payments'
-  const { currentYear, year, setYear, availableYears, applyAvailableYears, resetAvailableYears } = useAvailableYears({
-    initialYear: new Date().getFullYear(),
-    includeAllTime: false,
-  })
+  const { currentYear, year, setYear, availableYears, applyAvailableYears, resetAvailableYears } =
+    useAvailableYears({
+      initialYear: new Date().getFullYear(),
+      includeAllTime: false,
+    })
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -116,6 +117,7 @@ export default function Obligations() {
     }
 
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, paymentTypeFilter, search, statusFilter, isActivePage, location.search])
 
   const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
@@ -215,7 +217,8 @@ export default function Obligations() {
     setDecisionForm({
       year: mode.year,
       payment_type_id: mode.payment_type_id,
-      period_start: typeof mode.period_start === 'string' ? mode.period_start : mode.period_start?.slice(0, 10) || '',
+      period_start:
+        typeof mode.period_start === 'string' ? mode.period_start : mode.period_start?.slice(0, 10) || '',
       period_end: typeof mode.period_end === 'string' ? mode.period_end : mode.period_end?.slice(0, 10) || '',
       monthly_amount: mode.monthly_amount ?? '',
       base_amount: mode.base_amount ?? '',
@@ -281,49 +284,53 @@ export default function Obligations() {
     <div className="page">
       <PageHeader
         title={tr('payments')}
-        actions={(
+        actions={
           <>
-          <YearFilterSelect
-            value={year}
-            availableYears={availableYears}
-            onChange={setYear}
-            includeAllTime={false}
-            title={tr('filterYear')}
-          />
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            title={tr('filterStatus')}
-          >
-            {STATUS_FILTERS.map((filter) => (
-              <option key={filter.value} value={filter.value}>{tr(filter.label)}</option>
-            ))}
-          </select>
-          <select
-            className="form-input"
-            style={{ width: 'auto' }}
-            value={paymentTypeFilter}
-            onChange={(event) => setPaymentTypeFilter(event.target.value)}
-            title={tr('filterPaymentType')}
-          >
-            <option value="">{tr('statusFilterAll')}</option>
-            {types.map((type) => (
-              <option key={type.id} value={type.code}>{type.name_sr}</option>
-            ))}
-          </select>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 220 }}
-          />
-          <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
-            {tr('obligationsSettings')}
-          </button>
+            <YearFilterSelect
+              value={year}
+              availableYears={availableYears}
+              onChange={setYear}
+              includeAllTime={false}
+              title={tr('filterYear')}
+            />
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              title={tr('filterStatus')}
+            >
+              {STATUS_FILTERS.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {tr(filter.label)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              style={{ width: 'auto' }}
+              value={paymentTypeFilter}
+              onChange={(event) => setPaymentTypeFilter(event.target.value)}
+              title={tr('filterPaymentType')}
+            >
+              <option value="">{tr('statusFilterAll')}</option>
+              {types.map((type) => (
+                <option key={type.id} value={type.code}>
+                  {type.name_sr}
+                </option>
+              ))}
+            </select>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 220 }}
+            />
+            <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
+              {tr('obligationsSettings')}
+            </button>
           </>
-        )}
+        }
       />
 
       <div className="page-body">
@@ -346,7 +353,9 @@ export default function Obligations() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9}>{tr('loading')}</td></tr>
+                  <tr>
+                    <td colSpan={9}>{tr('loading')}</td>
+                  </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>
@@ -372,11 +381,23 @@ export default function Obligations() {
                           }
                           style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
                         >
-                          {obligation.status === 'paid' ? tr('paid') : obligation.status === 'overdue' ? tr('obligationsOverdue') : tr('unpaid')}
+                          {obligation.status === 'paid'
+                            ? tr('paid')
+                            : obligation.status === 'overdue'
+                              ? tr('obligationsOverdue')
+                              : tr('unpaid')}
                         </SharedStatusBadge>
                       </td>
                       <td>{obligation.paid_date ? formatDate(obligation.paid_date) : empty}</td>
-                      <td style={{ fontSize: '0.85rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={obligation.payment_reference || empty}>
+                      <td
+                        style={{
+                          fontSize: '0.85rem',
+                          maxWidth: 140,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={obligation.payment_reference || empty}
+                      >
                         {obligation.payment_reference || empty}
                       </td>
                       <td>
@@ -385,7 +406,10 @@ export default function Obligations() {
                             {tr('markUnpaid')}
                           </button>
                         ) : (
-                          <button className="btn btn-sm btn-primary" onClick={() => openPaidModal(obligation)}>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => openPaidModal(obligation)}
+                          >
                             {tr('markPaid')}
                           </button>
                         )}
@@ -409,7 +433,16 @@ export default function Obligations() {
       >
         {settingsModal ? (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: '1rem',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
               <button className="btn btn-primary" onClick={() => openDecisionForm('add')}>
                 {tr('add')}
               </button>
@@ -432,7 +465,9 @@ export default function Obligations() {
                 <tbody>
                   {decisions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>{tr('noDecisions')}</td>
+                      <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
+                        {tr('noDecisions')}
+                      </td>
                     </tr>
                   ) : (
                     decisions.map((decision) => (
@@ -441,9 +476,22 @@ export default function Obligations() {
                         <td>{decision.payment_type_name || decision.payment_type_code}</td>
                         <td>{decision.monthly_amount?.toLocaleString('sr-RS')} RSD</td>
                         <td style={{ fontSize: '0.85rem' }}>{decision.recipient_account}</td>
-                        <td style={{ fontSize: '0.8rem', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }} title={decision.poziv_na_broj}>{decision.poziv_na_broj}</td>
+                        <td
+                          style={{
+                            fontSize: '0.8rem',
+                            maxWidth: 120,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={decision.poziv_na_broj}
+                        >
+                          {decision.poziv_na_broj}
+                        </td>
                         <td>
-                          <button className="btn btn-sm btn-secondary" onClick={() => openDecisionForm(decision)}>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => openDecisionForm(decision)}
+                          >
                             {tr('edit')}
                           </button>
                         </td>
@@ -453,7 +501,10 @@ export default function Obligations() {
                 </tbody>
               </table>
             </div>
-            <div className="modal-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div
+              className="modal-actions"
+              style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}
+            >
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -473,37 +524,43 @@ export default function Obligations() {
       <Modal
         isOpen={!!paidModal}
         onClose={() => setPaidModal(null)}
-        title={paidModal ? `${tr('markPaid')} \u2014 ${getTypeName(paidModal.payment_type_code)} ${monthNamesShort[paidModal.month - 1]}` : tr('markPaid')}
+        title={
+          paidModal
+            ? `${tr('markPaid')} \u2014 ${getTypeName(paidModal.payment_type_code)} ${monthNamesShort[paidModal.month - 1]}`
+            : tr('markPaid')
+        }
         maxWidth="400px"
         closeOnOverlay
       >
         {paidModal ? (
-            <form onSubmit={handleMarkPaidSubmit}>
-              <div className="form-group">
-                <label className="form-label">{tr('date')}</label>
-                <DatePicker
-                  value={paidForm.paid_date}
-                  onChange={(value) => setPaidForm({ ...paidForm, paid_date: value })}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('paymentRef')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={paidForm.payment_reference}
-                  onChange={(event) => setPaidForm({ ...paidForm, payment_reference: event.target.value })}
-                  placeholder={tr('paymentRef')}
-                />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setPaidModal(null)}>
-                  {tr('cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary">{tr('save')}</button>
-              </div>
-            </form>
+          <form onSubmit={handleMarkPaidSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('date')}</label>
+              <DatePicker
+                value={paidForm.paid_date}
+                onChange={(value) => setPaidForm({ ...paidForm, paid_date: value })}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('paymentRef')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={paidForm.payment_reference}
+                onChange={(event) => setPaidForm({ ...paidForm, payment_reference: event.target.value })}
+                placeholder={tr('paymentRef')}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setPaidModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
+            </div>
+          </form>
         ) : null}
       </Modal>
 
@@ -516,89 +573,203 @@ export default function Obligations() {
         style={{ maxHeight: '90vh', overflow: 'auto' }}
       >
         {decisionFormModal ? (
-            <form onSubmit={handleDecisionFormSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">{tr('yearLabel')} *</label>
-                  <input type="number" className="form-input" value={decisionForm.year} onChange={(event) => setDecisionForm({ ...decisionForm, year: event.target.value })} required min={2020} max={2035} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('paymentTypeLabel')} *</label>
-                  <select className="form-input" value={decisionForm.payment_type_id} onChange={(event) => setDecisionForm({ ...decisionForm, payment_type_id: event.target.value })} required disabled={decisionFormModal !== 'add'}>
-                    {types.map((type) => (
-                      <option key={type.id} value={type.id}>{type.name_sr}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">{tr('periodFrom')} *</label>
-                  <DatePicker value={decisionForm.period_start} onChange={(value) => setDecisionForm({ ...decisionForm, period_start: value })} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('periodTo')} *</label>
-                  <DatePicker value={decisionForm.period_end} onChange={(value) => setDecisionForm({ ...decisionForm, period_end: value })} required />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">{tr('monthlyAmount')} *</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.monthly_amount} onChange={(event) => setDecisionForm({ ...decisionForm, monthly_amount: event.target.value })} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('baseAmount')}</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.base_amount} onChange={(event) => setDecisionForm({ ...decisionForm, base_amount: event.target.value })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('ratePercent')}</label>
-                  <input type="number" step="0.01" className="form-input" value={decisionForm.rate_percent} onChange={(event) => setDecisionForm({ ...decisionForm, rate_percent: event.target.value })} />
-                </div>
+          <form onSubmit={handleDecisionFormSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">{tr('yearLabel')} *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={decisionForm.year}
+                  onChange={(event) => setDecisionForm({ ...decisionForm, year: event.target.value })}
+                  required
+                  min={2020}
+                  max={2035}
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">{tr('recipient')}</label>
-                <input type="text" className="form-input" value={decisionForm.recipient_name} onChange={(event) => setDecisionForm({ ...decisionForm, recipient_name: event.target.value })} placeholder={tr('taxAuthority')} />
+                <label className="form-label">{tr('paymentTypeLabel')} *</label>
+                <select
+                  className="form-input"
+                  value={decisionForm.payment_type_id}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, payment_type_id: event.target.value })
+                  }
+                  required
+                  disabled={decisionFormModal !== 'add'}
+                >
+                  {types.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name_sr}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">{tr('recipientAccount')} *</label>
-                  <input type="text" className="form-input" value={decisionForm.recipient_account} onChange={(event) => setDecisionForm({ ...decisionForm, recipient_account: event.target.value })} required placeholder="840-71122843-32" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('sifraPlacanja')}</label>
-                  <input type="text" className="form-input" value={decisionForm.sifra_placanja} onChange={(event) => setDecisionForm({ ...decisionForm, sifra_placanja: event.target.value })} placeholder="253" />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">{tr('model')}</label>
-                  <input type="text" className="form-input" value={decisionForm.model} onChange={(event) => setDecisionForm({ ...decisionForm, model: event.target.value })} placeholder="97" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('pozivNaBroj')} *</label>
-                  <input type="text" className="form-input" value={decisionForm.poziv_na_broj} onChange={(event) => setDecisionForm({ ...decisionForm, poziv_na_broj: event.target.value })} required placeholder="2624190000007887475" />
-                </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">{tr('periodFrom')} *</label>
+                <DatePicker
+                  value={decisionForm.period_start}
+                  onChange={(value) => setDecisionForm({ ...decisionForm, period_start: value })}
+                  required
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">{tr('pozivNaBrojNext')}</label>
-                <input type="text" className="form-input" value={decisionForm.poziv_na_broj_next} onChange={(event) => setDecisionForm({ ...decisionForm, poziv_na_broj_next: event.target.value })} placeholder="2024190000008031910" />
+                <label className="form-label">{tr('periodTo')} *</label>
+                <DatePicker
+                  value={decisionForm.period_end}
+                  onChange={(value) => setDecisionForm({ ...decisionForm, period_end: value })}
+                  required
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">{tr('monthlyAmount')} *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-input"
+                  value={decisionForm.monthly_amount}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, monthly_amount: event.target.value })
+                  }
+                  required
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">{tr('paymentPurpose')} *</label>
-                <input type="text" className="form-input" value={decisionForm.payment_purpose} onChange={(event) => setDecisionForm({ ...decisionForm, payment_purpose: event.target.value })} required placeholder={tr('paymentPurpose')} />
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>{tr('purposeYearHint')}</div>
+                <label className="form-label">{tr('baseAmount')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-input"
+                  value={decisionForm.base_amount}
+                  onChange={(event) => setDecisionForm({ ...decisionForm, base_amount: event.target.value })}
+                />
               </div>
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={decisionForm.is_provisional} onChange={(event) => setDecisionForm({ ...decisionForm, is_provisional: event.target.checked })} />
-                  {tr('provisional')}
-                </label>
+                <label className="form-label">{tr('ratePercent')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-input"
+                  value={decisionForm.rate_percent}
+                  onChange={(event) => setDecisionForm({ ...decisionForm, rate_percent: event.target.value })}
+                />
               </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setDecisionFormModal(null)}>{tr('cancel')}</button>
-                <button type="submit" className="btn btn-primary">{tr('save')}</button>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('recipient')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={decisionForm.recipient_name}
+                onChange={(event) => setDecisionForm({ ...decisionForm, recipient_name: event.target.value })}
+                placeholder={tr('taxAuthority')}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">{tr('recipientAccount')} *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={decisionForm.recipient_account}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, recipient_account: event.target.value })
+                  }
+                  required
+                  placeholder="840-71122843-32"
+                />
               </div>
-            </form>
+              <div className="form-group">
+                <label className="form-label">{tr('sifraPlacanja')}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={decisionForm.sifra_placanja}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, sifra_placanja: event.target.value })
+                  }
+                  placeholder="253"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">{tr('model')}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={decisionForm.model}
+                  onChange={(event) => setDecisionForm({ ...decisionForm, model: event.target.value })}
+                  placeholder="97"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('pozivNaBroj')} *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={decisionForm.poziv_na_broj}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, poziv_na_broj: event.target.value })
+                  }
+                  required
+                  placeholder="2624190000007887475"
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('pozivNaBrojNext')}</label>
+              <input
+                type="text"
+                className="form-input"
+                value={decisionForm.poziv_na_broj_next}
+                onChange={(event) =>
+                  setDecisionForm({ ...decisionForm, poziv_na_broj_next: event.target.value })
+                }
+                placeholder="2024190000008031910"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('paymentPurpose')} *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={decisionForm.payment_purpose}
+                onChange={(event) =>
+                  setDecisionForm({ ...decisionForm, payment_purpose: event.target.value })
+                }
+                required
+                placeholder={tr('paymentPurpose')}
+              />
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                {tr('purposeYearHint')}
+              </div>
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={decisionForm.is_provisional}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, is_provisional: event.target.checked })
+                  }
+                />
+                {tr('provisional')}
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setDecisionFormModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
+            </div>
+          </form>
         ) : null}
       </Modal>
     </div>

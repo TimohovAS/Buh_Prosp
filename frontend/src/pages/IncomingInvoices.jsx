@@ -12,20 +12,37 @@ import SharedStatusBadge from '../components/StatusBadge'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
-import { UI_CLOSE, UI_DASH, formatDateSr as fmtDate, formatMoney2OrDash as fmt, todayIso } from '../utils/formatters'
+import {
+  UI_CLOSE,
+  UI_DASH,
+  formatDateSr as fmtDate,
+  formatMoney2OrDash as fmt,
+  todayIso,
+} from '../utils/formatters'
 
 const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
-const STATUS_LABELS = { unpaid: 'statusUnpaid', partial: 'statusPartial', paid: 'statusPaid', cancelled: 'statusCancelled' }
+const STATUS_LABELS = {
+  unpaid: 'statusUnpaid',
+  partial: 'statusPartial',
+  paid: 'statusPaid',
+  cancelled: 'statusCancelled',
+}
 
 function compactText(value, max = 80) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  const text = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!text) return ''
   return text.length > max ? `${text.slice(0, max - 3)}...` : text
 }
 
 function StatusBadge({ status }) {
   const tone = { unpaid: 'warning', partial: 'info', paid: 'success', cancelled: 'danger' }
-  return <SharedStatusBadge tone={tone[status] || 'muted'}>{tr(STATUS_LABELS[status] || status)}</SharedStatusBadge>
+  return (
+    <SharedStatusBadge tone={tone[status] || 'muted'}>
+      {tr(STATUS_LABELS[status] || status)}
+    </SharedStatusBadge>
+  )
 }
 
 function LinkedInvoiceSummary({ invoice }) {
@@ -34,13 +51,23 @@ function LinkedInvoiceSummary({ invoice }) {
     <div className="record-field-text">
       <div style={{ fontWeight: 600 }}>{invoice.invoice_number || UI_DASH}</div>
       <div style={{ color: 'var(--color-text-muted)' }}>
-        {[fmtDate(invoice.date), `${fmt(invoice.amount)} ${invoice.currency || 'RSD'}`, invoice.counterparty_name].filter(Boolean).join(' • ')}
+        {[
+          fmtDate(invoice.date),
+          `${fmt(invoice.amount)} ${invoice.currency || 'RSD'}`,
+          invoice.counterparty_name,
+        ]
+          .filter(Boolean)
+          .join(' • ')}
       </div>
       {invoice.project_code || invoice.project_name ? (
-        <div style={{ color: 'var(--color-text-muted)' }}>{[invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')}</div>
+        <div style={{ color: 'var(--color-text-muted)' }}>
+          {[invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')}
+        </div>
       ) : null}
       {invoice.description ? <div>{compactText(invoice.description, 120)}</div> : null}
-      <div style={{ marginTop: 4 }}><StatusBadge status={invoice.status} /></div>
+      <div style={{ marginTop: 4 }}>
+        <StatusBadge status={invoice.status} />
+      </div>
     </div>
   )
 }
@@ -59,7 +86,7 @@ function PaymentDetailsSummary({ details }) {
   const hasPaymentDetails = expense || bankTransaction || details.warning
   if (!hasPaymentDetails) return null
 
-  const renderMetaLine = parts => {
+  const renderMetaLine = (parts) => {
     const text = parts.filter(Boolean).join(` ${UI_DASH} `)
     return text ? <div style={{ color: 'var(--color-text-muted)' }}>{text}</div> : null
   }
@@ -69,7 +96,12 @@ function PaymentDetailsSummary({ details }) {
       {details.warning === 'linked_expense_without_bank_transaction' ? (
         <div
           className="record-detail-card incoming-invoice-payment-card"
-          style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-warning)', color: 'var(--color-warning)' }}
+          style={{
+            margin: 0,
+            padding: '0.85rem',
+            borderColor: 'var(--color-warning)',
+            color: 'var(--color-warning)',
+          }}
         >
           {tr('incomingInvoicePaymentNoBankLink')}
         </div>
@@ -78,7 +110,12 @@ function PaymentDetailsSummary({ details }) {
       {details.warning === 'missing_linked_expense' ? (
         <div
           className="record-detail-card incoming-invoice-payment-card"
-          style={{ margin: 0, padding: '0.85rem', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+          style={{
+            margin: 0,
+            padding: '0.85rem',
+            borderColor: 'var(--color-danger)',
+            color: 'var(--color-danger)',
+          }}
         >
           <strong>{tr('incomingInvoiceMissingLinkedExpense')}</strong>
           <div style={{ marginTop: '0.35rem' }}>
@@ -90,31 +127,40 @@ function PaymentDetailsSummary({ details }) {
       {expense ? (
         <div className="record-detail-card incoming-invoice-payment-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-            <strong>{tr('incomingInvoiceLinkedExpense')} #{expense.id}</strong>
-            <strong>{fmt(expense.amount)} {expense.currency || 'RSD'}</strong>
+            <strong>
+              {tr('incomingInvoiceLinkedExpense')} #{expense.id}
+            </strong>
+            <strong>
+              {fmt(expense.amount)} {expense.currency || 'RSD'}
+            </strong>
           </div>
           {renderMetaLine([
             expense.date ? `${tr('date')}: ${fmtDate(expense.date)}` : '',
             expense.paid_date ? `${tr('dateOfPayment')}: ${fmtDate(expense.paid_date)}` : '',
             expense.status ? `${tr('status')}: ${tr(expense.status)}` : '',
           ])}
-          {renderMetaLine([
-            paymentProjectLabel(expense.project),
-            expense.category,
-          ])}
+          {renderMetaLine([paymentProjectLabel(expense.project), expense.category])}
           {expense.bank_reference ? (
-            <div>{tr('paymentReference')}: {expense.bank_reference}</div>
+            <div>
+              {tr('paymentReference')}: {expense.bank_reference}
+            </div>
           ) : null}
           {expense.description ? <div>{compactText(expense.description, 180)}</div> : null}
-          {expense.note ? <div style={{ color: 'var(--color-text-muted)' }}>{compactText(expense.note, 180)}</div> : null}
+          {expense.note ? (
+            <div style={{ color: 'var(--color-text-muted)' }}>{compactText(expense.note, 180)}</div>
+          ) : null}
         </div>
       ) : null}
 
       {bankTransaction ? (
         <div className="record-detail-card incoming-invoice-payment-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-            <strong>{tr('incomingInvoiceLinkedBank')} #{bankTransaction.id}</strong>
-            <strong>{fmt(bankTransaction.amount)} {bankTransaction.currency || 'RSD'}</strong>
+            <strong>
+              {tr('incomingInvoiceLinkedBank')} #{bankTransaction.id}
+            </strong>
+            <strong>
+              {fmt(bankTransaction.amount)} {bankTransaction.currency || 'RSD'}
+            </strong>
           </div>
           {renderMetaLine([
             bankTransaction.date ? `${tr('date')}: ${fmtDate(bankTransaction.date)}` : '',
@@ -122,10 +168,19 @@ function PaymentDetailsSummary({ details }) {
             paymentProjectLabel(bankTransaction.project),
           ])}
           {bankTransaction.bank_reference ? (
-            <div>{tr('paymentReference')}: {bankTransaction.bank_reference}</div>
+            <div>
+              {tr('paymentReference')}: {bankTransaction.bank_reference}
+            </div>
           ) : null}
           {bankTransaction.counterparty_name || bankTransaction.purpose ? (
-            <div>{compactText([bankTransaction.counterparty_name, bankTransaction.purpose].filter(Boolean).join(` ${UI_DASH} `), 180)}</div>
+            <div>
+              {compactText(
+                [bankTransaction.counterparty_name, bankTransaction.purpose]
+                  .filter(Boolean)
+                  .join(` ${UI_DASH} `),
+                180
+              )}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -152,15 +207,22 @@ export default function IncomingInvoices() {
   const [form, setForm] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState('')
-  const {
-    search,
-    setSearch,
-    sortCol,
-    sortAsc,
-    toggleSort,
-  } = useListPageState({ initialSortCol: 'date', initialSortAsc: false })
+  const { search, setSearch, sortCol, sortAsc, toggleSort } = useListPageState({
+    initialSortCol: 'date',
+    initialSortAsc: false,
+  })
 
-  const defaultForm = { invoice_number: '', date: todayIso(), client_id: '', counterparty_name: '', project_id: '', amount: '', currency: 'RSD', description: '', note: '' }
+  const defaultForm = {
+    invoice_number: '',
+    date: todayIso(),
+    client_id: '',
+    counterparty_name: '',
+    project_id: '',
+    amount: '',
+    currency: 'RSD',
+    description: '',
+    note: '',
+  }
 
   const load = () => {
     setLoading(true)
@@ -184,11 +246,18 @@ export default function IncomingInvoices() {
   useEffect(() => {
     if (!isActivePage) return
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, filterStatus, isActivePage])
   useEffect(() => {
     if (!isActivePage) return
-    api.clients.list().then(all => setClients(all.filter(c => !c.is_archived))).catch(() => {})
-    api.projects.list().then(setProjects).catch(() => {})
+    api.clients
+      .list()
+      .then((all) => setClients(all.filter((c) => !c.is_archived)))
+      .catch(() => {})
+    api.projects
+      .list()
+      .then(setProjects)
+      .catch(() => {})
   }, [isActivePage])
 
   const refreshProjects = async () => {
@@ -205,11 +274,12 @@ export default function IncomingInvoices() {
     const q = (search || '').trim().toLowerCase()
     let rows = items
     if (q) {
-      rows = items.filter(i =>
-        (i.invoice_number || '').toLowerCase().includes(q) ||
-        (i.counterparty_name || '').toLowerCase().includes(q) ||
-        (i.client_name || '').toLowerCase().includes(q) ||
-        (i.description || '').toLowerCase().includes(q)
+      rows = items.filter(
+        (i) =>
+          (i.invoice_number || '').toLowerCase().includes(q) ||
+          (i.counterparty_name || '').toLowerCase().includes(q) ||
+          (i.client_name || '').toLowerCase().includes(q) ||
+          (i.description || '').toLowerCase().includes(q)
       )
     }
     return [...rows].sort((a, b) => {
@@ -227,7 +297,7 @@ export default function IncomingInvoices() {
     setModal('add')
   }
 
-  const openEdit = async item => {
+  const openEdit = async (item) => {
     await refreshProjects()
     setForm({
       invoice_number: item.invoice_number,
@@ -243,156 +313,285 @@ export default function IncomingInvoices() {
     setModal({ type: 'edit', id: item.id })
   }
 
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
     try {
-      const payload = { ...form, amount: Number(form.amount), client_id: form.client_id || null, project_id: form.project_id || null }
+      const payload = {
+        ...form,
+        amount: Number(form.amount),
+        client_id: form.client_id || null,
+        project_id: form.project_id || null,
+      }
       if (modal === 'add') await api.incomingInvoices.create(payload)
       else await api.incomingInvoices.update(modal.id, payload)
       setModal(null)
       load()
-    } catch { }
+    } catch {}
     setSubmitting(false)
   }
 
-  const handleCancel = async id => {
+  const handleCancel = async (id) => {
     if (!confirm(`${tr('delete')}?`)) return
     await api.incomingInvoices.cancel(id).catch(() => {})
     load()
   }
 
-  const openDetail = async id => {
+  const openDetail = async (id) => {
     try {
       const detail = await api.incomingInvoices.get(id)
       setDetailModal(detail)
-    } catch { }
+    } catch {}
   }
 
-  const handleReverseSettlement = async settlementId => {
+  const handleReverseSettlement = async (settlementId) => {
     if (!confirm(tr('reverseSettlementConfirm'))) return
     await api.incomingInvoices.reverseSettlement(settlementId).catch(() => {})
     if (detailModal) openDetail(detailModal.id)
     load()
   }
 
-  const openEditFromDetail = async item => {
+  const openEditFromDetail = async (item) => {
     setDetailModal(null)
     await openEdit(item)
   }
 
-  const openSettlementFromDetail = item => type => {
+  const openSettlementFromDetail = (item) => (type) => {
     setDetailModal(null)
     setSettleModal({ invoice: item, type })
   }
 
-  const openInvoiceLinkFromDetail = item => mode => {
+  const openInvoiceLinkFromDetail = (item) => (mode) => {
     setDetailModal(null)
     setLinkModal({ invoice: item, mode })
   }
 
-  const handleCancelFromDetail = async item => {
+  const handleCancelFromDetail = async (item) => {
     await handleCancel(item.id)
     openDetail(item.id)
   }
 
-  const handleRestoreFromDetail = async item => {
+  const handleRestoreFromDetail = async (item) => {
     await api.incomingInvoices.restore(item.id).catch(() => {})
     load()
     openDetail(item.id)
   }
 
-  const handleUnlinkFromDetail = async item => {
+  const handleUnlinkFromDetail = async (item) => {
     await api.incomingInvoices.unlinkAdvance(item.id).catch(() => {})
     load()
     openDetail(item.id)
   }
 
-  const totalAmount = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0), [filtered])
-  const totalRemaining = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.remaining_amount || 0), 0), [filtered])
-  const getProjectLabel = item => (
-    [item?.project_code, item?.project_name].filter(Boolean).join(' / ')
-    || projects.find(project => project.id === item?.project_id)?.name
-    || ''
+  const totalAmount = useMemo(
+    () => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    [filtered]
   )
-  const renderProjectLabel = item => getProjectLabel(item) || tr('unassigned')
+  const totalRemaining = useMemo(
+    () => filtered.reduce((sum, item) => sum + Number(item.remaining_amount || 0), 0),
+    [filtered]
+  )
+  const getProjectLabel = (item) =>
+    [item?.project_code, item?.project_name].filter(Boolean).join(' / ') ||
+    projects.find((project) => project.id === item?.project_id)?.name ||
+    ''
+  const renderProjectLabel = (item) => getProjectLabel(item) || tr('unassigned')
   const detailAmount = Number(detailModal?.amount || 0)
   const canEditDetail = !!detailModal && detailModal.status !== 'paid' && detailModal.status !== 'cancelled'
   const canRestoreDetail = detailModal?.status === 'cancelled'
   const canCancelDetail = !!detailModal && detailModal.status !== 'paid' && detailModal.status !== 'cancelled'
-  const canLinkAdvanceDetail = !!detailModal && detailAmount === 0 && !detailModal.advance_invoice && !detailModal.closing_invoice
-  const canLinkClosingDetail = !!detailModal && detailAmount > 0 && detailModal.status === 'paid' && !detailModal.closing_invoice
+  const canLinkAdvanceDetail =
+    !!detailModal && detailAmount === 0 && !detailModal.advance_invoice && !detailModal.closing_invoice
+  const canLinkClosingDetail =
+    !!detailModal && detailAmount > 0 && detailModal.status === 'paid' && !detailModal.closing_invoice
   const canUnlinkAdvanceDetail = !!detailModal?.advance_invoice
   const canUnlinkClosingDetail = !!detailModal?.closing_invoice
   const canSettleDetail = canEditDetail && detailAmount > 0 && !detailModal?.advance_invoice
-  const showDetailActions = canEditDetail || canRestoreDetail || canCancelDetail || canLinkAdvanceDetail || canLinkClosingDetail || canUnlinkAdvanceDetail || canUnlinkClosingDetail || canSettleDetail
+  const showDetailActions =
+    canEditDetail ||
+    canRestoreDetail ||
+    canCancelDetail ||
+    canLinkAdvanceDetail ||
+    canLinkClosingDetail ||
+    canUnlinkAdvanceDetail ||
+    canUnlinkClosingDetail ||
+    canSettleDetail
   const detailPaymentDetails = detailModal?.payment_details || null
   const detailSettlements = detailPaymentDetails?.settlements || detailModal?.settlements || []
-  const detailActionButtons = detailModal && showDetailActions ? (
-    <>
-      {canEditDetail ? <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>{tr('edit')}</button> : null}
-      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('expense')}>{tr('attachExpense')}</button> : null}
-      {canSettleDetail ? <button type="button" className="btn btn-primary" onClick={() => openSettlementFromDetail(detailModal)('bank')}>{tr('settleViaBank')}</button> : null}
-      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('cash')}>{tr('settleViaCash')}</button> : null}
-      {canSettleDetail ? <button type="button" className="btn btn-secondary" onClick={() => openSettlementFromDetail(detailModal)('offset')}>{tr('settleViaOffset')}</button> : null}
-      {canLinkAdvanceDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}>{tr('linkAdvanceInvoice')}</button> : null}
-      {canLinkClosingDetail ? <button type="button" className="btn btn-primary" onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}>{tr('linkClosingInvoice')}</button> : null}
-      {canUnlinkAdvanceDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkAdvanceInvoice')}</button> : null}
-      {canUnlinkClosingDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleUnlinkFromDetail(detailModal)}>{tr('unlinkClosingInvoice')}</button> : null}
-      {canRestoreDetail ? <button type="button" className="btn btn-secondary" onClick={() => handleRestoreFromDetail(detailModal)}>{tr('restoreIncomingInvoice')}</button> : null}
-      {canCancelDetail ? <button type="button" className="btn btn-danger" onClick={() => handleCancelFromDetail(detailModal)}>{tr('cancelIncomingInvoice')}</button> : null}
-    </>
-  ) : null
+  const detailActionButtons =
+    detailModal && showDetailActions ? (
+      <>
+        {canEditDetail ? (
+          <button type="button" className="btn btn-secondary" onClick={() => openEditFromDetail(detailModal)}>
+            {tr('edit')}
+          </button>
+        ) : null}
+        {canSettleDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => openSettlementFromDetail(detailModal)('expense')}
+          >
+            {tr('attachExpense')}
+          </button>
+        ) : null}
+        {canSettleDetail ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => openSettlementFromDetail(detailModal)('bank')}
+          >
+            {tr('settleViaBank')}
+          </button>
+        ) : null}
+        {canSettleDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => openSettlementFromDetail(detailModal)('cash')}
+          >
+            {tr('settleViaCash')}
+          </button>
+        ) : null}
+        {canSettleDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => openSettlementFromDetail(detailModal)('offset')}
+          >
+            {tr('settleViaOffset')}
+          </button>
+        ) : null}
+        {canLinkAdvanceDetail ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => openInvoiceLinkFromDetail(detailModal)('advance')}
+          >
+            {tr('linkAdvanceInvoice')}
+          </button>
+        ) : null}
+        {canLinkClosingDetail ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => openInvoiceLinkFromDetail(detailModal)('closing')}
+          >
+            {tr('linkClosingInvoice')}
+          </button>
+        ) : null}
+        {canUnlinkAdvanceDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => handleUnlinkFromDetail(detailModal)}
+          >
+            {tr('unlinkAdvanceInvoice')}
+          </button>
+        ) : null}
+        {canUnlinkClosingDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => handleUnlinkFromDetail(detailModal)}
+          >
+            {tr('unlinkClosingInvoice')}
+          </button>
+        ) : null}
+        {canRestoreDetail ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => handleRestoreFromDetail(detailModal)}
+          >
+            {tr('restoreIncomingInvoice')}
+          </button>
+        ) : null}
+        {canCancelDetail ? (
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => handleCancelFromDetail(detailModal)}
+          >
+            {tr('cancelIncomingInvoice')}
+          </button>
+        ) : null}
+      </>
+    ) : null
 
   return (
     <div className="page">
       <PageHeader
         title={tr('incomingInvoices')}
-        actions={(
+        actions={
           <>
-          {filtered.length > 0 ? (
-            <div
-              style={{
-                alignSelf: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                flexWrap: 'wrap',
-                marginRight: '0.5rem',
+            {filtered.length > 0 ? (
+              <div
+                style={{
+                  alignSelf: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  flexWrap: 'wrap',
+                  marginRight: '0.5rem',
+                }}
+              >
+                <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {tr('total')}: {filtered.length}
+                </span>
+                <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{fmt(totalAmount)}</span>
+                <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {tr('remainingAmount')}: {fmt(totalRemaining)}
+                </span>
+              </div>
+            ) : null}
+            <YearFilterSelect
+              value={year}
+              availableYears={availableYears}
+              onChange={(nextYear) => {
+                setYear(nextYear)
+                if (nextYear === '') setMonth('')
               }}
+              style={{ width: 120 }}
+            />
+            <select
+              className="form-input"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              style={{ width: 80 }}
+              disabled={!year}
             >
-              <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                {tr('total')}: {filtered.length}
-              </span>
-              <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>
-                {fmt(totalAmount)}
-              </span>
-              <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                {tr('remainingAmount')}: {fmt(totalRemaining)}
-              </span>
-            </div>
-          ) : null}
-          <YearFilterSelect
-            value={year}
-            availableYears={availableYears}
-            onChange={nextYear => {
-              setYear(nextYear)
-              if (nextYear === '') setMonth('')
-            }}
-            style={{ width: 120 }}
-          />
-          <select className="form-input" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 80 }} disabled={!year}>
-            <option value="">-</option>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 130 }}>
-            <option value="">{tr('all') || 'All'}</option>
-            {STATUSES.map(status => <option key={status} value={status}>{tr(STATUS_LABELS[status])}</option>)}
-          </select>
-          <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 200 }} />
-          <button className="btn btn-primary" onClick={openAdd}>{tr('createIncomingInvoice')}</button>
+              <option value="">-</option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{ width: 130 }}
+            >
+              <option value="">{tr('all') || 'All'}</option>
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {tr(STATUS_LABELS[status])}
+                </option>
+              ))}
+            </select>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 200 }}
+            />
+            <button className="btn btn-primary" onClick={openAdd}>
+              {tr('createIncomingInvoice')}
+            </button>
           </>
-        )}
+        }
       />
 
       {pageError && <div className="alert alert-danger">{pageError}</div>}
@@ -403,70 +602,95 @@ export default function IncomingInvoices() {
             <table className="incoming-invoices-list-table">
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>{tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')} <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} /></th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>
+                    {tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>
+                    {tr('invoiceNumber')}{' '}
+                    <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} />
+                  </th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>
+                    {tr('counterpartyName')}{' '}
+                    <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} />
+                  </th>
                   <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
+                    {tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={5}>{tr('loading')}</td></tr>
-                  : filtered.length === 0 ? <tr><td colSpan={5}>{tr('noRecords')}</td></tr>
-                    : filtered.map(inv => (
-                      <tr
-                        key={inv.id}
-                        className={`record-row ${inv.status === 'cancelled' ? 'row-reversal' : ''}`.trim()}
-                        onClick={() => openDetail(inv.id)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            openDetail(inv.id)
-                          }
-                        }}
-                        tabIndex={0}
-                      >
-                        <td className="incoming-invoice-date-cell">
-                          <div className="incoming-invoice-date-primary">{fmtDate(inv.date)}</div>
-                        </td>
-                        <td className="incoming-invoice-document-cell">
-                          <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
-                        </td>
-                        <td className="incoming-invoice-party-cell">
-                          <div className="incoming-invoice-party-name" title={inv.counterparty_name || inv.client_name || UI_DASH}>
-                            {inv.counterparty_name || inv.client_name || UI_DASH}
-                          </div>
-                          <div className="income-meta-chips">
-                            <span
-                              className="income-meta-chip income-meta-chip-accent"
-                              title={renderProjectLabel(inv)}
-                            >
-                              {renderProjectLabel(inv)}
+                {loading ? (
+                  <tr>
+                    <td colSpan={5}>{tr('loading')}</td>
+                  </tr>
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>{tr('noRecords')}</td>
+                  </tr>
+                ) : (
+                  filtered.map((inv) => (
+                    <tr
+                      key={inv.id}
+                      className={`record-row ${inv.status === 'cancelled' ? 'row-reversal' : ''}`.trim()}
+                      onClick={() => openDetail(inv.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openDetail(inv.id)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
+                      <td className="incoming-invoice-date-cell">
+                        <div className="incoming-invoice-date-primary">{fmtDate(inv.date)}</div>
+                      </td>
+                      <td className="incoming-invoice-document-cell">
+                        <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
+                      </td>
+                      <td className="incoming-invoice-party-cell">
+                        <div
+                          className="incoming-invoice-party-name"
+                          title={inv.counterparty_name || inv.client_name || UI_DASH}
+                        >
+                          {inv.counterparty_name || inv.client_name || UI_DASH}
+                        </div>
+                        <div className="income-meta-chips">
+                          <span
+                            className="income-meta-chip income-meta-chip-accent"
+                            title={renderProjectLabel(inv)}
+                          >
+                            {renderProjectLabel(inv)}
+                          </span>
+                          {inv.client_name && inv.client_name !== inv.counterparty_name ? (
+                            <span className="income-meta-chip" title={inv.client_name}>
+                              {tr('client')}: {inv.client_name}
                             </span>
-                            {inv.client_name && inv.client_name !== inv.counterparty_name ? (
-                              <span className="income-meta-chip" title={inv.client_name}>
-                                {tr('client')}: {inv.client_name}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="incoming-invoice-description-cell">
-                          <div className="incoming-invoice-description" title={inv.description || UI_DASH}>
-                            {inv.description || UI_DASH}
-                          </div>
-                        </td>
-                        <td className="incoming-invoice-amount-cell">
-                          <div className="incoming-invoice-amount-primary">{fmt(inv.amount)} {inv.currency || 'RSD'}</div>
-                          <div className="incoming-invoice-status-inline"><StatusBadge status={inv.status} /></div>
-                          <div className="incoming-invoice-amount-meta">
-                            {tr('settledAmount')}: {fmt(inv.settled_amount)}
-                          </div>
-                          <div className="incoming-invoice-amount-meta">
-                            {tr('remainingAmount')}: {fmt(inv.remaining_amount)}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="incoming-invoice-description-cell">
+                        <div className="incoming-invoice-description" title={inv.description || UI_DASH}>
+                          {inv.description || UI_DASH}
+                        </div>
+                      </td>
+                      <td className="incoming-invoice-amount-cell">
+                        <div className="incoming-invoice-amount-primary">
+                          {fmt(inv.amount)} {inv.currency || 'RSD'}
+                        </div>
+                        <div className="incoming-invoice-status-inline">
+                          <StatusBadge status={inv.status} />
+                        </div>
+                        <div className="incoming-invoice-amount-meta">
+                          {tr('settledAmount')}: {fmt(inv.settled_amount)}
+                        </div>
+                        <div className="incoming-invoice-amount-meta">
+                          {tr('remainingAmount')}: {fmt(inv.remaining_amount)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -480,56 +704,125 @@ export default function IncomingInvoices() {
         closeOnOverlay
       >
         {modal ? (
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">{tr('invoiceNumber')}</label>
-                <input className="form-input" required value={form.invoice_number} onChange={e => setForm({ ...form, invoice_number: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('date')}</label>
-                <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('counterpartyName')}</label>
-                <input className="form-input" required value={form.counterparty_name} onChange={e => setForm({ ...form, counterparty_name: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('client')}</label>
-                <select className="form-input" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-                  <option value="">-</option>
-                  {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <select className="form-input" value={form.project_id} onChange={e => setForm({ ...form, project_id: e.target.value })}>
-                  <option value="">-</option>
-                  {projects.map(project => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('amount')}</label>
-                <input className="form-input" type="number" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('description')}</label>
-                <input className="form-input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">{tr('note')}</label>
-                <textarea className="form-input" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setModal(null)}>{tr('cancel')}</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>{tr('save')}</button>
-              </div>
-            </form>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('invoiceNumber')}</label>
+              <input
+                className="form-input"
+                required
+                value={form.invoice_number}
+                onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('date')}</label>
+              <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('counterpartyName')}</label>
+              <input
+                className="form-input"
+                required
+                value={form.counterparty_name}
+                onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('client')}</label>
+              <select
+                className="form-input"
+                value={form.client_id}
+                onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+              >
+                <option value="">-</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <select
+                className="form-input"
+                value={form.project_id}
+                onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+              >
+                <option value="">-</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} - {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('amount')}</label>
+              <input
+                className="form-input"
+                type="number"
+                step="0.01"
+                required
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('description')}</label>
+              <input
+                className="form-input"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('note')}</label>
+              <textarea
+                className="form-input"
+                value={form.note}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {tr('save')}
+              </button>
+            </div>
+          </form>
         ) : null}
       </Modal>
 
-      {settleModal && <SettleModal data={settleModal} clients={clients} projects={projects} onClose={() => setSettleModal(null)} onDone={() => { const current = settleModal.invoice; setSettleModal(null); load(); openDetail(current.id) }} />}
+      {settleModal && (
+        <SettleModal
+          data={settleModal}
+          clients={clients}
+          projects={projects}
+          onClose={() => setSettleModal(null)}
+          onDone={() => {
+            const current = settleModal.invoice
+            setSettleModal(null)
+            load()
+            openDetail(current.id)
+          }}
+        />
+      )}
 
-      {linkModal && <LinkInvoiceModal data={linkModal} onClose={() => setLinkModal(null)} onDone={() => { const current = linkModal.invoice; setLinkModal(null); load(); openDetail(current.id) }} />}
+      {linkModal && (
+        <LinkInvoiceModal
+          data={linkModal}
+          onClose={() => setLinkModal(null)}
+          onDone={() => {
+            const current = linkModal.invoice
+            setLinkModal(null)
+            load()
+            openDetail(current.id)
+          }}
+        />
+      )}
 
       <EntityDetailModal
         isOpen={!!detailModal}
@@ -537,91 +830,104 @@ export default function IncomingInvoices() {
         title={detailModal ? `${tr('incomingInvoice')} ${detailModal.invoice_number}` : ''}
         maxWidth="1200px"
         className="incoming-invoice-detail-modal"
-        details={detailModal ? (
-          <div className="incoming-invoice-summary-grid">
-            <div className="record-field">
-              <span className="record-field-label">{tr('date')}</span>
-              <span className="record-field-value">{fmtDate(detailModal.date)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('status')}</span>
-              <span className="record-field-value"><StatusBadge status={detailModal.status} /></span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('amount')}</span>
-              <span className="record-field-value">{fmt(detailModal.amount)} {detailModal.currency}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('settledAmount')}</span>
-              <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('remainingAmount')}</span>
-              <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('project')}</span>
-              <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
-            </div>
-            <div className="record-field">
-              <span className="record-field-label">{tr('counterpartyName')}</span>
-              <span className="record-field-value">{detailModal.counterparty_name || detailModal.client_name || UI_DASH}</span>
-            </div>
-            {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+        details={
+          detailModal ? (
+            <div className="incoming-invoice-summary-grid">
               <div className="record-field">
-                <span className="record-field-label">{tr('client')}</span>
-                <span className="record-field-value">{detailModal.client_name}</span>
+                <span className="record-field-label">{tr('date')}</span>
+                <span className="record-field-value">{fmtDate(detailModal.date)}</span>
               </div>
-            ) : null}
+              <div className="record-field">
+                <span className="record-field-label">{tr('status')}</span>
+                <span className="record-field-value">
+                  <StatusBadge status={detailModal.status} />
+                </span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('amount')}</span>
+                <span className="record-field-value">
+                  {fmt(detailModal.amount)} {detailModal.currency}
+                </span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('settledAmount')}</span>
+                <span className="record-field-value">{fmt(detailModal.settled_amount)}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('remainingAmount')}</span>
+                <span className="record-field-value">{fmt(detailModal.remaining_amount)}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('project')}</span>
+                <span className="record-field-value">{getProjectLabel(detailModal) || UI_DASH}</span>
+              </div>
+              <div className="record-field">
+                <span className="record-field-label">{tr('counterpartyName')}</span>
+                <span className="record-field-value">
+                  {detailModal.counterparty_name || detailModal.client_name || UI_DASH}
+                </span>
+              </div>
+              {detailModal.client_name && detailModal.client_name !== detailModal.counterparty_name ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('client')}</span>
+                  <span className="record-field-value">{detailModal.client_name}</span>
+                </div>
+              ) : null}
 
-            {detailPaymentDetails && (detailPaymentDetails.expense || detailPaymentDetails.bank_transaction || detailPaymentDetails.warning) ? (
-              <div className="record-field full">
-                <span className="record-field-label">{tr('paymentDetails')}</span>
-                <PaymentDetailsSummary details={detailPaymentDetails} />
-              </div>
-            ) : detailModal.status === 'paid' && detailModal.expense_id && detailSettlements.length === 0 ? (
-              <div className="record-field full">
-                <span className="record-field-label">{tr('linkedExpense')}</span>
-                <span className="record-field-value">#{detailModal.expense_id}</span>
-              </div>
-            ) : null}
+              {detailPaymentDetails &&
+              (detailPaymentDetails.expense ||
+                detailPaymentDetails.bank_transaction ||
+                detailPaymentDetails.warning) ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('paymentDetails')}</span>
+                  <PaymentDetailsSummary details={detailPaymentDetails} />
+                </div>
+              ) : detailModal.status === 'paid' &&
+                detailModal.expense_id &&
+                detailSettlements.length === 0 ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('linkedExpense')}</span>
+                  <span className="record-field-value">#{detailModal.expense_id}</span>
+                </div>
+              ) : null}
 
-            {detailModal.advance_invoice ? (
+              {detailModal.advance_invoice ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('advanceInvoice')}</span>
+                  <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
+                </div>
+              ) : null}
+              {detailModal.closing_invoice ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('closingInvoice')}</span>
+                  <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
+                </div>
+              ) : null}
+              {detailModal.advance_invoice && detailAmount === 0 ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('note')}</span>
+                  <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+                </div>
+              ) : null}
+
               <div className="record-field full">
-                <span className="record-field-label">{tr('advanceInvoice')}</span>
-                <LinkedInvoiceSummary invoice={detailModal.advance_invoice} />
+                <span className="record-field-label">{tr('description')}</span>
+                <div className="record-field-text">{detailModal.description || UI_DASH}</div>
               </div>
-            ) : null}
-            {detailModal.closing_invoice ? (
-              <div className="record-field full">
-                <span className="record-field-label">{tr('closingInvoice')}</span>
-                <LinkedInvoiceSummary invoice={detailModal.closing_invoice} />
-              </div>
-            ) : null}
-            {detailModal.advance_invoice && detailAmount === 0 ? (
               <div className="record-field full">
                 <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{tr('linkedInvoiceAmountZeroHint')}</div>
+                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
               </div>
-            ) : null}
-
-            <div className="record-field full">
-              <span className="record-field-label">{tr('description')}</span>
-              <div className="record-field-text">{detailModal.description || UI_DASH}</div>
             </div>
-            <div className="record-field full">
-              <span className="record-field-label">{tr('note')}</span>
-              <div className="record-field-text">{detailModal.note || UI_DASH}</div>
+          ) : null
+        }
+        actions={
+          detailModal && detailActionButtons ? (
+            <div className="incoming-invoice-side-card">
+              <div className="record-actions-grid">{detailActionButtons}</div>
             </div>
-          </div>
-        ) : null}
-        actions={detailModal && detailActionButtons ? (
-          <div className="incoming-invoice-side-card">
-            <div className="record-actions-grid">
-              {detailActionButtons}
-            </div>
-          </div>
-        ) : null}
+          ) : null
+        }
       >
         {detailModal ? (
           <div className="record-detail-card incoming-invoice-settlement-card">
@@ -641,7 +947,7 @@ export default function IncomingInvoices() {
                     </tr>
                   </thead>
                   <tbody>
-                    {detailSettlements.map(settlement => (
+                    {detailSettlements.map((settlement) => (
                       <tr key={settlement.id}>
                         <td>{fmtDate(settlement.date)}</td>
                         <td>{tr(settlement.settlement_type) || settlement.settlement_type}</td>
@@ -652,14 +958,25 @@ export default function IncomingInvoices() {
                             <div style={{ marginTop: 4, color: 'var(--color-text-muted)' }}>
                               {[
                                 `${tr('bank')} #${settlement.bank_transaction.id}`,
-                                settlement.bank_transaction.bank_reference ? `${tr('paymentReference')}: ${settlement.bank_transaction.bank_reference}` : '',
+                                settlement.bank_transaction.bank_reference
+                                  ? `${tr('paymentReference')}: ${settlement.bank_transaction.bank_reference}`
+                                  : '',
                                 settlement.bank_transaction.counterparty_name,
                                 compactText(settlement.bank_transaction.purpose, 80),
-                              ].filter(Boolean).join(` ${UI_DASH} `)}
+                              ]
+                                .filter(Boolean)
+                                .join(` ${UI_DASH} `)}
                             </div>
                           ) : null}
                         </td>
-                        <td><button className="btn btn-sm btn-danger" onClick={() => handleReverseSettlement(settlement.id)}>{tr('reverseSettlement')}</button></td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleReverseSettlement(settlement.id)}
+                          >
+                            {tr('reverseSettlement')}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -673,32 +990,48 @@ export default function IncomingInvoices() {
   )
 }
 
-function SettleModal({ data, clients, projects, onClose, onDone }) {
+function SettleModal({ data, projects, onClose, onDone }) {
   const { invoice, type } = data
-  const [form, setForm] = useState({ amount: Number(invoice.remaining_amount || 0), date: invoice.date || todayIso(), note: '', bank_transaction_id: '', income_id: '', expense_id: '' })
+  const [form, setForm] = useState({
+    amount: Number(invoice.remaining_amount || 0),
+    date: invoice.date || todayIso(),
+    note: '',
+    bank_transaction_id: '',
+    income_id: '',
+    expense_id: '',
+  })
   const [bankTxs, setBankTxs] = useState([])
   const [openIncomes, setOpenIncomes] = useState([])
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [bankSearch, setBankSearch] = useState('')
   const [expenseSearch, setExpenseSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const selectedBankTx = bankTxs.find(i => i.id === Number(form.bank_transaction_id)) || null
-  const selectedIncome = openIncomes.find(i => i.id === Number(form.income_id)) || null
-  const selectedExpense = expenseCandidates.find(i => i.id === Number(form.expense_id)) || null
+  const selectedBankTx = bankTxs.find((i) => i.id === Number(form.bank_transaction_id)) || null
+  const selectedIncome = openIncomes.find((i) => i.id === Number(form.income_id)) || null
+  const selectedExpense = expenseCandidates.find((i) => i.id === Number(form.expense_id)) || null
 
   useEffect(() => {
     if (type === 'bank') {
-      api.bankTransactions.list({ status: 'unmatched', direction: 'out' }).then(setBankTxs).catch(() => {})
+      api.bankTransactions
+        .list({ status: 'unmatched', direction: 'out' })
+        .then(setBankTxs)
+        .catch(() => {})
     }
     if (type === 'offset' && invoice.client_id) {
-      api.incomingInvoices.openIncomes(invoice.client_id).then(setOpenIncomes).catch(() => {})
+      api.incomingInvoices
+        .openIncomes(invoice.client_id)
+        .then(setOpenIncomes)
+        .catch(() => {})
     }
     if (type === 'expense') {
-      api.incomingInvoices.expenseCandidates(invoice.id).then(setExpenseCandidates).catch(() => setExpenseCandidates([]))
+      api.incomingInvoices
+        .expenseCandidates(invoice.id)
+        .then(setExpenseCandidates)
+        .catch(() => setExpenseCandidates([]))
     }
   }, [type, invoice.client_id, invoice.id])
 
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
     try {
@@ -717,33 +1050,43 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         }
       }
       onDone()
-    } catch { }
+    } catch {}
     setSubmitting(false)
   }
 
-  const titles = { bank: tr('settleViaBank'), cash: tr('settleViaCash'), offset: tr('settleViaOffset'), expense: tr('attachExpense') }
+  const titles = {
+    bank: tr('settleViaBank'),
+    cash: tr('settleViaCash'),
+    offset: tr('settleViaOffset'),
+    expense: tr('attachExpense'),
+  }
   const invoiceProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
   const showInvoiceSummary = true
   const isWideSideLayout = type === 'expense' || type === 'bank'
-  const getProjectNameById = projectId => projects.find(project => project.id === projectId)?.name || ''
-  const toDateOnly = value => {
+  const getProjectNameById = (projectId) => projects.find((project) => project.id === projectId)?.name || ''
+  const toDateOnly = (value) => {
     if (!value) return null
     const date = new Date(value)
     return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate())
   }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const getDateDelta = (left, right) => {
     const leftDate = toDateOnly(left)
     const rightDate = toDateOnly(right)
     if (!leftDate || !rightDate) return Number.MAX_SAFE_INTEGER
     return Math.abs(Math.round((leftDate - rightDate) / 86400000))
   }
-  const normalizedInvoiceCounterparty = String(invoice.client_name || invoice.counterparty_name || '').toLowerCase().trim()
-  const invoiceCounterpartyTokens = normalizedInvoiceCounterparty.split(/\s+/).filter(token => token.length >= 4)
+  const normalizedInvoiceCounterparty = String(invoice.client_name || invoice.counterparty_name || '')
+    .toLowerCase()
+    .trim()
+  const invoiceCounterpartyTokens = normalizedInvoiceCounterparty
+    .split(/\s+/)
+    .filter((token) => token.length >= 4)
   const targetAmount = Math.abs(Number(invoice.remaining_amount || invoice.amount || 0))
   const bankTxCandidates = useMemo(() => {
     const query = bankSearch.trim().toLowerCase()
     return bankTxs
-      .map(tx => {
+      .map((tx) => {
         const amount = Math.abs(Number(tx.amount || 0))
         const searchText = [
           tx.counterparty_name,
@@ -753,11 +1096,15 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           tx.project_name,
           getProjectNameById(tx.project_id),
           String(tx.amount || ''),
-        ].filter(Boolean).join(' ').toLowerCase()
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
         const amountDelta = Math.abs(amount - targetAmount)
         const dateDelta = getDateDelta(tx.date, invoice.date)
-        const counterpartyMatch = invoiceCounterpartyTokens.length > 0
-          && invoiceCounterpartyTokens.some(token => searchText.includes(token))
+        const counterpartyMatch =
+          invoiceCounterpartyTokens.length > 0 &&
+          invoiceCounterpartyTokens.some((token) => searchText.includes(token))
         return {
           ...tx,
           amountDelta,
@@ -767,32 +1114,38 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           searchText,
         }
       })
-      .filter(tx => !query || tx.searchText.includes(query))
+      .filter((tx) => !query || tx.searchText.includes(query))
       .sort((a, b) => {
         if (a.amountDelta !== b.amountDelta) return a.amountDelta - b.amountDelta
         if (a.dateDelta !== b.dateDelta) return a.dateDelta - b.dateDelta
         if (a.counterpartyMatch !== b.counterpartyMatch) return a.counterpartyMatch ? -1 : 1
         return String(a.date || '').localeCompare(String(b.date || '')) * -1
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bankSearch, bankTxs, invoice.date, invoiceCounterpartyTokens, projects, targetAmount])
-  const suggestedBankTxs = bankTxCandidates.filter(tx => tx.amountDelta < 0.01 || tx.counterpartyMatch).slice(0, 6)
-  const suggestedBankTxIds = new Set(suggestedBankTxs.map(tx => tx.id))
-  const allBankTxs = bankTxCandidates.filter(tx => !suggestedBankTxIds.has(tx.id))
-  const formatOffsetIncomeLabel = income => {
+  const suggestedBankTxs = bankTxCandidates
+    .filter((tx) => tx.amountDelta < 0.01 || tx.counterpartyMatch)
+    .slice(0, 6)
+  const suggestedBankTxIds = new Set(suggestedBankTxs.map((tx) => tx.id))
+  const allBankTxs = bankTxCandidates.filter((tx) => !suggestedBankTxIds.has(tx.id))
+  const formatOffsetIncomeLabel = (income) => {
     const parts = [income.invoice_number || '']
     if (income.date) parts.push(fmtDate(income.date))
     if (income.client_name) parts.push(income.client_name)
-    if (income.project_code || income.project_name) parts.push([income.project_code, income.project_name].filter(Boolean).join(' / '))
+    if (income.project_code || income.project_name)
+      parts.push([income.project_code, income.project_name].filter(Boolean).join(' / '))
     if (income.description) parts.push(compactText(income.description, 60))
     parts.push(`${tr('remainingAmount')}: ${fmt(income.remaining)}`)
     return parts.filter(Boolean).join(' | ')
   }
   const expenseCandidatesView = useMemo(() => {
     const query = expenseSearch.trim().toLowerCase()
-    const normalizedInvoiceDescription = String(invoice.description || '').toLowerCase().trim()
-    const descriptionTokens = normalizedInvoiceDescription.split(/\s+/).filter(token => token.length >= 5)
+    const normalizedInvoiceDescription = String(invoice.description || '')
+      .toLowerCase()
+      .trim()
+    const descriptionTokens = normalizedInvoiceDescription.split(/\s+/).filter((token) => token.length >= 5)
     return expenseCandidates
-      .map(expense => {
+      .map((expense) => {
         const candidateDate = expense.paid_date || expense.date
         const description = expense.description || ''
         const projectLabel = [expense.project_code, expense.project_name].filter(Boolean).join(' / ')
@@ -808,9 +1161,12 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           expense.note,
           expense.bank_counterparty_name,
           expense.bank_purpose,
-        ].filter(Boolean).join(' ').toLowerCase()
-        const descriptionMatch = descriptionTokens.length > 0
-          && descriptionTokens.some(token => searchText.includes(token))
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        const descriptionMatch =
+          descriptionTokens.length > 0 && descriptionTokens.some((token) => searchText.includes(token))
         return {
           ...expense,
           candidateDate,
@@ -820,17 +1176,19 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
           descriptionMatch,
         }
       })
-      .filter(expense => !query || expense.searchText.includes(query))
+      .filter((expense) => !query || expense.searchText.includes(query))
       .sort((a, b) => {
         if (a.descriptionMatch !== b.descriptionMatch) return a.descriptionMatch ? -1 : 1
         if (a.dateDelta !== b.dateDelta) return a.dateDelta - b.dateDelta
         return String(b.candidateDate || '').localeCompare(String(a.candidateDate || ''))
       })
   }, [expenseCandidates, expenseSearch, getDateDelta, invoice.date, invoice.description])
-  const suggestedExpenseCandidates = expenseCandidatesView.filter(expense => expense.descriptionMatch || expense.dateDelta <= 10).slice(0, 6)
-  const suggestedExpenseIds = new Set(suggestedExpenseCandidates.map(expense => expense.id))
-  const allExpenseCandidates = expenseCandidatesView.filter(expense => !suggestedExpenseIds.has(expense.id))
-  const renderBankTxCard = tx => {
+  const suggestedExpenseCandidates = expenseCandidatesView
+    .filter((expense) => expense.descriptionMatch || expense.dateDelta <= 10)
+    .slice(0, 6)
+  const suggestedExpenseIds = new Set(suggestedExpenseCandidates.map((expense) => expense.id))
+  const allExpenseCandidates = expenseCandidatesView.filter((expense) => !suggestedExpenseIds.has(expense.id))
+  const renderBankTxCard = (tx) => {
     const isSelected = selectedBankTx?.id === tx.id
     return (
       <div
@@ -838,11 +1196,21 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         className="record-detail-card"
         role="button"
         tabIndex={0}
-        onClick={() => setForm(previous => ({ ...previous, bank_transaction_id: String(tx.id), amount: Number(tx.amount || previous.amount) }))}
-        onKeyDown={event => {
+        onClick={() =>
+          setForm((previous) => ({
+            ...previous,
+            bank_transaction_id: String(tx.id),
+            amount: Number(tx.amount || previous.amount),
+          }))
+        }
+        onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            setForm(previous => ({ ...previous, bank_transaction_id: String(tx.id), amount: Number(tx.amount || previous.amount) }))
+            setForm((previous) => ({
+              ...previous,
+              bank_transaction_id: String(tx.id),
+              amount: Number(tx.amount || previous.amount),
+            }))
           }
         }}
         style={{
@@ -861,11 +1229,15 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
             </div>
             {tx.purpose ? <div style={{ marginTop: 6 }}>{compactText(tx.purpose, 140)}</div> : null}
             <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
-              {[tx.projectLabel, tx.bank_reference ? `${tr('paymentReference')}: ${tx.bank_reference}` : ''].filter(Boolean).join(` ${UI_DASH} `) || UI_DASH}
+              {[tx.projectLabel, tx.bank_reference ? `${tr('paymentReference')}: ${tx.bank_reference}` : '']
+                .filter(Boolean)
+                .join(` ${UI_DASH} `) || UI_DASH}
             </div>
           </div>
           <div style={{ display: 'grid', gap: '0.5rem', justifyItems: 'end', alignContent: 'start' }}>
-            <div style={{ fontWeight: 700 }}>{fmt(tx.amount)} {tx.currency || 'RSD'}</div>
+            <div style={{ fontWeight: 700 }}>
+              {fmt(tx.amount)} {tx.currency || 'RSD'}
+            </div>
             {tx.amountDelta > 0.009 ? (
               <div style={{ color: 'var(--color-warning)', fontSize: '0.82rem', textAlign: 'right' }}>
                 {tr('receiptAmountDelta')}: {fmt(tx.amountDelta)}
@@ -876,7 +1248,7 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
       </div>
     )
   }
-  const renderExpenseCandidateCard = expense => {
+  const renderExpenseCandidateCard = (expense) => {
     const isSelected = selectedExpense?.id === expense.id
     return (
       <div
@@ -884,11 +1256,11 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         className="record-detail-card"
         role="button"
         tabIndex={0}
-        onClick={() => setForm(previous => ({ ...previous, expense_id: String(expense.id) }))}
-        onKeyDown={event => {
+        onClick={() => setForm((previous) => ({ ...previous, expense_id: String(expense.id) }))}
+        onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            setForm(previous => ({ ...previous, expense_id: String(expense.id) }))
+            setForm((previous) => ({ ...previous, expense_id: String(expense.id) }))
           }
         }}
         style={{
@@ -904,14 +1276,20 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <strong>{expense.description || `#${expense.id}`}</strong>
               <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(expense.date)}</span>
-              {expense.paid_date ? <span style={{ color: 'var(--color-text-muted)' }}>{tr('dateOfPayment')}: {fmtDate(expense.paid_date)}</span> : null}
+              {expense.paid_date ? (
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {tr('dateOfPayment')}: {fmtDate(expense.paid_date)}
+                </span>
+              ) : null}
             </div>
             <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
               {[
                 expense.projectLabel,
                 expense.contract_number ? `${tr('contractNumber')}: ${expense.contract_number}` : '',
                 expense.category,
-              ].filter(Boolean).join(` ${UI_DASH} `) || UI_DASH}
+              ]
+                .filter(Boolean)
+                .join(` ${UI_DASH} `) || UI_DASH}
             </div>
             {expense.bank_reference ? (
               <div style={{ marginTop: 6, color: 'var(--color-text-muted)' }}>
@@ -920,12 +1298,17 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
             ) : null}
             {expense.bank_counterparty_name || expense.bank_purpose ? (
               <div style={{ marginTop: 6 }}>
-                {compactText([expense.bank_counterparty_name, expense.bank_purpose].filter(Boolean).join(` ${UI_DASH} `), 140)}
+                {compactText(
+                  [expense.bank_counterparty_name, expense.bank_purpose].filter(Boolean).join(` ${UI_DASH} `),
+                  140
+                )}
               </div>
             ) : null}
           </div>
           <div style={{ display: 'grid', gap: '0.5rem', justifyItems: 'end', alignContent: 'start' }}>
-            <div style={{ fontWeight: 700 }}>{fmt(expense.amount)} {expense.currency || 'RSD'}</div>
+            <div style={{ fontWeight: 700 }}>
+              {fmt(expense.amount)} {expense.currency || 'RSD'}
+            </div>
             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>#{expense.id}</div>
           </div>
         </div>
@@ -945,7 +1328,9 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         </div>
         <div className="record-field">
           <span className="record-field-label">{tr('amount')}</span>
-          <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
+          <span className="record-field-value">
+            {fmt(invoice.amount)} {invoice.currency || 'RSD'}
+          </span>
         </div>
         <div className="record-field">
           <span className="record-field-label">{tr('remainingAmount')}</span>
@@ -953,7 +1338,9 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         </div>
         <div className="record-field full">
           <span className="record-field-label">{tr('counterpartyName')}</span>
-          <span className="record-field-value">{invoice.client_name || invoice.counterparty_name || UI_DASH}</span>
+          <span className="record-field-value">
+            {invoice.client_name || invoice.counterparty_name || UI_DASH}
+          </span>
         </div>
         {invoiceProjectLabel ? (
           <div className="record-field full">
@@ -976,10 +1363,14 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
       </div>
     </div>
   )
-  const renderExpenseSelectionPanel = () => (
-    expenseCandidates.length === 0 ? <p style={{ color: 'var(--color-text-muted)' }}>{tr('noExpenseCandidates')}</p> : (
+  const renderExpenseSelectionPanel = () =>
+    expenseCandidates.length === 0 ? (
+      <p style={{ color: 'var(--color-text-muted)' }}>{tr('noExpenseCandidates')}</p>
+    ) : (
       <div className="record-detail-card">
-        <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectExpense')}</div>
+        <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>
+          {tr('selectExpense')}
+        </div>
         <SearchInput
           placeholder={tr('search')}
           value={expenseSearch}
@@ -989,29 +1380,46 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           {suggestedExpenseCandidates.length > 0 ? (
             <div>
-              <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
+              <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>
+                {tr('bankTxAutoFound')}
+              </div>
               <div style={{ display: 'grid', gap: '0.75rem' }}>
                 {suggestedExpenseCandidates.map(renderExpenseCandidateCard)}
               </div>
             </div>
           ) : null}
           <div>
-            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
-            <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 420, overflowY: 'auto', paddingRight: '0.2rem' }}>
+            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>
+              {tr('bankTxAll')}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gap: '0.75rem',
+                maxHeight: 420,
+                overflowY: 'auto',
+                paddingRight: '0.2rem',
+              }}
+            >
               {expenseCandidatesView.length === 0 ? (
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                  {tr('bankTxNoInvoicesFound')}
+                </p>
               ) : (
-                (suggestedExpenseCandidates.length > 0 ? allExpenseCandidates : expenseCandidatesView).map(renderExpenseCandidateCard)
+                (suggestedExpenseCandidates.length > 0 ? allExpenseCandidates : expenseCandidatesView).map(
+                  renderExpenseCandidateCard
+                )
               )}
             </div>
           </div>
         </div>
       </div>
     )
-  )
   const renderBankSelectionPanel = () => (
     <div className="record-detail-card">
-      <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{tr('selectBankTx')}</div>
+      <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>
+        {tr('selectBankTx')}
+      </div>
       <SearchInput
         placeholder={tr('bankTxSearchObligations')}
         value={bankSearch}
@@ -1021,17 +1429,29 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
       <div style={{ display: 'grid', gap: '0.75rem' }}>
         {suggestedBankTxs.length > 0 ? (
           <div>
-            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAutoFound')}</div>
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
-              {suggestedBankTxs.map(renderBankTxCard)}
+            <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>
+              {tr('bankTxAutoFound')}
             </div>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>{suggestedBankTxs.map(renderBankTxCard)}</div>
           </div>
         ) : null}
         <div>
-          <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>{tr('bankTxAll')}</div>
-          <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 320, overflowY: 'auto', paddingRight: '0.2rem' }}>
+          <div className="record-field-label" style={{ marginBottom: '0.75rem' }}>
+            {tr('bankTxAll')}
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gap: '0.75rem',
+              maxHeight: 320,
+              overflowY: 'auto',
+              paddingRight: '0.2rem',
+            }}
+          >
             {bankTxCandidates.length === 0 ? (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>{tr('bankTxNoInvoicesFound')}</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                {tr('bankTxNoInvoicesFound')}
+              </p>
             ) : (
               (suggestedBankTxs.length > 0 ? allBankTxs : bankTxCandidates).map(renderBankTxCard)
             )}
@@ -1044,15 +1464,26 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
     <>
       <div className="form-group">
         <label className="form-label">{tr('settlementAmount')}</label>
-        <input className="form-input" type="number" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        <input
+          className="form-input"
+          type="number"
+          step="0.01"
+          required
+          value={form.amount}
+          onChange={(e) => setForm({ ...form, amount: e.target.value })}
+        />
       </div>
       <div className="form-group">
         <label className="form-label">{tr('settlementDate')}</label>
-        <DatePicker value={form.date} onChange={value => setForm({ ...form, date: value })} />
+        <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
       </div>
       <div className="form-group">
         <label className="form-label">{tr('note')}</label>
-        <input className="form-input" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+        <input
+          className="form-input"
+          value={form.note}
+          onChange={(e) => setForm({ ...form, note: e.target.value })}
+        />
       </div>
     </>
   )
@@ -1066,83 +1497,126 @@ function SettleModal({ data, clients, projects, onClose, onDone }) {
       bodyClassName={isWideSideLayout ? 'incoming-invoice-settle-modal-body' : ''}
       closeOnOverlay
     >
-        <form onSubmit={handleSubmit}>
-          {isWideSideLayout ? (
-            <div className="incoming-invoice-settle-layout">
-              <div className="incoming-invoice-settle-column">
-                {showInvoiceSummary && (
-                  <div className="form-group">
-                    {renderInvoiceSummaryCard()}
+      <form onSubmit={handleSubmit}>
+        {isWideSideLayout ? (
+          <div className="incoming-invoice-settle-layout">
+            <div className="incoming-invoice-settle-column">
+              {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
+            </div>
+            <div className="incoming-invoice-settle-column">
+              <div className="form-group">
+                {type === 'expense' ? renderExpenseSelectionPanel() : renderBankSelectionPanel()}
+              </div>
+              {type === 'bank' ? (
+                <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
+                  {renderSettlementFields()}
+                </div>
+              ) : null}
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={onClose}>
+                  {tr('cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    submitting ||
+                    (type === 'expense' && !form.expense_id) ||
+                    (type === 'bank' && !form.bank_transaction_id)
+                  }
+                >
+                  {tr('save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
+            {type === 'bank' && <div className="form-group">{renderBankSelectionPanel()}</div>}
+            {type === 'offset' && (
+              <div className="form-group">
+                <label className="form-label">{tr('selectIncome')}</label>
+                {!invoice.client_id ? (
+                  <p style={{ color: 'var(--color-danger)' }}>{tr('incomingInvoiceOffsetClientRequired')}</p>
+                ) : (
+                  <div>
+                    <select
+                      className="form-input"
+                      required
+                      value={form.income_id}
+                      onChange={(e) => {
+                        const income = openIncomes.find((item) => item.id === Number(e.target.value))
+                        const maxAmount = income
+                          ? Math.min(Number(income.remaining), Number(invoice.remaining_amount))
+                          : form.amount
+                        setForm({ ...form, income_id: e.target.value, amount: maxAmount })
+                      }}
+                    >
+                      <option value="">-</option>
+                      {openIncomes.map((income) => (
+                        <option key={income.id} value={income.id}>
+                          {formatOffsetIncomeLabel(income)}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedIncome && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: '0.75rem',
+                          border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
+                          borderRadius: 8,
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <div>
+                          <strong>{tr('counterpartyName')}:</strong> {selectedIncome.client_name || '-'}
+                        </div>
+                        {(selectedIncome.project_code || selectedIncome.project_name) && (
+                          <div>
+                            <strong>{tr('project')}:</strong>{' '}
+                            {[selectedIncome.project_code, selectedIncome.project_name]
+                              .filter(Boolean)
+                              .join(' / ')}
+                          </div>
+                        )}
+                        {selectedIncome.description && (
+                          <div>
+                            <strong>{tr('description')}:</strong> {selectedIncome.description}
+                          </div>
+                        )}
+                        <div>
+                          <strong>{tr('remainingAmount')}:</strong> {fmt(selectedIncome.remaining)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-              <div className="incoming-invoice-settle-column">
-                <div className="form-group">
-                  {type === 'expense' ? renderExpenseSelectionPanel() : renderBankSelectionPanel()}
-                </div>
-                {type === 'bank' ? (
-                  <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
-                    {renderSettlementFields()}
-                  </div>
-                ) : null}
-                <div className="modal-actions">
-                  <button type="button" className="btn" onClick={onClose}>{tr('cancel')}</button>
-                  <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id) || (type === 'bank' && !form.bank_transaction_id)}>{tr('save')}</button>
-                </div>
-              </div>
+            )}
+            {type === 'expense' && <div className="form-group">{renderExpenseSelectionPanel()}</div>}
+            {type !== 'expense' && renderSettlementFields()}
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={onClose}>
+                {tr('cancel')}
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={
+                  submitting ||
+                  (type === 'expense' && !form.expense_id) ||
+                  (type === 'bank' && !form.bank_transaction_id)
+                }
+              >
+                {tr('save')}
+              </button>
             </div>
-          ) : (
-            <>
-          {showInvoiceSummary && (
-            <div className="form-group">
-              {renderInvoiceSummaryCard()}
-            </div>
-          )}
-          {type === 'bank' && (
-            <div className="form-group">
-              {renderBankSelectionPanel()}
-            </div>
-          )}
-          {type === 'offset' && (
-            <div className="form-group">
-              <label className="form-label">{tr('selectIncome')}</label>
-              {!invoice.client_id ? <p style={{ color: 'var(--color-danger)' }}>{tr('incomingInvoiceOffsetClientRequired')}</p> : (
-                <div>
-                  <select className="form-input" required value={form.income_id} onChange={e => {
-                    const income = openIncomes.find(item => item.id === Number(e.target.value))
-                    const maxAmount = income ? Math.min(Number(income.remaining), Number(invoice.remaining_amount)) : form.amount
-                    setForm({ ...form, income_id: e.target.value, amount: maxAmount })
-                  }}>
-                    <option value="">-</option>
-                    {openIncomes.map(income => <option key={income.id} value={income.id}>{formatOffsetIncomeLabel(income)}</option>)}
-                  </select>
-                  {selectedIncome && (
-                    <div style={{ marginTop: 8, padding: '0.75rem', border: '1px solid var(--border-color, rgba(255,255,255,0.12))', borderRadius: 8, display: 'grid', gap: 4 }}>
-                      <div><strong>{tr('counterpartyName')}:</strong> {selectedIncome.client_name || '-'}</div>
-                      {(selectedIncome.project_code || selectedIncome.project_name) && <div><strong>{tr('project')}:</strong> {[selectedIncome.project_code, selectedIncome.project_name].filter(Boolean).join(' / ')}</div>}
-                      {selectedIncome.description && <div><strong>{tr('description')}:</strong> {selectedIncome.description}</div>}
-                      <div><strong>{tr('remainingAmount')}:</strong> {fmt(selectedIncome.remaining)}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {type === 'expense' && (
-            <div className="form-group">
-              {renderExpenseSelectionPanel()}
-            </div>
-          )}
-          {type !== 'expense' && (
-            renderSettlementFields()
-          )}
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose}>{tr('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting || (type === 'expense' && !form.expense_id) || (type === 'bank' && !form.bank_transaction_id)}>{tr('save')}</button>
-          </div>
-            </>
-          )}
-        </form>
+          </>
+        )}
+      </form>
     </Modal>
   )
 }
@@ -1155,15 +1629,24 @@ function LinkInvoiceModal({ data, onClose, onDone }) {
 
   useEffect(() => {
     let active = true
-    const loader = mode === 'advance' ? api.incomingInvoices.advanceCandidates : api.incomingInvoices.closingCandidates
+    const loader =
+      mode === 'advance' ? api.incomingInvoices.advanceCandidates : api.incomingInvoices.closingCandidates
     loader(invoice.id)
-      .then(items => { if (active) setCandidates(items || []) })
-      .catch(() => { if (active) setCandidates([]) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
+      .then((items) => {
+        if (active) setCandidates(items || [])
+      })
+      .catch(() => {
+        if (active) setCandidates([])
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [invoice.id, mode])
 
-  const handleLink = async candidateId => {
+  const handleLink = async (candidateId) => {
     setSubmittingId(candidateId)
     try {
       if (mode === 'advance') {
@@ -1189,69 +1672,103 @@ function LinkInvoiceModal({ data, onClose, onDone }) {
       maxWidth="840px"
       closeOnOverlay
     >
-          <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
-            <div className="record-field-grid">
-              <div className="record-field">
-                <span className="record-field-label">{tr('invoiceNumber')}</span>
-                <span className="record-field-value">{invoice.invoice_number}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('date')}</span>
-                <span className="record-field-value">{fmtDate(invoice.date)}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('amount')}</span>
-                <span className="record-field-value">{fmt(invoice.amount)} {invoice.currency || 'RSD'}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('status')}</span>
-                <div><StatusBadge status={invoice.status} /></div>
-              </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('counterpartyName')}</span>
-                <span className="record-field-value">{invoice.counterparty_name || invoice.client_name || UI_DASH}</span>
-              </div>
-              {currentProjectLabel ? (
-                <div className="record-field full">
-                  <span className="record-field-label">{tr('project')}</span>
-                  <span className="record-field-value">{currentProjectLabel}</span>
-                </div>
-              ) : null}
+      <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
+        <div className="record-field-grid">
+          <div className="record-field">
+            <span className="record-field-label">{tr('invoiceNumber')}</span>
+            <span className="record-field-value">{invoice.invoice_number}</span>
+          </div>
+          <div className="record-field">
+            <span className="record-field-label">{tr('date')}</span>
+            <span className="record-field-value">{fmtDate(invoice.date)}</span>
+          </div>
+          <div className="record-field">
+            <span className="record-field-label">{tr('amount')}</span>
+            <span className="record-field-value">
+              {fmt(invoice.amount)} {invoice.currency || 'RSD'}
+            </span>
+          </div>
+          <div className="record-field">
+            <span className="record-field-label">{tr('status')}</span>
+            <div>
+              <StatusBadge status={invoice.status} />
             </div>
           </div>
-
-          <div className="record-detail-card">
-            <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>{title}</div>
-            {loading ? <p>{tr('loading')}</p> : candidates.length === 0 ? <p>{emptyLabel}</p> : (
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                {candidates.map(candidate => {
-                  const candidateProjectLabel = [candidate.project_code, candidate.project_name].filter(Boolean).join(' / ')
-                  return (
-                    <div key={candidate.id} className="record-detail-card" style={{ margin: 0 }}>
-                      <div className="record-detail-grid" style={{ gridTemplateColumns: '1fr auto', gap: '1rem' }}>
-                        <div className="record-field-text">
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <strong>{candidate.invoice_number}</strong>
-                            <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(candidate.date)}</span>
-                            <StatusBadge status={candidate.status} />
-                          </div>
-                          <div style={{ marginTop: 6 }}>{candidate.counterparty_name || candidate.client_name || UI_DASH}</div>
-                          {candidateProjectLabel ? <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>{candidateProjectLabel}</div> : null}
-                          {candidate.description ? <div style={{ marginTop: 6 }}>{compactText(candidate.description, 140)}</div> : null}
-                        </div>
-                        <div style={{ display: 'grid', gap: '0.75rem', justifyItems: 'end', alignContent: 'start' }}>
-                          <div style={{ fontWeight: 700 }}>{fmt(candidate.amount)} {candidate.currency || 'RSD'}</div>
-                          <button type="button" className="btn btn-primary" disabled={submittingId === candidate.id} onClick={() => handleLink(candidate.id)}>
-                            {tr(mode === 'advance' ? 'linkAdvanceInvoice' : 'linkClosingInvoice')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+          <div className="record-field full">
+            <span className="record-field-label">{tr('counterpartyName')}</span>
+            <span className="record-field-value">
+              {invoice.counterparty_name || invoice.client_name || UI_DASH}
+            </span>
           </div>
+          {currentProjectLabel ? (
+            <div className="record-field full">
+              <span className="record-field-label">{tr('project')}</span>
+              <span className="record-field-value">{currentProjectLabel}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="record-detail-card">
+        <div className="record-field-label" style={{ marginBottom: '0.8rem' }}>
+          {title}
+        </div>
+        {loading ? (
+          <p>{tr('loading')}</p>
+        ) : candidates.length === 0 ? (
+          <p>{emptyLabel}</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {candidates.map((candidate) => {
+              const candidateProjectLabel = [candidate.project_code, candidate.project_name]
+                .filter(Boolean)
+                .join(' / ')
+              return (
+                <div key={candidate.id} className="record-detail-card" style={{ margin: 0 }}>
+                  <div
+                    className="record-detail-grid"
+                    style={{ gridTemplateColumns: '1fr auto', gap: '1rem' }}
+                  >
+                    <div className="record-field-text">
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <strong>{candidate.invoice_number}</strong>
+                        <span style={{ color: 'var(--color-text-muted)' }}>{fmtDate(candidate.date)}</span>
+                        <StatusBadge status={candidate.status} />
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        {candidate.counterparty_name || candidate.client_name || UI_DASH}
+                      </div>
+                      {candidateProjectLabel ? (
+                        <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {candidateProjectLabel}
+                        </div>
+                      ) : null}
+                      {candidate.description ? (
+                        <div style={{ marginTop: 6 }}>{compactText(candidate.description, 140)}</div>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{ display: 'grid', gap: '0.75rem', justifyItems: 'end', alignContent: 'start' }}
+                    >
+                      <div style={{ fontWeight: 700 }}>
+                        {fmt(candidate.amount)} {candidate.currency || 'RSD'}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={submittingId === candidate.id}
+                        onClick={() => handleLink(candidate.id)}
+                      >
+                        {tr(mode === 'advance' ? 'linkAdvanceInvoice' : 'linkClosingInvoice')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }

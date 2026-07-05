@@ -154,7 +154,9 @@ def _contract_to_response(contract: Contract) -> ContractResponse:
             closing_sum += amount
 
     total_received = advance_sum + intermediate_sum + closing_sum
-    total_expenses = decimal_sum([expense.amount or ZERO_DECIMAL for expense in (contract.__dict__.get("expenses") or [])])
+    total_expenses = decimal_sum(
+        [expense.amount or ZERO_DECIMAL for expense in (contract.__dict__.get("expenses") or [])]
+    )
     profit = total_received - total_expenses
 
     return ContractResponse(
@@ -285,5 +287,3 @@ async def delete_contract(
     await db.delete(contract)
     await db.commit()
     return {"ok": True}
-
-

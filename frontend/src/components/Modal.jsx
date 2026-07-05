@@ -20,10 +20,7 @@ export default function Modal({
   }
 
   return (
-    <div
-      className="modal-overlay"
-      onClick={closeOnOverlay ? onClose : undefined}
-    >
+    <div className="modal-overlay" onClick={closeOnOverlay ? onClose : undefined}>
       <div
         className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()}
         style={modalStyle}
@@ -35,9 +32,7 @@ export default function Modal({
             &times;
           </button>
         </div>
-        <div className={`modal-body ${bodyClassName}`.trim()}>
-          {children}
-        </div>
+        <div className={`modal-body ${bodyClassName}`.trim()}>{children}</div>
       </div>
     </div>
   )

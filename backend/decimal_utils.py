@@ -42,4 +42,3 @@ def money_gte(left: Any, right: Any = ZERO_DECIMAL) -> bool:
 
 def money_abs(value: Any) -> Decimal:
     return abs(to_decimal(value)).quantize(MONEY_PLACES, rounding=ROUND_HALF_UP)
-

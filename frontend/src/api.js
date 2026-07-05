@@ -1,206 +1,209 @@
 import { tr } from './i18n'
 
 // В dev — через proxy Vite (чтобы избежать CORS и Failed to fetch)
-const API_BASE = '/api';
-export const PENDING_LINKS_UPDATE_EVENT = 'pending-links-updated';
+const API_BASE = '/api'
+export const PENDING_LINKS_UPDATE_EVENT = 'pending-links-updated'
 
-let token = null;
+let token = null
 
 function shouldBroadcastPendingLinksUpdate(endpoint, options = {}) {
-  const method = String(options.method || 'GET').toUpperCase();
-  if (method === 'GET') return false;
+  const method = String(options.method || 'GET').toUpperCase()
+  if (method === 'GET') return false
   return (
     endpoint.startsWith('/bank-transactions') ||
     endpoint.startsWith('/counterparty-loans') ||
     endpoint.startsWith('/incoming-invoices') ||
     endpoint.startsWith('/bank-import') ||
     endpoint.startsWith('/efaktura')
-  );
+  )
 }
 
 export function broadcastPendingLinksUpdate() {
-  window.dispatchEvent(new CustomEvent(PENDING_LINKS_UPDATE_EVENT));
+  window.dispatchEvent(new CustomEvent(PENDING_LINKS_UPDATE_EVENT))
 }
 
 export function setToken(t) {
-  token = t;
-  if (t) localStorage.setItem('prospel_token', t);
-  else localStorage.removeItem('prospel_token');
+  token = t
+  if (t) localStorage.setItem('prospel_token', t)
+  else localStorage.removeItem('prospel_token')
 }
 
 export function setUser(u) {
-  if (u) localStorage.setItem('prospel_user', JSON.stringify(u));
-  else localStorage.removeItem('prospel_user');
+  if (u) localStorage.setItem('prospel_user', JSON.stringify(u))
+  else localStorage.removeItem('prospel_user')
 }
 
 export function getUser() {
   try {
-    const s = localStorage.getItem('prospel_user');
-    return s ? JSON.parse(s) : null;
+    const s = localStorage.getItem('prospel_user')
+    return s ? JSON.parse(s) : null
   } catch {
-    return null;
+    return null
   }
 }
 
 export function getToken() {
-  if (!token) token = localStorage.getItem('prospel_token');
-  return token;
+  if (!token) token = localStorage.getItem('prospel_token')
+  return token
 }
 
 function handleUnauthorized() {
-  setToken(null);
-  setUser(null);
-  window.location.href = '/login';
+  setToken(null)
+  setUser(null)
+  window.location.href = '/login'
 }
 
 function getAuthHeaders(extraHeaders = {}) {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}`, ...extraHeaders } : extraHeaders;
+  const t = getToken()
+  return t ? { Authorization: `Bearer ${t}`, ...extraHeaders } : extraHeaders
 }
 
 async function getErrorMessage(res, fallbackMessage = null) {
-  const err = await res.json().catch(() => ({}));
+  const err = await res.json().catch(() => ({}))
   return typeof err.detail === 'string'
     ? err.detail
-    : (Array.isArray(err.detail)
+    : Array.isArray(err.detail)
       ? err.detail.map((item) => item.msg).join(', ')
-      : err.message || fallbackMessage || `HTTP ${res.status}`);
+      : err.message || fallbackMessage || `HTTP ${res.status}`
 }
 
 function resolveApiUrl(pathOrUrl) {
-  if (!pathOrUrl) return API_BASE;
+  if (!pathOrUrl) return API_BASE
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://') || pathOrUrl.startsWith(API_BASE)) {
-    return pathOrUrl;
+    return pathOrUrl
   }
-  return API_BASE + pathOrUrl;
+  return API_BASE + pathOrUrl
 }
 
 function triggerBrowserDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function getFilenameFromResponse(res, fallbackFilename) {
-  const disposition = res.headers.get('content-disposition') || '';
-  const match = disposition.match(/filename=([^;]+)/i);
-  return match ? match[1].replace(/"/g, '') : fallbackFilename;
+  const disposition = res.headers.get('content-disposition') || ''
+  const match = disposition.match(/filename=([^;]+)/i)
+  return match ? match[1].replace(/"/g, '') : fallbackFilename
 }
 
 async function uploadFiles(endpoint, files, fieldName = 'files') {
-  const formData = new FormData();
-  Array.from(files || []).forEach((file) => formData.append(fieldName, file));
+  const formData = new FormData()
+  Array.from(files || []).forEach((file) => formData.append(fieldName, file))
   const res = await fetch(resolveApiUrl(endpoint), {
     method: 'POST',
     body: formData,
     headers: getAuthHeaders(),
-  });
+  })
 
   if (res.status === 401) {
-    handleUnauthorized();
-    throw new Error('Unauthorized');
+    handleUnauthorized()
+    throw new Error('Unauthorized')
   }
 
   if (!res.ok) {
-    const msg = await getErrorMessage(res);
-    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-    throw new Error(msg);
+    const msg = await getErrorMessage(res)
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }))
+    throw new Error(msg)
   }
 
   if (shouldBroadcastPendingLinksUpdate(endpoint, { method: 'POST' })) {
-    broadcastPendingLinksUpdate();
+    broadcastPendingLinksUpdate()
   }
 
-  return res.json();
+  return res.json()
 }
 
 async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Download failed') {
   const res = await fetch(resolveApiUrl(pathOrUrl), {
     headers: getAuthHeaders(),
-  });
+  })
 
   if (res.status === 401) {
-    handleUnauthorized();
-    throw new Error('Unauthorized');
+    handleUnauthorized()
+    throw new Error('Unauthorized')
   }
 
   if (!res.ok) {
-    const msg = await getErrorMessage(res, fallbackMessage);
-    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-    throw new Error(msg);
+    const msg = await getErrorMessage(res, fallbackMessage)
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }))
+    throw new Error(msg)
   }
 
-  const blob = await res.blob();
-  triggerBrowserDownload(blob, getFilenameFromResponse(res, fallbackFilename));
+  const blob = await res.blob()
+  triggerBrowserDownload(blob, getFilenameFromResponse(res, fallbackFilename))
 }
 
 async function request(endpoint, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
-  };
-  const t = getToken();
-  if (t) headers['Authorization'] = `Bearer ${t}`;
+  }
+  const t = getToken()
+  if (t) headers['Authorization'] = `Bearer ${t}`
 
   const res = await fetch(API_BASE + endpoint, {
     ...options,
     headers,
-  });
+  })
 
   if (res.status === 401) {
-    handleUnauthorized();
-    throw new Error('Unauthorized');
+    handleUnauthorized()
+    throw new Error('Unauthorized')
   }
 
   if (!res.ok) {
-    const msg = await getErrorMessage(res);
-    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-    const e = new Error(msg);
-    e.status = res.status;
-    throw e;
+    const msg = await getErrorMessage(res)
+    window.dispatchEvent(new CustomEvent('api-error', { detail: msg }))
+    const e = new Error(msg)
+    e.status = res.status
+    throw e
   }
 
   if (shouldBroadcastPendingLinksUpdate(endpoint, options)) {
-    broadcastPendingLinksUpdate();
+    broadcastPendingLinksUpdate()
   }
 
-  const contentType = res.headers.get('content-type');
+  const contentType = res.headers.get('content-type')
   if (contentType && contentType.includes('application/json')) {
-    return res.json();
+    return res.json()
   }
-  return res;
+  return res
 }
 
-const dashboardApi = () => request('/dashboard');
-dashboardApi.pendingLinks = () => request('/dashboard/pending-links');
+const dashboardApi = () => request('/dashboard')
+dashboardApi.pendingLinks = () => request('/dashboard/pending-links')
 
 export const api = {
   auth: {
     login: (username, password) => {
-      const params = new URLSearchParams();
-      params.append('username', username);
-      params.append('password', password);
+      const params = new URLSearchParams()
+      params.append('username', username)
+      params.append('password', password)
       return fetch(API_BASE + '/auth/login', {
         method: 'POST',
         body: params,
         headers: { Accept: 'application/json' },
       }).then(async (r) => {
         if (!r.ok) {
-          await r.json().catch(() => ({}));
-          const msg = tr('invalidLogin');
-          window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
-          throw new Error(msg);
+          await r.json().catch(() => ({}))
+          const msg = tr('invalidLogin')
+          window.dispatchEvent(new CustomEvent('api-error', { detail: msg }))
+          throw new Error(msg)
         }
-        const data = await r.json();
-        setToken(data.access_token);
-        setUser(data.user);
-        return data;
-      });
+        const data = await r.json()
+        setToken(data.access_token)
+        setUser(data.user)
+        return data
+      })
     },
-    logout: () => { setToken(null); setUser(null); },
+    logout: () => {
+      setToken(null)
+      setUser(null)
+    },
     updateMe: (data) => request('/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
@@ -214,24 +217,29 @@ export const api = {
 
   income: {
     list: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/income?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/income?${q}`)
     },
     years: () => request('/income/years'),
     get: (id) => request(`/income/${id}`),
     payments: (id) => request(`/income/${id}/payments`),
     clearManualPayment: (id) => request(`/income/${id}/clear-manual-payment`, { method: 'POST' }),
     itemSuggestions: (params = {}) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/income/item-suggestions${q ? `?${q}` : ''}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/income/item-suggestions${q ? `?${q}` : ''}`)
     },
-    exportEfakturaXml: (id, fallbackFilename = 'efaktura.xml') => downloadBlob(`/income/${id}/efaktura-xml`, fallbackFilename, 'Export failed'),
+    exportEfakturaXml: (id, fallbackFilename = 'efaktura.xml') =>
+      downloadBlob(`/income/${id}/efaktura-xml`, fallbackFilename, 'Export failed'),
     create: (data) => request('/income', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/income/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => request(`/income/${id}`, { method: 'DELETE' }),
-    bulkAssignProject: (data) => request('/income/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
+    bulkAssignProject: (data) =>
+      request('/income/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
     nextInvoice: (year) => request(`/income/next-invoice-number?year=${year || new Date().getFullYear()}`),
-    checkInvoice: (invoiceNumber, year) => request(`/income/check-invoice?invoice_number=${encodeURIComponent(invoiceNumber)}&year=${year || new Date().getFullYear()}`),
+    checkInvoice: (invoiceNumber, year) =>
+      request(
+        `/income/check-invoice?invoice_number=${encodeURIComponent(invoiceNumber)}&year=${year || new Date().getFullYear()}`
+      ),
   },
 
   efaktura: {
@@ -244,30 +252,30 @@ export const api = {
 
   finance: {
     summary: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/summary?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/summary?${q}`)
     },
     limits: (params = {}) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/limits${q ? `?${q}` : ''}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/limits${q ? `?${q}` : ''}`)
     },
     pnl: (year) => request(`/finance/pnl?year=${year}`),
     pnlYears: () => request('/finance/pnl/years'),
     ar: (params = {}) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/ar${q ? `?${q}` : ''}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/ar${q ? `?${q}` : ''}`)
     },
     cashflow: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/cashflow?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/cashflow?${q}`)
     },
     byProject: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/by-project?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/by-project?${q}`)
     },
     projectMovements: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/finance/project-movements?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/finance/project-movements?${q}`)
     },
   },
   projects: {
@@ -286,11 +294,15 @@ export const api = {
       return request(`/receipts${q ? `?${q}` : ''}`)
     },
     get: (id) => request(`/receipts/${id}`),
-    importFromQr: (data) => request('/receipts/import-from-qr', { method: 'POST', body: JSON.stringify(data) }),
+    importFromQr: (data) =>
+      request('/receipts/import-from-qr', { method: 'POST', body: JSON.stringify(data) }),
     expenseCandidates: (id) => request(`/receipts/${id}/expense-candidates`),
-    assignProject: (id, data) => request(`/receipts/${id}/assign-project`, { method: 'POST', body: JSON.stringify(data) }),
-    linkExpense: (id, data) => request(`/receipts/${id}/link-expense`, { method: 'POST', body: JSON.stringify(data) }),
-    createExpense: (id, data) => request(`/receipts/${id}/create-expense`, { method: 'POST', body: JSON.stringify(data) }),
+    assignProject: (id, data) =>
+      request(`/receipts/${id}/assign-project`, { method: 'POST', body: JSON.stringify(data) }),
+    linkExpense: (id, data) =>
+      request(`/receipts/${id}/link-expense`, { method: 'POST', body: JSON.stringify(data) }),
+    createExpense: (id, data) =>
+      request(`/receipts/${id}/create-expense`, { method: 'POST', body: JSON.stringify(data) }),
     unlinkExpense: (id) => request(`/receipts/${id}/unlink-expense`, { method: 'POST' }),
     markCashPaid: (id) => request(`/receipts/${id}/mark-cash-paid`, { method: 'POST' }),
     markWaitingBank: (id) => request(`/receipts/${id}/mark-waiting-bank`, { method: 'POST' }),
@@ -304,7 +316,7 @@ export const api = {
       return downloadBlob(
         `/receipts/by-project/${projectId}/export.xlsx${q ? `?${q}` : ''}`,
         fallbackFilename,
-        'Export failed',
+        'Export failed'
       )
     },
   },
@@ -320,8 +332,8 @@ export const api = {
 
   contracts: {
     list: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/contracts?${q}`);
+      const q = new URLSearchParams(params || {}).toString()
+      return request(`/contracts?${q}`)
     },
     get: (id) => request(`/contracts/${id}`),
     create: (data) => request('/contracts/create', { method: 'POST', body: JSON.stringify(data) }),
@@ -332,8 +344,8 @@ export const api = {
 
   clients: {
     list: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/clients?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/clients?${q}`)
     },
     listBrief: (search) => request(`/clients/brief?search=${encodeURIComponent(search || '')}`),
     get: (id) => request(`/clients/${id}`),
@@ -344,32 +356,38 @@ export const api = {
 
   expenses: {
     list: (params) => {
-      const q = new URLSearchParams(params).toString();
-      return request(`/expenses?${q}`);
+      const q = new URLSearchParams(params).toString()
+      return request(`/expenses?${q}`)
     },
     duplicates: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/expenses/duplicates?${q}`);
+      const q = new URLSearchParams(params || {}).toString()
+      return request(`/expenses/duplicates?${q}`)
     },
     years: () => request('/expenses/years'),
-    mergeDuplicates: (data) => request('/expenses/merge-duplicates', { method: 'POST', body: JSON.stringify(data) }),
+    mergeDuplicates: (data) =>
+      request('/expenses/merge-duplicates', { method: 'POST', body: JSON.stringify(data) }),
     get: (id) => request(`/expenses/${id}`),
     create: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    reverse: (id, data) => request(`/expenses/${id}/reverse`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
-    bulkAssignProject: (data) => request('/expenses/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
-    adminHardDelete: (data) => request('/expenses/admin-hard-delete', { method: 'POST', body: JSON.stringify(data) }),
+    reverse: (id, data) =>
+      request(`/expenses/${id}/reverse`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+    bulkAssignProject: (data) =>
+      request('/expenses/bulk-assign-project', { method: 'POST', body: JSON.stringify(data) }),
+    adminHardDelete: (data) =>
+      request('/expenses/admin-hard-delete', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
   },
 
   plannedExpenses: {
     list: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/planned-expenses?${q}`);
+      const q = new URLSearchParams(params || {}).toString()
+      return request(`/planned-expenses?${q}`)
     },
     upcoming: (days = 60) => request(`/planned-expenses/upcoming?days=${days}`),
-    markPaid: (data) => request('/planned-expenses/mark-paid', { method: 'POST', body: JSON.stringify(data) }),
-    markUnpaid: (data) => request('/planned-expenses/mark-unpaid', { method: 'POST', body: JSON.stringify(data) }),
+    markPaid: (data) =>
+      request('/planned-expenses/mark-paid', { method: 'POST', body: JSON.stringify(data) }),
+    markUnpaid: (data) =>
+      request('/planned-expenses/mark-unpaid', { method: 'POST', body: JSON.stringify(data) }),
     get: (id) => request(`/planned-expenses/${id}`),
     create: (data) => request('/planned-expenses', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/planned-expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -380,17 +398,20 @@ export const api = {
     types: () => request('/obligations/types'),
     years: () => request('/obligations/years'),
     calendar: (year, paymentType) => {
-      let url = `/obligations/calendar?year=${year}`;
-      if (paymentType) url += `&payment_type=${paymentType}`;
-      return request(url);
+      let url = `/obligations/calendar?year=${year}`
+      if (paymentType) url += `&payment_type=${paymentType}`
+      return request(url)
     },
     decisions: (year) => request(`/obligations/decisions${year ? `?year=${year}` : ''}`),
     getDecision: (id) => request(`/obligations/decisions/${id}`),
-    createDecision: (data) => request('/obligations/decisions', { method: 'POST', body: JSON.stringify(data) }),
-    updateDecision: (id, data) => request(`/obligations/decisions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    createDecision: (data) =>
+      request('/obligations/decisions', { method: 'POST', body: JSON.stringify(data) }),
+    updateDecision: (id, data) =>
+      request(`/obligations/decisions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     applyPreset2026: () => request('/obligations/decisions/apply-preset-2026', { method: 'POST' }),
     generate: (year) => request(`/obligations/generate?year=${year}`, { method: 'POST' }),
-    markPaid: (id, data) => request(`/obligations/obligations/${id}/mark-paid`, { method: 'PATCH', body: JSON.stringify(data) }),
+    markPaid: (id, data) =>
+      request(`/obligations/obligations/${id}/mark-paid`, { method: 'PATCH', body: JSON.stringify(data) }),
     markUnpaid: (id) => request(`/obligations/obligations/${id}/mark-unpaid`, { method: 'PATCH' }),
     ipsQr: (id) => request(`/obligations/obligations/${id}/ips-qr`),
     summary: (year) => request(`/obligations/summary${year ? `?year=${year}` : ''}`),
@@ -409,15 +430,23 @@ export const api = {
     },
     get: (id) => request(`/bank-transactions/${id}`),
     years: () => request('/bank-transactions/years'),
-    update: (id, payload) => request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-    match: (id, payload) => request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) =>
+      request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    match: (id, payload) =>
+      request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
     classifyOwnerFunds: (id) => request(`/bank-transactions/${id}/owner-funds`, { method: 'POST' }),
     incomeAllocation: (id) => request(`/bank-transactions/${id}/income-allocation`),
-    saveIncomeAllocation: (id, payload) => request(`/bank-transactions/${id}/income-allocation`, { method: 'POST', body: JSON.stringify(payload) }),
-    createExpense: (id, payload) => request(`/bank-transactions/${id}/create-expense`, { method: 'POST', body: JSON.stringify(payload) }),
+    saveIncomeAllocation: (id, payload) =>
+      request(`/bank-transactions/${id}/income-allocation`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    createExpense: (id, payload) =>
+      request(`/bank-transactions/${id}/create-expense`, { method: 'POST', body: JSON.stringify(payload) }),
     unmatch: (id) => request(`/bank-transactions/${id}/unmatch`, { method: 'POST' }),
     suggest: (id) => request(`/bank-transactions/${id}/suggest`),
-    bulkAssignProject: (payload) => request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),
+    bulkAssignProject: (payload) =>
+      request('/bank-transactions/bulk-assign-project', { method: 'POST', body: JSON.stringify(payload) }),
   },
   counterpartyLoans: {
     list: (params = {}) => {
@@ -429,9 +458,15 @@ export const api = {
       return request(`/counterparty-loans/owner-funds${q ? `?${q}` : ''}`)
     },
     get: (id) => request(`/counterparty-loans/${id}`),
-    createFromBank: (txId, payload) => request(`/counterparty-loans/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
-    addMovementFromBank: (loanId, txId, payload) => request(`/counterparty-loans/${loanId}/movements/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
-    update: (id, payload) => request(`/counterparty-loans/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    createFromBank: (txId, payload) =>
+      request(`/counterparty-loans/from-bank/${txId}`, { method: 'POST', body: JSON.stringify(payload) }),
+    addMovementFromBank: (loanId, txId, payload) =>
+      request(`/counterparty-loans/${loanId}/movements/from-bank/${txId}`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    update: (id, payload) =>
+      request(`/counterparty-loans/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     cancel: (id) => request(`/counterparty-loans/${id}/cancel`, { method: 'POST' }),
   },
   cash: {
@@ -443,8 +478,10 @@ export const api = {
     updateEntry: (id, data) => request(`/cash/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteEntry: (id) => request(`/cash/${id}`, { method: 'DELETE' }),
     createWithdrawal: (data) => request('/cash/withdrawals', { method: 'POST', body: JSON.stringify(data) }),
-    createPendingWithdrawal: (data) => request('/cash/pending-withdrawals', { method: 'POST', body: JSON.stringify(data) }),
-    linkPendingWithdrawal: (id, data) => request(`/cash/pending-withdrawals/${id}/link-bank`, { method: 'POST', body: JSON.stringify(data) }),
+    createPendingWithdrawal: (data) =>
+      request('/cash/pending-withdrawals', { method: 'POST', body: JSON.stringify(data) }),
+    linkPendingWithdrawal: (id, data) =>
+      request(`/cash/pending-withdrawals/${id}/link-bank`, { method: 'POST', body: JSON.stringify(data) }),
     createExpense: (data) => request('/cash/expenses', { method: 'POST', body: JSON.stringify(data) }),
     createAdjustment: (data) => request('/cash/adjustments', { method: 'POST', body: JSON.stringify(data) }),
   },
@@ -462,7 +499,8 @@ export const api = {
     },
     getPayout: (id) => request(`/workers/payouts/${id}`),
     createPayout: (data) => request('/workers/payouts', { method: 'POST', body: JSON.stringify(data) }),
-    updatePayout: (id, data) => request(`/workers/payouts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updatePayout: (id, data) =>
+      request(`/workers/payouts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
   enterprise: {
     get: () => request('/enterprise'),
@@ -472,66 +510,79 @@ export const api = {
 
   service: {
     backups: () => request('/service/backups'),
-    updateSettings: (data) => request('/service/backups/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    updateSettings: (data) =>
+      request('/service/backups/settings', { method: 'PUT', body: JSON.stringify(data) }),
     createBackup: () => request('/service/backups', { method: 'POST' }),
-    restoreBackup: (name) => request(`/service/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
-    downloadBackup: (name) => downloadBlob(`/service/backups/${encodeURIComponent(name)}/download`, name, 'Download failed'),
+    restoreBackup: (name) =>
+      request(`/service/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
+    downloadBackup: (name) =>
+      downloadBlob(`/service/backups/${encodeURIComponent(name)}/download`, name, 'Download failed'),
   },
 
   incomingInvoices: {
     list: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/incoming-invoices?${q}`);
+      const q = new URLSearchParams(params || {}).toString()
+      return request(`/incoming-invoices?${q}`)
     },
-      years: () => request('/incoming-invoices/years'),
-      get: (id) => request(`/incoming-invoices/${id}`),
-      create: (data) => request('/incoming-invoices', { method: 'POST', body: JSON.stringify(data) }),
-      update: (id, data) => request(`/incoming-invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-      cancel: (id) => request(`/incoming-invoices/${id}/cancel`, { method: 'POST' }),
-      restore: (id) => request(`/incoming-invoices/${id}/restore`, { method: 'POST' }),
-      expenseCandidates: (id) => request(`/incoming-invoices/${id}/expense-candidates`),
-      advanceCandidates: (id) => request(`/incoming-invoices/${id}/advance-candidates`),
-      closingCandidates: (id) => request(`/incoming-invoices/${id}/closing-candidates`),
-      attachExpense: (id, data) => request(`/incoming-invoices/${id}/attach-expense`, { method: 'POST', body: JSON.stringify(data) }),
-      linkAdvance: (id, data) => request(`/incoming-invoices/${id}/link-advance`, { method: 'POST', body: JSON.stringify(data) }),
-      linkClosing: (id, data) => request(`/incoming-invoices/${id}/link-closing`, { method: 'POST', body: JSON.stringify(data) }),
-      unlinkAdvance: (id) => request(`/incoming-invoices/${id}/unlink-advance`, { method: 'POST' }),
-      settleBank: (id, data) => request(`/incoming-invoices/${id}/settle/bank`, { method: 'POST', body: JSON.stringify(data) }),
-      settleCash: (id, data) => request(`/incoming-invoices/${id}/settle/cash`, { method: 'POST', body: JSON.stringify(data) }),
-      settleOffset: (id, data) => request(`/incoming-invoices/${id}/settle/offset`, { method: 'POST', body: JSON.stringify(data) }),
+    years: () => request('/incoming-invoices/years'),
+    get: (id) => request(`/incoming-invoices/${id}`),
+    create: (data) => request('/incoming-invoices', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) =>
+      request(`/incoming-invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    cancel: (id) => request(`/incoming-invoices/${id}/cancel`, { method: 'POST' }),
+    restore: (id) => request(`/incoming-invoices/${id}/restore`, { method: 'POST' }),
+    expenseCandidates: (id) => request(`/incoming-invoices/${id}/expense-candidates`),
+    advanceCandidates: (id) => request(`/incoming-invoices/${id}/advance-candidates`),
+    closingCandidates: (id) => request(`/incoming-invoices/${id}/closing-candidates`),
+    attachExpense: (id, data) =>
+      request(`/incoming-invoices/${id}/attach-expense`, { method: 'POST', body: JSON.stringify(data) }),
+    linkAdvance: (id, data) =>
+      request(`/incoming-invoices/${id}/link-advance`, { method: 'POST', body: JSON.stringify(data) }),
+    linkClosing: (id, data) =>
+      request(`/incoming-invoices/${id}/link-closing`, { method: 'POST', body: JSON.stringify(data) }),
+    unlinkAdvance: (id) => request(`/incoming-invoices/${id}/unlink-advance`, { method: 'POST' }),
+    settleBank: (id, data) =>
+      request(`/incoming-invoices/${id}/settle/bank`, { method: 'POST', body: JSON.stringify(data) }),
+    settleCash: (id, data) =>
+      request(`/incoming-invoices/${id}/settle/cash`, { method: 'POST', body: JSON.stringify(data) }),
+    settleOffset: (id, data) =>
+      request(`/incoming-invoices/${id}/settle/offset`, { method: 'POST', body: JSON.stringify(data) }),
     reverseSettlement: (id) => request(`/incoming-invoices/settlements/${id}`, { method: 'DELETE' }),
     counterpartyBalance: (params) => {
-      const q = new URLSearchParams(params || {}).toString();
-      return request(`/incoming-invoices/counterparty-balance?${q}`);
+      const q = new URLSearchParams(params || {}).toString()
+      return request(`/incoming-invoices/counterparty-balance?${q}`)
     },
     openIncomes: (clientId) => request(`/incoming-invoices/open-incomes/${clientId}`),
   },
 
   reports: {
     kpoCsvUrl: (year, month) => {
-      let url = `${API_BASE}/reports/kpo/csv?year=${year}`;
-      if (month) url += `&month=${month}`;
-      return url;
+      let url = `${API_BASE}/reports/kpo/csv?year=${year}`
+      if (month) url += `&month=${month}`
+      return url
     },
     kpoPdfUrl: (year, month) => {
-      let url = `${API_BASE}/reports/kpo/pdf?year=${year}`;
-      if (month) url += `&month=${month}`;
-      return url;
+      let url = `${API_BASE}/reports/kpo/pdf?year=${year}`
+      if (month) url += `&month=${month}`
+      return url
     },
-    downloadPdf: (year, month) => downloadBlob(
-      `/reports/kpo/pdf?year=${year}${month ? `&month=${month}` : ''}`,
-      `kpo_${year}${month ? `_${month}` : ''}.pdf`,
-      'Download failed',
-    ),
-    downloadOwnerFundsPdf: (txId) => downloadBlob(
-      `/reports/bank-transactions/${txId}/owner-funds/pdf`,
-      `owner_funds_${txId}.pdf`,
-      'Download failed',
-    ),
-    downloadCsv: (year, month) => downloadBlob(
-      `/reports/kpo/csv?year=${year}${month ? `&month=${month}` : ''}`,
-      `kpo_${year}${month ? `_${month}` : ''}.csv`,
-      'Download failed',
-    ),
+    downloadPdf: (year, month) =>
+      downloadBlob(
+        `/reports/kpo/pdf?year=${year}${month ? `&month=${month}` : ''}`,
+        `kpo_${year}${month ? `_${month}` : ''}.pdf`,
+        'Download failed'
+      ),
+    downloadOwnerFundsPdf: (txId) =>
+      downloadBlob(
+        `/reports/bank-transactions/${txId}/owner-funds/pdf`,
+        `owner_funds_${txId}.pdf`,
+        'Download failed'
+      ),
+    downloadCsv: (year, month) =>
+      downloadBlob(
+        `/reports/kpo/csv?year=${year}${month ? `&month=${month}` : ''}`,
+        `kpo_${year}${month ? `_${month}` : ''}.csv`,
+        'Download failed'
+      ),
   },
-};
+}

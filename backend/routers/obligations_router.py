@@ -1,12 +1,15 @@
 """Роутер обязательных платежей (решения Пореске управе) — ТЗ."""
+
 from datetime import date
 from typing import Optional
-import calendar
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
-from backend.obligation_payment_service import mark_obligation_paid as apply_obligation_payment, reset_obligation_payment
+from backend.obligation_payment_service import (
+    mark_obligation_paid as apply_obligation_payment,
+    reset_obligation_payment,
+)
 from backend.models import PaymentType, YearDecision, MonthlyObligation, Enterprise, User
 from backend.state_machine import InvalidStatusTransition
 from backend.schemas import (
@@ -22,7 +25,6 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.payments_service import (
     ensure_payment_types,
     get_or_create_obligations,
-    deadline_for_month,
     payment_purpose_with_year,
     presets_2026,
 )
@@ -66,13 +68,10 @@ async def list_obligation_years(
     """Р”РѕСЃС‚СѓРїРЅС‹Рµ РіРѕРґС‹ РґР»СЏ РєР°Р»РµРЅРґР°СЂСЏ РѕР±СЏР·Р°С‚РµР»СЊСЃС‚РІ."""
     decision_result = await db.execute(select(YearDecision.year))
     obligation_result = await db.execute(select(MonthlyObligation.year))
-    years = {
-        value
-        for (value,) in [*decision_result.all(), *obligation_result.all()]
-        if value is not None
-    }
+    years = {value for (value,) in [*decision_result.all(), *obligation_result.all()] if value is not None}
     years.add(date.today().year)
     return sorted(years, reverse=True)
+
 
 @router.get("/calendar", response_model=list[MonthlyObligationResponse])
 async def list_obligations(
@@ -117,9 +116,7 @@ async def list_decisions(
     current_user: User = Depends(get_current_user_required),
 ):
     """Список решений по годам."""
-    q = select(YearDecision).order_by(
-        YearDecision.year.desc(), YearDecision.payment_type_id
-    )
+    q = select(YearDecision).order_by(YearDecision.year.desc(), YearDecision.payment_type_id)
     if year:
         q = q.where(YearDecision.year == year)
     r = await db.execute(q)
@@ -133,14 +130,36 @@ async def list_decisions(
     out = []
     for d in items:
         t = type_map.get(d.payment_type_id)
-        out.append(YearDecisionResponse(
-            **{k: getattr(d, k) for k in ["id", "year", "payment_type_id", "period_start", "period_end",
-               "monthly_amount", "base_amount", "rate_percent", "recipient_name", "recipient_account",
-               "sifra_placanja", "model", "poziv_na_broj", "poziv_na_broj_next", "payment_purpose",
-               "currency", "is_provisional", "is_active"] if hasattr(d, k)},
-            payment_type_code=t.code if t else None,
-            payment_type_name=t.name_sr if t else None,
-        ))
+        out.append(
+            YearDecisionResponse(
+                **{
+                    k: getattr(d, k)
+                    for k in [
+                        "id",
+                        "year",
+                        "payment_type_id",
+                        "period_start",
+                        "period_end",
+                        "monthly_amount",
+                        "base_amount",
+                        "rate_percent",
+                        "recipient_name",
+                        "recipient_account",
+                        "sifra_placanja",
+                        "model",
+                        "poziv_na_broj",
+                        "poziv_na_broj_next",
+                        "payment_purpose",
+                        "currency",
+                        "is_provisional",
+                        "is_active",
+                    ]
+                    if hasattr(d, k)
+                },
+                payment_type_code=t.code if t else None,
+                payment_type_name=t.name_sr if t else None,
+            )
+        )
     return out
 
 
@@ -156,10 +175,29 @@ async def get_decision(
         raise HTTPException(404, "Решение не найдено")
     pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
     return YearDecisionResponse(
-        **{k: getattr(dec, k) for k in ["id", "year", "payment_type_id", "period_start", "period_end",
-           "monthly_amount", "base_amount", "rate_percent", "recipient_name", "recipient_account",
-           "sifra_placanja", "model", "poziv_na_broj", "poziv_na_broj_next", "payment_purpose",
-           "currency", "is_provisional", "is_active"]},
+        **{
+            k: getattr(dec, k)
+            for k in [
+                "id",
+                "year",
+                "payment_type_id",
+                "period_start",
+                "period_end",
+                "monthly_amount",
+                "base_amount",
+                "rate_percent",
+                "recipient_name",
+                "recipient_account",
+                "sifra_placanja",
+                "model",
+                "poziv_na_broj",
+                "poziv_na_broj_next",
+                "payment_purpose",
+                "currency",
+                "is_provisional",
+                "is_active",
+            ]
+        },
         payment_type_code=pt.code if pt else None,
         payment_type_name=pt.name_sr if pt else None,
     )
@@ -187,10 +225,29 @@ async def create_decision(
     await db.refresh(dec)
     pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
     return YearDecisionResponse(
-        **{k: getattr(dec, k) for k in ["id", "year", "payment_type_id", "period_start", "period_end",
-           "monthly_amount", "base_amount", "rate_percent", "recipient_name", "recipient_account",
-           "sifra_placanja", "model", "poziv_na_broj", "poziv_na_broj_next", "payment_purpose",
-           "currency", "is_provisional", "is_active"]},
+        **{
+            k: getattr(dec, k)
+            for k in [
+                "id",
+                "year",
+                "payment_type_id",
+                "period_start",
+                "period_end",
+                "monthly_amount",
+                "base_amount",
+                "rate_percent",
+                "recipient_name",
+                "recipient_account",
+                "sifra_placanja",
+                "model",
+                "poziv_na_broj",
+                "poziv_na_broj_next",
+                "payment_purpose",
+                "currency",
+                "is_provisional",
+                "is_active",
+            ]
+        },
         payment_type_code=pt.code if pt else None,
         payment_type_name=pt.name_sr if pt else None,
     )
@@ -213,10 +270,29 @@ async def update_decision(
     await db.refresh(dec)
     pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
     return YearDecisionResponse(
-        **{k: getattr(dec, k) for k in ["id", "year", "payment_type_id", "period_start", "period_end",
-           "monthly_amount", "base_amount", "rate_percent", "recipient_name", "recipient_account",
-           "sifra_placanja", "model", "poziv_na_broj", "poziv_na_broj_next", "payment_purpose",
-           "currency", "is_provisional", "is_active"]},
+        **{
+            k: getattr(dec, k)
+            for k in [
+                "id",
+                "year",
+                "payment_type_id",
+                "period_start",
+                "period_end",
+                "monthly_amount",
+                "base_amount",
+                "rate_percent",
+                "recipient_name",
+                "recipient_account",
+                "sifra_placanja",
+                "model",
+                "poziv_na_broj",
+                "poziv_na_broj_next",
+                "payment_purpose",
+                "currency",
+                "is_provisional",
+                "is_active",
+            ]
+        },
         payment_type_code=pt.code if pt else None,
         payment_type_name=pt.name_sr if pt else None,
     )
@@ -288,11 +364,17 @@ async def mark_obligation_paid(
     await db.refresh(ob)
     pt = await db.get(PaymentType, ob.payment_type_id) if ob.payment_type_id else None
     return MonthlyObligationResponse(
-        id=ob.id, year=ob.year, month=ob.month, payment_type_id=ob.payment_type_id,
+        id=ob.id,
+        year=ob.year,
+        month=ob.month,
+        payment_type_id=ob.payment_type_id,
         payment_type_code=pt.code if pt else None,
         payment_type_name=pt.name_sr if pt else None,
-        amount=ob.amount, deadline=ob.deadline.isoformat(), status=ob.status,
-        paid_date=ob.paid_date, payment_reference=ob.payment_reference,
+        amount=ob.amount,
+        deadline=ob.deadline.isoformat(),
+        status=ob.status,
+        paid_date=ob.paid_date,
+        payment_reference=ob.payment_reference,
     )
 
 
@@ -353,9 +435,7 @@ async def get_obligations_summary(
 ):
     """Сводка: к оплате, просрочено (для дашборда)."""
     y = year or date.today().year
-    r = await db.execute(
-        select(MonthlyObligation).where(MonthlyObligation.year == y)
-    )
+    r = await db.execute(select(MonthlyObligation).where(MonthlyObligation.year == y))
     items = r.scalars().all()
     today = date.today()
     unpaid_count = sum(1 for i in items if i.status in ("unpaid", "overdue"))

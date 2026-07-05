@@ -1,4 +1,5 @@
 """Р РѕСѓС‚РµСЂ РїР»Р°РЅРёСЂСѓРµРјС‹С… (РїРµСЂРёРѕРґРёС‡РµСЃРєРёС…) СЂР°СЃС…РѕРґРѕРІ."""
+
 from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +21,7 @@ from backend.schemas import (
 from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/planned-expenses", tags=["planned-expenses"])
+
 
 async def _resolve_category_project_id(db: AsyncSession, category_id: int | None, project_id: int | None) -> int | None:
     category = await get_category_or_none(db, category_id)
@@ -77,9 +79,7 @@ async def get_upcoming_payments(
                 PlannedExpensePayment.planned_expense_id,
                 PlannedExpensePayment.due_date,
                 PlannedExpensePayment.worker_payout_id,
-            ).where(
-                PlannedExpensePayment.planned_expense_id.in_([pe.id for pe in items])
-            )
+            ).where(PlannedExpensePayment.planned_expense_id.in_([pe.id for pe in items]))
         )
         paid_set = {(row[0], row[1]): row[2] for row in r_paid.fetchall()}
 
@@ -88,21 +88,21 @@ async def get_upcoming_payments(
     for pe in items:
         dates = payment_dates_in_range(pe, range_start, range_end, limit=24)
         for d in dates:
-                item = UpcomingPaymentItem(
-                    planned_expense_id=pe.id,
-                    name=pe.name,
-                    amount=pe.amount,
-                    currency=pe.currency,
-                    due_date=d.isoformat(),
-                    reminder_days=pe.reminder_days or 0,
-                    is_paid=(pe.id, d) in paid_set,
-                    worker_id=pe.worker_id,
-                    worker_payout_id=paid_set.get((pe.id, d)),
-                )
-                if item.is_paid:
-                    paid.append(item)
-                else:
-                    unpaid.append(item)
+            item = UpcomingPaymentItem(
+                planned_expense_id=pe.id,
+                name=pe.name,
+                amount=pe.amount,
+                currency=pe.currency,
+                due_date=d.isoformat(),
+                reminder_days=pe.reminder_days or 0,
+                is_paid=(pe.id, d) in paid_set,
+                worker_id=pe.worker_id,
+                worker_payout_id=paid_set.get((pe.id, d)),
+            )
+            if item.is_paid:
+                paid.append(item)
+            else:
+                unpaid.append(item)
     unpaid.sort(key=lambda x: x.due_date)
     paid.sort(key=lambda x: x.due_date)
     return unpaid + paid

@@ -10,7 +10,7 @@ export function getContractLabelById(contracts, contractId, emptyLabel = UI_DASH
   if (contractId == null || contractId === '') return emptyLabel
   return buildContractLabel(
     contracts.find((contract) => String(contract.id) === String(contractId)),
-    emptyLabel,
+    emptyLabel
   )
 }
 

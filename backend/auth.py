@@ -1,4 +1,5 @@
 """Аутентификация и авторизация."""
+
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -35,8 +36,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 async def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+    token: Optional[str] = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
     """Получить текущего пользователя по токену."""
     if not token:
@@ -61,28 +61,22 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_required(
-    current_user: Optional[User] = Depends(get_current_user)
-) -> User:
+async def get_current_user_required(current_user: Optional[User] = Depends(get_current_user)) -> User:
     """Требует авторизации."""
     if current_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Требуется авторизация"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Требуется авторизация")
     return current_user
 
 
 def require_role(*allowed_roles: UserRole):
     """Проверка роли пользователя."""
+
     async def role_checker(current_user: User = Depends(get_current_user_required)) -> User:
         user_role = UserRole(current_user.role)
         if user_role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
         return current_user
+
     return role_checker
 
 

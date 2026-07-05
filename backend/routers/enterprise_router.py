@@ -1,11 +1,12 @@
 """Роутер настроек предприятия."""
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import Enterprise, User
-from backend.schemas import EnterpriseBrandResponse, EnterpriseBase, EnterpriseUpdate, EnterpriseResponse
+from backend.schemas import EnterpriseBrandResponse, EnterpriseUpdate, EnterpriseResponse
 from backend.auth import get_current_user_required, require_admin
 
 router = APIRouter(prefix="/enterprise", tags=["enterprise"])

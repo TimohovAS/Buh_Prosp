@@ -69,8 +69,7 @@ export default function Layout({ lang, toggleLang, children }) {
         bank_unmatched_count: Number(data?.bank_unmatched_count || 0),
         incoming_invoices_pending_count: Number(data?.incoming_invoices_pending_count || 0),
       })
-    } catch {
-    }
+    } catch {}
   }
 
   useEffect(() => {
@@ -105,12 +104,12 @@ export default function Layout({ lang, toggleLang, children }) {
     }
   }, [mobileNavOpen])
 
-  const incomingInvoicesBadge = pendingCounts.incoming_invoices_pending_count > 0
-    ? ` (${pendingCounts.incoming_invoices_pending_count})`
-    : ''
-  const bankTransactionsBadge = pendingCounts.bank_unmatched_count > 0
-    ? ` (${pendingCounts.bank_unmatched_count})`
-    : ''
+  const incomingInvoicesBadge =
+    pendingCounts.incoming_invoices_pending_count > 0
+      ? ` (${pendingCounts.incoming_invoices_pending_count})`
+      : ''
+  const bankTransactionsBadge =
+    pendingCounts.bank_unmatched_count > 0 ? ` (${pendingCounts.bank_unmatched_count})` : ''
 
   return (
     <div className={`app${mobileNavOpen ? ' mobile-nav-open' : ''}`}>
@@ -127,7 +126,9 @@ export default function Layout({ lang, toggleLang, children }) {
               {brand.emblem_data_url ? <img src={brand.emblem_data_url} alt="" /> : <Building2 size={20} />}
             </div>
             <div className="sidebar-brand-copy">
-              <strong style={{ fontSize: '1.25rem' }}>ProspEl <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>v2</span></strong>
+              <strong style={{ fontSize: '1.25rem' }}>
+                ProspEl <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>v2</span>
+              </strong>
               {enterpriseName ? <div className="sidebar-brand-subtitle">{enterpriseName}</div> : null}
             </div>
           </div>
@@ -158,60 +159,159 @@ export default function Layout({ lang, toggleLang, children }) {
           <div className="sidebar-group">
             <div className="sidebar-group-title">{tr('sidebarOverview')}</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/" end><LayoutDashboard size={18} /> {tr('dashboard')}</NavLink></li>
-              <li><NavLink to="/finance" end><LineChart size={18} /> {tr('finance')}</NavLink></li>
-              <li><NavLink to="/finance/pnl"><LineChart size={18} /> {tr('pnlTitle')}</NavLink></li>
-              <li><NavLink to="/finance/cashflow"><Wallet size={18} /> {tr('cashflowTitle')}</NavLink></li>
-              <li><NavLink to="/finance/ar"><AlertCircle size={18} /> {tr('financeAR')}</NavLink></li>
-              <li><NavLink to="/counterparty-balance"><Scale size={18} /> {tr('counterpartyBalance')}</NavLink></li>
-              <li><NavLink to="/counterparty-loans"><Landmark size={18} /> {tr('counterpartyLoans')}</NavLink></li>
+              <li>
+                <NavLink to="/" end>
+                  <LayoutDashboard size={18} /> {tr('dashboard')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/finance" end>
+                  <LineChart size={18} /> {tr('finance')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/finance/pnl">
+                  <LineChart size={18} /> {tr('pnlTitle')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/finance/cashflow">
+                  <Wallet size={18} /> {tr('cashflowTitle')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/finance/ar">
+                  <AlertCircle size={18} /> {tr('financeAR')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/counterparty-balance">
+                  <Scale size={18} /> {tr('counterpartyBalance')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/counterparty-loans">
+                  <Landmark size={18} /> {tr('counterpartyLoans')}
+                </NavLink>
+              </li>
             </ul>
           </div>
 
           <div className="sidebar-group">
             <div className="sidebar-group-title">{tr('sidebarOperations')}</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/income"><FileText size={18} /> {tr('income')}</NavLink></li>
-              <li><NavLink to="/efaktura"><FileText size={18} /> {tr('efakturaModule')}</NavLink></li>
-              <li><NavLink to="/incoming-invoices"><FileInput size={18} /> {tr('incomingInvoices')}{incomingInvoicesBadge}</NavLink></li>
-              <li><NavLink to="/expenses"><CreditCard size={18} /> {tr('expenses')}</NavLink></li>
-              <li><NavLink to="/receipts"><QrCode size={18} /> {tr('receipts')}</NavLink></li>
-              <li><NavLink to="/planned-expenses"><CalendarDays size={18} /> {tr('plannedExpenses')}</NavLink></li>
-              <li><NavLink to="/payments"><Landmark size={18} /> {tr('payments')}</NavLink></li>
+              <li>
+                <NavLink to="/income">
+                  <FileText size={18} /> {tr('income')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/efaktura">
+                  <FileText size={18} /> {tr('efakturaModule')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/incoming-invoices">
+                  <FileInput size={18} /> {tr('incomingInvoices')}
+                  {incomingInvoicesBadge}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/expenses">
+                  <CreditCard size={18} /> {tr('expenses')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/receipts">
+                  <QrCode size={18} /> {tr('receipts')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/planned-expenses">
+                  <CalendarDays size={18} /> {tr('plannedExpenses')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/payments">
+                  <Landmark size={18} /> {tr('payments')}
+                </NavLink>
+              </li>
             </ul>
           </div>
 
           <div className="sidebar-group">
             <div className="sidebar-group-title">{tr('sidebarBank')}</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/bank"><Building2 size={18} /> {tr('bankTransactions')}{bankTransactionsBadge}</NavLink></li>
-              <li><NavLink to="/cash"><Wallet size={18} /> {tr('cashRegister')}</NavLink></li>
-              <li><NavLink to="/bank-import"><ArrowRightLeft size={18} /> {tr('bankImport')}</NavLink></li>
+              <li>
+                <NavLink to="/bank">
+                  <Building2 size={18} /> {tr('bankTransactions')}
+                  {bankTransactionsBadge}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/cash">
+                  <Wallet size={18} /> {tr('cashRegister')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/bank-import">
+                  <ArrowRightLeft size={18} /> {tr('bankImport')}
+                </NavLink>
+              </li>
             </ul>
           </div>
 
           <div className="sidebar-group">
             <div className="sidebar-group-title">{tr('sidebarDirectories')}</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/clients"><Users size={18} /> {tr('clients')}</NavLink></li>
-              <li><NavLink to="/workers"><Users size={18} /> {tr('workersTitle')}</NavLink></li>
-              <li><NavLink to="/projects"><FolderKanban size={18} /> {tr('projects')}</NavLink></li>
-              <li><NavLink to="/contracts"><Briefcase size={18} /> {tr('contracts')}</NavLink></li>
+              <li>
+                <NavLink to="/clients">
+                  <Users size={18} /> {tr('clients')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/workers">
+                  <Users size={18} /> {tr('workersTitle')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/projects">
+                  <FolderKanban size={18} /> {tr('projects')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/contracts">
+                  <Briefcase size={18} /> {tr('contracts')}
+                </NavLink>
+              </li>
             </ul>
           </div>
 
           <div className="sidebar-group">
             <div className="sidebar-group-title">{tr('sidebarSystem')}</div>
             <ul className="sidebar-nav">
-              <li><NavLink to="/settings"><Settings size={18} /> {tr('settings')}</NavLink></li>
+              <li>
+                <NavLink to="/settings">
+                  <Settings size={18} /> {tr('settings')}
+                </NavLink>
+              </li>
             </ul>
           </div>
         </nav>
         <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <button
             className="btn btn-sm btn-secondary"
-            style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem', alignItems: 'center' }}
-            onClick={() => { api.auth.logout(); window.location.href = '/login'; }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              alignItems: 'center',
+            }}
+            onClick={() => {
+              api.auth.logout()
+              window.location.href = '/login'
+            }}
           >
             <LogOut size={16} /> {tr('logout')}
           </button>
@@ -228,7 +328,9 @@ export default function Layout({ lang, toggleLang, children }) {
             <Menu size={18} />
           </button>
           <div className="mobile-topbar-copy">
-            <strong>ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v2</span></strong>
+            <strong>
+              ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v2</span>
+            </strong>
             {enterpriseName ? <span>{enterpriseName}</span> : null}
           </div>
           <button

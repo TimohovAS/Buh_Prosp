@@ -1,4 +1,5 @@
 """Создание или сброс пароля администратора."""
+
 import asyncio
 import sys
 from pathlib import Path

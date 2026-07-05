@@ -14,11 +14,29 @@ from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.config import get_settings
 from backend.database import get_db
 from backend.date_utils import coerce_date, days_between
-from backend.models import BankTransaction, BankTransactionIncomeAllocation, Expense, Income, IncomingInvoice, MonthlyObligation, PaymentType, PlannedExpense, PlannedExpensePayment, User
+from backend.models import (
+    BankTransaction,
+    BankTransactionIncomeAllocation,
+    Expense,
+    Income,
+    IncomingInvoice,
+    MonthlyObligation,
+    PaymentType,
+    PlannedExpense,
+    PlannedExpensePayment,
+    User,
+)
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
-from backend.schemas import DashboardIncomeResponse, DashboardStats, IncomeLimitStatus, PendingLinkCountsResponse, UpcomingObligationItem, UpcomingPlannedItem
+from backend.schemas import (
+    DashboardIncomeResponse,
+    DashboardStats,
+    IncomeLimitStatus,
+    PendingLinkCountsResponse,
+    UpcomingObligationItem,
+    UpcomingPlannedItem,
+)
 from backend.services import get_income_limit_status, get_income_total
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -196,9 +214,17 @@ async def get_dashboard(
         )
 
     unpaid_payments_count = len(unpaid_obligations)
-    next_deadline = next((item.deadline for item in unpaid_obligations if item.deadline >= today), None) if unpaid_obligations else None
-    upcoming_payment_date = next_deadline.strftime("%d.%m.%Y") if next_deadline else (
-        f"15.{(today.month % 12) + 1:02d}.{today.year}" if today.day >= 15 else f"15.{today.month:02d}.{today.year}"
+    next_deadline = (
+        next((item.deadline for item in unpaid_obligations if item.deadline >= today), None)
+        if unpaid_obligations
+        else None
+    )
+    upcoming_payment_date = (
+        next_deadline.strftime("%d.%m.%Y")
+        if next_deadline
+        else (
+            f"15.{(today.month % 12) + 1:02d}.{today.year}" if today.day >= 15 else f"15.{today.month:02d}.{today.year}"
+        )
     )
 
     range_start_planned = today - timedelta(days=approaching_days)

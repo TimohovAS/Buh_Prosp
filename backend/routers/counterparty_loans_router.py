@@ -34,19 +34,21 @@ def _serialize(loan: CounterpartyLoan) -> CounterpartyLoanResponse:
     movements = []
     for movement in loan.movements or []:
         bank_transaction = movement.bank_transaction
-        movements.append({
-            "id": movement.id,
-            "loan_id": movement.loan_id,
-            "movement_type": movement.movement_type,
-            "date": movement.date,
-            "amount": movement.amount,
-            "currency": movement.currency or "RSD",
-            "bank_transaction_id": movement.bank_transaction_id,
-            "note": movement.note,
-            "created_at": movement.created_at,
-            "bank_reference": bank_transaction.bank_reference if bank_transaction else None,
-            "bank_purpose": bank_transaction.purpose if bank_transaction else None,
-        })
+        movements.append(
+            {
+                "id": movement.id,
+                "loan_id": movement.loan_id,
+                "movement_type": movement.movement_type,
+                "date": movement.date,
+                "amount": movement.amount,
+                "currency": movement.currency or "RSD",
+                "bank_transaction_id": movement.bank_transaction_id,
+                "note": movement.note,
+                "created_at": movement.created_at,
+                "bank_reference": bank_transaction.bank_reference if bank_transaction else None,
+                "bank_purpose": bank_transaction.purpose if bank_transaction else None,
+            }
+        )
     return CounterpartyLoanResponse(
         id=loan.id,
         loan_type=loan.loan_type,
@@ -83,7 +85,11 @@ async def list_loans(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    query = select(CounterpartyLoan).options(*_with_links()).order_by(CounterpartyLoan.start_date.desc(), CounterpartyLoan.id.desc())
+    query = (
+        select(CounterpartyLoan)
+        .options(*_with_links())
+        .order_by(CounterpartyLoan.start_date.desc(), CounterpartyLoan.id.desc())
+    )
     if loan_type:
         query = query.where(CounterpartyLoan.loan_type == loan_type)
     if status:
@@ -240,9 +246,7 @@ async def update_loan(
     if "counterparty_name" in payload:
         new_counterparty_name = payload["counterparty_name"].strip()
         payload["counterparty_name"] = new_counterparty_name
-    if loan.movements and (
-        new_client_id != loan.client_id or new_counterparty_name != loan.counterparty_name
-    ):
+    if loan.movements and (new_client_id != loan.client_id or new_counterparty_name != loan.counterparty_name):
         raise HTTPException(400, "Counterparty cannot be changed after loan movements exist")
     for field, value in payload.items():
         setattr(loan, field, value)

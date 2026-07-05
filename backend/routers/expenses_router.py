@@ -22,14 +22,11 @@ from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import (
     BankTransaction,
     CashEntry,
-    Contract,
     Expense,
     ExpenseItem,
     IncomingInvoice,
     MonthlyObligation,
-    Project,
     PurchaseReceipt,
-    TransactionCategory,
     User,
 )
 from backend.schemas import (
@@ -82,7 +79,9 @@ def _normalize_expense_items(items) -> list[dict]:
         else:
             amount = to_decimal(amount_value if amount_value not in (None, "") else ZERO_DECIMAL)
 
-        has_payload = bool(name) or quantity is not None or unit_price is not None or amount != ZERO_DECIMAL or bool(note)
+        has_payload = (
+            bool(name) or quantity is not None or unit_price is not None or amount != ZERO_DECIMAL or bool(note)
+        )
         if not has_payload:
             continue
         if not name:
@@ -194,11 +193,7 @@ async def _sync_bank_transactions_from_expense(db: AsyncSession, expense: Expens
             BankTransaction.direction == "out",
         )
     )
-    candidates = [
-        tx
-        for tx in result.scalars().all()
-        if abs(to_decimal(tx.amount or ZERO_DECIMAL)) == amount
-    ]
+    candidates = [tx for tx in result.scalars().all() if abs(to_decimal(tx.amount or ZERO_DECIMAL)) == amount]
     if len(candidates) != 1:
         return
 
@@ -218,7 +213,11 @@ def _amount_key(value: float | int | None) -> str:
 
 
 def _is_reversal_row(expense: Expense) -> bool:
-    return bool(expense.reversal_of_id) or getattr(expense, "status", None) == "reversed" or to_decimal(expense.amount or ZERO_DECIMAL) < ZERO_DECIMAL
+    return (
+        bool(expense.reversal_of_id)
+        or getattr(expense, "status", None) == "reversed"
+        or to_decimal(expense.amount or ZERO_DECIMAL) < ZERO_DECIMAL
+    )
 
 
 def _is_active_duplicate_candidate(expense: Expense) -> bool:
@@ -276,7 +275,9 @@ async def _find_duplicate_groups(
     groups: list[ExpenseDuplicateGroup] = []
     seen_ids: set[tuple[int, ...]] = set()
 
-    def add_group(reason: str, expenses: list[Expense], payment_reference: str | None = None, description: str | None = None) -> None:
+    def add_group(
+        reason: str, expenses: list[Expense], payment_reference: str | None = None, description: str | None = None
+    ) -> None:
         ids = tuple(sorted(expense.id for expense in expenses))
         if len(ids) < 2 or ids in seen_ids:
             return
@@ -337,9 +338,7 @@ async def _merge_expense_links(
         .values(matched_id=keep.id)
     )
     await db.execute(
-        update(MonthlyObligation)
-        .where(MonthlyObligation.expense_id == duplicate.id)
-        .values(expense_id=keep.id)
+        update(MonthlyObligation).where(MonthlyObligation.expense_id == duplicate.id).values(expense_id=keep.id)
     )
 
 
@@ -452,7 +451,10 @@ async def merge_expense_duplicates(
             keep.category = duplicate.category
         if keep.contract_id is None and duplicate.contract_id is not None:
             keep.contract_id = duplicate.contract_id
-        if keep.project_id in (None, unassigned_project_id) and duplicate.project_id not in (None, unassigned_project_id):
+        if keep.project_id in (None, unassigned_project_id) and duplicate.project_id not in (
+            None,
+            unassigned_project_id,
+        ):
             keep.project_id = duplicate.project_id
         if keep.paid_date is None and duplicate.paid_date is not None:
             keep.paid_date = duplicate.paid_date
@@ -677,7 +679,9 @@ async def update_expense(
     if item_payload is not None:
         expense_items = _normalize_expense_items(item_payload)
         dump["amount"] = _expense_amount_from_items(expense_items, dump.get("amount", expense.amount))
-        dump["description"] = _expense_description_from_items(expense_items, dump.get("description", expense.description))
+        dump["description"] = _expense_description_from_items(
+            expense_items, dump.get("description", expense.description)
+        )
         expense.items = _build_expense_item_models(expense_items)
 
     for key, value in dump.items():
@@ -697,22 +701,18 @@ async def update_expense(
 async def _admin_clear_expense_links(db: AsyncSession, expense_ids: list[int]) -> None:
     await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id.in_(expense_ids)))
     await db.execute(
-        update(Expense)
-        .where(Expense.reversed_expense_id.in_(expense_ids))
-        .values(reversed_expense_id=None)
+        update(Expense).where(Expense.reversed_expense_id.in_(expense_ids)).values(reversed_expense_id=None)
     )
-    await db.execute(
-        update(Expense)
-        .where(Expense.reversal_of_id.in_(expense_ids))
-        .values(reversal_of_id=None)
-    )
+    await db.execute(update(Expense).where(Expense.reversal_of_id.in_(expense_ids)).values(reversal_of_id=None))
     await db.execute(
         update(BankTransaction)
         .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id.in_(expense_ids))
         .values(status="unmatched", matched_type=None, matched_id=None)
     )
     await db.execute(update(CashEntry).where(CashEntry.expense_id.in_(expense_ids)).values(expense_id=None))
-    await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id.in_(expense_ids)).values(expense_id=None))
+    await db.execute(
+        update(MonthlyObligation).where(MonthlyObligation.expense_id.in_(expense_ids)).values(expense_id=None)
+    )
 
     invoice_result = await db.execute(select(IncomingInvoice).where(IncomingInvoice.expense_id.in_(expense_ids)))
     for invoice in invoice_result.scalars().all():
@@ -787,7 +787,9 @@ async def delete_expense(
             .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == expense.id)
             .values(status="unmatched", matched_type=None, matched_id=None)
         )
-        await db.execute(update(MonthlyObligation).where(MonthlyObligation.expense_id == expense.id).values(expense_id=None))
+        await db.execute(
+            update(MonthlyObligation).where(MonthlyObligation.expense_id == expense.id).values(expense_id=None)
+        )
         await db.delete(expense)
         await db.commit()
         return {"ok": True, "deleted": True, "restored_expense_id": original_expense.id if original_expense else None}

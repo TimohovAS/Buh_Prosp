@@ -10,7 +10,12 @@ import SortIndicator from '../components/SortIndicator'
 import { UI_DASH, formatDateSr as fmtDate, formatMoney2OrDash as fmt } from '../utils/formatters'
 
 function LoanStatus({ status }) {
-  const label = status === 'open' ? tr('loanOpen') : status === 'repaid' ? tr('loanRepaidComplete') : tr('statusCancelled')
+  const label =
+    status === 'open'
+      ? tr('loanOpen')
+      : status === 'repaid'
+        ? tr('loanRepaidComplete')
+        : tr('statusCancelled')
   const tone = status === 'open' ? 'warning' : status === 'repaid' ? 'success' : 'muted'
   return <StatusBadge tone={tone}>{label}</StatusBadge>
 }
@@ -56,13 +61,20 @@ function ownerFundsTooltip(movement) {
     `${tr('counterpartyName')}: ${movement.counterparty_name || UI_DASH}`,
     `${tr('bankTxReference')}: ${movement.bank_reference || UI_DASH}`,
     movement.purpose ? `${tr('description')}: ${movement.purpose}` : null,
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function ownerFundsCounterpartyName(movements) {
   const rawName = movements.find((movement) => movement.counterparty_name)?.counterparty_name || ''
-  const withoutAccount = rawName.replace(/\b\d{10,}\b/g, ' ').replace(/\s+/g, ' ').trim()
-  const addressStart = withoutAccount.search(/\s(?:VOJVOĐANSKIH|VOJVODANSKIH|VOJVODJANSKIH|ВОЈВОЂАНСКИХ|BULEVAR|RITSKA|УЛ\.|UL\.|\d{1,4}\b)/i)
+  const withoutAccount = rawName
+    .replace(/\b\d{10,}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const addressStart = withoutAccount.search(
+    /\s(?:VOJVOĐANSKIH|VOJVODANSKIH|VOJVODJANSKIH|ВОЈВОЂАНСКИХ|BULEVAR|RITSKA|УЛ\.|UL\.|\d{1,4}\b)/i
+  )
   const displayName = addressStart > 0 ? withoutAccount.slice(0, addressStart).trim() : withoutAccount
   return displayName || tr('bankTxOwnerFundsLabel')
 }
@@ -112,7 +124,8 @@ export default function CounterpartyLoans() {
       setOwnerFundsItems(ownerFunds)
       const openId = new URLSearchParams(location.search).get('open')
       if (openId && includeLoans) {
-        const selected = loans.find((loan) => String(loan.id) === openId) || await api.counterpartyLoans.get(openId)
+        const selected =
+          loans.find((loan) => String(loan.id) === openId) || (await api.counterpartyLoans.get(openId))
         openLoanDetail(selected)
       }
     } finally {
@@ -126,19 +139,23 @@ export default function CounterpartyLoans() {
       setItems([])
       setOwnerFundsItems([])
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActivePage, typeFilter, statusFilter, location.search])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = q
-      ? items.filter((loan) =>
-          (loan.counterparty_name || '').toLowerCase().includes(q) ||
-          (loan.agreement_number || '').toLowerCase().includes(q))
+      ? items.filter(
+          (loan) =>
+            (loan.counterparty_name || '').toLowerCase().includes(q) ||
+            (loan.agreement_number || '').toLowerCase().includes(q)
+        )
       : items
     return [...rows].sort((left, right) => {
       const a = left[sortCol] ?? ''
       const b = right[sortCol] ?? ''
-      if (typeof a === 'number' || typeof b === 'number') return sortAsc ? Number(a) - Number(b) : Number(b) - Number(a)
+      if (typeof a === 'number' || typeof b === 'number')
+        return sortAsc ? Number(a) - Number(b) : Number(b) - Number(a)
       return sortAsc ? String(a).localeCompare(String(b)) : String(b).localeCompare(String(a))
     })
   }, [items, search, sortAsc, sortCol])
@@ -146,19 +163,24 @@ export default function CounterpartyLoans() {
   const filteredOwnerFunds = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return ownerFundsItems
-    return ownerFundsItems.filter((movement) =>
-      (movement.counterparty_name || '').toLowerCase().includes(q) ||
-      (movement.purpose || '').toLowerCase().includes(q) ||
-      (movement.bank_reference || '').toLowerCase().includes(q))
+    return ownerFundsItems.filter(
+      (movement) =>
+        (movement.counterparty_name || '').toLowerCase().includes(q) ||
+        (movement.purpose || '').toLowerCase().includes(q) ||
+        (movement.bank_reference || '').toLowerCase().includes(q)
+    )
   }, [ownerFundsItems, search])
 
   const ownerFundsTotals = useMemo(() => {
-    const totals = filteredOwnerFunds.reduce((acc, movement) => {
-      const amount = Number(movement.amount || 0)
-      if (movement.direction === 'in') acc.in += amount
-      if (movement.direction === 'out') acc.out += amount
-      return acc
-    }, { in: 0, out: 0 })
+    const totals = filteredOwnerFunds.reduce(
+      (acc, movement) => {
+        const amount = Number(movement.amount || 0)
+        if (movement.direction === 'in') acc.in += amount
+        if (movement.direction === 'out') acc.out += amount
+        return acc
+      },
+      { in: 0, out: 0 }
+    )
     return { ...totals, balance: totals.in - totals.out }
   }, [filteredOwnerFunds])
 
@@ -220,112 +242,171 @@ export default function CounterpartyLoans() {
     <div className="page">
       <PageHeader
         title={tr('counterpartyLoans')}
-        actions={(
+        actions={
           <>
-            <select className="form-input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} style={{ width: 150 }}>
+            <select
+              className="form-input"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              style={{ width: 150 }}
+            >
               <option value="">{tr('filterAll')}</option>
               <option value="borrowed">{tr('loanBorrowed')}</option>
               <option value="issued">{tr('loanIssued')}</option>
               <option value="owner_funds">{tr('bankTxOwnerFundsLabel')}</option>
             </select>
-            <select className="form-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ width: 145 }} disabled={typeFilter === 'owner_funds'}>
+            <select
+              className="form-input"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              style={{ width: 145 }}
+              disabled={typeFilter === 'owner_funds'}
+            >
               <option value="">{tr('filterAll')}</option>
               <option value="open">{tr('loanOpen')}</option>
               <option value="repaid">{tr('loanRepaidComplete')}</option>
             </select>
-            <SearchInput placeholder={tr('search')} value={search} onChange={setSearch} style={{ width: 230 }} />
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 230 }}
+            />
           </>
-        )}
+        }
       />
       <div className="page-body">
         {typeFilter !== 'owner_funds' ? (
-        <div className="card">
-          <div className="table-wrap">
-            <table className="loan-list-table">
-              <LoanTableColGroup />
-              <thead>
-                <tr>
-                  <th onClick={() => toggleSort('start_date')}>{tr('date')} <SortIndicator active={sortCol === 'start_date'} asc={sortAsc} /></th>
-                  <th onClick={() => toggleSort('counterparty_name')}>{tr('counterpartyName')} <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} /></th>
-                  <th>{tr('loanType')}</th>
-                  <th>{tr('loanAgreementNumber')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('loanDisbursed')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('loanRepaid')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
-                  <th>{tr('status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={8}>{tr('loading')}</td></tr>
-                  : filtered.length === 0 ? <tr><td colSpan={8}>{tr('noRecords')}</td></tr>
-                    : filtered.map((loan) => (
-                      <tr key={loan.id} className="record-row" tabIndex={0} onClick={() => openLoanDetail(loan)} onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          openLoanDetail(loan)
-                        }
-                      }}>
+          <div className="card">
+            <div className="table-wrap">
+              <table className="loan-list-table">
+                <LoanTableColGroup />
+                <thead>
+                  <tr>
+                    <th onClick={() => toggleSort('start_date')}>
+                      {tr('date')} <SortIndicator active={sortCol === 'start_date'} asc={sortAsc} />
+                    </th>
+                    <th onClick={() => toggleSort('counterparty_name')}>
+                      {tr('counterpartyName')}{' '}
+                      <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} />
+                    </th>
+                    <th>{tr('loanType')}</th>
+                    <th>{tr('loanAgreementNumber')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('loanDisbursed')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('loanRepaid')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
+                    <th>{tr('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8}>{tr('loading')}</td>
+                    </tr>
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>{tr('noRecords')}</td>
+                    </tr>
+                  ) : (
+                    filtered.map((loan) => (
+                      <tr
+                        key={loan.id}
+                        className="record-row"
+                        tabIndex={0}
+                        onClick={() => openLoanDetail(loan)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openLoanDetail(loan)
+                          }
+                        }}
+                      >
                         <td>{fmtDate(loan.start_date)}</td>
                         <td>{loan.counterparty_name}</td>
                         <td>{typeLabel(loan.loan_type)}</td>
                         <td>{loan.agreement_number || UI_DASH}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(loan.disbursed_amount)}</td>
                         <td style={{ textAlign: 'right' }}>{fmt(loan.repaid_amount)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(loan.outstanding_amount)}</td>
-                        <td><LoanStatus status={loan.status} /></td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                          {fmt(loan.outstanding_amount)}
+                        </td>
+                        <td>
+                          <LoanStatus status={loan.status} />
+                        </td>
                       </tr>
-                    ))}
-              </tbody>
-            </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         ) : null}
         {typeFilter === '' || typeFilter === 'owner_funds' ? (
-        <div className="card loan-owner-funds-card">
-          <div className="loan-section-header">
-            <h3>{tr('bankTxOwnerFundsLabel')}</h3>
-          </div>
-          <div className="table-wrap">
-            <table className="loan-list-table loan-owner-funds-table">
-              <LoanTableColGroup />
-              <thead>
-                <tr>
-                  <th>{tr('date')}</th>
-                  <th>{tr('counterpartyName')}</th>
-                  <th>{tr('loanType')}</th>
-                  <th>{tr('loanAgreementNumber')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
-                  <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
-                  <th>{tr('status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={8}>{tr('loading')}</td></tr>
-                  : !ownerFundsSummary ? <tr><td colSpan={8}>{tr('noRecords')}</td></tr>
-                    : (
-                      <tr className="record-row" tabIndex={0} onClick={() => setOwnerFundsSummaryOpen(true)} onKeyDown={(event) => {
+          <div className="card loan-owner-funds-card">
+            <div className="loan-section-header">
+              <h3>{tr('bankTxOwnerFundsLabel')}</h3>
+            </div>
+            <div className="table-wrap">
+              <table className="loan-list-table loan-owner-funds-table">
+                <LoanTableColGroup />
+                <thead>
+                  <tr>
+                    <th>{tr('date')}</th>
+                    <th>{tr('counterpartyName')}</th>
+                    <th>{tr('loanType')}</th>
+                    <th>{tr('loanAgreementNumber')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('ownerFundsIn')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('ownerFundsOut')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('loanOutstanding')}</th>
+                    <th>{tr('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8}>{tr('loading')}</td>
+                    </tr>
+                  ) : !ownerFundsSummary ? (
+                    <tr>
+                      <td colSpan={8}>{tr('noRecords')}</td>
+                    </tr>
+                  ) : (
+                    <tr
+                      className="record-row"
+                      tabIndex={0}
+                      onClick={() => setOwnerFundsSummaryOpen(true)}
+                      onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
                           setOwnerFundsSummaryOpen(true)
                         }
-                      }}>
-                        <td>{fmtDate(ownerFundsSummary.start_date)}</td>
-                        <td title={filteredOwnerFunds.find((movement) => movement.counterparty_name)?.counterparty_name || ownerFundsSummary.counterparty_name}>
-                          {ownerFundsSummary.counterparty_name}
-                        </td>
-                        <td>{tr('bankTxOwnerFundsLabel')}</td>
-                        <td>{UI_DASH}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.disbursed_amount)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.repaid_amount)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(ownerFundsSummary.outstanding_amount)}</td>
-                        <td><LoanStatus status={ownerFundsSummary.status} /></td>
-                      </tr>
-                    )}
-              </tbody>
-            </table>
+                      }}
+                    >
+                      <td>{fmtDate(ownerFundsSummary.start_date)}</td>
+                      <td
+                        title={
+                          filteredOwnerFunds.find((movement) => movement.counterparty_name)
+                            ?.counterparty_name || ownerFundsSummary.counterparty_name
+                        }
+                      >
+                        {ownerFundsSummary.counterparty_name}
+                      </td>
+                      <td>{tr('bankTxOwnerFundsLabel')}</td>
+                      <td>{UI_DASH}</td>
+                      <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.disbursed_amount)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmt(ownerFundsSummary.repaid_amount)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        {fmt(ownerFundsSummary.outstanding_amount)}
+                      </td>
+                      <td>
+                        <LoanStatus status={ownerFundsSummary.status} />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         ) : null}
       </div>
       <Modal
@@ -338,12 +419,32 @@ export default function CounterpartyLoans() {
         {detail ? (
           <div className="loan-detail-layout">
             <div className="loan-detail-summary">
-              <div><span>{tr('counterpartyName')}</span><strong>{detail.counterparty_name}</strong></div>
-              <div><span>{tr('loanType')}</span><strong>{typeLabel(detail.loan_type)}</strong></div>
-              <div><span>{tr('loanAgreementNumber')}</span><strong>{detail.agreement_number || UI_DASH}</strong></div>
-              <div><span>{tr('loanDueDate')}</span><strong>{fmtDate(detail.due_date)}</strong></div>
-              <div><span>{tr('loanOutstanding')}</span><strong>{fmt(detail.outstanding_amount)} {detail.currency}</strong></div>
-              <div><span>{tr('status')}</span><LoanStatus status={detail.status} /></div>
+              <div>
+                <span>{tr('counterpartyName')}</span>
+                <strong>{detail.counterparty_name}</strong>
+              </div>
+              <div>
+                <span>{tr('loanType')}</span>
+                <strong>{typeLabel(detail.loan_type)}</strong>
+              </div>
+              <div>
+                <span>{tr('loanAgreementNumber')}</span>
+                <strong>{detail.agreement_number || UI_DASH}</strong>
+              </div>
+              <div>
+                <span>{tr('loanDueDate')}</span>
+                <strong>{fmtDate(detail.due_date)}</strong>
+              </div>
+              <div>
+                <span>{tr('loanOutstanding')}</span>
+                <strong>
+                  {fmt(detail.outstanding_amount)} {detail.currency}
+                </strong>
+              </div>
+              <div>
+                <span>{tr('status')}</span>
+                <LoanStatus status={detail.status} />
+              </div>
               <div className="loan-detail-note">
                 <span>{tr('note')}</span>
                 <textarea
@@ -384,9 +485,13 @@ export default function CounterpartyLoans() {
                       </td>
                       <td>
                         {movement.bank_reference || UI_DASH}
-                        {movement.bank_purpose ? <div className="loan-movement-note">{movement.bank_purpose}</div> : null}
+                        {movement.bank_purpose ? (
+                          <div className="loan-movement-note">{movement.bank_purpose}</div>
+                        ) : null}
                       </td>
-                      <td style={{ textAlign: 'right' }}>{fmt(movement.amount)} {movement.currency}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {fmt(movement.amount)} {movement.currency}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -405,12 +510,40 @@ export default function CounterpartyLoans() {
         {ownerFundsSummary ? (
           <div className="loan-detail-layout">
             <div className="loan-detail-summary">
-              <div><span>{tr('counterpartyName')}</span><strong>{ownerFundsSummary.counterparty_name}</strong></div>
-              <div><span>{tr('loanType')}</span><strong>{tr('bankTxOwnerFundsLabel')}</strong></div>
-              <div><span>{tr('date')}</span><strong>{fmtDate(ownerFundsSummary.start_date)}</strong></div>
-              <div><span>{tr('ownerFundsIn')}</span><strong>{ownerFundsAmount(ownerFundsSummary.disbursed_amount, ownerFundsSummary.currency)}</strong></div>
-              <div><span>{tr('ownerFundsOut')}</span><strong>{ownerFundsAmount(ownerFundsSummary.repaid_amount, ownerFundsSummary.currency)}</strong></div>
-              <div><span>{tr('ownerFundsCompanyOwes')}</span><strong className={ownerFundsSummary.outstanding_amount >= 0 ? 'amount-positive' : 'amount-negative'}>{ownerFundsAmount(ownerFundsSummary.outstanding_amount, ownerFundsSummary.currency)}</strong></div>
+              <div>
+                <span>{tr('counterpartyName')}</span>
+                <strong>{ownerFundsSummary.counterparty_name}</strong>
+              </div>
+              <div>
+                <span>{tr('loanType')}</span>
+                <strong>{tr('bankTxOwnerFundsLabel')}</strong>
+              </div>
+              <div>
+                <span>{tr('date')}</span>
+                <strong>{fmtDate(ownerFundsSummary.start_date)}</strong>
+              </div>
+              <div>
+                <span>{tr('ownerFundsIn')}</span>
+                <strong>
+                  {ownerFundsAmount(ownerFundsSummary.disbursed_amount, ownerFundsSummary.currency)}
+                </strong>
+              </div>
+              <div>
+                <span>{tr('ownerFundsOut')}</span>
+                <strong>
+                  {ownerFundsAmount(ownerFundsSummary.repaid_amount, ownerFundsSummary.currency)}
+                </strong>
+              </div>
+              <div>
+                <span>{tr('ownerFundsCompanyOwes')}</span>
+                <strong
+                  className={
+                    ownerFundsSummary.outstanding_amount >= 0 ? 'amount-positive' : 'amount-negative'
+                  }
+                >
+                  {ownerFundsAmount(ownerFundsSummary.outstanding_amount, ownerFundsSummary.currency)}
+                </strong>
+              </div>
             </div>
             <div className="table-wrap">
               <table className="loan-movement-table">
@@ -426,18 +559,35 @@ export default function CounterpartyLoans() {
                 </thead>
                 <tbody>
                   {filteredOwnerFunds.map((movement) => (
-                    <tr key={movement.id} className="record-row" tabIndex={0} title={ownerFundsTooltip(movement)} onClick={() => setOwnerFundsDetail(movement)} onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setOwnerFundsDetail(movement)
-                      }
-                    }}>
+                    <tr
+                      key={movement.id}
+                      className="record-row"
+                      tabIndex={0}
+                      title={ownerFundsTooltip(movement)}
+                      onClick={() => setOwnerFundsDetail(movement)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setOwnerFundsDetail(movement)
+                        }
+                      }}
+                    >
                       <td>{fmtDate(movement.date)}</td>
                       <td>{ownerFundsLabel(movement)}</td>
                       <td className="loan-owner-funds-description">{ownerFundsDescription(movement)}</td>
-                      <td style={{ textAlign: 'right' }}>{movement.direction === 'in' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}</td>
-                      <td style={{ textAlign: 'right' }}>{movement.direction === 'out' ? ownerFundsAmount(movement.amount, movement.currency) : UI_DASH}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{ownerFundsAmount(ownerFundsBalanceById[movement.id] || 0, movement.currency)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {movement.direction === 'in'
+                          ? ownerFundsAmount(movement.amount, movement.currency)
+                          : UI_DASH}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {movement.direction === 'out'
+                          ? ownerFundsAmount(movement.amount, movement.currency)
+                          : UI_DASH}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        {ownerFundsAmount(ownerFundsBalanceById[movement.id] || 0, movement.currency)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -449,22 +599,50 @@ export default function CounterpartyLoans() {
       <Modal
         isOpen={!!ownerFundsDetail}
         onClose={() => setOwnerFundsDetail(null)}
-        title={ownerFundsDetail ? `${tr('bankTxOwnerFundsLabel')} #${ownerFundsDetail.id}` : tr('bankTxOwnerFundsLabel')}
+        title={
+          ownerFundsDetail
+            ? `${tr('bankTxOwnerFundsLabel')} #${ownerFundsDetail.id}`
+            : tr('bankTxOwnerFundsLabel')
+        }
         className="loan-detail-modal"
         maxWidth="900px"
       >
         {ownerFundsDetail ? (
           <div className="loan-detail-layout">
             <div className="loan-detail-summary">
-              <div><span>{tr('counterpartyName')}</span><strong>{ownerFundsDetail.counterparty_name || UI_DASH}</strong></div>
-              <div><span>{tr('type')}</span><strong>{ownerFundsLabel(ownerFundsDetail)}</strong></div>
-              <div><span>{tr('date')}</span><strong>{fmtDate(ownerFundsDetail.date)}</strong></div>
-              <div><span>{tr('amount')}</span><strong>{fmt(ownerFundsDetail.amount)} {ownerFundsDetail.currency}</strong></div>
-              <div><span>{tr('bankTxReference')}</span><strong>{ownerFundsDetail.bank_reference || UI_DASH}</strong></div>
-              <div className="loan-detail-note"><span>{tr('description')}</span><div className="record-field-text">{ownerFundsDetail.purpose || UI_DASH}</div></div>
+              <div>
+                <span>{tr('counterpartyName')}</span>
+                <strong>{ownerFundsDetail.counterparty_name || UI_DASH}</strong>
+              </div>
+              <div>
+                <span>{tr('type')}</span>
+                <strong>{ownerFundsLabel(ownerFundsDetail)}</strong>
+              </div>
+              <div>
+                <span>{tr('date')}</span>
+                <strong>{fmtDate(ownerFundsDetail.date)}</strong>
+              </div>
+              <div>
+                <span>{tr('amount')}</span>
+                <strong>
+                  {fmt(ownerFundsDetail.amount)} {ownerFundsDetail.currency}
+                </strong>
+              </div>
+              <div>
+                <span>{tr('bankTxReference')}</span>
+                <strong>{ownerFundsDetail.bank_reference || UI_DASH}</strong>
+              </div>
+              <div className="loan-detail-note">
+                <span>{tr('description')}</span>
+                <div className="record-field-text">{ownerFundsDetail.purpose || UI_DASH}</div>
+              </div>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => api.reports.downloadOwnerFundsPdf(ownerFundsDetail.id)}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => api.reports.downloadOwnerFundsPdf(ownerFundsDetail.id)}
+              >
                 {tr('bankTxOwnerFundsDocument')}
               </button>
             </div>

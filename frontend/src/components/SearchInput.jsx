@@ -19,12 +19,7 @@ export default function SearchInput({
         {...props}
       />
       {value ? (
-        <button
-          type="button"
-          className="search-input-clear"
-          onClick={() => onChange('')}
-          aria-label="clear"
-        >
+        <button type="button" className="search-input-clear" onClick={() => onChange('')} aria-label="clear">
           {UI_CLEAR}
         </button>
       ) : null}

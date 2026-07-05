@@ -1,4 +1,5 @@
 """Главный модуль приложения ProspEl."""
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -62,6 +63,7 @@ async def _bootstrap_users_and_payments() -> None:
             print("[startup] No users found. Admin auto-bootstrap is disabled in prod.")
 
         from backend.payments_service import ensure_payment_types
+
         await ensure_payment_types(db)
         await db.commit()
 
@@ -105,6 +107,7 @@ async def log_unhandled_exceptions(request: Request, call_next):
     except Exception:
         logger.exception("Unhandled exception during %s %s", request.method, request.url.path)
         raise
+
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(income_router, prefix="/api")

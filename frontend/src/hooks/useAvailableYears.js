@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getCurrentYear, getValidYearSelection, normalizeAvailableYears } from '../components/YearFilterSelect'
+import { getCurrentYear, getValidYearSelection, normalizeAvailableYears } from '../utils/years'
 
 export default function useAvailableYears({ initialYear, includeAllTime = true } = {}) {
   const currentYear = getCurrentYear()
   const [year, setYear] = useState(initialYear ?? (includeAllTime ? '' : currentYear))
   const [availableYears, setAvailableYears] = useState([currentYear])
 
-  const applyAvailableYears = useCallback((years) => {
-    setAvailableYears(normalizeAvailableYears(years, currentYear))
-  }, [currentYear])
+  const applyAvailableYears = useCallback(
+    (years) => {
+      setAvailableYears(normalizeAvailableYears(years, currentYear))
+    },
+    [currentYear]
+  )
 
   const resetAvailableYears = useCallback(() => {
     setAvailableYears(normalizeAvailableYears([], currentYear))

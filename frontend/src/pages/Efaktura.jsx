@@ -40,7 +40,10 @@ function ResultSummary({ result }) {
         </div>
         <div className="stat-card">
           <div className="stat-label">{tr('efakturaErrors')}</div>
-          <div className="stat-value" style={{ color: result.error_count ? 'var(--color-danger)' : undefined }}>
+          <div
+            className="stat-value"
+            style={{ color: result.error_count ? 'var(--color-danger)' : undefined }}
+          >
             {result.error_count || 0}
           </div>
         </div>
@@ -59,7 +62,10 @@ function ResultSummary({ result }) {
         {'download_error_count' in result ? (
           <div className="stat-card">
             <div className="stat-label">{tr('efakturaDownloadErrors')}</div>
-            <div className="stat-value" style={{ color: result.download_error_count ? 'var(--color-danger)' : undefined }}>
+            <div
+              className="stat-value"
+              style={{ color: result.download_error_count ? 'var(--color-danger)' : undefined }}
+            >
               {result.download_error_count || 0}
             </div>
           </div>
@@ -72,7 +78,8 @@ function ResultSummary({ result }) {
           <ul style={{ margin: '0.5rem 0 0 1rem' }}>
             {result.errors.slice(0, 10).map((item, index) => (
               <li key={`${item.file_name || item.invoice_number || 'error'}-${index}`}>
-                {item.file_name || item.invoice_number || tr('efakturaDocument')}: {item.error || tr('efakturaUnknownError')}
+                {item.file_name || item.invoice_number || tr('efakturaDocument')}:{' '}
+                {item.error || tr('efakturaUnknownError')}
               </li>
             ))}
           </ul>
@@ -85,7 +92,8 @@ function ResultSummary({ result }) {
           <ul style={{ margin: '0.5rem 0 0 1rem' }}>
             {result.download_errors.slice(0, 10).map((item, index) => (
               <li key={`${item.file_name || item.invoice_number || 'download'}-${index}`}>
-                {item.file_name || item.invoice_number || tr('efakturaDocument')}: {item.error || tr('efakturaUnknownError')}
+                {item.file_name || item.invoice_number || tr('efakturaDocument')}:{' '}
+                {item.error || tr('efakturaUnknownError')}
               </li>
             ))}
           </ul>
@@ -142,6 +150,7 @@ export default function Efaktura() {
   useEffect(() => {
     if (!isActivePage) return
     loadHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActivePage])
 
   const handleImportClick = () => {
@@ -215,7 +224,10 @@ export default function Efaktura() {
 
       <div className="page-body">
         {pageError ? (
-          <div className="settings-callout" style={{ marginBottom: '1rem', borderColor: 'rgba(239, 68, 68, 0.35)' }}>
+          <div
+            className="settings-callout"
+            style={{ marginBottom: '1rem', borderColor: 'rgba(239, 68, 68, 0.35)' }}
+          >
             <strong>{tr('loadError')}</strong>
             <div>{pageError}</div>
           </div>
@@ -237,11 +249,24 @@ export default function Efaktura() {
               </div>
               {settingsInfo ? (
                 <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
-                  <div>{tr('efakturaBaseUrl')}: {effectiveBaseUrl}</div>
-                  <div>{tr('efakturaIncomingLabel')}: {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}</div>
-                  <div>{tr('efakturaOutgoingLabel')}: {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}</div>
-                  <div>{tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}</div>
-                  <div>{tr('efakturaSavePdf')}: {settingsInfo.efaktura_save_pdf ? tr('yes') : tr('no')}</div>
+                  <div>
+                    {tr('efakturaBaseUrl')}: {effectiveBaseUrl}
+                  </div>
+                  <div>
+                    {tr('efakturaIncomingLabel')}:{' '}
+                    {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}
+                  </div>
+                  <div>
+                    {tr('efakturaOutgoingLabel')}:{' '}
+                    {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}
+                  </div>
+                  <div>
+                    {tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0}{' '}
+                    {tr('efakturaDaysShort')}
+                  </div>
+                  <div>
+                    {tr('efakturaSavePdf')}: {settingsInfo.efaktura_save_pdf ? tr('yes') : tr('no')}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -251,7 +276,15 @@ export default function Efaktura() {
         <ResultSummary result={lastResult} />
 
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '1rem',
+            }}
+          >
             <h3 style={{ margin: 0 }}>{tr('efakturaHistoryTitle')}</h3>
             <button className="btn btn-secondary btn-sm" onClick={loadHistory} disabled={historyLoading}>
               {tr('serviceBackupsRefresh')}
@@ -282,17 +315,27 @@ export default function Efaktura() {
                   {history.map((item) => (
                     <tr key={item.id}>
                       <td>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</td>
-                      <td>{item.direction === 'incoming' ? tr('efakturaIncoming') : tr('efakturaOutgoing')}</td>
+                      <td>
+                        {item.direction === 'incoming' ? tr('efakturaIncoming') : tr('efakturaOutgoing')}
+                      </td>
                       <td>
                         <div>{item.invoice_number || '—'}</div>
-                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{item.issued_date || '—'}</div>
+                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                          {item.issued_date || '—'}
+                        </div>
                       </td>
-                      <td>{item.direction === 'incoming' ? (item.supplier_name || '—') : (item.customer_name || '—')}</td>
-                      <td>{formatAmount(item.amount_rsd)}</td>
                       <td>
-                        -
+                        {item.direction === 'incoming'
+                          ? item.supplier_name || '—'
+                          : item.customer_name || '—'}
                       </td>
-                      <td>{item.imported_as === 'expense' ? tr('efakturaImportedAsExpense') : tr('efakturaImportedAsIncome')}</td>
+                      <td>{formatAmount(item.amount_rsd)}</td>
+                      <td>-</td>
+                      <td>
+                        {item.imported_as === 'expense'
+                          ? tr('efakturaImportedAsExpense')
+                          : tr('efakturaImportedAsIncome')}
+                      </td>
                       <td>{item.imported_record_id || '—'}</td>
                       <td>{item.source || '—'}</td>
                     </tr>

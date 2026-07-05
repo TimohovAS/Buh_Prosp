@@ -1,4 +1,5 @@
 """Remove pending cash withdrawals already represented by linked bank withdrawals."""
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,7 @@ def get_db_path() -> Path:
     url = get_settings().database_url
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            raw = url[len(prefix):]
+            raw = url[len(prefix) :]
             path = Path(raw)
             if not path.is_absolute():
                 return (ROOT_DIR / path).resolve()
@@ -63,7 +64,7 @@ def build_pending_query(args: argparse.Namespace) -> tuple[str, list[object]]:
             COALESCE(currency, 'RSD') AS currency,
             description
         FROM cash_entries
-        WHERE {' AND '.join(conditions)}
+        WHERE {" AND ".join(conditions)}
         ORDER BY date, id
     """
     return sql, params
@@ -110,7 +111,7 @@ def find_duplicate_withdrawals(
             b.purpose
         FROM cash_entries w
         JOIN bank_transactions b ON b.id = w.bank_transaction_id
-        WHERE {' AND '.join(conditions)}
+        WHERE {" AND ".join(conditions)}
         ORDER BY ABS(julianday(w.date) - julianday(?)), w.id
         LIMIT 2
         """,
@@ -198,11 +199,15 @@ def build_parser() -> argparse.ArgumentParser:
         description="Remove pending cash withdrawal rows duplicated by linked bank withdrawal rows."
     )
     parser.add_argument("--dry-run", action="store_true", help="Print candidate deletes without committing.")
-    parser.add_argument("--entry-id", action="append", type=int, help="Limit to a pending cash entry id. Can be repeated.")
+    parser.add_argument(
+        "--entry-id", action="append", type=int, help="Limit to a pending cash entry id. Can be repeated."
+    )
     parser.add_argument("--date", help="Limit pending entries to YYYY-MM-DD.")
     parser.add_argument("--amount", type=parse_amount, help="Limit pending entries to an absolute amount.")
     parser.add_argument("--bank-reference", help="Require the duplicate withdrawal to use this bank reference.")
-    parser.add_argument("--max-days", type=int, default=14, help="Maximum days from pending entry date to bank withdrawal date.")
+    parser.add_argument(
+        "--max-days", type=int, default=14, help="Maximum days from pending entry date to bank withdrawal date."
+    )
     return parser
 
 

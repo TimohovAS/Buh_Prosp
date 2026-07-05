@@ -1,4 +1,5 @@
 """Сервис обязательных платежей — по ТЗ решений Пореске управе."""
+
 from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,10 +49,7 @@ async def get_or_create_obligations(
         select(YearDecision)
         .where(
             YearDecision.is_active == True,
-            (
-                (YearDecision.year == year)
-                | ((YearDecision.year == (year - 1)) & (YearDecision.is_provisional == True))
-            ),
+            ((YearDecision.year == year) | ((YearDecision.year == (year - 1)) & (YearDecision.is_provisional == True))),
         )
         .join(PaymentType)
     )

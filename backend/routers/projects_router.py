@@ -1,4 +1,5 @@
 """Роутер справочника проектов."""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,10 +28,12 @@ def _project_status_sort_order():
 
 def _project_response_with_meta(project: Project, movement_bounds: dict[int, dict] | None = None) -> ProjectResponse:
     movement_bounds = movement_bounds or {}
-    return ProjectResponse.model_validate(project).model_copy(update={
-        "client_name": project.client.name if project.client else None,
-        **movement_bounds.get(project.id, {}),
-    })
+    return ProjectResponse.model_validate(project).model_copy(
+        update={
+            "client_name": project.client.name if project.client else None,
+            **movement_bounds.get(project.id, {}),
+        }
+    )
 
 
 @router.get("", response_model=list[ProjectResponse])

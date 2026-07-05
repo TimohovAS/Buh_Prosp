@@ -1,4 +1,5 @@
 """One-time repair: convert legacy incoming eFaktura expenses into IncomingInvoice records."""
+
 from __future__ import annotations
 
 import asyncio

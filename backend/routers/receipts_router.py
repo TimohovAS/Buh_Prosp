@@ -294,9 +294,7 @@ async def export_project_purchase_receipts_xlsx(
     the columns shown in the UI modal. Labels follow the UI language
     (sr default, ru also supported)."""
     try:
-        payload = await get_project_receipt_purchases(
-            db, project_id=project_id, from_date=from_date, to_date=to_date
-        )
+        payload = await get_project_receipt_purchases(db, project_id=project_id, from_date=from_date, to_date=to_date)
     except ReceiptImportError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -316,15 +314,17 @@ async def export_project_purchase_receipts_xlsx(
     for item in payload.get("items", []):
         receipt_dt = item.get("receipt_datetime")
         date_str = str(receipt_dt)[:10] if receipt_dt else ""
-        sheet.append([
-            date_str,
-            item.get("seller_name") or "",
-            item.get("invoice_number") or "",
-            item.get("item_name") or "",
-            float(item.get("quantity") or 0),
-            float(item.get("unit_price") or 0),
-            float(item.get("total_amount") or 0),
-        ])
+        sheet.append(
+            [
+                date_str,
+                item.get("seller_name") or "",
+                item.get("invoice_number") or "",
+                item.get("item_name") or "",
+                float(item.get("quantity") or 0),
+                float(item.get("unit_price") or 0),
+                float(item.get("total_amount") or 0),
+            ]
+        )
 
     column_widths = [12, 36, 26, 48, 12, 18, 18]
     for index, width in enumerate(column_widths, start=1):

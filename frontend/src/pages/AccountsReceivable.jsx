@@ -23,7 +23,8 @@ export default function AccountsReceivable() {
 
   const load = () => {
     setLoading(true)
-    api.finance.ar()
+    api.finance
+      .ar()
       .then((data) => {
         setItems(data.items || [])
         setTotals(data.totals || null)
@@ -45,11 +46,13 @@ export default function AccountsReceivable() {
   const filtered = useMemo(() => {
     const s = (search || '').trim().toLowerCase()
     let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
-    if (s) rows = rows.filter(i =>
-      (i.invoice_number || '').toLowerCase().includes(s) ||
-      (i.client_name || UI_DASH).toLowerCase().includes(s) ||
-      amountSearchHay(i.amount).includes(s)
-    )
+    if (s)
+      rows = rows.filter(
+        (i) =>
+          (i.invoice_number || '').toLowerCase().includes(s) ||
+          (i.client_name || UI_DASH).toLowerCase().includes(s) ||
+          amountSearchHay(i.amount).includes(s)
+      )
     return [...rows].sort((a, b) => {
       const valA = a[sortCol] ?? 0
       const valB = b[sortCol] ?? 0
@@ -60,8 +63,11 @@ export default function AccountsReceivable() {
   }, [items, onlyOverdue, search, sortCol, sortAsc])
 
   const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc(v => !v)
-    else { setSortCol(col); setSortAsc(true) }
+    if (sortCol === col) setSortAsc((v) => !v)
+    else {
+      setSortCol(col)
+      setSortAsc(true)
+    }
   }
   if (loading && items.length === 0) {
     return (
@@ -76,28 +82,30 @@ export default function AccountsReceivable() {
     <div className="page">
       <PageHeader
         title={tr('financeAR')}
-        actions={(
+        actions={
           <>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={onlyOverdue}
-              onChange={(e) => setOnlyOverdue(e.target.checked)}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={onlyOverdue}
+                onChange={(e) => setOnlyOverdue(e.target.checked)}
+              />
+              <span>{tr('arFilterOverdue')}</span>
+            </label>
+            <SearchInput
+              placeholder={tr('search')}
+              value={search}
+              onChange={setSearch}
+              style={{ width: 200 }}
             />
-            <span>{tr('arFilterOverdue')}</span>
-          </label>
-          <SearchInput
-            placeholder={tr('search')}
-            value={search}
-            onChange={setSearch}
-            style={{ width: 200 }}
-          />
           </>
-        )}
+        }
       />
 
       {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>
+        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+          {error}
+        </div>
       )}
 
       {totals && (
@@ -118,19 +126,35 @@ export default function AccountsReceivable() {
           <table>
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>{tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>{tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>{tr('date')} <SortIndicator active={sortCol === 'issued_date'} asc={sortAsc} /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>{tr('valuta')} <SortIndicator active={sortCol === 'due_date'} asc={sortAsc} /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>{tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} /></th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>{tr('financeDaysOverdue')} <SortIndicator active={sortCol === 'days_overdue'} asc={sortAsc} /></th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>
+                  {tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} />
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>
+                  {tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} />
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>
+                  {tr('date')} <SortIndicator active={sortCol === 'issued_date'} asc={sortAsc} />
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>
+                  {tr('valuta')} <SortIndicator active={sortCol === 'due_date'} asc={sortAsc} />
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
+                  {tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} />
+                </th>
+                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>
+                  {tr('financeDaysOverdue')}{' '}
+                  <SortIndicator active={sortCol === 'days_overdue'} asc={sortAsc} />
+                </th>
                 <th style={{ width: 140 }}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                  <td
+                    colSpan={7}
+                    style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}
+                  >
                     {onlyOverdue ? tr('financeNoOverdue') : tr('noData')}
                   </td>
                 </tr>
@@ -146,11 +170,7 @@ export default function AccountsReceivable() {
                       {Math.max(0, i.days_overdue ?? 0)} {tr('days')}
                     </td>
                     <td>
-                      <a
-                        href="/bank"
-                        className="btn btn-sm btn-primary"
-                        style={{ textDecoration: 'none' }}
-                      >
+                      <a href="/bank" className="btn btn-sm btn-primary" style={{ textDecoration: 'none' }}>
                         {'\uD83D\uDD17'} {tr('bankTransactions')}
                       </a>
                     </td>

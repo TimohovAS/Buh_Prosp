@@ -1,4 +1,5 @@
 """Сервис входящих фактур: создание, закрытие (банк/наличка/взаимозачёт), баланс контрагентов."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -21,7 +22,6 @@ from backend.models import (
     Income,
     IncomingInvoice,
     IncomingInvoiceSettlement,
-    Project,
 )
 from backend.state_machine import (
     InvalidStatusTransition,
@@ -97,18 +97,15 @@ async def update_incoming_invoice(
     **fields,
 ) -> IncomingInvoice:
     if invoice.status in {"paid", "cancelled"}:
-        raise InvalidStatusTransition(
-            f"IncomingInvoice: cannot edit invoice in status '{invoice.status}'."
-        )
+        raise InvalidStatusTransition(f"IncomingInvoice: cannot edit invoice in status '{invoice.status}'.")
     for key, value in fields.items():
         if value is not None:
             setattr(invoice, key, value)
     if invoice.expense_id:
         expense = await db.get(Expense, invoice.expense_id)
         if expense and expense.status == "planned":
-            expense.description = (
-                f"Вх.ф. {invoice.invoice_number}: {invoice.counterparty_name}"
-                + (f" — {invoice.description}" if invoice.description else "")
+            expense.description = f"Вх.ф. {invoice.invoice_number}: {invoice.counterparty_name}" + (
+                f" — {invoice.description}" if invoice.description else ""
             )
             expense.amount = to_decimal(invoice.amount)
             expense.date = invoice.date
@@ -125,9 +122,7 @@ def _recalc_settled(invoice: IncomingInvoice, settlements: list[IncomingInvoiceS
 
 async def _load_settlements(db: AsyncSession, invoice_id: int) -> list[IncomingInvoiceSettlement]:
     result = await db.execute(
-        select(IncomingInvoiceSettlement).where(
-            IncomingInvoiceSettlement.incoming_invoice_id == invoice_id
-        )
+        select(IncomingInvoiceSettlement).where(IncomingInvoiceSettlement.incoming_invoice_id == invoice_id)
     )
     return list(result.scalars().all())
 
@@ -184,9 +179,7 @@ async def attach_existing_expense(
     expense_id: int,
 ) -> IncomingInvoice:
     if invoice.status in {"paid", "cancelled"}:
-        raise InvalidStatusTransition(
-            f"IncomingInvoice: cannot attach expense in status '{invoice.status}'."
-        )
+        raise InvalidStatusTransition(f"IncomingInvoice: cannot attach expense in status '{invoice.status}'.")
 
     settlements = await _load_settlements(db, invoice.id)
     if settlements:
@@ -245,10 +238,7 @@ async def attach_existing_expense(
         linked_cash_result = await db.execute(
             select(CashEntry.id).where(CashEntry.expense_id == previous_expense.id).limit(1)
         )
-        if (
-            linked_bank_result.scalar_one_or_none() is None
-            and linked_cash_result.scalar_one_or_none() is None
-        ):
+        if linked_bank_result.scalar_one_or_none() is None and linked_cash_result.scalar_one_or_none() is None:
             await db.delete(previous_expense)
 
     return invoice
@@ -265,9 +255,7 @@ async def settle_via_bank(
     created_by: int | None = None,
 ) -> IncomingInvoiceSettlement:
     if invoice.status in {"paid", "cancelled"}:
-        raise InvalidStatusTransition(
-            f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'."
-        )
+        raise InvalidStatusTransition(f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'.")
     tx = await db.get(BankTransaction, bank_transaction_id)
     if not tx:
         raise ValueError("BankTransaction not found.")
@@ -318,9 +306,7 @@ async def settle_via_cash(
     created_by: int | None = None,
 ) -> IncomingInvoiceSettlement:
     if invoice.status in {"paid", "cancelled"}:
-        raise InvalidStatusTransition(
-            f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'."
-        )
+        raise InvalidStatusTransition(f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'.")
 
     remaining = invoice.remaining_amount
     settle_amount = to_decimal(amount)
@@ -369,9 +355,7 @@ async def settle_via_offset(
     created_by: int | None = None,
 ) -> IncomingInvoiceSettlement:
     if invoice.status in {"paid", "cancelled"}:
-        raise InvalidStatusTransition(
-            f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'."
-        )
+        raise InvalidStatusTransition(f"IncomingInvoice: cannot settle invoice in status '{invoice.status}'.")
 
     income = await db.get(Income, income_id)
     if not income:
@@ -494,7 +478,9 @@ async def list_advance_invoice_candidates(
     if invoice.client_id:
         query = query.where(IncomingInvoice.client_id == invoice.client_id)
     else:
-        query = query.where(func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name))
+        query = query.where(
+            func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name)
+        )
 
     result = await db.execute(query)
     items: list[IncomingInvoice] = []
@@ -537,7 +523,9 @@ async def list_closing_invoice_candidates(
     if invoice.client_id:
         query = query.where(IncomingInvoice.client_id == invoice.client_id)
     else:
-        query = query.where(func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name))
+        query = query.where(
+            func.lower(IncomingInvoice.counterparty_name) == _normalize_counterparty_name(invoice.counterparty_name)
+        )
 
     result = await db.execute(query)
     items: list[IncomingInvoice] = []
@@ -579,10 +567,16 @@ async def link_advance_invoice(
         raise ValueError("Only paid advance invoices can be linked.")
     if to_decimal(advance_invoice.amount or ZERO_DECIMAL) <= ZERO_DECIMAL:
         raise ValueError("Advance invoice amount must be greater than zero.")
-    if advance_invoice.client_id and closing_invoice.client_id and advance_invoice.client_id != closing_invoice.client_id:
+    if (
+        advance_invoice.client_id
+        and closing_invoice.client_id
+        and advance_invoice.client_id != closing_invoice.client_id
+    ):
         raise ValueError("Advance and closing invoices must belong to the same counterparty.")
 
-    linked_closing = await _find_closing_invoice_for_advance(db, advance_invoice.id, exclude_invoice_id=closing_invoice.id)
+    linked_closing = await _find_closing_invoice_for_advance(
+        db, advance_invoice.id, exclude_invoice_id=closing_invoice.id
+    )
     if linked_closing is not None:
         raise ValueError("Advance invoice is already linked to another zero closing invoice.")
 
@@ -656,9 +650,7 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
 
     client_names: dict[int, str] = {}
     if client_ids:
-        clients_result = await db.execute(
-            select(Client.id, Client.name).where(Client.id.in_(client_ids))
-        )
+        clients_result = await db.execute(select(Client.id, Client.name).where(Client.id.in_(client_ids)))
         for cid, cname in clients_result.all():
             client_names[cid] = cname
 
@@ -666,16 +658,19 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
 
     def balance_entry(client_id, name):
         key = client_id or f"_unknown_{name}"
-        return balances.setdefault(key, {
-            "client_id": client_id,
-            "client_name": name or "—",
-            "document_receivables": ZERO_DECIMAL,
-            "issued_loans": ZERO_DECIMAL,
-            "receivables": ZERO_DECIMAL,
-            "document_payables": ZERO_DECIMAL,
-            "borrowed_loans": ZERO_DECIMAL,
-            "payables": ZERO_DECIMAL,
-        })
+        return balances.setdefault(
+            key,
+            {
+                "client_id": client_id,
+                "client_name": name or "—",
+                "document_receivables": ZERO_DECIMAL,
+                "issued_loans": ZERO_DECIMAL,
+                "receivables": ZERO_DECIMAL,
+                "document_payables": ZERO_DECIMAL,
+                "borrowed_loans": ZERO_DECIMAL,
+                "payables": ZERO_DECIMAL,
+            },
+        )
 
     for row in receivables_rows:
         name = client_names.get(row.client_id, row.client_name_fallback) if row.client_id else row.client_name_fallback

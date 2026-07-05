@@ -1,4 +1,5 @@
-﻿"""One-time repair: restore BankTransaction -> Expense links for existing bank-import expenses."""
+"""One-time repair: restore BankTransaction -> Expense links for existing bank-import expenses."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -16,7 +17,7 @@ def get_db_path() -> Path:
     url = get_settings().database_url
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            raw = url[len(prefix):]
+            raw = url[len(prefix) :]
             path = Path(raw)
             if not path.is_absolute():
                 return (ROOT_DIR / path).resolve()
@@ -72,7 +73,9 @@ def main() -> None:
             tx = candidates[0]
             matched_type = tx["matched_type"]
             matched_id = tx["matched_id"]
-            if matched_type not in (None, "", "expense") or (matched_type == "expense" and matched_id not in (None, expense["id"])):
+            if matched_type not in (None, "", "expense") or (
+                matched_type == "expense" and matched_id not in (None, expense["id"])
+            ):
                 skipped_conflict += 1
                 continue
 

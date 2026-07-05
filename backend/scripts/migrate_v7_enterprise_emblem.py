@@ -1,4 +1,5 @@
 """Migration v7: add enterprise emblem data URL field."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -16,7 +17,7 @@ def get_db_path() -> Path:
     url = get_settings().database_url
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            raw = url[len(prefix):]
+            raw = url[len(prefix) :]
             path = Path(raw)
             if not path.is_absolute():
                 return (ROOT_DIR / path).resolve()

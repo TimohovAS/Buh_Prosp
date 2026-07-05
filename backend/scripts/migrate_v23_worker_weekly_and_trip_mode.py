@@ -25,7 +25,7 @@ def get_db_path() -> Path:
     url = os.environ.get("DATABASE_URL") or read_env_value("DATABASE_URL") or "sqlite+aiosqlite:///./prospel.db"
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            path = Path(url[len(prefix):])
+            path = Path(url[len(prefix) :])
             return path.resolve() if path.is_absolute() else (ROOT_DIR / path).resolve()
     return (ROOT_DIR / "prospel.db").resolve()
 

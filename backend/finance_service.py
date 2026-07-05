@@ -1,4 +1,5 @@
-﻿"""Р¤РёРЅР°РЅСЃРѕРІС‹Р№ СЃРµСЂРІРёСЃ: РјРµС‚СЂРёРєРё accrual vs cash."""
+"""Р¤РёРЅР°РЅСЃРѕРІС‹Р№ СЃРµСЂРІРёСЃ: РјРµС‚СЂРёРєРё accrual vs cash."""
+
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -8,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.date_utils import coerce_date, days_between
-from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import Income, Expense, Enterprise, Project, BankTransaction, BankTransactionIncomeAllocation
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
@@ -159,14 +160,6 @@ async def get_finance_summary(
     if category is not None:
         expense_tax_base = and_(expense_tax_base, Expense.category == category)
 
-    # Р¤РѕСЂРјР°С‚ РґР»СЏ GROUP BY РІ SQLite
-    if group_by == "day":
-        fmt = "%Y-%m-%d"
-    elif group_by == "month":
-        fmt = "%Y-%m"
-    else:
-        fmt = "%Y"
-
     periods_data: dict[str, dict[str, float]] = {}
     for pk in _iter_periods(date_from, date_to, group_by):
         periods_data[pk] = {
@@ -183,17 +176,14 @@ async def get_finance_summary(
     # SQLite: strftime('%Y-%m', date) РґР»СЏ РіСЂСѓРїРїРёСЂРѕРІРєРё РїРѕ РјРµСЃСЏС†Сѓ
     if group_by == "day":
         grp = func.strftime("%Y-%m-%d", income_date_col)
-        grp_paid_i = func.strftime("%Y-%m-%d", income_paid_col)
         grp_exp = func.strftime("%Y-%m-%d", expense_date_col)
         grp_paid_e = func.strftime("%Y-%m-%d", expense_paid_col)
     elif group_by == "month":
         grp = func.strftime("%Y-%m", income_date_col)
-        grp_paid_i = func.strftime("%Y-%m", income_paid_col)
         grp_exp = func.strftime("%Y-%m", expense_date_col)
         grp_paid_e = func.strftime("%Y-%m", expense_paid_col)
     else:
         grp = func.strftime("%Y", income_date_col)
-        grp_paid_i = func.strftime("%Y", income_paid_col)
         grp_exp = func.strftime("%Y", expense_date_col)
         grp_paid_e = func.strftime("%Y", expense_paid_col)
 
@@ -264,9 +254,14 @@ async def get_finance_summary(
             _append_period_amount(periods_data, str(row.period), "revenue_cash", row.s)
 
         q_rc_alloc = (
-            select(grp_bt.label("period"), func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0).label("s"))
+            select(
+                grp_bt.label("period"), func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0).label("s")
+            )
             .select_from(BankTransaction)
-            .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
+            .join(
+                BankTransactionIncomeAllocation,
+                BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id,
+            )
             .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
             .where(
                 bt_direction == "in",
@@ -378,7 +373,7 @@ async def get_finance_summary(
             _append_period_amount(periods_data, str(row.period), "taxes_cash", row.s)
 
     # net profit
-    for p, data in periods_data.items():
+    for _period, data in periods_data.items():
         data["net_profit_accrual"] = data["revenue_accrual"] - data["expense_accrual"]
         data["net_profit_cash"] = data["revenue_cash"] - data["expense_cash"]
 
@@ -408,10 +403,15 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
     Р”Р»СЏ partial РїРѕРєР°Р·С‹РІР°РµС‚ РѕСЃС‚Р°С‚РѕРє (amount_rsd - paid_amount).
     """
     today = as_of or date.today()
-    q = select(Income).options(selectinload(Income.client)).where(
-        Income.status.in_(["issued", "partial"]),
-        Income.issued_date <= today,
-    ).order_by(Income.issued_date.asc())
+    q = (
+        select(Income)
+        .options(selectinload(Income.client))
+        .where(
+            Income.status.in_(["issued", "partial"]),
+            Income.issued_date <= today,
+        )
+        .order_by(Income.issued_date.asc())
+    )
     r = await db.execute(q)
     incomes = r.scalars().all()
     items = []
@@ -426,19 +426,21 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
         due_dt = coerce_date(i.due_date) or ((issued_date + timedelta(days=30)) if issued_date else today)
         days_out = days_between(today, issued_date, absolute=False) if issued_date else 0
         days_overdue = days_between(today, due_dt, absolute=False)
-        items.append({
-            "income_id": i.id,
-            "invoice_number": i.invoice_number,
-            "client_name": i.client_name or (i.client.name if i.client else None),
-            "issued_date": issued_date.isoformat() if issued_date else None,
-            "due_date": due_dt.isoformat(),
-            "amount": float(remaining),          # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
-            "amount_full": float(to_decimal(i.amount_rsd)),
-            "amount_paid": float(to_decimal(i.paid_amount or ZERO_DECIMAL)),
-            "status": i.status,
-            "days_outstanding": days_out,
-            "days_overdue": days_overdue,
-        })
+        items.append(
+            {
+                "income_id": i.id,
+                "invoice_number": i.invoice_number,
+                "client_name": i.client_name or (i.client.name if i.client else None),
+                "issued_date": issued_date.isoformat() if issued_date else None,
+                "due_date": due_dt.isoformat(),
+                "amount": float(remaining),  # РѕСЃС‚Р°С‚РѕРє Рє РѕРїР»Р°С‚Рµ
+                "amount_full": float(to_decimal(i.amount_rsd)),
+                "amount_paid": float(to_decimal(i.paid_amount or ZERO_DECIMAL)),
+                "status": i.status,
+                "days_outstanding": days_out,
+                "days_overdue": days_overdue,
+            }
+        )
         ar_total += remaining
         if days_overdue > 0:
             ar_overdue += remaining
@@ -462,7 +464,9 @@ async def get_cashflow(
     """
     r = await db.execute(select(Enterprise).limit(1))
     ent = r.scalar_one_or_none()
-    opening_cash_balance = to_decimal(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else ZERO_DECIMAL
+    opening_cash_balance = (
+        to_decimal(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else ZERO_DECIMAL
+    )
     opening_cash_date = ent.opening_cash_date if ent and ent.opening_cash_date is not None else None
 
     bt_date = BankTransaction.date
@@ -537,15 +541,17 @@ async def get_cashflow(
         opening = prev_closing
         closing = opening + inflow - outflow + financing_inflow - financing_outflow
         prev_closing = closing
-        result_series.append({
-            "period": s["period"],
-            "opening": opening,
-            "inflow": inflow,
-            "outflow": outflow,
-            "financing_inflow": financing_inflow,
-            "financing_outflow": financing_outflow,
-            "closing": closing,
-        })
+        result_series.append(
+            {
+                "period": s["period"],
+                "opening": opening,
+                "inflow": inflow,
+                "outflow": outflow,
+                "financing_inflow": financing_inflow,
+                "financing_outflow": financing_outflow,
+                "closing": closing,
+            }
+        )
 
     return {
         "range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
@@ -619,7 +625,11 @@ async def get_finance_by_project(
     unassigned = {"revenue": 0.0, "expenses": 0.0, "profit": 0.0}
 
     for pid in all_ids:
-        name = "вЂ” Р‘РµР· РїСЂРѕРµРєС‚Р° вЂ”" if pid is None else next((p.name for p in projects if p.id == pid), f"Project {pid}")
+        name = (
+            "вЂ” Р‘РµР· РїСЂРѕРµРєС‚Р° вЂ”"
+            if pid is None
+            else next((p.name for p in projects if p.id == pid), f"Project {pid}")
+        )
 
         # Revenue РїРѕ РїСЂРѕРµРєС‚Сѓ
         if mode == "accrual":
@@ -627,7 +637,7 @@ async def get_finance_by_project(
             q_rev = select(func.coalesce(func.sum(income_amount), 0)).where(inc_cond)
             r = await db.execute(q_rev)
             revenue = to_decimal(r.scalar() or ZERO_DECIMAL)
-            
+
             exp_cond = and_(expense_base, Expense.project_id == pid)
             q_exp = select(func.coalesce(func.sum(expense_amount), 0)).where(exp_cond)
             r = await db.execute(q_exp)
@@ -655,7 +665,10 @@ async def get_finance_by_project(
             q_rev_alloc = (
                 select(func.coalesce(func.sum(BankTransactionIncomeAllocation.amount), 0))
                 .select_from(BankTransaction)
-                .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
+                .join(
+                    BankTransactionIncomeAllocation,
+                    BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id,
+                )
                 .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
                 .where(
                     and_(
@@ -702,7 +715,11 @@ async def get_finance_by_project(
             expenses += to_decimal(r.scalar() or ZERO_DECIMAL)
 
         profit = revenue - expenses
-        margin_percent = float(((profit / revenue) * Decimal("100")).quantize(Decimal("0.1"))) if revenue and revenue > ZERO_DECIMAL else 0.0
+        margin_percent = (
+            float(((profit / revenue) * Decimal("100")).quantize(Decimal("0.1")))
+            if revenue and revenue > ZERO_DECIMAL
+            else 0.0
+        )
 
         row = {
             "project_id": pid,
@@ -746,9 +763,9 @@ async def get_project_movement_bounds(
             Income.project_id,
             func.min(Income.issued_date),
             func.max(Income.issued_date),
-        ).where(
-            and_(*income_conditions)
-        ).group_by(Income.project_id)
+        )
+        .where(and_(*income_conditions))
+        .group_by(Income.project_id)
     )
 
     for project_id, min_date, max_date in income_rows.fetchall():
@@ -779,9 +796,9 @@ async def get_project_movement_bounds(
             Expense.project_id,
             func.min(Expense.date),
             func.max(Expense.date),
-        ).where(
-            and_(*expense_conditions)
-        ).group_by(Expense.project_id)
+        )
+        .where(and_(*expense_conditions))
+        .group_by(Expense.project_id)
     )
 
     for project_id, min_date, max_date in expense_rows.fetchall():
@@ -803,9 +820,7 @@ async def get_project_movements(
     date_to: date,
     mode: Literal["accrual", "cash"] = "accrual",
 ) -> dict:
-    project = (
-        await db.execute(select(Project).where(Project.id == project_id))
-    ).scalar_one_or_none()
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
     if not project:
         raise ValueError("Project not found")
 
@@ -830,19 +845,29 @@ async def get_project_movements(
                 )
             )
         )
-        for income_id, issued_date, invoice_number, client_name, description, amount_rsd, status in income_rows.fetchall():
-            items.append({
-                "row_key": f"income-{income_id}",
-                "date": issued_date,
-                "direction": "in",
-                "movement_type": "income",
-                "source_kind": "income",
-                "document_number": invoice_number,
-                "counterparty_name": client_name,
-                "description": description,
-                "amount": to_decimal(amount_rsd or ZERO_DECIMAL),
-                "status": status,
-            })
+        for (
+            income_id,
+            issued_date,
+            invoice_number,
+            client_name,
+            description,
+            amount_rsd,
+            status,
+        ) in income_rows.fetchall():
+            items.append(
+                {
+                    "row_key": f"income-{income_id}",
+                    "date": issued_date,
+                    "direction": "in",
+                    "movement_type": "income",
+                    "source_kind": "income",
+                    "document_number": invoice_number,
+                    "counterparty_name": client_name,
+                    "description": description,
+                    "amount": to_decimal(amount_rsd or ZERO_DECIMAL),
+                    "status": status,
+                }
+            )
 
         expense_rows = await db.execute(
             select(
@@ -863,18 +888,20 @@ async def get_project_movements(
             )
         )
         for expense_id, expense_date, bank_reference, description, amount, status in expense_rows.fetchall():
-            items.append({
-                "row_key": f"expense-{expense_id}",
-                "date": expense_date,
-                "direction": "out",
-                "movement_type": "expense",
-                "source_kind": "expense",
-                "document_number": bank_reference,
-                "counterparty_name": None,
-                "description": description,
-                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
-                "status": status,
-            })
+            items.append(
+                {
+                    "row_key": f"expense-{expense_id}",
+                    "date": expense_date,
+                    "direction": "out",
+                    "movement_type": "expense",
+                    "source_kind": "expense",
+                    "document_number": bank_reference,
+                    "counterparty_name": None,
+                    "description": description,
+                    "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                    "status": status,
+                }
+            )
     else:
         direct_income_rows = await db.execute(
             select(
@@ -900,19 +927,30 @@ async def get_project_movements(
                 )
             )
         )
-        for tx_id, tx_date, invoice_number, counterparty_name, purpose, description, amount, status in direct_income_rows.fetchall():
-            items.append({
-                "row_key": f"bank-income-{tx_id}",
-                "date": tx_date,
-                "direction": "in",
-                "movement_type": "income",
-                "source_kind": "bank",
-                "document_number": invoice_number,
-                "counterparty_name": counterparty_name,
-                "description": purpose or description,
-                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
-                "status": status,
-            })
+        for (
+            tx_id,
+            tx_date,
+            invoice_number,
+            counterparty_name,
+            purpose,
+            description,
+            amount,
+            status,
+        ) in direct_income_rows.fetchall():
+            items.append(
+                {
+                    "row_key": f"bank-income-{tx_id}",
+                    "date": tx_date,
+                    "direction": "in",
+                    "movement_type": "income",
+                    "source_kind": "bank",
+                    "document_number": invoice_number,
+                    "counterparty_name": counterparty_name,
+                    "description": purpose or description,
+                    "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                    "status": status,
+                }
+            )
 
         allocated_income_rows = await db.execute(
             select(
@@ -927,7 +965,10 @@ async def get_project_movements(
                 BankTransaction.status,
             )
             .select_from(BankTransaction)
-            .join(BankTransactionIncomeAllocation, BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id)
+            .join(
+                BankTransactionIncomeAllocation,
+                BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id,
+            )
             .join(Income, BankTransactionIncomeAllocation.income_id == Income.id)
             .where(
                 and_(
@@ -940,19 +981,31 @@ async def get_project_movements(
                 )
             )
         )
-        for tx_id, allocation_id, tx_date, invoice_number, counterparty_name, purpose, description, amount, status in allocated_income_rows.fetchall():
-            items.append({
-                "row_key": f"bank-income-allocation-{allocation_id}",
-                "date": tx_date,
-                "direction": "in",
-                "movement_type": "income",
-                "source_kind": "allocation",
-                "document_number": invoice_number,
-                "counterparty_name": counterparty_name,
-                "description": purpose or description,
-                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
-                "status": status,
-            })
+        for (
+            _tx_id,
+            allocation_id,
+            tx_date,
+            invoice_number,
+            counterparty_name,
+            purpose,
+            description,
+            amount,
+            status,
+        ) in allocated_income_rows.fetchall():
+            items.append(
+                {
+                    "row_key": f"bank-income-allocation-{allocation_id}",
+                    "date": tx_date,
+                    "direction": "in",
+                    "movement_type": "income",
+                    "source_kind": "allocation",
+                    "document_number": invoice_number,
+                    "counterparty_name": counterparty_name,
+                    "description": purpose or description,
+                    "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                    "status": status,
+                }
+            )
 
         expense_cash_rows = await db.execute(
             select(
@@ -979,19 +1032,30 @@ async def get_project_movements(
                 )
             )
         )
-        for tx_id, tx_date, bank_reference, counterparty_name, purpose, description, amount, status in expense_cash_rows.fetchall():
-            items.append({
-                "row_key": f"bank-expense-{tx_id}",
-                "date": tx_date,
-                "direction": "out",
-                "movement_type": "expense",
-                "source_kind": "bank",
-                "document_number": bank_reference,
-                "counterparty_name": counterparty_name,
-                "description": purpose or description,
-                "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
-                "status": status,
-            })
+        for (
+            tx_id,
+            tx_date,
+            bank_reference,
+            counterparty_name,
+            purpose,
+            description,
+            amount,
+            status,
+        ) in expense_cash_rows.fetchall():
+            items.append(
+                {
+                    "row_key": f"bank-expense-{tx_id}",
+                    "date": tx_date,
+                    "direction": "out",
+                    "movement_type": "expense",
+                    "source_kind": "bank",
+                    "document_number": bank_reference,
+                    "counterparty_name": counterparty_name,
+                    "description": purpose or description,
+                    "amount": abs(to_decimal(amount or ZERO_DECIMAL)),
+                    "status": status,
+                }
+            )
 
     items.sort(key=lambda item: (item["date"], item["direction"] == "out", item["row_key"]), reverse=True)
 
@@ -1003,8 +1067,6 @@ async def get_project_movements(
         "to_date": date_to,
         "items": items,
     }
-
-
 
 
 async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
@@ -1026,11 +1088,13 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
         select(
             func.strftime("%m", Income.issued_date).label("month"),
             func.coalesce(func.sum(Income.amount_rsd), 0).label("amount"),
-        ).where(
+        )
+        .where(
             Income.status != "cancelled",
             Income.issued_date >= date_from,
             Income.issued_date <= date_to,
-        ).group_by(func.strftime("%m", Income.issued_date))
+        )
+        .group_by(func.strftime("%m", Income.issued_date))
     )
     for row in revenue_rows.fetchall():
         months[int(row.month)]["revenue"] = to_decimal(row.amount)
@@ -1039,13 +1103,15 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
-        ).where(
+        )
+        .where(
             _visible_expense_condition(),
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,
             func.coalesce(Expense.is_tax_related, False) == False,
-        ).group_by(func.strftime("%m", Expense.date))
+        )
+        .group_by(func.strftime("%m", Expense.date))
     )
     for row in operating_rows.fetchall():
         months[int(row.month)]["expenses"] = to_decimal(row.amount)
@@ -1054,13 +1120,15 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
         select(
             func.strftime("%m", Expense.date).label("month"),
             func.coalesce(func.sum(Expense.amount), 0).label("amount"),
-        ).where(
+        )
+        .where(
             _visible_expense_condition(),
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date >= date_from,
             Expense.date <= date_to,
             Expense.is_tax_related == True,
-        ).group_by(func.strftime("%m", Expense.date))
+        )
+        .group_by(func.strftime("%m", Expense.date))
     )
     for row in tax_rows.fetchall():
         months[int(row.month)]["taxes"] = to_decimal(row.amount)
@@ -1077,13 +1145,15 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
         expenses = months[month]["expenses"]
         taxes = months[month]["taxes"]
         profit = revenue - expenses - taxes
-        items.append({
-            "month": month,
-            "revenue": revenue,
-            "expenses": expenses,
-            "taxes": taxes,
-            "profit": profit,
-        })
+        items.append(
+            {
+                "month": month,
+                "revenue": revenue,
+                "expenses": expenses,
+                "taxes": taxes,
+                "profit": profit,
+            }
+        )
         totals["revenue"] += revenue
         totals["expenses"] += expenses
         totals["taxes"] += taxes
@@ -1098,24 +1168,18 @@ async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
 
 async def get_finance_pnl_years(db: AsyncSession) -> list[int]:
     income_rows = await db.execute(
-        select(func.distinct(func.strftime("%Y", Income.issued_date)).label("year"))
-        .where(
+        select(func.distinct(func.strftime("%Y", Income.issued_date)).label("year")).where(
             Income.status != "cancelled",
             Income.issued_date.isnot(None),
         )
     )
     expense_rows = await db.execute(
-        select(func.distinct(func.strftime("%Y", Expense.date)).label("year"))
-        .where(
+        select(func.distinct(func.strftime("%Y", Expense.date)).label("year")).where(
             _visible_expense_condition(),
             Expense.source != CASH_TRANSFER_SOURCE,
             Expense.date.isnot(None),
         )
     )
 
-    years = {
-        int(row.year)
-        for row in income_rows.fetchall() + expense_rows.fetchall()
-        if row.year
-    }
+    years = {int(row.year) for row in income_rows.fetchall() + expense_rows.fetchall() if row.year}
     return sorted(years, reverse=True)

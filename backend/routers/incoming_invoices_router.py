@@ -1,5 +1,5 @@
 """CRUD и settlement-операции для входящих фактур."""
-from datetime import date
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,7 +12,6 @@ from backend.database import get_db
 from backend.date_utils import days_between
 from backend.decimal_utils import to_decimal
 from backend.incoming_invoice_service import (
-    INCOMING_INVOICE_SOURCE,
     attach_existing_expense,
     create_incoming_invoice,
     get_counterparty_balances,
@@ -29,11 +28,9 @@ from backend.incoming_invoice_service import (
 )
 from backend.models import (
     BankTransaction,
-    Client,
     Expense,
     Income,
     IncomingInvoice,
-    IncomingInvoiceSettlement,
     User,
 )
 from backend.schemas import (
@@ -45,7 +42,6 @@ from backend.schemas import (
     IncomingInvoiceClosingLinkRequest,
     IncomingInvoiceCreate,
     IncomingInvoiceExpenseCandidateResponse,
-    IncomingInvoiceDetailResponse,
     IncomingInvoiceLinkSummary,
     IncomingInvoiceResponse,
     IncomingInvoiceSettlementCreate,
@@ -74,8 +70,7 @@ def _serialize(invoice: IncomingInvoice) -> dict:
 def _serialize_detail(invoice: IncomingInvoice) -> dict:
     d = _serialize(invoice)
     d["settlements"] = [
-        IncomingInvoiceSettlementResponse.model_validate(s).model_dump()
-        for s in (invoice.settlements or [])
+        IncomingInvoiceSettlementResponse.model_validate(s).model_dump() for s in (invoice.settlements or [])
     ]
     return d
 
@@ -200,9 +195,7 @@ async def _load_payment_details(db: AsyncSession, invoice: IncomingInvoice) -> d
         linked_bank_tx = tx_result.scalar_one_or_none()
 
     settlement_bank_ids = [
-        settlement.bank_transaction_id
-        for settlement in (invoice.settlements or [])
-        if settlement.bank_transaction_id
+        settlement.bank_transaction_id for settlement in (invoice.settlements or []) if settlement.bank_transaction_id
     ]
     settlement_bank_map = {}
     if settlement_bank_ids:
@@ -217,21 +210,14 @@ async def _load_payment_details(db: AsyncSession, invoice: IncomingInvoice) -> d
     settlements = []
     for settlement in invoice.settlements or []:
         item = IncomingInvoiceSettlementResponse.model_validate(settlement).model_dump()
-        item["bank_transaction"] = _serialize_bank_payment(
-            settlement_bank_map.get(settlement.bank_transaction_id)
-        )
+        item["bank_transaction"] = _serialize_bank_payment(settlement_bank_map.get(settlement.bank_transaction_id))
         settlements.append(item)
     d_settlements = settlements
 
     warning = None
     if invoice.expense_id and not expense:
         warning = "missing_linked_expense"
-    elif (
-        invoice.status == "paid"
-        and invoice.expense_id
-        and not linked_bank_tx
-        and not settlement_bank_ids
-    ):
+    elif invoice.status == "paid" and invoice.expense_id and not linked_bank_tx and not settlement_bank_ids:
         warning = "linked_expense_without_bank_transaction"
 
     return {
@@ -285,12 +271,16 @@ async def list_incoming_invoices(
     )
     if year:
         from datetime import date as dt_date
+
         q = q.where(IncomingInvoice.date >= dt_date(year, 1, 1), IncomingInvoice.date <= dt_date(year, 12, 31))
     if month and year:
         import calendar
         from datetime import date as dt_date
+
         last_day = calendar.monthrange(year, month)[1]
-        q = q.where(IncomingInvoice.date >= dt_date(year, month, 1), IncomingInvoice.date <= dt_date(year, month, last_day))
+        q = q.where(
+            IncomingInvoice.date >= dt_date(year, month, 1), IncomingInvoice.date <= dt_date(year, month, last_day)
+        )
     if client_id:
         q = q.where(IncomingInvoice.client_id == client_id)
     if status:
@@ -407,9 +397,8 @@ async def expense_candidates(
     if not invoice:
         raise HTTPException(404, "IncomingInvoice not found.")
 
-    linked_expenses_subquery = (
-        select(IncomingInvoice.expense_id)
-        .where(IncomingInvoice.id != invoice.id, IncomingInvoice.expense_id.is_not(None))
+    linked_expenses_subquery = select(IncomingInvoice.expense_id).where(
+        IncomingInvoice.id != invoice.id, IncomingInvoice.expense_id.is_not(None)
     )
     result = await db.execute(
         select(Expense)
@@ -453,10 +442,7 @@ async def expense_candidates(
             -int(expense.id),
         )
     )
-    return [
-        _serialize_expense_candidate(expense, transactions_by_expense.get(int(expense.id)))
-        for expense in expenses
-    ]
+    return [_serialize_expense_candidate(expense, transactions_by_expense.get(int(expense.id))) for expense in expenses]
 
 
 @router.get("/{invoice_id}/advance-candidates", response_model=list[IncomingInvoiceLinkSummary])
@@ -682,7 +668,8 @@ async def settle_bank(
         raise HTTPException(404, "IncomingInvoice not found.")
     try:
         settlement = await settle_via_bank(
-            db, invoice,
+            db,
+            invoice,
             bank_transaction_id=data.bank_transaction_id,
             amount=data.amount,
             settlement_date=data.date,
@@ -707,7 +694,8 @@ async def settle_cash(
         raise HTTPException(404, "IncomingInvoice not found.")
     try:
         settlement = await settle_via_cash(
-            db, invoice,
+            db,
+            invoice,
             amount=data.amount,
             settlement_date=data.date,
             note=data.note,
@@ -731,7 +719,8 @@ async def settle_offset(
         raise HTTPException(404, "IncomingInvoice not found.")
     try:
         settlement = await settle_via_offset(
-            db, invoice,
+            db,
+            invoice,
             income_id=data.income_id,
             amount=data.amount,
             settlement_date=data.date,

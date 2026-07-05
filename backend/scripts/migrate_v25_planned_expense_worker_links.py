@@ -24,7 +24,7 @@ def get_db_path() -> Path:
     url = os.environ.get("DATABASE_URL") or read_env_value("DATABASE_URL") or "sqlite+aiosqlite:///./prospel.db"
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if url.startswith(prefix):
-            path = Path(url[len(prefix):])
+            path = Path(url[len(prefix) :])
             return path.resolve() if path.is_absolute() else (ROOT_DIR / path).resolve()
     return (ROOT_DIR / "prospel.db").resolve()
 
@@ -55,7 +55,9 @@ def run_migration(conn: sqlite3.Connection) -> bool:
     cursor = conn.cursor()
     changed = False
     changed |= ensure_column(cursor, "planned_expenses", "worker_id", "INTEGER REFERENCES workers(id)")
-    changed |= ensure_column(cursor, "planned_expense_payments", "worker_payout_id", "INTEGER REFERENCES worker_payouts(id)")
+    changed |= ensure_column(
+        cursor, "planned_expense_payments", "worker_payout_id", "INTEGER REFERENCES worker_payouts(id)"
+    )
     if table_exists(cursor, "planned_expenses"):
         cursor.execute("CREATE INDEX IF NOT EXISTS ix_planned_expenses_worker_id ON planned_expenses(worker_id)")
     if table_exists(cursor, "planned_expense_payments"):

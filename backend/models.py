@@ -1,8 +1,23 @@
 """Модели базы данных ProspEl."""
-from datetime import datetime, date
+
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, Float, Numeric, Boolean, Date, DateTime, ForeignKey, Enum, Index, UniqueConstraint, text
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Float,
+    Numeric,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import enum
@@ -10,6 +25,7 @@ import enum
 
 class UserRole(str, enum.Enum):
     """Роли пользователей."""
+
     ADMIN = "admin"
     ACCOUNTANT = "accountant"
     OBSERVER = "observer"
@@ -18,6 +34,7 @@ class UserRole(str, enum.Enum):
 
 class User(Base):
     """Пользователи системы."""
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -32,6 +49,7 @@ class User(Base):
 
 class Client(Base):
     """Справочник клиентов."""
+
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -52,6 +70,7 @@ class Client(Base):
 
 class Worker(Base):
     """Workers and contractors paid through the cash register."""
+
     __tablename__ = "workers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -83,6 +102,7 @@ class Worker(Base):
 
 class WorkerPayout(Base):
     """Calculated worker payment recorded as a cash expense."""
+
     __tablename__ = "worker_payouts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -128,6 +148,7 @@ class WorkerPayout(Base):
 
 class Enterprise(Base):
     """Данные предприятия (ИП)."""
+
     __tablename__ = "enterprise"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -170,6 +191,7 @@ class Enterprise(Base):
 
 class EfakturaImportRecord(Base):
     """Р–СѓСЂРЅР°Р» РёРјРїРѕСЂС‚РѕРІ eFaktura."""
+
     __tablename__ = "efaktura_import_records"
     __table_args__ = (UniqueConstraint("document_key", name="uq_efaktura_document_key"),)
 
@@ -193,6 +215,7 @@ class EfakturaImportRecord(Base):
 
 class IncomingInvoice(Base):
     """Входящая фактура — наш долг перед контрагентом."""
+
     __tablename__ = "incoming_invoices"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -217,7 +240,9 @@ class IncomingInvoice(Base):
     client = relationship("Client")
     project = relationship("Project")
     expense = relationship("Expense")
-    advance_invoice = relationship("IncomingInvoice", remote_side=[id], foreign_keys=[advance_invoice_id], uselist=False)
+    advance_invoice = relationship(
+        "IncomingInvoice", remote_side=[id], foreign_keys=[advance_invoice_id], uselist=False
+    )
     efaktura_record = relationship("EfakturaImportRecord")
     settlements = relationship(
         "IncomingInvoiceSettlement",
@@ -232,6 +257,7 @@ class IncomingInvoice(Base):
 
 class IncomingInvoiceSettlement(Base):
     """Журнал закрытия входящей фактуры: банк, наличка, взаимозачёт."""
+
     __tablename__ = "incoming_invoice_settlements"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -251,6 +277,7 @@ class IncomingInvoiceSettlement(Base):
 
 class ContributionRates(Base):
     """Ставки налогов и взносов (из налогового решения). DEPRECATED: используйте YearDecision + MonthlyObligation."""
+
     __tablename__ = "contribution_rates"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -270,6 +297,7 @@ class ContributionRates(Base):
 # --- Обязательные платежи (ТЗ: решения Пореске управе) ---
 class PaymentType(Base):
     """Тип обязательного платежа: Порез, PIO, Здравство, Безработица."""
+
     __tablename__ = "payment_types"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -284,6 +312,7 @@ class PaymentType(Base):
 
 class YearDecision(Base):
     """Решение Пореске управе на год: параметры начисления и платежные реквизиты."""
+
     __tablename__ = "year_decisions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -313,6 +342,7 @@ class YearDecision(Base):
 
 class MonthlyObligation(Base):
     """Месячное обязательство: год, месяц, тип, сумма, дедлайн, статус."""
+
     __tablename__ = "monthly_obligations"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -336,6 +366,7 @@ class MonthlyObligation(Base):
 
 class InvoiceSequence(Base):
     """Счётчик номеров счетов по годам (блокировка конкуренции при присвоении NNNN-YYYY)."""
+
     __tablename__ = "invoice_sequence"
 
     year = Column(Integer, primary_key=True)
@@ -344,6 +375,7 @@ class InvoiceSequence(Base):
 
 class ProjectSequence(Base):
     """Счётчик кодов проектов по годам (формат PR-YYYY-NNNN)."""
+
     __tablename__ = "project_sequence"
 
     year = Column(Integer, primary_key=True)
@@ -352,6 +384,7 @@ class ProjectSequence(Base):
 
 class Project(Base):
     """Проекты — центральная сущность (ЦФО), к ним привязываются доходы/расходы/договоры."""
+
     __tablename__ = "projects"
     __table_args__ = (UniqueConstraint("code", name="uq_projects_code"),)
 
@@ -376,11 +409,9 @@ class Project(Base):
     purchase_receipts = relationship("PurchaseReceipt", back_populates="project")
 
 
-
-
-
 class BankTransaction(Base):
     """Строка выписки банка (поступление/списание)."""
+
     __tablename__ = "bank_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -413,6 +444,7 @@ class BankTransaction(Base):
 
 class CounterpartyLoan(Base):
     """Principal-only loan received from or issued to a counterparty."""
+
     __tablename__ = "counterparty_loans"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -440,6 +472,7 @@ class CounterpartyLoan(Base):
 
 class CounterpartyLoanMovement(Base):
     """A principal drawdown or repayment tied to one bank transaction."""
+
     __tablename__ = "counterparty_loan_movements"
     __table_args__ = (
         Index(
@@ -463,11 +496,14 @@ class CounterpartyLoanMovement(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     loan = relationship("CounterpartyLoan", back_populates="movements")
-    bank_transaction = relationship("BankTransaction", back_populates="loan_movement", foreign_keys=[bank_transaction_id])
+    bank_transaction = relationship(
+        "BankTransaction", back_populates="loan_movement", foreign_keys=[bank_transaction_id]
+    )
 
 
 class BankImportFile(Base):
     """Журнал импортированных банковских файлов (защита от повторного импорта)."""
+
     __tablename__ = "bank_import_files"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -484,6 +520,7 @@ class BankImportFile(Base):
 
 class CashEntry(Base):
     """Реестр налички: пополнение из банка, наличные расходы и корректировки."""
+
     __tablename__ = "cash_entries"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -505,6 +542,7 @@ class CashEntry(Base):
 
 class Income(Base):
     """Книга доходов (КПО) - записи о доходах. Управленческая экономика: issued/paid/cancelled."""
+
     __tablename__ = "income"
     __table_args__ = (UniqueConstraint("invoice_year", "invoice_number", name="uq_income_invoice_per_year"),)
 
@@ -514,7 +552,7 @@ class Income(Base):
     invoice_year = Column(Integer, nullable=True)  # Период счёта (год): нумерация NNNN-YYYY сбрасывается по годам
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     client_name = Column(String(200))  # На случай если клиент не в справочнике
-    description = Column(String(500))   # Основание платежа / описание услуги
+    description = Column(String(500))  # Основание платежа / описание услуги
     amount_rsd = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")
     exchange_rate = Column(Float, default=1.0)
@@ -575,6 +613,7 @@ class IncomeItem(Base):
 
 class Contract(Base):
     """Договоры (по образцу 1С Моя фирма)."""
+
     __tablename__ = "contracts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -603,10 +642,9 @@ class Contract(Base):
 
 class BankTransactionIncomeAllocation(Base):
     """Р Р°СЃРїСЂРµРґРµР»РµРЅРёРµ РѕРґРЅРѕРіРѕ РІС…РѕРґСЏС‰РµРіРѕ РїР»Р°С‚РµР¶Р° РїРѕ РЅРµСЃРєРѕР»СЊРєРёРј С„Р°РєС‚СѓСЂР°Рј."""
+
     __tablename__ = "bank_transaction_income_allocations"
-    __table_args__ = (
-        UniqueConstraint("bank_transaction_id", "income_id", name="uq_bank_tx_income_allocation"),
-    )
+    __table_args__ = (UniqueConstraint("bank_transaction_id", "income_id", name="uq_bank_tx_income_allocation"),)
 
     id = Column(Integer, primary_key=True, index=True)
     bank_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), nullable=False, index=True)
@@ -621,6 +659,7 @@ class BankTransactionIncomeAllocation(Base):
 
 class ContractItem(Base):
     """Позиции договора (услуги/товары)."""
+
     __tablename__ = "contract_items"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -637,6 +676,7 @@ class ContractItem(Base):
 
 class Payment(Base):
     """Платежи налогов и взносов."""
+
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -658,6 +698,7 @@ class Payment(Base):
 
 class TransactionCategory(Base):
     """Справочник категорий доходов/расходов (статьи ДДС)."""
+
     __tablename__ = "transaction_categories"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -674,6 +715,7 @@ class TransactionCategory(Base):
 
 class Expense(Base):
     """Расходы. Сторно вместо удаления для obligation/bank_import."""
+
     __tablename__ = "expenses"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -728,9 +770,7 @@ class ExpenseItem(Base):
 
 class PurchaseReceipt(Base):
     __tablename__ = "purchase_receipts"
-    __table_args__ = (
-        UniqueConstraint("qr_hash", name="uq_purchase_receipts_qr_hash"),
-    )
+    __table_args__ = (UniqueConstraint("qr_hash", name="uq_purchase_receipts_qr_hash"),)
 
     id = Column(Integer, primary_key=True, index=True)
     verification_url = Column(Text, nullable=False)
@@ -747,7 +787,9 @@ class PurchaseReceipt(Base):
     total_amount = Column(Numeric(14, 2), nullable=False, default=0)
     currency = Column(String(5), default="RSD")
     is_valid = Column(Boolean, default=True)
-    status = Column(String(30), nullable=False, default="new")  # new | linked_expense | waiting_bank | matched_bank | cash_expense | error
+    status = Column(
+        String(30), nullable=False, default="new"
+    )  # new | linked_expense | waiting_bank | matched_bank | cash_expense | error
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, unique=True)
@@ -795,6 +837,7 @@ class PurchaseReceiptItem(Base):
 
 class PeriodClosure(Base):
     """Закрытие периода (year, month) — для управленческого учёта."""
+
     __tablename__ = "period_closures"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -806,6 +849,7 @@ class PeriodClosure(Base):
 
 class PlannedExpense(Base):
     """Планируемые (периодические) расходы — аренда, интернет, телефон и т.д."""
+
     __tablename__ = "planned_expenses"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -835,6 +879,7 @@ class PlannedExpense(Base):
 
 class PlannedExpensePayment(Base):
     """Отметки об оплате конкретного экземпляра планируемого расхода (planned_expense_id + due_date)."""
+
     __tablename__ = "planned_expense_payments"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -851,6 +896,7 @@ class PlannedExpensePayment(Base):
 
 class EcoTax(Base):
     """Экологическая такса - учёт и напоминания."""
+
     __tablename__ = "eco_tax"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -865,6 +911,7 @@ class EcoTax(Base):
 
 class AuditLog(Base):
     """Журнал аудита."""
+
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)

@@ -22,7 +22,8 @@ export default function CashFlow() {
   useEffect(() => {
     if (!isActivePage) return
     setLoading(true)
-    api.finance.cashflow({ from, to, group_by: 'month' })
+    api.finance
+      .cashflow({ from, to, group_by: 'month' })
       .then(setData)
       .catch((e) => {
         setError(e.message)
@@ -41,7 +42,9 @@ export default function CashFlow() {
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
           <div>
-            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{tr('financePeriod')}</label>
+            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+              {tr('financePeriod')}
+            </label>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
               {['month', 'quarter', 'year', 'custom'].map((q) => (
                 <button
@@ -75,7 +78,9 @@ export default function CashFlow() {
       </div>
 
       {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>
+        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+          {error}
+        </div>
       )}
 
       {loading ? (
@@ -107,7 +112,10 @@ export default function CashFlow() {
                 <tbody>
                   {series.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                      <td
+                        colSpan={7}
+                        style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}
+                      >
                         {tr('noData')}
                       </td>
                     </tr>

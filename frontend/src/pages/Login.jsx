@@ -30,13 +30,15 @@ export default function Login({ onLoginSuccess }) {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--color-bg)',
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg)',
+      }}
+    >
       <div className="card" style={{ maxWidth: 380, width: '100%' }}>
         <div className="login-brand">
           <div className="brand-mark brand-mark-lg" aria-hidden="true">
@@ -44,7 +46,11 @@ export default function Login({ onLoginSuccess }) {
           </div>
           <div className="login-brand-copy">
             <h1 style={{ margin: 0, fontSize: '1.35rem' }}>ProspEl</h1>
-            {enterpriseName ? <p style={{ margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{enterpriseName}</p> : null}
+            {enterpriseName ? (
+              <p style={{ margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                {enterpriseName}
+              </p>
+            ) : null}
           </div>
         </div>
         <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
@@ -72,7 +78,11 @@ export default function Login({ onLoginSuccess }) {
               required
             />
           </div>
-          {error && <p style={{ color: 'var(--color-danger)', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</p>}
+          {error && (
+            <p style={{ color: 'var(--color-danger)', marginBottom: '1rem', fontSize: '0.875rem' }}>
+              {error}
+            </p>
+          )}
           <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
             {loading ? '...' : tr('login')}
           </button>
