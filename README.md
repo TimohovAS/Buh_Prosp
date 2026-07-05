@@ -25,6 +25,33 @@
 - **Бэкап:** автоматические snapshots SQLite с расписанием и ручное управление через UI
 - **State Machine:** `backend/state_machine.py` — централизованный контроль переходов статусов
 
+### Разработка: линт и тесты
+
+Dev-зависимости бэкенда: `pip install -r requirements-dev.txt` (в venv).
+
+Проверки (эти же шаги гоняет CI, все должны быть зелёными):
+
+```
+# Backend
+ruff check backend run.py create_admin.py          # линт (конфиг в pyproject.toml)
+ruff format --check backend run.py create_admin.py # проверка форматирования
+pytest -q                                          # тесты (backend/tests)
+
+# Frontend (из папки frontend)
+npm run lint          # ESLint, --max-warnings=0: предупреждения тоже валят проверку
+npm run format:check  # проверка форматирования Prettier
+npm run build         # проверка сборки
+```
+
+Автоформатирование (запускать перед коммитом, если проверки красные):
+
+```
+ruff format backend run.py create_admin.py   # backend
+npm run format                               # frontend (из папки frontend)
+```
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) гоняет всё это на каждый push/PR в main. ESLint работает в режиме zero-warnings: существующие осознанные исключения помечены `eslint-disable-next-line` в коде, любое новое предупреждение валит CI.
+
 ### Безопасность запуска (APP_ENV)
 
 - `APP_ENV=dev` (по умолчанию) — создаётся admin/admin при первом запуске, используется дефолтный SECRET_KEY, CORS разрешён для localhost
