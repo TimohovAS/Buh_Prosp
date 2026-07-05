@@ -1,4 +1,4 @@
-"""Р‘РёР·РЅРµСЃ-Р»РѕРіРёРєР° ProspEl."""
+"""Бизнес-логика ProspEl."""
 
 import calendar
 from datetime import date, timedelta
@@ -23,7 +23,7 @@ async def get_income_total(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
 ) -> Decimal:
-    """РЎСѓРјРјР° РґРѕС…РѕРґРѕРІ Р·Р° РїРµСЂРёРѕРґ."""
+    """Сумма доходов за период."""
     from datetime import date as date_type
     import calendar
 
@@ -44,7 +44,7 @@ async def get_income_total(
 
 
 async def get_income_total_12_months(db: AsyncSession, as_of: date) -> Decimal:
-    """Р”РѕС…РѕРґ Р·Р° РїРѕСЃР»РµРґРЅРёРµ 12 РјРµСЃСЏС†РµРІ (РґР»СЏ Р»РёРјРёС‚Р° 8 РјР»РЅ)."""
+    """Доход за последние 12 месяцев (для лимита 8 млн)."""
     from dateutil.relativedelta import relativedelta
 
     start = as_of - relativedelta(months=12)
@@ -53,7 +53,7 @@ async def get_income_total_12_months(db: AsyncSession, as_of: date) -> Decimal:
 
 def _parse_invoice_number_parts(value: Optional[str]) -> tuple[Optional[int], Optional[int]]:
     """
-    Р’РµСЂРЅСѓС‚СЊ (year, serial) РґР»СЏ С„РѕСЂРјР°С‚РѕРІ:
+    Вернуть (year, serial) для форматов:
     - YYYY-NNNN
     - NNNN-YYYY
     """
@@ -84,8 +84,8 @@ def _normalize_invoice_number(value: Optional[str]) -> str:
 
 def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
     """
-    Р”РѕСЃС‚Р°С‘Рј РІРѕР·РјРѕР¶РЅС‹Рµ РЅРѕРјРµСЂР° С„Р°РєС‚СѓСЂ РёР· С‚РµРєСЃС‚Р° РЅР°Р·РЅР°С‡РµРЅРёСЏ/СЂРµС„РµСЂРµРЅС†РёРё.
-    РџРѕРґРґРµСЂР¶РёРІР°РµРј РѕР±Р° С‡Р°СЃС‚С‹С… С„РѕСЂРјР°С‚Р°: YYYY-NNNN Рё NNN-YYYY.
+    Достаём возможные номера фактур из текста назначения/референции.
+    Поддерживаем оба частых формата: YYYY-NNNN и NNN-YYYY.
     """
     text = " ".join([str(p or "") for p in parts]).upper()
     patterns = [
@@ -104,7 +104,7 @@ def _extract_invoice_candidates(*parts: Optional[str]) -> list[str]:
 
 
 def _invoice_year_from_record(i: Income) -> Optional[int]:
-    """Р“РѕРґ РїРµСЂРёРѕРґР° СЃС‡С‘С‚Р°: РёР· РїРѕР»СЏ invoice_year РёР»Рё РёР· РЅРѕРјРµСЂР° СЃС‡С‘С‚Р°."""
+    """Год периода счёта: из поля invoice_year или из номера счёта."""
     if getattr(i, "invoice_year", None) is not None:
         return int(i.invoice_year)
     y, _ = _parse_invoice_number_parts(getattr(i, "invoice_number", None))
@@ -114,7 +114,7 @@ def _invoice_year_from_record(i: Income) -> Optional[int]:
 
 
 def get_next_invoice_number(db_incomes: list[Income], year: int) -> str:
-    """РЎР»РµРґСѓСЋС‰РёР№ РЅРѕРјРµСЂ СЃС‡С‘С‚Р° Р·Р° РіРѕРґ (С„РѕСЂРјР°С‚ NNNN-YYYY)."""
+    """Следующий номер счёта за год (формат NNNN-YYYY)."""
     nums = []
     for i in db_incomes:
         if not i.invoice_number:
@@ -131,7 +131,7 @@ def get_next_invoice_number(db_incomes: list[Income], year: int) -> str:
 
 
 async def allocate_next_invoice_number(db: AsyncSession, year: int) -> int:
-    """РђС‚РѕРјР°СЂРЅРѕ РІС‹РґРµР»РёС‚СЊ СЃР»РµРґСѓСЋС‰РёР№ РїРѕСЂСЏРґРєРѕРІС‹Р№ РЅРѕРјРµСЂ СЃС‡С‘С‚Р° Р·Р° РіРѕРґ (Р±Р»РѕРєРёСЂРѕРІРєР° РєРѕРЅРєСѓСЂРµРЅС†РёРё)."""
+    """Атомарно выделить следующий порядковый номер счёта за год (блокировка конкуренции)."""
     r = await db.execute(
         text("""
             INSERT INTO invoice_sequence (year, last_number) VALUES (:y, 1)
@@ -149,11 +149,11 @@ async def allocate_next_invoice_number(db: AsyncSession, year: int) -> int:
 
 
 async def allocate_next_project_code(db: AsyncSession) -> str:
-    """РђС‚РѕРјР°СЂРЅРѕ РІС‹РґРµР»РёС‚СЊ СЃР»РµРґСѓСЋС‰РёР№ РєРѕРґ РїСЂРѕРµРєС‚Р° (PR-YYYY-NNNN). Р‘РµР· РґСѓР±Р»РµР№ РїСЂРё РїР°СЂР°Р»Р»РµР»СЊРЅС‹С… Р·Р°РїСЂРѕСЃР°С…."""
+    """Атомарно выделить следующий код проекта (PR-YYYY-NNNN). Без дублей при параллельных запросах."""
     from datetime import date
 
     year = date.today().year
-    # РђС‚РѕРјР°СЂРЅС‹Р№ increment (INSERT or UPDATE) + RETURNING
+    # Атомарный increment (INSERT or UPDATE) + RETURNING
     r = await db.execute(
         text("""
             INSERT INTO project_sequence (year, last_number) VALUES (:y, 1)
@@ -165,7 +165,7 @@ async def allocate_next_project_code(db: AsyncSession) -> str:
     row = r.fetchone()
     if row is not None:
         return f"PR-{year}-{int(row[0]):04d}"
-    # Fallback РґР»СЏ SQLite Р±РµР· RETURNING: Р°С‚РѕРјР°СЂРЅС‹Р№ UPDATE
+    # Fallback для SQLite без RETURNING: атомарный UPDATE
     await db.execute(
         text("""
             INSERT INTO project_sequence (year, last_number) VALUES (:y, 1)
@@ -224,7 +224,7 @@ async def create_expense_reversal(
 
 
 async def get_income_limit_status(db: AsyncSession, year: int) -> dict:
-    """РЎС‚Р°С‚СѓСЃ Р»РёРјРёС‚РѕРІ РґРѕС…РѕРґР°."""
+    """Статус лимитов дохода."""
     year_income = await get_income_total(db, year=year)
     today = date.today()
     income_12m = await get_income_total_12_months(db, today)

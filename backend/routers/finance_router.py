@@ -117,8 +117,8 @@ async def finance_by_project(
 @router.get("/project-movements", response_model=ProjectMovementsResponse)
 async def finance_project_movements(
     project_id: int = Query(...),
-    from_: date = Query(..., alias="from", description="РќР°С‡Р°Р»Рѕ РїРµСЂРёРѕРґР°"),
-    to: date = Query(..., alias="to", description="РљРѕРЅРµС† РїРµСЂРёРѕРґР°"),
+    from_: date = Query(..., alias="from", description="Начало периода"),
+    to: date = Query(..., alias="to", description="Конец периода"),
     mode: Literal["accrual", "cash"] = Query("accrual"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),

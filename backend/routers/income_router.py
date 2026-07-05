@@ -1,4 +1,4 @@
-"""Р РѕСѓС‚РµСЂ РґРѕС…РѕРґРѕРІ (РљРџРћ)."""
+"""Роутер доходов (КПО)."""
 
 from datetime import date
 from typing import Optional
@@ -243,7 +243,7 @@ async def list_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РЎРїРёСЃРѕРє РґРѕС…РѕРґРѕРІ СЃ С„РёР»СЊС‚СЂР°С†РёРµР№."""
+    """Список доходов с фильтрацией."""
     q = (
         select(Income)
         .options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items))
@@ -290,7 +290,7 @@ async def create_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Р”РѕР±Р°РІРёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР° (РљРџРћ). РќРѕРјРµСЂ СЃС‡С‘С‚Р°: Р°РІС‚Рѕ (РїРѕ РіРѕРґСѓ) РёР»Рё РїРµСЂРµРґР°РЅ; СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚СЊ per year."""
+    """Добавить запись дохода (КПО). Номер счёта: авто (по году) или передан; уникальность per year."""
     client_name = data.client_name
     if data.client_id:
         r = await db.execute(select(Client).where(Client.id == data.client_id))
@@ -303,7 +303,7 @@ async def create_income(
     invoice_year_val = year
 
     if not invoice_number:
-        # РњРѕР¶РµС‚ Р±С‹С‚СЊ СЃС‚Р°СЂС‹Р№ С„РѕСЂРјР°С‚ РІ Р‘Р” (YYYY-NNNN), РїРѕСЌС‚РѕРјСѓ РїСЂРё РєРѕР»Р»РёР·РёРё Р±РµСЂС‘Рј СЃР»РµРґСѓСЋС‰РёР№ РЅРѕРјРµСЂ.
+        # Может быть старый формат в БД (YYYY-NNNN), поэтому при коллизии берём следующий номер.
         allocated = False
         for _ in range(50):
             next_n = await allocate_next_invoice_number(db, year)
@@ -377,12 +377,12 @@ async def create_income(
 
 @router.get("/check-invoice")
 async def check_invoice_exists(
-    invoice_number: str = Query(..., description="РќРѕРјРµСЂ СЃС‡С‘С‚Р°"),
+    invoice_number: str = Query(..., description="Номер счёта"),
     year: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РџСЂРѕРІРµСЂРёС‚СЊ, СЃСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё СЃС‡С‘С‚ СЃ С‚Р°РєРёРј РЅРѕРјРµСЂРѕРј РІ СѓРєР°Р·Р°РЅРЅРѕРј РіРѕРґСѓ (РїРµСЂРёРѕРґ СЃС‡С‘С‚Р°)."""
+    """Проверить, существует ли счёт с таким номером в указанном году (период счёта)."""
     y = year or date.today().year
     normalized = to_number_year_format(invoice_number, y)
     return {"exists": await has_invoice_duplicate(db, normalized, y)}
@@ -394,7 +394,7 @@ async def next_invoice_number(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РЎР»РµРґСѓСЋС‰РёР№ РЅРѕРјРµСЂ СЃС‡С‘С‚Р° Р·Р° РіРѕРґ (NNNN СЃР±СЂР°СЃС‹РІР°РµС‚СЃСЏ РЅР° 0001 РІ РЅРѕРІРѕРј РіРѕРґСѓ)."""
+    """Следующий номер счёта за год (NNNN сбрасывается на 0001 в новом году)."""
     y = year or date.today().year
     r = await db.execute(
         select(Income).where(
@@ -418,7 +418,7 @@ async def bulk_assign_project_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РњР°СЃСЃРѕРІРѕРµ РЅР°Р·РЅР°С‡РµРЅРёРµ РїСЂРѕРµРєС‚Р° РґРѕС…РѕРґР°Рј. project_id=null в†’ INT-UNASSIGNED."""
+    """Массовое назначение проекта доходам. project_id=null → INT-UNASSIGNED."""
     if not data.ids:
         return {"updated": 0}
     pid = data.project_id
@@ -428,9 +428,9 @@ async def bulk_assign_project_income(
         r = await db.execute(select(Project).where(Project.id == pid))
         proj = r.scalar_one_or_none()
         if not proj:
-            raise HTTPException(404, "РџСЂРѕРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ")
+            raise HTTPException(404, "Проект не найден")
         if proj.status == "archived":
-            raise HTTPException(400, "РќРµР»СЊР·СЏ РЅР°Р·РЅР°С‡РёС‚СЊ Р°СЂС…РёРІРёСЂРѕРІР°РЅРЅС‹Р№ РїСЂРѕРµРєС‚")
+            raise HTTPException(400, "Нельзя назначить архивированный проект")
     r = await db.execute(select(Income).where(Income.id.in_(data.ids)))
     items = r.scalars().all()
     for item in items:
@@ -618,7 +618,7 @@ async def get_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РџРѕР»СѓС‡РёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР°."""
+    """Получить запись дохода."""
     r = await db.execute(
         select(Income)
         .options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items))
@@ -626,7 +626,7 @@ async def get_income(
     )
     income = r.scalar_one_or_none()
     if not income:
-        raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
+        raise HTTPException(404, "Запись не найдена")
     return _income_response(income)
 
 
@@ -637,11 +637,11 @@ async def update_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РћР±РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ РґРѕС…РѕРґР°."""
+    """Обновить запись дохода."""
     r = await db.execute(select(Income).options(selectinload(Income.items)).where(Income.id == income_id))
     income = r.scalar_one_or_none()
     if not income:
-        raise HTTPException(404, "Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°")
+        raise HTTPException(404, "Запись не найдена")
     if income.status == "cancelled":
         raise HTTPException(400, "Cancelled income cannot be updated")
     requested_items = data.items if "items" in data.model_fields_set else None
@@ -691,7 +691,7 @@ async def update_income(
                 )
         except InvalidStatusTransition as exc:
             raise HTTPException(400, str(exc)) from exc
-    # РџСЂРѕРІРµСЂРєР° СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚Рё (invoice_year, invoice_number) РґРѕ flush
+    # Проверка уникальности (invoice_year, invoice_number) до flush
     if "invoice_number" in dump:
         year_val = income.invoice_year
         if year_val is None and income.issued_date:
@@ -711,7 +711,7 @@ async def update_income(
         if "UNIQUE" in msg and ("invoice" in msg or "income" in msg.lower()):
             raise HTTPException(409, INVOICE_DUPLICATE_DETAIL) from e
         raise
-    # РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°, BankTransaction СЃР°Рј СѓРїСЂР°РІР»СЏРµС‚СЃСЏ
+    # Синхронизация завершена, BankTransaction сам управляется
     r = await db.execute(
         select(Income)
         .options(selectinload(Income.contract), selectinload(Income.client), selectinload(Income.items))

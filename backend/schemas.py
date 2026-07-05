@@ -1,9 +1,9 @@
-"""Pydantic РЎРѓРЎвЂ¦Р ВµР СРЎвЂ№ Р Т‘Р В»РЎРЏ API."""
+"""Pydantic схемы для API."""
 
 from datetime import date, datetime
 from decimal import Decimal
 
-# Р С’Р В»Р С‘Р В°РЎРѓ Р Т‘Р В»РЎРЏ Р С‘Р В·Р В±Р ВµР В¶Р В°Р Р…Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂћР В»Р С‘Р С”РЎвЂљР В° Р С‘Р СР ВµР Р…Р С‘ Р С—Р С•Р В»РЎРЏ date РЎРѓ РЎвЂљР С‘Р С—Р С•Р С date
+# Алиас для избежания конфликта имени поля date с типом date
 from typing import Literal, Optional
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -196,10 +196,8 @@ class IncomeItemSuggestion(BaseModel):
 
 
 class IncomeBase(BaseModel):
-    issued_date: DateType = Field(
-        serialization_alias="date"
-    )  # Р Т‘Р В°РЎвЂљР В° РЎРѓРЎвЂЎРЎвЂРЎвЂљР В° (Р Р† Р вЂР вЂќ: date)
-    due_date: Optional[DateType] = None  # Valuta / РЎРѓРЎР‚Р С•Р С” Р С•Р С—Р В»Р В°РЎвЂљРЎвЂ№
+    issued_date: DateType = Field(serialization_alias="date")  # дата счёта (в БД: date)
+    due_date: Optional[DateType] = None  # Valuta / срок оплаты
     invoice_number: str
     invoice_year: Optional[int] = None
     client_id: Optional[int] = None
@@ -218,13 +216,9 @@ class IncomeBase(BaseModel):
 
 
 class IncomeCreate(IncomeBase):
-    invoice_number: Optional[str] = (
-        None  # Р С—РЎС“РЎРѓРЎвЂљР С• = Р С—РЎР‚Р С‘РЎРѓР Р†Р С•Р С‘РЎвЂљРЎРЉ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘
-    )
+    invoice_number: Optional[str] = None  # пусто = присвоить автоматически
     invoice_year: Optional[int] = None
-    issued_date: Optional[DateType] = (
-        None  # Р С—РЎР‚Р С‘ Р С—РЎС“РЎРѓРЎвЂљР С• Р В±Р ВµРЎР‚РЎвЂРЎвЂљРЎРѓРЎРЏ date (backward compat)
-    )
+    issued_date: Optional[DateType] = None  # при пусто берётся date (backward compat)
     status: Optional[str] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
@@ -291,7 +285,7 @@ class IncomeMarkPaid(BaseModel):
 
 
 class BulkAssignProject(BaseModel):
-    """Р СљР В°РЎРѓРЎРѓР С•Р Р†Р С•Р Вµ Р Р…Р В°Р В·Р Р…Р В°РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР В°: ids + project_id (null = РЎРѓР Р…РЎРЏРЎвЂљРЎРЉ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљ)."""
+    """Массовое назначение проекта: ids + project_id (null = снять проект)."""
 
     ids: list[int]
     project_id: Optional[int] = None
@@ -502,7 +496,7 @@ class IncomePaymentDetailsResponse(BaseModel):
 
 
 class DashboardIncomeResponse(BaseModel):
-    """Р Р€Р С—РЎР‚Р С•РЎвЂ°РЎвЂР Р…Р Р…РЎвЂ№Р в„– Р С•РЎвЂљР Р†Р ВµРЎвЂљ Р Т‘Р В»РЎРЏ Р С—Р В°Р Р…Р ВµР В»Р С‘."""
+    """Упрощённый ответ для панели."""
 
     id: int
     issued_date: DateType = Field(serialization_alias="date")
@@ -517,7 +511,7 @@ class DashboardIncomeResponse(BaseModel):
 class ContractItemBase(BaseModel):
     description: str
     quantity: float = 1
-    unit: str = "РЎв‚¬РЎвЂљ"
+    unit: str = "шт"
     price: Decimal = Decimal("0.00")
 
 
@@ -573,7 +567,7 @@ class ContractResponse(ContractBase):
     created_at: datetime
     client_name: Optional[str] = None
     items: Optional[list[ContractItemResponse]] = None
-    # Р РЋРЎС“Р СР СРЎвЂ№ Р С—Р С• РЎвЂљР С‘Р С—Р В°Р С Р С—Р В»Р В°РЎвЂљР ВµР В¶Р ВµР в„– (Р В°Р Р†Р В°Р Р…РЎРѓ, Р С—РЎР‚Р С•Р СР ВµР В¶РЎС“РЎвЂљР С•РЎвЂЎР Р…РЎвЂ№Р Вµ, Р В·Р В°Р С”РЎР‚РЎвЂ№Р Р†Р В°РЎР‹РЎвЂ°Р С‘Р в„–)
+    # Суммы по типам платежей (аванс, промежуточные, закрывающий)
     advance_sum: Decimal = Decimal("0.00")
     intermediate_sum: Decimal = Decimal("0.00")
     closing_sum: Decimal = Decimal("0.00")
@@ -714,7 +708,7 @@ class EfakturaSyncResponse(EfakturaImportResult):
     fetched_count: int = 0
 
 
-# --- PaymentType, YearDecision, MonthlyObligation (Р СћР вЂ”: Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘) ---
+# --- PaymentType, YearDecision, MonthlyObligation (ТЗ: Обязательные платежи) ---
 class PaymentTypeResponse(BaseModel):
     id: int
     code: str
@@ -733,7 +727,7 @@ class YearDecisionBase(BaseModel):
     monthly_amount: Decimal
     base_amount: Optional[Decimal] = None
     rate_percent: Optional[float] = None
-    recipient_name: str = "Р СџР С•РЎР‚Р ВµРЎРѓР С”Р В° РЎС“Р С—РЎР‚Р В°Р Р†Р В° Р В Р ВµР С—РЎС“Р В±Р В»Р С‘Р С”Р Вµ Р РЋРЎР‚Р В±Р С‘РЎВР Вµ"
+    recipient_name: str = "Пореска управа Републике Србије"
     recipient_account: str
     sifra_placanja: str = "253"
     model: str = "97"
@@ -796,7 +790,7 @@ class ObligationMarkPaid(BaseModel):
 
 
 class IPSQRData(BaseModel):
-    """Р вЂќР В°Р Р…Р Р…РЎвЂ№Р Вµ Р Т‘Р В»РЎРЏ IPS QR (NBS)."""
+    """Данные для IPS QR (NBS)."""
 
     payer: str
     recipient: str
@@ -907,18 +901,18 @@ class FinancePnlResponse(BaseModel):
 
 
 class UpcomingObligationItem(BaseModel):
-    """Р СњР ВµР С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р Вµ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓРЎвЂљР Р†Р С• Р Т‘Р В»РЎРЏ Р С—РЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р В° Р Т‘Р В°РЎв‚¬Р В±Р С•РЎР‚Р Т‘Р Вµ."""
+    """Неоплаченное обязательство для предупреждения на дашборде."""
 
     id: int
     payment_type_name: str
     amount: Decimal
     deadline: str  # YYYY-MM-DD
     status: str  # overdue | upcoming
-    days_until: int  # Р С•РЎвЂљРЎР‚Р С‘РЎвЂ Р В°РЎвЂљР ВµР В»РЎРЉР Р…Р С•Р Вµ Р ВµРЎРѓР В»Р С‘ Р С—РЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р С•
+    days_until: int  # отрицательное если просрочено
 
 
 class UpcomingPlannedItem(BaseModel):
-    """Р СџРЎР‚Р С•РЎРѓРЎР‚Р С•РЎвЂЎР ВµР Р…Р Р…РЎвЂ№Р в„– Р С‘Р В»Р С‘ Р С—РЎР‚Р С‘Р В±Р В»Р С‘Р В¶Р В°РЎР‹РЎвЂ°Р С‘Р в„–РЎРѓРЎРЏ Р С—Р ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘."""
+    """Просроченный или приближающийся периодический расход."""
 
     planned_expense_id: int
     name: str
@@ -938,7 +932,7 @@ class DashboardStats(BaseModel):
     balance_year: Decimal  # year_income - year_expenses
     balance_all_time: Decimal
     financial_result_all_time: Decimal
-    planned_expenses_until_month_end: Decimal  # Р С—Р В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№ + Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р В»Р В°РЎвЂљР ВµР В¶Р С‘ Р Т‘Р С• Р С”Р С•Р Р…РЎвЂ Р В° Р СР ВµРЎРѓРЎРЏРЎвЂ Р В°
+    planned_expenses_until_month_end: Decimal  # планируемые расходы + обязательные платежи до конца месяца
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None
@@ -967,7 +961,7 @@ class ExpenseBase(BaseModel):
     category_id: Optional[int] = None
     source: Optional[str] = None  # manual | planned | obligation | bank_import | cash | cash_transfer
     reversal_of_id: Optional[int] = None
-    bank_reference: Optional[str] = None  # Р СњР С•Р СР ВµРЎР‚ Р С—Р В»Р В°РЎвЂљРЎвЂР В¶Р С”Р С‘ / ID transakcije
+    bank_reference: Optional[str] = None  # Номер платёжки / ID transakcije
     note: Optional[str] = None
 
     @field_validator("project_id", "contract_id", "category_id", mode="before")
@@ -1046,7 +1040,7 @@ class ExpenseDetailResponse(ExpenseResponse):
     items: list[ExpenseItemResponse] = Field(default_factory=list)
 
 
-# --- PlannedExpense (Р СџР В»Р В°Р Р…Р С‘РЎР‚РЎС“Р ВµР СРЎвЂ№Р Вµ РЎР‚Р В°РЎРѓРЎвЂ¦Р С•Р Т‘РЎвЂ№) ---
+# --- PlannedExpense (Планируемые расходы) ---
 
 
 class ExpenseDuplicateItem(BaseModel):
@@ -1087,8 +1081,8 @@ class PlannedExpenseBase(BaseModel):
     project_id: Optional[int] = None
     worker_id: Optional[int] = None
     period: str = "monthly"  # weekly, monthly, quarterly, yearly
-    payment_day: Optional[int] = None  # 1-31 Р Т‘Р В»РЎРЏ monthly/quarterly/yearly
-    payment_day_of_week: Optional[int] = None  # 0-6 Р Т‘Р В»РЎРЏ weekly (0=Р С—Р Р…)
+    payment_day: Optional[int] = None  # 1-31 для monthly/quarterly/yearly
+    payment_day_of_week: Optional[int] = None  # 0-6 для weekly (0=пн)
     start_date: DateType
     end_date: Optional[DateType] = None
     reminder_days: int = 3

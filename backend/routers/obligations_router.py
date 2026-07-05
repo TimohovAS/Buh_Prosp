@@ -65,7 +65,7 @@ async def list_obligation_years(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Р”РѕСЃС‚СѓРїРЅС‹Рµ РіРѕРґС‹ РґР»СЏ РєР°Р»РµРЅРґР°СЂСЏ РѕР±СЏР·Р°С‚РµР»СЊСЃС‚РІ."""
+    """Доступные годы для календаря обязательств."""
     decision_result = await db.execute(select(YearDecision.year))
     obligation_result = await db.execute(select(MonthlyObligation.year))
     years = {value for (value,) in [*decision_result.all(), *obligation_result.all()] if value is not None}

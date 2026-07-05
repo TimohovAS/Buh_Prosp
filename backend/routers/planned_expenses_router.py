@@ -1,4 +1,4 @@
-"""Р РѕСѓС‚РµСЂ РїР»Р°РЅРёСЂСѓРµРјС‹С… (РїРµСЂРёРѕРґРёС‡РµСЃРєРёС…) СЂР°СЃС…РѕРґРѕРІ."""
+"""Роутер планируемых (периодических) расходов."""
 
 from datetime import date, timedelta
 from typing import Optional
@@ -47,7 +47,7 @@ async def list_planned_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РЎРїРёСЃРѕРє РїР»Р°РЅРёСЂСѓРµРјС‹С… СЂР°СЃС…РѕРґРѕРІ."""
+    """Список планируемых расходов."""
     q = select(PlannedExpense).order_by(PlannedExpense.name)
     if is_active is not None:
         q = q.where(PlannedExpense.is_active == is_active)
@@ -66,7 +66,7 @@ async def get_upcoming_payments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РџСЂРµРґСЃС‚РѕСЏС‰РёРµ РїР»Р°С‚РµР¶Рё: РїСЂРѕСЃСЂРѕС‡РµРЅРЅС‹Рµ + РІ Р±Р»РёР¶Р°Р№С€РёРµ N РґРЅРµР№. РќРµРѕРїР»Р°С‡РµРЅРЅС‹Рµ РїРѕ РґР°С‚Рµ, РѕРїР»Р°С‡РµРЅРЅС‹Рµ РІ РєРѕРЅС†Рµ."""
+    """Предстоящие платежи: просроченные + в ближайшие N дней. Неоплаченные по дате, оплаченные в конце."""
     today = date.today()
     range_start = today - timedelta(days=days)
     range_end = today + timedelta(days=days)
@@ -114,11 +114,11 @@ async def mark_planned_expense_paid(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РћС‚РјРµС‚РёС‚СЊ РїР»Р°С‚С‘Р¶ РїР»Р°РЅРёСЂСѓРµРјРѕРіРѕ СЂР°СЃС…РѕРґР° РєР°Рє РѕРїР»Р°С‡РµРЅРЅС‹Р№ Рё СЃРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ РІ СЂР°СЃС…РѕРґР°С…."""
+    """Отметить платёж планируемого расхода как оплаченный и создать запись в расходах."""
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.id == data.planned_expense_id))
     pe = r.scalar_one_or_none()
     if not pe:
-        raise HTTPException(404, "РџР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
+        raise HTTPException(404, "Планируемый расход не найден")
     due_d = data.due_date if hasattr(data.due_date, "year") else date.fromisoformat(str(data.due_date))
     paid_d = data.paid_date if hasattr(data.paid_date, "year") else date.fromisoformat(str(data.paid_date))
     r_exist = await db.execute(
@@ -128,7 +128,7 @@ async def mark_planned_expense_paid(
         )
     )
     if r_exist.scalar_one_or_none():
-        raise HTTPException(400, "Р­С‚РѕС‚ РїР»Р°С‚С‘Р¶ СѓР¶Рµ РѕС‚РјРµС‡РµРЅ РєР°Рє РѕРїР»Р°С‡РµРЅРЅС‹Р№")
+        raise HTTPException(400, "Этот платёж уже отмечен как оплаченный")
     pep = PlannedExpensePayment(
         planned_expense_id=pe.id,
         due_date=due_d,
@@ -146,7 +146,7 @@ async def mark_planned_expense_unpaid(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РћС‚РјРµРЅРёС‚СЊ РѕС‚РјРµС‚РєСѓ РѕР± РѕРїР»Р°С‚Рµ: СЃС‚РѕСЂРЅРѕ СЂР°СЃС…РѕРґР°, СѓРґР°Р»РµРЅРёРµ PlannedExpensePayment."""
+    """Отменить отметку об оплате: сторно расхода, удаление PlannedExpensePayment."""
     due_d = data.due_date if hasattr(data.due_date, "year") else date.fromisoformat(str(data.due_date))
     r = await db.execute(
         select(PlannedExpensePayment).where(
@@ -156,7 +156,7 @@ async def mark_planned_expense_unpaid(
     )
     pep = r.scalar_one_or_none()
     if not pep:
-        raise HTTPException(404, "РћРїР»Р°С‚Р° РЅРµ РЅР°Р№РґРµРЅР°")
+        raise HTTPException(404, "Оплата не найдена")
     await db.delete(pep)
     await db.commit()
     return {"ok": True}
@@ -168,7 +168,7 @@ async def create_planned_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Р”РѕР±Р°РІРёС‚СЊ РїР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ."""
+    """Добавить планируемый расход."""
     project_id = await _resolve_category_project_id(
         db,
         data.category_id if hasattr(data, "category_id") else None,
@@ -207,11 +207,11 @@ async def get_planned_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """РџРѕР»СѓС‡РёС‚СЊ РїР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ."""
+    """Получить планируемый расход."""
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.id == expense_id))
     pe = r.scalar_one_or_none()
     if not pe:
-        raise HTTPException(404, "РџР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
+        raise HTTPException(404, "Планируемый расход не найден")
     return PlannedExpenseResponse.model_validate(pe)
 
 
@@ -222,11 +222,11 @@ async def update_planned_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РћР±РЅРѕРІРёС‚СЊ РїР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ."""
+    """Обновить планируемый расход."""
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.id == expense_id))
     pe = r.scalar_one_or_none()
     if not pe:
-        raise HTTPException(404, "РџР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
+        raise HTTPException(404, "Планируемый расход не найден")
     dump = data.model_dump(exclude_unset=True)
     desired_project_id = await _resolve_category_project_id(
         db,
@@ -253,11 +253,11 @@ async def delete_planned_expense(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """РЈРґР°Р»РёС‚СЊ РїР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ."""
+    """Удалить планируемый расход."""
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.id == expense_id))
     pe = r.scalar_one_or_none()
     if not pe:
-        raise HTTPException(404, "РџР»Р°РЅРёСЂСѓРµРјС‹Р№ СЂР°СЃС…РѕРґ РЅРµ РЅР°Р№РґРµРЅ")
+        raise HTTPException(404, "Планируемый расход не найден")
     await db.delete(pe)
     await db.commit()
     return {"ok": True}

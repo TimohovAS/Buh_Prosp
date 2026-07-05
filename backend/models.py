@@ -190,7 +190,7 @@ class Enterprise(Base):
 
 
 class EfakturaImportRecord(Base):
-    """Р–СѓСЂРЅР°Р» РёРјРїРѕСЂС‚РѕРІ eFaktura."""
+    """Журнал импортов eFaktura."""
 
     __tablename__ = "efaktura_import_records"
     __table_args__ = (UniqueConstraint("document_key", name="uq_efaktura_document_key"),)
@@ -641,7 +641,7 @@ class Contract(Base):
 
 
 class BankTransactionIncomeAllocation(Base):
-    """Р Р°СЃРїСЂРµРґРµР»РµРЅРёРµ РѕРґРЅРѕРіРѕ РІС…РѕРґСЏС‰РµРіРѕ РїР»Р°С‚РµР¶Р° РїРѕ РЅРµСЃРєРѕР»СЊРєРёРј С„Р°РєС‚СѓСЂР°Рј."""
+    """Распределение одного входящего платежа по нескольким фактурам."""
 
     __tablename__ = "bank_transaction_income_allocations"
     __table_args__ = (UniqueConstraint("bank_transaction_id", "income_id", name="uq_bank_tx_income_allocation"),)

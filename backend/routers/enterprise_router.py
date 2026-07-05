@@ -16,7 +16,7 @@ router = APIRouter(prefix="/enterprise", tags=["enterprise"])
 async def get_enterprise_branding(
     db: AsyncSession = Depends(get_db),
 ):
-    """РџРѕР»СѓС‡РёС‚СЊ РїСѓР±Р»РёС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ Р±СЂРµРЅРґР° РїСЂРµРґРїСЂРёСЏС‚РёСЏ."""
+    """Получить публичные данные бренда предприятия."""
     r = await db.execute(select(Enterprise).limit(1))
     ent = r.scalar_one_or_none()
     if not ent:
