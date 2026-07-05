@@ -1,4 +1,5 @@
 """Импорт банковских изводов в BankTransaction."""
+
 from datetime import date
 from typing import Optional, Any
 import hashlib
@@ -36,9 +37,7 @@ class ApplyRequest(BaseModel):
 
 
 async def _recent_files(db: AsyncSession, limit: int = 10) -> list[dict[str, Any]]:
-    r = await db.execute(
-        select(BankImportFile).order_by(BankImportFile.imported_at.desc()).limit(limit)
-    )
+    r = await db.execute(select(BankImportFile).order_by(BankImportFile.imported_at.desc()).limit(limit))
     items = r.scalars().all()
     user_map: dict[int, str] = {}
     user_ids = [x.imported_by for x in items if x.imported_by is not None]
@@ -80,22 +79,25 @@ async def list_all_import_files(
 ):
     """Все импортированные файлы с флагом ghost (created=0 but tx_count>0)."""
     from sqlalchemy import select as _select
+
     r = await db.execute(_select(BankImportFile).order_by(BankImportFile.id))
     items = r.scalars().all()
     result = []
     for f in items:
         created = (f.created_income or 0) + (f.created_expense or 0)
         is_ghost = created == 0 and (f.transaction_count or 0) > 0
-        result.append({
-            "id": f.id,
-            "file_name": f.file_name,
-            "file_hash": f.file_hash,
-            "transaction_count": f.transaction_count,
-            "created_income": f.created_income,
-            "created_expense": f.created_expense,
-            "imported_at": f.imported_at.isoformat() if f.imported_at else None,
-            "is_ghost": is_ghost,
-        })
+        result.append(
+            {
+                "id": f.id,
+                "file_name": f.file_name,
+                "file_hash": f.file_hash,
+                "transaction_count": f.transaction_count,
+                "created_income": f.created_income,
+                "created_expense": f.created_expense,
+                "imported_at": f.imported_at.isoformat() if f.imported_at else None,
+                "is_ghost": is_ghost,
+            }
+        )
     return {"items": result, "total": len(result)}
 
 
@@ -107,7 +109,8 @@ async def delete_import_file_record(
 ):
     """Удалить запись об импорте файла (чтобы можно было переимпортировать)."""
     from sqlalchemy import delete as _delete
-    r = await db.execute(_select(BankImportFile).where(BankImportFile.id == file_id))
+
+    r = await db.execute(select(BankImportFile).where(BankImportFile.id == file_id))
     rec = r.scalar_one_or_none()
     if not rec:
         raise HTTPException(404, "Запись не найдена")
@@ -117,7 +120,6 @@ async def delete_import_file_record(
     return {"deleted": True, "file_name": rec.file_name, "was_ghost": created == 0 and (rec.transaction_count or 0) > 0}
 
 
-
 @router.post("/parse")
 async def parse_izvod(
     files: list[UploadFile] = File(...),
@@ -125,49 +127,53 @@ async def parse_izvod(
     current_user: User = Depends(get_current_user_required),
 ):
     """Разобрать файл(ы) извода (.xls). Возвращает список транзакций.
-    
+
     если файл уже был импортирован, он всё равно разбирается, но помечается предупреждением.
     Дубликаты транзакций будут отсеяны на этапе /apply.
     """
     all_transactions = []
     skipped_files = []
     parsed_files = []
-    
+
     for file in files:
         if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
             skipped_files.append({"file_name": file.filename or "unknown", "reason": "Нужен файл .xls или .xlsx"})
             continue
-            
+
         content = await file.read()
         file_hash = hashlib.sha256(content).hexdigest()
-        
+
         # Проверяем, был ли файл уже импортирован - но теперь это только предупреждение
         r = await db.execute(select(BankImportFile).where(BankImportFile.file_hash == file_hash))
         existing = r.scalar_one_or_none()
         previously_imported = existing is not None
-            
+
         try:
             transactions = parse_izvod_xls(content)
             for t in transactions:
                 t["file_hash"] = file_hash
             all_transactions.extend(transactions)
-            parsed_files.append({
-                "file_hash": file_hash,
-                "file_name": file.filename,
-                "file_size": len(content),
-                "transaction_count": len(transactions),
-                "previously_imported": previously_imported,
-            })
-            if previously_imported:
-                skipped_files.append({
+            parsed_files.append(
+                {
+                    "file_hash": file_hash,
                     "file_name": file.filename,
-                    "reason": "Уже импортирован",
-                    "hash": file_hash,
-                    "re_import": True,
-                })
+                    "file_size": len(content),
+                    "transaction_count": len(transactions),
+                    "previously_imported": previously_imported,
+                }
+            )
+            if previously_imported:
+                skipped_files.append(
+                    {
+                        "file_name": file.filename,
+                        "reason": "Уже импортирован",
+                        "hash": file_hash,
+                        "re_import": True,
+                    }
+                )
         except Exception as e:
             skipped_files.append({"file_name": file.filename, "reason": f"Ошибка чтения: {e}"})
-            
+
     return {
         "transactions": all_transactions,
         "parsed_files": parsed_files,
@@ -196,7 +202,7 @@ async def apply_import(
 
     for i, item in enumerate(transactions):
         tx = item.tx
-        
+
         ref = tx.get("reference") or ""
         date_str = tx.get("date")
         amount = to_decimal(tx.get("amount") or ZERO_DECIMAL)
@@ -226,12 +232,14 @@ async def apply_import(
                 is_duplicate = True
         else:
             # Дедупликация по дате, сумме, направлению и назначению
-            r = await db.execute(select(BankTransaction).where(
-                BankTransaction.date == d,
-                BankTransaction.amount == amount,
-                BankTransaction.direction == direction,
-                BankTransaction.purpose == description
-            ))
+            r = await db.execute(
+                select(BankTransaction).where(
+                    BankTransaction.date == d,
+                    BankTransaction.amount == amount,
+                    BankTransaction.direction == direction,
+                    BankTransaction.purpose == description,
+                )
+            )
             if r.scalar_one_or_none():
                 is_duplicate = True
 
@@ -247,7 +255,7 @@ async def apply_import(
             purpose=description or None,
             bank_reference=ref or None,
             raw_json=raw_json,
-            status="unmatched"
+            status="unmatched",
         )
         db.add(transaction)
         created_transactions += 1

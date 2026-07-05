@@ -21,7 +21,6 @@ const t = {
     search: 'Претрага',
     date: 'Датум',
     valuta: 'Valuta',
-    invoiceNumber: 'Бр. рачуна',
     client: 'Клијент',
     description: 'Опис',
     amount: 'Износ (RSD)',
@@ -87,9 +86,11 @@ const t = {
     confirmDeleteReversalExpense: 'Обрисати сторно запис и вратити оригинални расход?',
     adminHardDeleteSelected: 'Админ: обриши записе',
     adminHardDeleteExpense: 'Админ: обриши запис',
-    confirmAdminHardDeleteExpenses: 'Администраторско брисање физички уклања {count} запис(а) из базе. Наставити?',
+    confirmAdminHardDeleteExpenses:
+      'Администраторско брисање физички уклања {count} запис(а) из базе. Наставити?',
     expenseDuplicatesTitle: 'Могући дупликати расхода',
-    expenseDuplicatesHint: 'Проверени су уноси са истим позивом на број, као и записи са истим датумом, описом и износом. Изаберите који унос желите да задржите.',
+    expenseDuplicatesHint:
+      'Проверени су уноси са истим позивом на број, као и записи са истим датумом, описом и износом. Изаберите који унос желите да задржите.',
     expenseDuplicateByPaymentRef: 'Дупликат по позиву на број',
     expenseDuplicateByDescription: 'Дупликат по датуму, опису и износу',
     expenseMergeKeepThis: 'Остави ову запис',
@@ -154,8 +155,10 @@ const t = {
     efakturaImportedAsExpense: 'Расход',
     efakturaSettingsTitle: 'eFaktura API',
     efakturaSettingsSummary: 'API кључ • base URL • шаблони синхронизације',
-    efakturaSettingsHint: 'Овај модул је задужен за API синхронизацију са eFaktura. XML увоз на одвојеној страници ради и без ових подешавања.',
-    efakturaSettingsDefaultHint: 'Ако Base URL и путање оставите празне, користе се стандардне eFaktura адресе. Попуњавајте поља само ако желите да их промените.',
+    efakturaSettingsHint:
+      'Овај модул је задужен за API синхронизацију са eFaktura. XML увоз на одвојеној страници ради и без ових подешавања.',
+    efakturaSettingsDefaultHint:
+      'Ако Base URL и путање оставите празне, користе се стандардне eFaktura адресе. Попуњавајте поља само ако желите да их промените.',
     efakturaDefaultValue: 'Подразумевано',
     efakturaOverrideHint: 'Оставите празно ако желите подразумевану вредност.',
     efakturaEnabled: 'Модул је укључен',
@@ -171,7 +174,8 @@ const t = {
     efakturaOutgoingListPath: 'Путања за листу излазних',
     efakturaOutgoingDocumentPath: 'Путања за документ излазних',
     efakturaFileDownloadSettings: 'Преузимање PDF фактура',
-    efakturaFileDownloadHint: 'Ако је укључено, после API синхронизације PDF фактуре се преузимају преко браузера у локални Downloads фолдер корисника.',
+    efakturaFileDownloadHint:
+      'Ако је укључено, после API синхронизације PDF фактуре се преузимају преко браузера у локални Downloads фолдер корисника.',
     efakturaSavePdf: 'Чувати PDF',
     efakturaIncomingPdfPath: 'Путања PDF улазних',
     efakturaOutgoingPdfPath: 'Путања PDF излазних',
@@ -259,7 +263,8 @@ const t = {
     notAvailable: 'Недоступно',
     noRecords: 'Нема уноса',
     limitWarning: 'Приближавање лимиту (80%). Препоручује се контрола прихода.',
-    limitExceeded: 'Внимање! Прекорачен је лимит прихода. При прекорачењу 6 мил. RSD годишње — прелазак на општи режим. При прекорачењу 8 мил. за 12 мес. — обавезна регистрација ПДВ.',
+    limitExceeded:
+      'Внимање! Прекорачен је лимит прихода. При прекорачењу 6 мил. RSD годишње — прелазак на општи режим. При прекорачењу 8 мил. за 12 мес. — обавезна регистрација ПДВ.',
     obligationsCalendar: 'Календар обавеза',
     dateOfPayment: 'датум уплате',
     decisionsModalTitle: 'Одлуке Пореске управе',
@@ -352,7 +357,8 @@ const t = {
     finance: 'Финансије',
     pnlTitle: 'P&L',
     pnlExplanation: 'Профит и губитак по месецима',
-    pnlAccrualNote: 'P&L се рачуна по датумима докумената: приходи по датуму фактуре, расходи по датуму расхода.',
+    pnlAccrualNote:
+      'P&L се рачуна по датумима докумената: приходи по датуму фактуре, расходи по датуму расхода.',
     pnlChart: 'Графикон P&L',
     pnlTable: 'Табела P&L',
     financeOverview: 'Финансије — преглед',
@@ -401,7 +407,8 @@ const t = {
     cashAddFromBank: 'Додај из банке',
     cashAddPendingWithdrawal: 'Привремени улаз готовине',
     cashPendingWithdrawalDefaultDescription: 'Привремено подизање готовине',
-    cashPendingWithdrawalHint: 'Ова операција само привремено повећава стање готовине док банковни извод не стигне. Не креира расход нити приход.',
+    cashPendingWithdrawalHint:
+      'Ова операција само привремено повећава стање готовине док банковни извод не стигне. Не креира расход нити приход.',
     cashPendingWithdrawalTotal: 'Чека извод',
     cashLinkPendingWithdrawal: 'Повежи са изводом',
     cashLinkPendingWithdrawalTitle: 'Повезивање привременог улаза са изводом',
@@ -538,9 +545,11 @@ const t = {
     receiptAmountDelta: 'Разлика',
     receiptAmountExact: 'Износ се поклапа',
     receiptLinkMismatchHint: 'Износ чека и расхода се разликује, али ручно повезивање је дозвољено.',
-    receiptLinkMismatchConfirm: 'Износ чека: {receipt}. Износ расхода: {expense}. Разлика: {delta}. Повезати ипак?',
+    receiptLinkMismatchConfirm:
+      'Износ чека: {receipt}. Износ расхода: {expense}. Разлика: {delta}. Повезати ипак?',
     receiptDelete: 'Обриши чек',
-    receiptDeleteConfirm: 'Обрисати овај чек? Ако је чек креирао сопствени расход без других веза, и тај расход ће бити обрисан.',
+    receiptDeleteConfirm:
+      'Обрисати овај чек? Ако је чек креирао сопствени расход без других веза, и тај расход ће бити обрисан.',
     receiptLinkedExpense: 'Повезани расход',
     receiptLinkedBank: 'Повезана банка',
     receiptExpenseCandidates: 'Кандидати за повезивање',
@@ -626,7 +635,8 @@ const t = {
     fullNamePlaceholder: 'Име и презиме',
     noUsers: 'Нема корисника',
     limits: 'Лимити',
-    limitsDescription: 'Лимит 6 мил. RSD — праг изласка из паушалног режима годишње. Лимит 8 мил. — праг регистрације ПДВ за 12 мес.',
+    limitsDescription:
+      'Лимит 6 мил. RSD — праг изласка из паушалног режима годишње. Лимит 8 мил. — праг регистрације ПДВ за 12 мес.',
     loginHint: 'По дефолту: admin / admin',
     loginCannotChange: 'Логин се не може мењати',
     loginError: 'Грешка пријаве',
@@ -660,7 +670,8 @@ const t = {
     bankTxNoInvoicesFound: 'Ништа није пронађено',
     bankTxCreateExpense: 'Креирај расход',
     bankTxExistingExpenses: 'Постојећи расходи',
-    bankTxCreateExpenseHint: 'Из ове трансакције ће бити креиран плаћени расход који ће се појавити на страници расхода.',
+    bankTxCreateExpenseHint:
+      'Из ове трансакције ће бити креиран плаћени расход који ће се појавити на страници расхода.',
     bankTxOpenObligations: 'Отворене обавезе',
     bankTxSearchObligations: 'Претрага по називу, року или износу...',
     bankTxNoOpenObligations: 'Нема отворених обавеза за повезивање.',
@@ -678,7 +689,8 @@ const t = {
     bankTxAllocationRemaining: 'РћСЃС‚Р°С‚Р°Рє',
     bankTxAllocationOverAllocated: 'Р Р°СЃРїРѕСЂРµРґРµРЅРѕ РІРёС€Рµ РёР·РЅРѕСЃР° РїР»Р°С‚РµР¶Р° Р·Р°',
     bankTxAllocationRemainingHint: 'Р”РµРѕ РїР»Р°С‚РµР¶Р° СРѕС€ РЅРёСРµ СЂР°СЃРїРѕСЂРµРґРµРЅ:',
-    bankTxAllocationEmpty: 'РР·Р°Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂРµ РєРѕСРёРјР° СЂР°СЃРїРѕСЂРµС’СѓСРµС‚Рµ РѕРІСѓ СѓРїР»Р°С‚Сѓ.',
+    bankTxAllocationEmpty:
+      'РР·Р°Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂРµ РєРѕСРёРјР° СЂР°СЃРїРѕСЂРµС’СѓСРµС‚Рµ РѕРІСѓ СѓРїР»Р°С‚Сѓ.',
     bankTxAllocationCandidates: 'РћС‚РІРѕСЂРµРЅРµ С„Р°РєС‚СѓСЂРµ Р·Р° СЂР°СЃРїРѕРґРµР»Сѓ',
     bankTxAllocationPartialStatus: 'Р”РµР»РёРјРёС‡РЅРѕ СЂР°СЃРїРѕСЂРµРґРµРЅРѕ',
     bankTxAllocationFullStatus: 'Р Р°СЃРїРѕСЂРµРґРµРЅРѕ',
@@ -704,7 +716,8 @@ const t = {
     noCategories: 'Нема категорија',
     download: 'Преузми',
     serviceBackupsTitle: 'Сервис и резервне копије',
-    serviceBackupsHint: 'Аутоматски се креира snapshot SQLite базе. Backup можете ручно направити, преузети или вратити из ове секције.',
+    serviceBackupsHint:
+      'Аутоматски се креира snapshot SQLite базе. Backup можете ручно направити, преузети или вратити из ове секције.',
     serviceBackupsUnsupported: 'Backup/restore је доступан само када апликација ради на SQLite бази.',
     serviceBackupsRefresh: 'Освежи',
     serviceBackupsCreate: 'Направи backup',
@@ -724,7 +737,8 @@ const t = {
     serviceBackupsManualRetentionHint: 'Колико последњих ручно направљених архива задржати.',
     serviceBackupsPreRestoreRetentionHint: 'Колико архива направљених пре restore операције задржати.',
     serviceBackupsSchedulerCheck: 'Провера scheduler-а',
-    serviceBackupsSchedulerCheckHint: 'На колико минута сервис проверава да ли је време за следећи auto backup.',
+    serviceBackupsSchedulerCheckHint:
+      'На колико минута сервис проверава да ли је време за следећи auto backup.',
     serviceBackupsHours: 'сати',
     serviceBackupsMinutes: 'минута',
     serviceBackupsTabSettings: 'Параметри',
@@ -744,7 +758,8 @@ const t = {
     serviceBackupsSettingsSaved: 'Backup подешавања су сачувана.',
     serviceBackupsSettingsSaveError: 'Грешка при чувању backup подешавања.',
     serviceBackupsRestoreSuccess: 'База је враћена из backup-а. Страница ће се освежити.',
-    serviceBackupsRestoreConfirm: 'Вратити базу из изабраног backup-а? Препоручљиво је да у том тренутку нико не ради у систему.',
+    serviceBackupsRestoreConfirm:
+      'Вратити базу из изабраног backup-а? Препоручљиво је да у том тренутку нико не ради у систему.',
     serviceBackupsReloadHint: 'После враћања, активни корисници треба да освежe страницу.',
 
     incomingInvoices: 'Улазне фактуре',
@@ -766,14 +781,17 @@ const t = {
     selectExpense: 'Изабери постојећи расход',
     settlementAmount: 'Износ затварања',
     settlementDate: 'Датум затварања',
-    noExpenseCandidates: 'Нема плаћених расхода са истим износом који још нису повезани са другом улазном фактуром.',
+    noExpenseCandidates:
+      'Нема плаћених расхода са истим износом који још нису повезани са другом улазном фактуром.',
     linkedExpense: 'Повезани расход',
     paymentDetails: 'Детаљи плаћања',
     incomingInvoiceLinkedExpense: 'Расход којим је фактура затворена',
     incomingInvoiceLinkedBank: 'Повезана банковна трансакција',
-    incomingInvoicePaymentNoBankLink: 'Фактура је означена као плаћена преко повезаног расхода, али банковна трансакција није повезана са тим расходом.',
+    incomingInvoicePaymentNoBankLink:
+      'Фактура је означена као плаћена преко повезаног расхода, али банковна трансакција није повезана са тим расходом.',
     incomingInvoiceMissingLinkedExpense: 'Повезани расход није пронађен',
-    incomingInvoiceMissingLinkedExpenseHint: 'У фактури је остала веза на расход #{id}, али тај запис више не постоји. Статус плаћања може бити застарео.',
+    incomingInvoiceMissingLinkedExpenseHint:
+      'У фактури је остала веза на расход #{id}, али тај запис више не постоји. Статус плаћања може бити застарео.',
     paymentReference: 'Позив на број',
     receivables: 'Потраживања',
     payables: 'Обавезе',
@@ -816,7 +834,6 @@ const t = {
     search: 'Поиск',
     date: 'Дата',
     valuta: 'Valuta',
-    invoiceNumber: '№ счёта',
     client: 'Клиент',
     description: 'Описание',
     amount: 'Сумма (RSD)',
@@ -879,9 +896,11 @@ const t = {
     confirmDeleteReversalExpense: 'Удалить сторно-запись и восстановить исходный расход?',
     adminHardDeleteSelected: 'Админ: удалить строки',
     adminHardDeleteExpense: 'Админ: удалить запись',
-    confirmAdminHardDeleteExpenses: 'Администраторское удаление физически удалит {count} записей из базы. Продолжить?',
+    confirmAdminHardDeleteExpenses:
+      'Администраторское удаление физически удалит {count} записей из базы. Продолжить?',
     expenseDuplicatesTitle: 'Возможные дубликаты расходов',
-    expenseDuplicatesHint: 'Проверены записи с одинаковым номером платёжного поручения, а также записи с одинаковой датой, описанием и суммой. Выберите запись, которую нужно оставить.',
+    expenseDuplicatesHint:
+      'Проверены записи с одинаковым номером платёжного поручения, а также записи с одинаковой датой, описанием и суммой. Выберите запись, которую нужно оставить.',
     expenseDuplicateByPaymentRef: 'Дубликат по номеру платёжного поручения',
     expenseDuplicateByDescription: 'Дубликат по дате, описанию и сумме',
     expenseMergeKeepThis: 'Оставить эту запись',
@@ -949,8 +968,10 @@ const t = {
     efakturaImportedAsExpense: 'Расход',
     efakturaSettingsTitle: 'eFaktura API',
     efakturaSettingsSummary: 'API key • base URL • шаблоны синхронизации',
-    efakturaSettingsHint: 'Этот модуль отвечает за API-синхронизацию с eFaktura. XML-импорт на отдельной странице работает и без этих настроек.',
-    efakturaSettingsDefaultHint: 'Если Base URL и пути оставить пустыми, используются стандартные адреса eFaktura. Заполняйте поля только если хотите их переопределить.',
+    efakturaSettingsHint:
+      'Этот модуль отвечает за API-синхронизацию с eFaktura. XML-импорт на отдельной странице работает и без этих настроек.',
+    efakturaSettingsDefaultHint:
+      'Если Base URL и пути оставить пустыми, используются стандартные адреса eFaktura. Заполняйте поля только если хотите их переопределить.',
     efakturaDefaultValue: 'По умолчанию',
     efakturaOverrideHint: 'Оставьте пустым, если хотите использовать значение по умолчанию.',
     efakturaEnabled: 'Модуль включён',
@@ -966,7 +987,8 @@ const t = {
     efakturaOutgoingListPath: 'Путь списка исходящих',
     efakturaOutgoingDocumentPath: 'Путь документа исходящих',
     efakturaFileDownloadSettings: 'Скачивание PDF фактур',
-    efakturaFileDownloadHint: 'Если включено, после API-синхронизации PDF-фактуры скачиваются через браузер в локальную папку загрузок пользователя.',
+    efakturaFileDownloadHint:
+      'Если включено, после API-синхронизации PDF-фактуры скачиваются через браузер в локальную папку загрузок пользователя.',
     efakturaSavePdf: 'Сохранять PDF',
     efakturaIncomingPdfPath: 'Путь PDF входящих',
     efakturaOutgoingPdfPath: 'Путь PDF исходящих',
@@ -1054,7 +1076,8 @@ const t = {
     notAvailable: 'Недоступно',
     noRecords: 'Нет записей',
     limitWarning: 'Приближение к лимиту (80%). Рекомендуется контролировать доход.',
-    limitExceeded: 'Внимание! Превышен лимит дохода. При превышении 6 млн RSD в год — переход на общий режим. При превышении 8 млн за 12 мес. — обязательная регистрация НДС.',
+    limitExceeded:
+      'Внимание! Превышен лимит дохода. При превышении 6 млн RSD в год — переход на общий режим. При превышении 8 млн за 12 мес. — обязательная регистрация НДС.',
     obligationsCalendar: 'Календарь обязательств',
     dateOfPayment: 'дата оплаты',
     decisionsModalTitle: 'Решения Пореске управе',
@@ -1196,7 +1219,8 @@ const t = {
     cashAddFromBank: 'Добавить из банка',
     cashAddPendingWithdrawal: 'Временное пополнение',
     cashPendingWithdrawalDefaultDescription: 'Временное снятие налички',
-    cashPendingWithdrawalHint: 'Эта операция временно увеличивает остаток налички, пока выписка не пришла. Она не создает расход и не создает доход.',
+    cashPendingWithdrawalHint:
+      'Эта операция временно увеличивает остаток налички, пока выписка не пришла. Она не создает расход и не создает доход.',
     cashPendingWithdrawalTotal: 'Ожидает выписку',
     cashLinkPendingWithdrawal: 'Связать с выпиской',
     cashLinkPendingWithdrawalTitle: 'Связать временное пополнение с выпиской',
@@ -1274,7 +1298,8 @@ const t = {
     workerLodgingNightRate: 'Гостиница/ночь',
     cashManagedInRegister: 'Этот наличный расход изменяется через экран налички.',
     cashDeleteExpense: 'Удалить наличный расход',
-    cashDeleteExpenseConfirm: 'Удалить этот наличный расход? Связанная запись в «Расходах» тоже будет удалена.',
+    cashDeleteExpenseConfirm:
+      'Удалить этот наличный расход? Связанная запись в «Расходах» тоже будет удалена.',
     cashDeletePendingWithdrawal: 'Удалить временное пополнение',
     cashDeletePendingWithdrawalConfirm: 'Удалить это временное пополнение налички?',
     projects: 'Проекты',
@@ -1333,9 +1358,11 @@ const t = {
     receiptAmountDelta: 'Расхождение',
     receiptAmountExact: 'Сумма совпадает',
     receiptLinkMismatchHint: 'Сумма чека и расхода отличается, но ручная привязка разрешена.',
-    receiptLinkMismatchConfirm: 'Сумма чека: {receipt}. Сумма расхода: {expense}. Расхождение: {delta}. Всё равно привязать?',
+    receiptLinkMismatchConfirm:
+      'Сумма чека: {receipt}. Сумма расхода: {expense}. Расхождение: {delta}. Всё равно привязать?',
     receiptDelete: 'Удалить чек',
-    receiptDeleteConfirm: 'Удалить этот чек? Если чек создал собственный расход без других связей, этот расход тоже будет удалён.',
+    receiptDeleteConfirm:
+      'Удалить этот чек? Если чек создал собственный расход без других связей, этот расход тоже будет удалён.',
     receiptLinkedExpense: 'Связанный расход',
     receiptLinkedBank: 'Связанный банк',
     receiptExpenseCandidates: 'Кандидаты на связь',
@@ -1421,7 +1448,8 @@ const t = {
     fullNamePlaceholder: 'ФИО',
     noUsers: 'Нет пользователей',
     limits: 'Лимиты',
-    limitsDescription: 'Лимит 6 млн RSD — порог выхода из паушального режима в год. Лимит 8 млн — порог регистрации НДС за 12 мес.',
+    limitsDescription:
+      'Лимит 6 млн RSD — порог выхода из паушального режима в год. Лимит 8 млн — порог регистрации НДС за 12 мес.',
     loginHint: 'По умолчанию: admin / admin',
     loginCannotChange: 'Логин нельзя изменить',
     loginError: 'Ошибка входа',
@@ -1455,7 +1483,8 @@ const t = {
     bankTxNoInvoicesFound: 'Ничего не найдено',
     bankTxCreateExpense: 'Создать расход',
     bankTxExistingExpenses: 'Существующие расходы',
-    bankTxCreateExpenseHint: 'Из этой транзакции будет создан оплаченный расход, который появится на странице расходов.',
+    bankTxCreateExpenseHint:
+      'Из этой транзакции будет создан оплаченный расход, который появится на странице расходов.',
     bankTxOpenObligations: 'Открытые обязательства',
     bankTxSearchObligations: 'Поиск по названию, сроку или сумме...',
     bankTxNoOpenObligations: 'Нет открытых обязательств для связывания.',
@@ -1473,7 +1502,8 @@ const t = {
     bankTxAllocationRemaining: 'РћСЃС‚Р°С‚РѕРє',
     bankTxAllocationOverAllocated: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРѕ Р±РѕР»СЊС€Рµ СЃСѓРјРјС‹ РїР»Р°С‚РµР¶Р° РЅР°',
     bankTxAllocationRemainingHint: 'Р§Р°СЃС‚СЊ РїР»Р°С‚РµР¶Р° РµС‰Рµ РЅРµ СЂР°СЃРїСЂРµРґРµР»РµРЅР°:',
-    bankTxAllocationEmpty: 'Р’С‹Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂС‹, РјРµР¶РґСѓ РєРѕС‚РѕСЂС‹РјРё РЅСѓР¶РЅРѕ СЂР°СЃРїСЂРµРґРµР»РёС‚СЊ РїР»Р°С‚РµР¶.',
+    bankTxAllocationEmpty:
+      'Р’С‹Р±РµСЂРёС‚Рµ С„Р°РєС‚СѓСЂС‹, РјРµР¶РґСѓ РєРѕС‚РѕСЂС‹РјРё РЅСѓР¶РЅРѕ СЂР°СЃРїСЂРµРґРµР»РёС‚СЊ РїР»Р°С‚РµР¶.',
     bankTxAllocationCandidates: 'РћС‚РєСЂС‹С‚С‹Рµ С„Р°РєС‚СѓСЂС‹ РґР»СЏ СЂР°СЃРїСЂРµРґРµР»РµРЅРёСЏ',
     bankTxAllocationPartialStatus: 'Р§Р°СЃС‚РёС‡РЅРѕ СЂР°СЃРїСЂРµРґРµР»РµРЅРѕ',
     bankTxAllocationFullStatus: 'Р Р°СЃРїСЂРµРґРµР»РµРЅРѕ',
@@ -1499,7 +1529,8 @@ const t = {
     noCategories: 'Нет категорий',
     download: 'Скачать',
     serviceBackupsTitle: 'Сервис и backup',
-    serviceBackupsHint: 'Приложение автоматически создает snapshot SQLite-базы. Из этого раздела можно вручную создать архив, скачать его или восстановить базу.',
+    serviceBackupsHint:
+      'Приложение автоматически создает snapshot SQLite-базы. Из этого раздела можно вручную создать архив, скачать его или восстановить базу.',
     serviceBackupsUnsupported: 'Backup/restore доступен только когда приложение работает на SQLite базе.',
     serviceBackupsRefresh: 'Обновить',
     serviceBackupsCreate: 'Создать backup',
@@ -1519,7 +1550,8 @@ const t = {
     serviceBackupsManualRetentionHint: 'Сколько последних ручных архивов оставлять.',
     serviceBackupsPreRestoreRetentionHint: 'Сколько архивов, созданных перед restore, оставлять.',
     serviceBackupsSchedulerCheck: 'Проверка scheduler-а',
-    serviceBackupsSchedulerCheckHint: 'Как часто сервис проверяет, пора ли запускать следующий auto backup, в минутах.',
+    serviceBackupsSchedulerCheckHint:
+      'Как часто сервис проверяет, пора ли запускать следующий auto backup, в минутах.',
     serviceBackupsHours: 'часов',
     serviceBackupsMinutes: 'минут',
     serviceBackupsTabSettings: 'Параметры',
@@ -1539,7 +1571,8 @@ const t = {
     serviceBackupsSettingsSaved: 'Настройки backup сохранены.',
     serviceBackupsSettingsSaveError: 'Ошибка сохранения настроек backup.',
     serviceBackupsRestoreSuccess: 'База восстановлена из backup. Страница будет перезагружена.',
-    serviceBackupsRestoreConfirm: 'Восстановить базу из выбранного backup-а? Желательно, чтобы в этот момент никто не работал в системе.',
+    serviceBackupsRestoreConfirm:
+      'Восстановить базу из выбранного backup-а? Желательно, чтобы в этот момент никто не работал в системе.',
     serviceBackupsReloadHint: 'После восстановления активным пользователям лучше обновить страницу.',
 
     incomingInvoices: 'Входящие фактуры',
@@ -1561,14 +1594,17 @@ const t = {
     selectExpense: 'Выберите существующий расход',
     settlementAmount: 'Сумма закрытия',
     settlementDate: 'Дата закрытия',
-    noExpenseCandidates: 'Нет оплаченных расходов с такой же суммой, которые ещё не привязаны к другой входящей фактуре.',
+    noExpenseCandidates:
+      'Нет оплаченных расходов с такой же суммой, которые ещё не привязаны к другой входящей фактуре.',
     linkedExpense: 'Связанный расход',
     paymentDetails: 'Реквизиты оплаты',
     incomingInvoiceLinkedExpense: 'Расход, которым закрыта фактура',
     incomingInvoiceLinkedBank: 'Связанная банковская транзакция',
-    incomingInvoicePaymentNoBankLink: 'Фактура отмечена как оплаченная через связанный расход, но банковская транзакция с этим расходом не связана.',
+    incomingInvoicePaymentNoBankLink:
+      'Фактура отмечена как оплаченная через связанный расход, но банковская транзакция с этим расходом не связана.',
     incomingInvoiceMissingLinkedExpense: 'Связанный расход не найден',
-    incomingInvoiceMissingLinkedExpenseHint: 'В фактуре осталась ссылка на расход #{id}, но такой записи уже нет. Статус оплаты может быть устаревшим.',
+    incomingInvoiceMissingLinkedExpenseHint:
+      'В фактуре осталась ссылка на расход #{id}, но такой записи уже нет. Статус оплаты может быть устаревшим.',
     paymentReference: 'Номер платёжного поручения',
     receivables: 'Дебиторка',
     payables: 'Кредиторка',
@@ -1589,7 +1625,7 @@ const t = {
     offset: 'Взаимозачёт',
     createIncomingInvoice: 'Новая входящая фактура',
   },
-};
+}
 
 Object.assign(t.sr, {
   incomePaymentTransactionTotal: 'Цео износ уплате',
@@ -1603,7 +1639,8 @@ Object.assign(t.sr, {
   bankTxOwnerFundsDocument: 'Документ',
   bankTxOwnerFundsConfirmIn: 'Означити овај прилив као улагање сопствених средстава?',
   bankTxOwnerFundsConfirmOut: 'Означити овај одлив као поврат сопствених средстава?',
-  bankTxOwnerFundsConvertConfirm: 'Претворити овај расход у сопствена средства? Погрешно креирани расход ће бити уклоњен ако није повезан ни са чим другим.',
+  bankTxOwnerFundsConvertConfirm:
+    'Претворити овај расход у сопствена средства? Погрешно креирани расход ће бити уклоњен ако није повезан ни са чим другим.',
   bankTxDistributedLabel: 'Расподела',
   bankTxAllocateMode: 'Расподели уплату',
   bankTxAllocateAdd: 'Додај',
@@ -1670,7 +1707,8 @@ Object.assign(t.ru, {
   bankTxOwnerFundsDocument: 'Документ',
   bankTxOwnerFundsConfirmIn: 'Отметить это поступление как внесение собственных средств?',
   bankTxOwnerFundsConfirmOut: 'Отметить это списание как возврат собственных средств?',
-  bankTxOwnerFundsConvertConfirm: 'Преобразовать этот расход в собственные средства? Ошибочно созданный расход будет удалён, если он больше нигде не используется.',
+  bankTxOwnerFundsConvertConfirm:
+    'Преобразовать этот расход в собственные средства? Ошибочно созданный расход будет удалён, если он больше нигде не используется.',
   bankTxDistributedLabel: 'Распределение',
   bankTxAllocateMode: 'Распределить платёж',
   bankTxAllocateAdd: 'Добавить',
@@ -1807,35 +1845,61 @@ Object.assign(t.ru, {
   nonProductionBannerText: 'Не вводите реальные данные: это тестовая среда. Текущий адрес: {host}',
 })
 
-let lang = localStorage.getItem('prospel_lang') || 'sr';
+let lang = localStorage.getItem('prospel_lang') || 'sr'
 
 export function setLang(l) {
-  lang = l;
-  localStorage.setItem('prospel_lang', l);
+  lang = l
+  localStorage.setItem('prospel_lang', l)
 }
 
 export function getLang() {
-  return lang;
+  return lang
 }
 
 export function tr(key, replacements = null) {
-  const value = t[lang]?.[key] ?? t.sr[key] ?? key;
-  if (!replacements) return value;
+  const value = t[lang]?.[key] ?? t.sr[key] ?? key
+  if (!replacements) return value
   return Object.entries(replacements).reduce(
     (text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement ?? '')),
     value
-  );
+  )
 }
 
-const MONTH_NAMES_SR = ['Јан', 'Феб', 'Мар', 'Апр', 'Мај', 'Јун', 'Јул', 'Авг', 'Сеп', 'Окт', 'Нов', 'Дец'];
-const MONTH_NAMES_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-const MONTH_NAMES_FULL_SR = ['јануар', 'фебруар', 'март', 'април', 'мај', 'јун', 'јул', 'август', 'септембар', 'октобар', 'новембар', 'децембар'];
-const MONTH_NAMES_FULL_RU = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const MONTH_NAMES_SR = ['Јан', 'Феб', 'Мар', 'Апр', 'Мај', 'Јун', 'Јул', 'Авг', 'Сеп', 'Окт', 'Нов', 'Дец']
+const MONTH_NAMES_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+const MONTH_NAMES_FULL_SR = [
+  'јануар',
+  'фебруар',
+  'март',
+  'април',
+  'мај',
+  'јун',
+  'јул',
+  'август',
+  'септембар',
+  'октобар',
+  'новембар',
+  'децембар',
+]
+const MONTH_NAMES_FULL_RU = [
+  'январь',
+  'февраль',
+  'март',
+  'апрель',
+  'май',
+  'июнь',
+  'июль',
+  'август',
+  'сентябрь',
+  'октябрь',
+  'ноябрь',
+  'декабрь',
+]
 
 export function getMonthNamesShort() {
-  return lang === 'ru' ? MONTH_NAMES_RU : MONTH_NAMES_SR;
+  return lang === 'ru' ? MONTH_NAMES_RU : MONTH_NAMES_SR
 }
 
 export function getMonthNamesFull() {
-  return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR;
+  return lang === 'ru' ? MONTH_NAMES_FULL_RU : MONTH_NAMES_FULL_SR
 }
