@@ -107,7 +107,7 @@ function findResizableHeader(event) {
     if (event.clientY < tableRect.top || event.clientY > tableRect.bottom) continue
 
     const headers = getHeaderCells(table)
-    for (let index = 0; index < headers.length - 1; index += 1) {
+    for (let index = 0; index < headers.length; index += 1) {
       const header = headers[index]
       const rect = header.getBoundingClientRect()
       const isInHeaderY = event.clientY >= rect.top && event.clientY <= rect.bottom

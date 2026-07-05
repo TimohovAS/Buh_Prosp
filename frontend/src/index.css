@@ -2308,7 +2308,7 @@ th {
   overflow: visible;
 }
 
-.table-wrap thead th:not(:last-child)::after {
+.table-wrap thead th::after {
   content: '';
   position: absolute;
   top: 0.55rem;
@@ -2319,8 +2319,8 @@ th {
   pointer-events: none;
 }
 
-.table-wrap thead th:not(:last-child):hover::after,
-.table-wrap thead th:not(:last-child):focus-within::after {
+.table-wrap thead th:hover::after,
+.table-wrap thead th:focus-within::after {
   background: rgba(59, 130, 246, 0.85);
 }
 
