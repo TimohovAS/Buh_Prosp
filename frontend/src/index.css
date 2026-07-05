@@ -1241,7 +1241,8 @@ tr.row-reversal {
   overflow: hidden;
 }
 
-.cash-register-table-wrap {
+/* Двойной класс, чтобы перебить max-height из общего правила .table-wrap ниже */
+.table-wrap.cash-register-table-wrap {
   max-width: 100%;
   max-height: clamp(280px, 38vh, 620px);
   overflow: auto;
@@ -2229,8 +2230,12 @@ tr.row-reversal {
 .table-wrap {
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
+  /* Скролл-контейнер по обеим осям: горизонтальная полоса прокрутки всегда
+     в пределах экрана, а не под длинной таблицей; заголовки липнут внутри.
+     320px — запас под шапку страницы и фильтры (замерено: 200–300px). */
+  max-height: max(360px, calc(100dvh - 320px));
+  overflow: auto;
+  scrollbar-gutter: stable;
   position: relative;
   isolation: isolate;
 }
