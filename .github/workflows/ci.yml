@@ -17,9 +17,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Lint (ruff)
-        run: ruff check backend run.py create_admin.py
+        run: ruff check backend alembic run.py create_admin.py
       - name: Format check (ruff format)
-        run: ruff format --check backend run.py create_admin.py
+        run: ruff format --check backend alembic run.py create_admin.py
+      - name: Migrations (Alembic)
+        run: |
+          python -m alembic -x database_url=sqlite+aiosqlite:///./.ci_alembic.db upgrade head
+          python -m alembic -x database_url=sqlite+aiosqlite:///./.ci_alembic.db check
       - name: Tests (pytest)
         run: pytest -q
 

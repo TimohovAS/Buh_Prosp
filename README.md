@@ -33,9 +33,10 @@ Dev-зависимости бэкенда: `pip install -r requirements-dev.txt`
 
 ```
 # Backend
-ruff check backend run.py create_admin.py          # линт (конфиг в pyproject.toml)
-ruff format --check backend run.py create_admin.py # проверка форматирования
+ruff check backend alembic run.py create_admin.py          # линт (конфиг в pyproject.toml)
+ruff format --check backend alembic run.py create_admin.py # проверка форматирования
 pytest -q                                          # тесты (backend/tests)
+python -m alembic upgrade head                     # применить миграции БД
 
 # Frontend (из папки frontend)
 npm run lint          # ESLint, --max-warnings=0: предупреждения тоже валят проверку
@@ -46,11 +47,41 @@ npm run build         # проверка сборки
 Автоформатирование (запускать перед коммитом, если проверки красные):
 
 ```
-ruff format backend run.py create_admin.py   # backend
+ruff format backend alembic run.py create_admin.py # backend
 npm run format                               # frontend (из папки frontend)
 ```
 
 CI (GitHub Actions, `.github/workflows/ci.yml`) гоняет всё это на каждый push/PR в main. ESLint работает в режиме zero-warnings: существующие осознанные исключения помечены `eslint-disable-next-line` в коде, любое новое предупреждение валит CI.
+
+### Миграции БД (Alembic)
+
+Схема БД управляется Alembic. Приложение больше не создаёт и не меняет таблицы при старте.
+
+Новая пустая база:
+
+```bash
+python -m alembic upgrade head
+```
+
+Существующая база, которая уже соответствует текущим моделям, один раз ставится на учёт:
+
+```bash
+python -m alembic stamp 20260705_0001
+python -m alembic current
+```
+
+После этого все будущие обновления схемы выполняются обычной командой:
+
+```bash
+python -m alembic upgrade head
+```
+
+Новая миграция после изменения `backend/models.py`:
+
+```bash
+python -m alembic revision --autogenerate -m "описание изменения"
+python -m alembic upgrade head
+```
 
 ### Безопасность запуска (APP_ENV)
 
@@ -355,7 +386,7 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) гоняет всё это на 
 
 ### Миграции
 
-При запуске выполняются проверки и добавляются недостающие колонки. Ручные миграции находятся в `manual_migrations/`.
+Миграции выполняются через Alembic (`alembic/versions`). Старые Windows-only `.cmd` wrappers из `manual_migrations/` удалены; новые изменения схемы добавляются только Alembic-ревизиями.
 
 ---
 
@@ -431,6 +462,7 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) гоняет всё это на 
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+python -m alembic upgrade head
 python run.py
 ```
 

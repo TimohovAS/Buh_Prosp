@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
-from backend.database import init_db
 from backend.backup_service import backup_scheduler_loop
 from backend.models import User
 from backend.auth import get_password_hash
@@ -71,7 +70,6 @@ async def _bootstrap_users_and_payments() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Инициализация при запуске."""
-    await init_db()
     backup_task = None
     await _bootstrap_users_and_payments()
     backup_task = asyncio.create_task(backup_scheduler_loop())

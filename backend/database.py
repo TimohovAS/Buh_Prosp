@@ -1,5 +1,6 @@
 """Подключение к базе данных и сессии."""
 
+import asyncio
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -42,45 +43,19 @@ async def get_db():
 
 
 async def init_db():
-    """Инициализация таблиц БД (создание по моделям)."""
-    import backend.models  # noqa: F401 — регистрируем модели в Base.metadata
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_ensure_income_due_date_column)
-        await conn.run_sync(_ensure_enterprise_backup_columns)
+    """Apply Alembic migrations to the configured database."""
+    await asyncio.to_thread(run_migrations)
 
 
-def _ensure_income_due_date_column(sync_conn):
-    """
-    Лёгкая миграция для существующих SQLite БД:
-    добавляет income.due_date (Valuta), если колонка отсутствует.
-    """
-    if sync_conn.dialect.name != "sqlite":
-        return
-    rows = sync_conn.exec_driver_sql("PRAGMA table_info('income')").fetchall()
-    columns = {str(r[1]).lower() for r in rows}
-    if "due_date" not in columns:
-        sync_conn.exec_driver_sql("ALTER TABLE income ADD COLUMN due_date DATE")
+def run_migrations() -> None:
+    """Upgrade the configured database to the latest Alembic revision."""
+    from alembic import command
+    from alembic.config import Config
 
-
-def _ensure_enterprise_backup_columns(sync_conn):
-    if sync_conn.dialect.name != "sqlite":
-        return
-    rows = sync_conn.exec_driver_sql("PRAGMA table_info('enterprise')").fetchall()
-    columns = {str(r[1]).lower() for r in rows}
-    required = {
-        "backup_dir": "ALTER TABLE enterprise ADD COLUMN backup_dir VARCHAR(500)",
-        "backup_auto_enabled": "ALTER TABLE enterprise ADD COLUMN backup_auto_enabled BOOLEAN",
-        "backup_auto_interval_hours": "ALTER TABLE enterprise ADD COLUMN backup_auto_interval_hours INTEGER",
-        "backup_auto_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_auto_retention_count INTEGER",
-        "backup_manual_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_manual_retention_count INTEGER",
-        "backup_pre_restore_retention_count": "ALTER TABLE enterprise ADD COLUMN backup_pre_restore_retention_count INTEGER",
-        "backup_scheduler_check_minutes": "ALTER TABLE enterprise ADD COLUMN backup_scheduler_check_minutes INTEGER",
-    }
-    for column, ddl in required.items():
-        if column not in columns:
-            sync_conn.exec_driver_sql(ddl)
+    project_root = Path(__file__).resolve().parent.parent
+    alembic_config = Config(str(project_root / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(project_root / "alembic"))
+    command.upgrade(alembic_config, "head")
 
 
 def get_db_path() -> Path | None:
@@ -96,5 +71,6 @@ async def reset_db():
     """Удалить БД и создать пустую. Вызвать до создания сессий."""
     db_path = get_db_path()
     if db_path and db_path.exists():
+        await engine.dispose()
         db_path.unlink()
     await init_db()
