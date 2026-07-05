@@ -1,6 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+import sqlalchemy as sa
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import make_url
 
@@ -38,6 +39,32 @@ def _database_url() -> str:
 config.set_main_option("sqlalchemy.url", _database_url())
 
 
+def _is_sqlite_context(context_or_connection) -> bool:
+    dialect = getattr(context_or_connection, "dialect", None)
+    return getattr(dialect, "name", None) == "sqlite"
+
+
+def _is_sqlite_url() -> bool:
+    return make_url(config.get_main_option("sqlalchemy.url")).get_backend_name() == "sqlite"
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    """Filter SQLite reflection noise out of Alembic autogenerate/check."""
+    if _is_sqlite_url():
+        if type_ == "column" and name == "id" and getattr(obj, "primary_key", False):
+            return False
+        if type_ in {"foreign_key_constraint", "unique_constraint"}:
+            return False
+    return True
+
+
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    """SQLite does not enforce VARCHAR lengths, so length-only diffs are noise."""
+    if _is_sqlite_context(context) and isinstance(inspected_type, sa.String) and isinstance(metadata_type, sa.String):
+        return False
+    return None
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -56,7 +83,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        compare_type=True,
+        include_object=include_object,
+        compare_type=compare_type,
         render_as_batch=url.startswith("sqlite"),
     )
 
@@ -81,7 +109,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            compare_type=True,
+            include_object=include_object,
+            compare_type=compare_type,
             render_as_batch=connection.dialect.name == "sqlite",
         )
 

@@ -63,14 +63,15 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) гоняет всё это на 
 python -m alembic upgrade head
 ```
 
-Существующая база, которая уже соответствует текущим моделям, один раз ставится на учёт:
+Существующая база, которая была создана старыми ручными миграциями, один раз ставится на учёт и выравнивается:
 
 ```bash
 python -m alembic stamp 20260705_0001
+python -m alembic upgrade head
 python -m alembic current
 ```
 
-После этого все будущие обновления схемы выполняются обычной командой:
+`20260705_0002` чистит legacy-дрейф SQLite-схемы: переносит старые `cash_transactions` в `audit_logs`, удаляет Windows-only legacy-остатки и добавляет недостающие индексы. После этого все будущие обновления схемы выполняются обычной командой:
 
 ```bash
 python -m alembic upgrade head
