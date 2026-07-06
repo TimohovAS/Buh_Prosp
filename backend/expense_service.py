@@ -1,7 +1,23 @@
 """Business helpers for expenses."""
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.db_utils import get_contract_or_404, get_project_or_404, get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import ExpenseItem
+from backend.models import Expense, ExpenseItem
+
+
+class NotFoundError(ValueError):
+    """Domain reference was not found."""
+
+
+async def _get_project_or_error(db: AsyncSession, project_id: int):
+    try:
+        return await get_project_or_404(db, project_id, exc_cls=ValueError)
+    except ValueError as exc:
+        if str(exc) == "Project not found":
+            raise NotFoundError(str(exc)) from exc
+        raise
 
 
 def _item_field(item, key: str):
@@ -79,3 +95,37 @@ def build_expense_item_models(items: list[dict]) -> list[ExpenseItem]:
         )
         for index, item in enumerate(items)
     ]
+
+
+async def resolve_expense_links(
+    db: AsyncSession,
+    project_id: int | None,
+    contract_id: int | None,
+) -> tuple[int | None, int | None]:
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
+    resolved_contract_id = contract_id
+    project_validated = False
+
+    if resolved_contract_id is not None:
+        contract = await get_contract_or_404(db, resolved_contract_id, exc_cls=NotFoundError)
+        if contract.project_id is None:
+            if resolved_project_id is None:
+                raise ValueError("Select a project before linking this contract")
+            await _get_project_or_error(db, resolved_project_id)
+            project_validated = True
+            contract.project_id = resolved_project_id
+            await db.flush()
+        resolved_project_id = contract.project_id
+
+    if resolved_project_id is not None and not project_validated:
+        await _get_project_or_error(db, resolved_project_id)
+
+    return resolved_project_id, resolved_contract_id
+
+
+async def clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense, project_id: int | None) -> None:
+    if not expense.contract_id or project_id is None:
+        return
+    contract = await get_contract_or_404(db, expense.contract_id, exc_cls=NotFoundError)
+    if contract.project_id != project_id:
+        expense.contract_id = None

@@ -19,10 +19,13 @@ from backend.db_utils import (
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
 from backend.expense_service import (
+    NotFoundError,
     build_expense_item_models,
+    clear_contract_if_project_mismatch,
     expense_amount_from_items,
     expense_description_from_items,
     normalize_expense_items,
+    resolve_expense_links,
 )
 from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import (
@@ -60,36 +63,28 @@ def _visible_expense_condition():
     return or_(Expense.status != "planned", Expense.source.in_([EFAKTURA_IMPORT_SOURCE, RECEIPT_SOURCE]))
 
 
-async def _resolve_expense_links(
+async def _resolve_expense_links_or_400(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await get_unassigned_project_id(db)
-    resolved_contract_id = contract_id
-
-    if resolved_contract_id is not None:
-        contract = await get_contract_or_404(db, resolved_contract_id)
-        if contract.project_id is None:
-            if resolved_project_id is None:
-                raise HTTPException(400, "Select a project before linking this contract")
-            await get_project_or_404(db, resolved_project_id)
-            contract.project_id = resolved_project_id
-            await db.flush()
-        resolved_project_id = contract.project_id
-
-    if resolved_project_id is not None:
-        await get_project_or_404(db, resolved_project_id)
-
-    return resolved_project_id, resolved_contract_id
+    try:
+        return await resolve_expense_links(db, project_id, contract_id)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
-async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense, project_id: int | None) -> None:
-    if not expense.contract_id or project_id is None:
-        return
-    contract = await get_contract_or_404(db, expense.contract_id)
-    if contract.project_id != project_id:
-        expense.contract_id = None
+async def _clear_contract_if_project_mismatch_or_400(
+    db: AsyncSession, expense: Expense, project_id: int | None
+) -> None:
+    try:
+        await clear_contract_if_project_mismatch(db, expense, project_id)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> None:
@@ -398,7 +393,7 @@ async def merge_expense_duplicates(
         await db.delete(duplicate)
 
     if keep.project_id is not None:
-        await _clear_contract_if_project_mismatch(db, keep, keep.project_id)
+        await _clear_contract_if_project_mismatch_or_400(db, keep, keep.project_id)
         await db.execute(
             update(BankTransaction)
             .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == keep.id)
@@ -422,7 +417,7 @@ async def create_expense(
         data.project_id,
         data.contract_id,
     )
-    project_id, contract_id = await _resolve_expense_links(db, project_id, contract_id)
+    project_id, contract_id = await _resolve_expense_links_or_400(db, project_id, contract_id)
     try:
         expense_items = normalize_expense_items(data.items)
     except ValueError as exc:
@@ -470,7 +465,7 @@ async def bulk_assign_project_expenses(
     items = result.scalars().all()
     for item in items:
         item.project_id = project_id
-        await _clear_contract_if_project_mismatch(db, item, project_id)
+        await _clear_contract_if_project_mismatch_or_400(db, item, project_id)
         await _sync_bank_transactions_from_expense(db, item)
         await sync_receipt_project_from_expense(db, item)
 
@@ -603,7 +598,9 @@ async def update_expense(
         if contract.project_id != desired_project_id:
             desired_contract_id = None
 
-    desired_project_id, desired_contract_id = await _resolve_expense_links(db, desired_project_id, desired_contract_id)
+    desired_project_id, desired_contract_id = await _resolve_expense_links_or_400(
+        db, desired_project_id, desired_contract_id
+    )
     dump["project_id"] = desired_project_id
     dump["contract_id"] = desired_contract_id
     dump["is_tax_related"] = is_tax_related
