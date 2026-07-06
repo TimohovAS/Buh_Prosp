@@ -18,13 +18,25 @@ function saveStoredWidths(next) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
 }
 
+// Список таблиц кэшируется: getResizableTables зовётся на каждый mousemove,
+// а querySelectorAll по документу там слишком дорог. Кэш сбрасывается при
+// смене маршрута (меняется активный слот) и при childList-мутациях DOM.
+let tablesCache = null
+
+function invalidateTablesCache() {
+  tablesCache = null
+}
+
 function getResizableTables() {
-  return Array.from(document.querySelectorAll('.table-wrap table')).filter((table) => {
-    const slot = table.closest('.route-cache-slot')
-    if (slot && !slot.classList.contains('active')) return false
-    if (table.querySelector('colgroup:not([data-resizable-columns="true"])')) return false
-    return true
-  })
+  if (!tablesCache) {
+    tablesCache = Array.from(document.querySelectorAll('.table-wrap table')).filter((table) => {
+      const slot = table.closest('.route-cache-slot')
+      if (slot && !slot.classList.contains('active')) return false
+      if (table.querySelector('colgroup:not([data-resizable-columns="true"])')) return false
+      return true
+    })
+  }
+  return tablesCache
 }
 
 function getTableKey(table) {
@@ -124,16 +136,32 @@ export default function useResizableTableColumns() {
   const location = useLocation()
 
   useEffect(() => {
+    invalidateTablesCache()
     restoreTables()
-    const observer = new MutationObserver(() => restoreTables())
+    // Мутации приходят пачками (рендер React) — восстановление ширин
+    // схлопывается в один вызов на кадр через requestAnimationFrame.
+    let rafId = null
+    const observer = new MutationObserver(() => {
+      invalidateTablesCache()
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        restoreTables()
+      })
+    })
     observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
   }, [location.pathname])
 
   useEffect(() => {
     let activeResize = null
     let pendingResize = null
     let suppressNextClick = false
+    let cursorRafId = null
+    let lastIdleMove = null
     const previousCursor = { value: '' }
     const previousUserSelect = { value: '' }
 
@@ -180,7 +208,18 @@ export default function useResizableTableColumns() {
         return
       }
 
-      document.body.classList.toggle('table-column-resize-cursor', Boolean(findResizableHeader(event)))
+      // Холостое движение мыши: хит-тест курсора не чаще раза за кадр.
+      // Путь активного перетаскивания выше остаётся синхронным.
+      lastIdleMove = event
+      if (cursorRafId !== null) return
+      cursorRafId = requestAnimationFrame(() => {
+        cursorRafId = null
+        if (activeResize || pendingResize || !lastIdleMove) return
+        document.body.classList.toggle(
+          'table-column-resize-cursor',
+          Boolean(findResizableHeader(lastIdleMove))
+        )
+      })
     }
 
     const handleMouseDown = (event) => {
@@ -250,6 +289,7 @@ export default function useResizableTableColumns() {
       document.removeEventListener('mouseleave', handleMouseLeave)
       window.removeEventListener('mouseup', handleMouseUp, true)
       window.removeEventListener('blur', handleWindowBlur)
+      if (cursorRafId !== null) cancelAnimationFrame(cursorRafId)
       document.body.classList.remove('table-column-resize-cursor')
       stopResize()
     }
