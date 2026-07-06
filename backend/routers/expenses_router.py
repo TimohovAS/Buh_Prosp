@@ -24,8 +24,11 @@ from backend.expense_service import (
     clear_contract_if_project_mismatch,
     expense_amount_from_items,
     expense_description_from_items,
+    is_reversal_row,
     normalize_expense_items,
     resolve_expense_links,
+    sync_bank_transactions_from_expense,
+    sync_cash_entry_from_expense,
 )
 from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import (
@@ -87,47 +90,6 @@ async def _clear_contract_if_project_mismatch_or_400(
         raise HTTPException(400, str(exc)) from exc
 
 
-async def _sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> None:
-    result = await db.execute(select(CashEntry).where(CashEntry.expense_id == expense.id))
-    cash_entry = result.scalar_one_or_none()
-    if not cash_entry:
-        return
-
-    cash_entry.date = expense.paid_date or expense.date
-    cash_entry.amount = to_decimal(expense.amount or ZERO_DECIMAL)
-    cash_entry.currency = expense.currency or "RSD"
-    cash_entry.description = (expense.description or "")[:500]
-    cash_entry.note = expense.note
-
-
-async def _sync_bank_transactions_from_expense(db: AsyncSession, expense: Expense) -> None:
-    await db.execute(
-        update(BankTransaction)
-        .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == expense.id)
-        .values(project_id=expense.project_id)
-    )
-
-    if not expense.bank_reference or _is_reversal_row(expense):
-        return
-
-    amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
-    result = await db.execute(
-        select(BankTransaction).where(
-            BankTransaction.bank_reference == expense.bank_reference,
-            BankTransaction.direction == "out",
-        )
-    )
-    candidates = [tx for tx in result.scalars().all() if abs(to_decimal(tx.amount or ZERO_DECIMAL)) == amount]
-    if len(candidates) != 1:
-        return
-
-    tx = candidates[0]
-    tx.status = "matched"
-    tx.matched_type = "expense"
-    tx.matched_id = expense.id
-    tx.project_id = expense.project_id
-
-
 def _normalize_duplicate_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
 
@@ -137,11 +99,7 @@ def _amount_key(value: float | int | None) -> str:
 
 
 def _is_reversal_row(expense: Expense) -> bool:
-    return (
-        bool(expense.reversal_of_id)
-        or getattr(expense, "status", None) == "reversed"
-        or to_decimal(expense.amount or ZERO_DECIMAL) < ZERO_DECIMAL
-    )
+    return is_reversal_row(expense)
 
 
 def _is_active_duplicate_candidate(expense: Expense) -> bool:
@@ -440,7 +398,7 @@ async def create_expense(
     initialize_expense_status(expense, "paid", paid_date=data.paid_date or data.date)
     db.add(expense)
     await db.flush()
-    await _sync_bank_transactions_from_expense(db, expense)
+    await sync_bank_transactions_from_expense(db, expense)
     await db.commit()
     await db.refresh(expense)
     return ExpenseResponse.model_validate(expense)
@@ -466,7 +424,7 @@ async def bulk_assign_project_expenses(
     for item in items:
         item.project_id = project_id
         await _clear_contract_if_project_mismatch_or_400(db, item, project_id)
-        await _sync_bank_transactions_from_expense(db, item)
+        await sync_bank_transactions_from_expense(db, item)
         await sync_receipt_project_from_expense(db, item)
 
     await db.commit()
@@ -620,8 +578,8 @@ async def update_expense(
         setattr(expense, key, value)
 
     if getattr(expense, "source", None) == "cash":
-        await _sync_cash_entry_from_expense(db, expense)
-    await _sync_bank_transactions_from_expense(db, expense)
+        await sync_cash_entry_from_expense(db, expense)
+    await sync_bank_transactions_from_expense(db, expense)
     await sync_receipt_project_from_expense(db, expense)
 
     await db.flush()

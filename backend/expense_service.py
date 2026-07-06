@@ -1,10 +1,11 @@
 """Business helpers for expenses."""
 
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db_utils import get_contract_or_404, get_project_or_404, get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import Expense, ExpenseItem
+from backend.models import BankTransaction, CashEntry, Expense, ExpenseItem
 
 
 class NotFoundError(ValueError):
@@ -129,3 +130,52 @@ async def clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense,
     contract = await get_contract_or_404(db, expense.contract_id, exc_cls=NotFoundError)
     if contract.project_id != project_id:
         expense.contract_id = None
+
+
+def is_reversal_row(expense: Expense) -> bool:
+    return (
+        bool(expense.reversal_of_id)
+        or getattr(expense, "status", None) == "reversed"
+        or to_decimal(expense.amount or ZERO_DECIMAL) < ZERO_DECIMAL
+    )
+
+
+async def sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> None:
+    result = await db.execute(select(CashEntry).where(CashEntry.expense_id == expense.id))
+    cash_entry = result.scalar_one_or_none()
+    if not cash_entry:
+        return
+
+    cash_entry.date = expense.paid_date or expense.date
+    cash_entry.amount = to_decimal(expense.amount or ZERO_DECIMAL)
+    cash_entry.currency = expense.currency or "RSD"
+    cash_entry.description = (expense.description or "")[:500]
+    cash_entry.note = expense.note
+
+
+async def sync_bank_transactions_from_expense(db: AsyncSession, expense: Expense) -> None:
+    await db.execute(
+        update(BankTransaction)
+        .where(BankTransaction.matched_type == "expense", BankTransaction.matched_id == expense.id)
+        .values(project_id=expense.project_id)
+    )
+
+    if not expense.bank_reference or is_reversal_row(expense):
+        return
+
+    amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
+    result = await db.execute(
+        select(BankTransaction).where(
+            BankTransaction.bank_reference == expense.bank_reference,
+            BankTransaction.direction == "out",
+        )
+    )
+    candidates = [tx for tx in result.scalars().all() if abs(to_decimal(tx.amount or ZERO_DECIMAL)) == amount]
+    if len(candidates) != 1:
+        return
+
+    tx = candidates[0]
+    tx.status = "matched"
+    tx.matched_type = "expense"
+    tx.matched_id = expense.id
+    tx.project_id = expense.project_id

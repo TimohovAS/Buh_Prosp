@@ -12,8 +12,10 @@ from backend.expense_service import (
     expense_description_from_items,
     normalize_expense_items,
     resolve_expense_links,
+    sync_bank_transactions_from_expense,
+    sync_cash_entry_from_expense,
 )
-from backend.models import Contract, Expense, Project
+from backend.models import CashEntry, Contract, Expense, Project
 from backend.tests.conftest import TEST_NOW
 
 NOW = TEST_NOW
@@ -132,3 +134,70 @@ async def test_clear_contract_if_project_mismatch_removes_stale_contract(db_sess
     await clear_contract_if_project_mismatch(db_session, expense, second_project.id)
 
     assert expense.contract_id is None
+
+
+async def test_sync_bank_transactions_from_expense_matches_unique_reference(db_session, make_bank_tx, make_project):
+    project = await make_project(db_session, code="SYNC-BANK")
+    expense = Expense(
+        date=date(2026, 7, 6),
+        description="Bank synced expense",
+        amount=Decimal("100.00"),
+        currency="RSD",
+        status="paid",
+        paid_date=date(2026, 7, 6),
+        bank_reference="BANK-SYNC-1",
+        project_id=project.id,
+        created_at=NOW,
+    )
+    db_session.add(expense)
+    await db_session.flush()
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("-100.00"),
+        direction="out",
+        bank_reference="BANK-SYNC-1",
+        project_id=None,
+    )
+
+    await sync_bank_transactions_from_expense(db_session, expense)
+
+    assert tx.status == "matched"
+    assert tx.matched_type == "expense"
+    assert tx.matched_id == expense.id
+    assert tx.project_id == project.id
+
+
+async def test_sync_cash_entry_from_expense_updates_existing_cash_entry(db_session):
+    expense = Expense(
+        date=date(2026, 7, 5),
+        paid_date=date(2026, 7, 6),
+        description="Updated cash expense",
+        amount=Decimal("55.50"),
+        currency="EUR",
+        status="paid",
+        note="cash note",
+        source="cash",
+        created_at=NOW,
+    )
+    db_session.add(expense)
+    await db_session.flush()
+    cash_entry = CashEntry(
+        date=date(2026, 7, 1),
+        direction="out",
+        amount=Decimal("1.00"),
+        currency="RSD",
+        description="Old",
+        entry_type="expense",
+        expense_id=expense.id,
+        created_at=NOW,
+    )
+    db_session.add(cash_entry)
+    await db_session.flush()
+
+    await sync_cash_entry_from_expense(db_session, expense)
+
+    assert cash_entry.date == date(2026, 7, 6)
+    assert cash_entry.amount == Decimal("55.50")
+    assert cash_entry.currency == "EUR"
+    assert cash_entry.description == "Updated cash expense"
+    assert cash_entry.note == "cash note"
