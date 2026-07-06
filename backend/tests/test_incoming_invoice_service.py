@@ -1,27 +1,13 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from backend.database import Base
 from backend.incoming_invoice_service import create_incoming_invoice, update_incoming_invoice
 from backend.models import IncomingInvoice, Project
+from backend.tests.conftest import TEST_NOW
 
-NOW = datetime(2026, 7, 6, 8, 0, 0)
-
-
-@pytest.fixture
-async def db_session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as session:
-        yield session
-
-    await engine.dispose()
+NOW = TEST_NOW
 
 
 async def test_create_incoming_invoice_rejects_archived_project(db_session):
