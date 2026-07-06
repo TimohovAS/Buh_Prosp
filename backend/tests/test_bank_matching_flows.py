@@ -15,7 +15,7 @@ from backend.bank_matching_service import (
     suggest_matches,
     unmatch_transaction,
 )
-from backend.models import BankTransactionIncomeAllocation, Contract
+from backend.models import BankTransactionIncomeAllocation, Contract, Expense, MonthlyObligation, PaymentType
 from backend.tests.conftest import TEST_DATE, TEST_NOW
 
 pytestmark = pytest.mark.filterwarnings("ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning")
@@ -152,6 +152,48 @@ async def test_unmatch_transaction_reopens_expense_payment(
 
 
 @pytest.mark.asyncio
+async def test_match_transaction_marks_obligation_paid_and_matches_transaction(
+    db_session,
+    make_bank_tx,
+):
+    payment_type = PaymentType(code="tax", name_sr="Porez", sort_order=1)
+    db_session.add(payment_type)
+    await db_session.flush()
+    obligation = MonthlyObligation(
+        year=2026,
+        month=6,
+        payment_type_id=payment_type.id,
+        amount=Decimal("123.45"),
+        deadline=date(2026, 7, 15),
+        status="unpaid",
+        created_at=TEST_NOW,
+    )
+    db_session.add(obligation)
+    await db_session.flush()
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("123.45"),
+        direction="out",
+        bank_reference="OBL-REF",
+    )
+
+    matched_tx = await match_transaction(db_session, tx.id, "obligation", obligation.id)
+
+    expense = await db_session.get(Expense, obligation.expense_id)
+    assert matched_tx.status == "matched"
+    assert matched_tx.matched_type == "obligation"
+    assert matched_tx.matched_id == obligation.id
+    assert obligation.status == "paid"
+    assert obligation.paid_date == TEST_DATE
+    assert obligation.payment_method == "bank_import"
+    assert obligation.payment_reference == "OBL-REF"
+    assert expense is not None
+    assert expense.status == "paid"
+    assert expense.source == "obligation"
+    assert expense.bank_reference == "OBL-REF"
+
+
+@pytest.mark.asyncio
 async def test_match_transaction_rejects_already_matched_transaction(
     db_session,
     make_bank_tx,
@@ -164,6 +206,44 @@ async def test_match_transaction_rejects_already_matched_transaction(
 
     with pytest.raises(ValueError, match="Transaction is already matched"):
         await match_transaction(db_session, tx.id, "income", second_income.id)
+
+
+@pytest.mark.asyncio
+async def test_match_transaction_rejects_missing_transaction(db_session):
+    with pytest.raises(ValueError, match="BankTransaction not found"):
+        await match_transaction(db_session, 999, "income", 1)
+
+
+@pytest.mark.asyncio
+async def test_match_transaction_rejects_missing_income(db_session, make_bank_tx):
+    tx = await make_bank_tx(db_session, direction="in")
+
+    with pytest.raises(ValueError, match="Income not found"):
+        await match_transaction(db_session, tx.id, "income", 999)
+
+
+@pytest.mark.asyncio
+async def test_match_transaction_rejects_missing_expense(db_session, make_bank_tx):
+    tx = await make_bank_tx(db_session, direction="out")
+
+    with pytest.raises(ValueError, match="Expense not found"):
+        await match_transaction(db_session, tx.id, "expense", 999)
+
+
+@pytest.mark.asyncio
+async def test_match_transaction_rejects_missing_obligation(db_session, make_bank_tx):
+    tx = await make_bank_tx(db_session, direction="out")
+
+    with pytest.raises(ValueError, match="MonthlyObligation not found"):
+        await match_transaction(db_session, tx.id, "obligation", 999)
+
+
+@pytest.mark.asyncio
+async def test_match_transaction_rejects_unknown_match_type(db_session, make_bank_tx):
+    tx = await make_bank_tx(db_session, direction="in")
+
+    with pytest.raises(ValueError, match="Unknown match type"):
+        await match_transaction(db_session, tx.id, "unknown", 1)
 
 
 @pytest.mark.asyncio
