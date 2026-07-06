@@ -140,7 +140,7 @@ async def create_from_bank(
 async def list_owner_funds_movements(
     direction: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
+    limit: Optional[int] = Query(None, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
@@ -151,8 +151,9 @@ async def list_owner_funds_movements(
             BankTransaction.matched_type == MATCH_TYPE_OWNER_FUNDS,
         )
         .order_by(BankTransaction.date.desc(), BankTransaction.id.desc())
-        .limit(limit)
     )
+    if limit is not None:
+        query = query.limit(limit)
     if direction:
         query = query.where(BankTransaction.direction == direction)
     if search:

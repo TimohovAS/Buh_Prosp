@@ -118,7 +118,7 @@ export default function CounterpartyLoans() {
       if (statusFilter) params.status = statusFilter
       const [loans, ownerFunds] = await Promise.all([
         includeLoans ? api.counterpartyLoans.list(params) : Promise.resolve([]),
-        includeOwnerFunds ? api.counterpartyLoans.ownerFunds({ limit: 500 }) : Promise.resolve([]),
+        includeOwnerFunds ? api.counterpartyLoans.ownerFunds() : Promise.resolve([]),
       ])
       setItems(loans)
       setOwnerFundsItems(ownerFunds)

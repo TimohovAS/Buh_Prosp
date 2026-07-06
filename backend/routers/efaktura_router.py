@@ -106,13 +106,14 @@ async def sync_efaktura(
 
 @router.get("/history", response_model=list[EfakturaImportHistoryItem])
 async def get_efaktura_history(
-    limit: int = Query(100, ge=1, le=500),
+    limit: int | None = Query(None, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    result = await db.execute(
-        select(EfakturaImportRecord)
-        .order_by(EfakturaImportRecord.created_at.desc(), EfakturaImportRecord.id.desc())
-        .limit(limit)
+    query = select(EfakturaImportRecord).order_by(
+        EfakturaImportRecord.created_at.desc(), EfakturaImportRecord.id.desc()
     )
+    if limit is not None:
+        query = query.limit(limit)
+    result = await db.execute(query)
     return [EfakturaImportHistoryItem.model_validate(item) for item in result.scalars().all()]

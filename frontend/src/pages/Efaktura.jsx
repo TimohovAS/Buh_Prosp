@@ -134,7 +134,7 @@ export default function Efaktura() {
     setHistoryLoading(true)
     try {
       const [historyItems, settings] = await Promise.all([
-        api.efaktura.history(200),
+        api.efaktura.history(),
         isAdmin ? api.efaktura.settings() : Promise.resolve(null),
       ])
       setHistory(historyItems || [])

@@ -119,7 +119,7 @@ export default function BankTransactions() {
   const loadReferenceData = async () => {
     const [projectList, contractList, categoryList] = await Promise.all([
       api.projects.list({ show_archived: true }),
-      api.contracts.list({ limit: 500 }),
+      api.contracts.list(),
       api.categories.list({ category_type: 'expense' }),
     ])
     setProjects(projectList)

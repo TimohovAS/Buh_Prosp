@@ -239,7 +239,7 @@ export default function Expenses() {
     Promise.all([
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
-      api.contracts.list({ limit: 500 }),
+      api.contracts.list(),
     ])
       .then(([projectList, categoryList, contractList]) => {
         setProjects(projectList)

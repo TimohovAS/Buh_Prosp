@@ -208,7 +208,7 @@ export default function CashRegister() {
       api.cash.years(),
       api.projects.list({ show_archived: true }),
       api.categories.list({ category_type: 'expense' }),
-      api.contracts.list({ limit: 500 }),
+      api.contracts.list(),
       api.workers.list({ active: true }),
     ])
       .then(([cashSummary, years, projectList, categoryList, contractList, workerList]) => {

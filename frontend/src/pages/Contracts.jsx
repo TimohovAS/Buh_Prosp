@@ -57,7 +57,7 @@ export default function Contracts() {
     if (statusFilter) params.status = statusFilter
     if (clientFilter) params.client_id = clientFilter
     api.contracts
-      .list({ ...params, limit: 500 })
+      .list(params)
       .then(setItems)
       .finally(() => setLoading(false))
   }

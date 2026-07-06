@@ -24,7 +24,7 @@ async def list_contracts(
     status: Optional[str] = Query(None),
     year: Optional[int] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: Optional[int] = Query(None, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
@@ -40,7 +40,11 @@ async def list_contracts(
         query = query.where(Contract.status == status)
     if year:
         query = query.where(Contract.date >= date(year, 1, 1), Contract.date <= date(year, 12, 31))
-    query = query.order_by(Contract.date.desc(), Contract.id.desc()).offset(skip).limit(limit)
+    query = query.order_by(Contract.date.desc(), Contract.id.desc())
+    if skip:
+        query = query.offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
     result = await db.execute(query)
     return [_contract_to_response(contract) for contract in result.scalars().all()]
 

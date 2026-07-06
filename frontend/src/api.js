@@ -245,7 +245,7 @@ export const api = {
   efaktura: {
     settings: () => request('/efaktura/settings'),
     updateSettings: (data) => request('/efaktura/settings', { method: 'PUT', body: JSON.stringify(data) }),
-    history: (limit = 100) => request(`/efaktura/history?limit=${limit}`),
+    history: (limit) => request(`/efaktura/history${limit ? `?limit=${limit}` : ''}`),
     sync: () => request('/efaktura/sync', { method: 'POST' }),
     importXml: (files) => uploadFiles('/efaktura/import-xml', files),
   },
