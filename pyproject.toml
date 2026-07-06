@@ -21,9 +21,3 @@ ignore = [
 testpaths = ["backend/tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
-filterwarnings = [
-  # json_encoders (Decimal -> float) в backend/schemas.py оставлен намеренно:
-  # дефолт Pydantic v2 сериализует Decimal строкой, что сломало бы все суммы
-  # в API. Пересмотреть при переходе на Pydantic v3 (Annotated + PlainSerializer).
-  "ignore:`json_encoders` is deprecated.*:pydantic.warnings.PydanticDeprecatedSince20",
-]

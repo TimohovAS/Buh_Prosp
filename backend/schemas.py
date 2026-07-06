@@ -5,7 +5,14 @@ from decimal import Decimal
 
 # Алиас для избежания конфликта имени поля date с типом date
 from typing import Literal, Optional
-from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel as PydanticBaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 DateType = date
 
@@ -13,9 +20,14 @@ MAX_EMBLEM_DATA_URL_LENGTH = 350000
 
 
 class BaseModel(PydanticBaseModel):
-    model_config = ConfigDict(
-        json_encoders={Decimal: lambda value: float(value)},
-    )
+    # Decimal -> число в JSON (дефолт Pydantic v2 — строка, это сломало бы суммы).
+    # Сериализатор видит только значение поля целиком: Decimal внутри list/dict
+    # НЕ конвертируется — такие поля объявлять нельзя без своего сериализатора.
+    @field_serializer("*", when_used="json")
+    def serialize_decimal(self, value):
+        if isinstance(value, Decimal):
+            return float(value)
+        return value
 
 
 # --- User ---
