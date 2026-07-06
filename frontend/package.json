@@ -8,8 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings=0",
-    "format": "prettier --write src",
-    "format:check": "prettier --check src"
+    "i18n:check": "node scripts/check-i18n-keys.mjs",
+    "format": "prettier --write src scripts",
+    "format:check": "prettier --check src scripts"
   },
   "dependencies": {
     "lucide-react": "^0.576.0",
