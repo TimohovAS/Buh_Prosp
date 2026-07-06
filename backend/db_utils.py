@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Contract, Project, TransactionCategory
 
+UNASSIGNED_PROJECT_CODE = "INT-UNASSIGNED"
+
 
 def _raise(exc_cls: type[Exception], message: str, status: int) -> None:
     if exc_cls is HTTPException or (isinstance(exc_cls, type) and issubclass(exc_cls, HTTPException)):
@@ -20,7 +22,7 @@ def _raise(exc_cls: type[Exception], message: str, status: int) -> None:
 
 async def get_unassigned_project_id(db: AsyncSession) -> int | None:
     """Return id of the INT-UNASSIGNED project or None."""
-    result = await db.execute(select(Project).where(Project.code == "INT-UNASSIGNED"))
+    result = await db.execute(select(Project).where(Project.code == UNASSIGNED_PROJECT_CODE))
     project = result.scalar_one_or_none()
     return project.id if project else None
 
@@ -30,14 +32,15 @@ async def get_project_or_404(
     project_id: int,
     *,
     exc_cls: type[Exception] = HTTPException,
+    archived_exc_cls: type[Exception] | None = None,
 ) -> Project:
     """Fetch a project; raise `exc_cls` (HTTPException by default) if missing or archived."""
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
         _raise(exc_cls, "Project not found", 404)
-    if project.status == "archived":
-        _raise(exc_cls, "Cannot use archived project", 400)
+    if project.status == "archived" and project.code != UNASSIGNED_PROJECT_CODE:
+        _raise(archived_exc_cls or exc_cls, "Cannot use archived project", 400)
     return project
 
 
@@ -53,6 +56,45 @@ async def get_contract_or_404(
     if not contract:
         _raise(exc_cls, "Contract not found", 404)
     return contract
+
+
+async def resolve_project_contract_links(
+    db: AsyncSession,
+    project_id: int | None,
+    contract_id: int | None,
+    *,
+    not_found_exc_cls: type[Exception] = HTTPException,
+    validation_exc_cls: type[Exception] = HTTPException,
+) -> tuple[int | None, int | None]:
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
+    resolved_contract_id = contract_id
+    project_validated = False
+
+    if resolved_contract_id is not None:
+        contract = await get_contract_or_404(db, resolved_contract_id, exc_cls=not_found_exc_cls)
+        if contract.project_id is None:
+            if resolved_project_id is None:
+                _raise(validation_exc_cls, "Select a project before linking this contract", 400)
+            await get_project_or_404(
+                db,
+                resolved_project_id,
+                exc_cls=not_found_exc_cls,
+                archived_exc_cls=validation_exc_cls,
+            )
+            project_validated = True
+            contract.project_id = resolved_project_id
+            await db.flush()
+        resolved_project_id = contract.project_id
+
+    if resolved_project_id is not None and not project_validated:
+        await get_project_or_404(
+            db,
+            resolved_project_id,
+            exc_cls=not_found_exc_cls,
+            archived_exc_cls=validation_exc_cls,
+        )
+
+    return resolved_project_id, resolved_contract_id
 
 
 async def get_category_or_none(db: AsyncSession, category_id: int | None) -> TransactionCategory | None:

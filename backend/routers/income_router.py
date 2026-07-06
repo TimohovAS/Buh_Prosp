@@ -15,13 +15,13 @@ from backend.db_utils import (
     get_contract_or_404,
     get_project_or_404,
     get_unassigned_project_id,
+    resolve_project_contract_links,
 )
 from backend.models import (
     Income,
     IncomeItem,
     Client,
     User,
-    Project,
     BankTransaction,
     BankTransactionIncomeAllocation,
     Contract,
@@ -61,30 +61,6 @@ router = APIRouter(prefix="/income", tags=["income"])
 INVOICE_DUPLICATE_DETAIL = "Invoice number already exists for this year."
 INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
-
-
-async def _resolve_income_links(
-    db: AsyncSession,
-    project_id: int | None,
-    contract_id: int | None,
-) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await get_unassigned_project_id(db)
-    resolved_contract_id = contract_id
-
-    if resolved_contract_id is not None:
-        contract = await get_contract_or_404(db, resolved_contract_id)
-        if contract.project_id is None:
-            if resolved_project_id is None:
-                raise HTTPException(400, "Select a project before linking this contract")
-            await get_project_or_404(db, resolved_project_id)
-            contract.project_id = resolved_project_id
-            await db.flush()
-        resolved_project_id = contract.project_id
-
-    if resolved_project_id is not None:
-        await get_project_or_404(db, resolved_project_id)
-
-    return resolved_project_id, resolved_contract_id
 
 
 async def _clear_contract_if_project_mismatch(db: AsyncSession, income: Income, project_id: int | None) -> None:
@@ -325,7 +301,7 @@ async def create_income(
             raise HTTPException(409, INVOICE_DUPLICATE_DETAIL)
 
     status_val = data.status or ("paid" if data.paid_date else "issued")
-    project_id, contract_id = await _resolve_income_links(db, data.project_id, data.contract_id)
+    project_id, contract_id = await resolve_project_contract_links(db, data.project_id, data.contract_id)
     income = Income(
         issued_date=data.issued_date,
         invoice_number=invoice_number,
@@ -425,12 +401,7 @@ async def bulk_assign_project_income(
     if pid is None:
         pid = await get_unassigned_project_id(db)
     if pid is not None:
-        r = await db.execute(select(Project).where(Project.id == pid))
-        proj = r.scalar_one_or_none()
-        if not proj:
-            raise HTTPException(404, "Проект не найден")
-        if proj.status == "archived":
-            raise HTTPException(400, "Нельзя назначить архивированный проект")
+        await get_project_or_404(db, pid)
     r = await db.execute(select(Income).where(Income.id.in_(data.ids)))
     items = r.scalars().all()
     for item in items:
@@ -660,7 +631,9 @@ async def update_income(
         if contract.project_id != desired_project_id:
             desired_contract_id = None
 
-    desired_project_id, desired_contract_id = await _resolve_income_links(db, desired_project_id, desired_contract_id)
+    desired_project_id, desired_contract_id = await resolve_project_contract_links(
+        db, desired_project_id, desired_contract_id
+    )
     dump["project_id"] = desired_project_id
     dump["contract_id"] = desired_contract_id
     if desired_contract_id is None:

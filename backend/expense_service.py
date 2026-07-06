@@ -9,7 +9,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
-from backend.db_utils import get_contract_or_404, get_project_or_404, get_unassigned_project_id
+from backend.db_utils import get_contract_or_404, get_unassigned_project_id, resolve_project_contract_links
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
 from backend.models import BankTransaction, CashEntry, Expense, ExpenseItem, MonthlyObligation
 from backend.schemas import ExpenseDuplicateGroup, ExpenseDuplicateItem
@@ -21,15 +21,6 @@ RECEIPT_SOURCE = "receipt"
 
 class NotFoundError(ValueError):
     """Domain reference was not found."""
-
-
-async def _get_project_or_error(db: AsyncSession, project_id: int):
-    try:
-        return await get_project_or_404(db, project_id, exc_cls=ValueError)
-    except ValueError as exc:
-        if str(exc) == "Project not found":
-            raise NotFoundError(str(exc)) from exc
-        raise
 
 
 def _item_field(item, key: str):
@@ -114,25 +105,13 @@ async def resolve_expense_links(
     project_id: int | None,
     contract_id: int | None,
 ) -> tuple[int | None, int | None]:
-    resolved_project_id = project_id or await get_unassigned_project_id(db)
-    resolved_contract_id = contract_id
-    project_validated = False
-
-    if resolved_contract_id is not None:
-        contract = await get_contract_or_404(db, resolved_contract_id, exc_cls=NotFoundError)
-        if contract.project_id is None:
-            if resolved_project_id is None:
-                raise ValueError("Select a project before linking this contract")
-            await _get_project_or_error(db, resolved_project_id)
-            project_validated = True
-            contract.project_id = resolved_project_id
-            await db.flush()
-        resolved_project_id = contract.project_id
-
-    if resolved_project_id is not None and not project_validated:
-        await _get_project_or_error(db, resolved_project_id)
-
-    return resolved_project_id, resolved_contract_id
+    return await resolve_project_contract_links(
+        db,
+        project_id,
+        contract_id,
+        not_found_exc_cls=NotFoundError,
+        validation_exc_cls=ValueError,
+    )
 
 
 async def clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense, project_id: int | None) -> None:
