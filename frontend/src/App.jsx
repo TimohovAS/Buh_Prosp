@@ -1,57 +1,37 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom'
 import { getToken, setUser, getUser, api } from './api'
 import { getLang, setLang, tr } from './i18n'
 import ToastProvider from './components/ToastProvider'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Income from './pages/Income'
-import Clients from './pages/Clients'
-import Contracts from './pages/Contracts'
-import Settings from './pages/Settings'
-import Expenses from './pages/Expenses'
-import PlannedExpenses from './pages/PlannedExpenses'
-import BankImport from './pages/BankImport'
-import BankTransactions from './pages/BankTransactions'
-import FinanceOverview from './pages/FinanceOverview'
-import ProfitAndLoss from './pages/ProfitAndLoss'
-import AccountsReceivable from './pages/AccountsReceivable'
-import CashFlow from './pages/CashFlow'
-import CashRegister from './pages/CashRegister'
-import Projects from './pages/Projects'
-import Obligations from './pages/Obligations'
-import Efaktura from './pages/Efaktura'
-import IncomingInvoices from './pages/IncomingInvoices'
-import CounterpartyBalance from './pages/CounterpartyBalance'
-import Receipts from './pages/Receipts'
-import CounterpartyLoans from './pages/CounterpartyLoans'
-import Workers from './pages/Workers'
 import useResizableTableColumns from './hooks/useResizableTableColumns'
 
+// Страницы грузятся лениво: код страницы (и тяжёлые зависимости вроде
+// recharts) скачивается при первом заходе на маршрут, а не на экране логина.
 const APP_PAGE_ROUTES = [
-  { id: 'dashboard', path: '/', Component: Dashboard },
-  { id: 'income', path: '/income', Component: Income },
-  { id: 'efaktura', path: '/efaktura', Component: Efaktura },
-  { id: 'incoming-invoices', path: '/incoming-invoices', Component: IncomingInvoices },
-  { id: 'counterparty-balance', path: '/counterparty-balance', Component: CounterpartyBalance },
-  { id: 'counterparty-loans', path: '/counterparty-loans', Component: CounterpartyLoans },
-  { id: 'clients', path: '/clients', Component: Clients },
-  { id: 'workers', path: '/workers', Component: Workers },
-  { id: 'finance', path: '/finance', Component: FinanceOverview },
-  { id: 'finance-pnl', path: '/finance/pnl', Component: ProfitAndLoss },
-  { id: 'finance-ar', path: '/finance/ar', Component: AccountsReceivable },
-  { id: 'finance-cashflow', path: '/finance/cashflow', Component: CashFlow },
-  { id: 'cash', path: '/cash', Component: CashRegister },
-  { id: 'projects', path: '/projects', Component: Projects },
-  { id: 'payments', path: '/payments', Component: Obligations },
-  { id: 'contracts', path: '/contracts', Component: Contracts },
-  { id: 'expenses', path: '/expenses', Component: Expenses },
-  { id: 'receipts', path: '/receipts', Component: Receipts },
-  { id: 'planned-expenses', path: '/planned-expenses', Component: PlannedExpenses },
-  { id: 'bank-import', path: '/bank-import', Component: BankImport },
-  { id: 'bank', path: '/bank', Component: BankTransactions },
-  { id: 'settings', path: '/settings', Component: Settings },
+  { id: 'dashboard', path: '/', Component: lazy(() => import('./pages/Dashboard')) },
+  { id: 'income', path: '/income', Component: lazy(() => import('./pages/Income')) },
+  { id: 'efaktura', path: '/efaktura', Component: lazy(() => import('./pages/Efaktura')) },
+  { id: 'incoming-invoices', path: '/incoming-invoices', Component: lazy(() => import('./pages/IncomingInvoices')) },
+  { id: 'counterparty-balance', path: '/counterparty-balance', Component: lazy(() => import('./pages/CounterpartyBalance')) },
+  { id: 'counterparty-loans', path: '/counterparty-loans', Component: lazy(() => import('./pages/CounterpartyLoans')) },
+  { id: 'clients', path: '/clients', Component: lazy(() => import('./pages/Clients')) },
+  { id: 'workers', path: '/workers', Component: lazy(() => import('./pages/Workers')) },
+  { id: 'finance', path: '/finance', Component: lazy(() => import('./pages/FinanceOverview')) },
+  { id: 'finance-pnl', path: '/finance/pnl', Component: lazy(() => import('./pages/ProfitAndLoss')) },
+  { id: 'finance-ar', path: '/finance/ar', Component: lazy(() => import('./pages/AccountsReceivable')) },
+  { id: 'finance-cashflow', path: '/finance/cashflow', Component: lazy(() => import('./pages/CashFlow')) },
+  { id: 'cash', path: '/cash', Component: lazy(() => import('./pages/CashRegister')) },
+  { id: 'projects', path: '/projects', Component: lazy(() => import('./pages/Projects')) },
+  { id: 'payments', path: '/payments', Component: lazy(() => import('./pages/Obligations')) },
+  { id: 'contracts', path: '/contracts', Component: lazy(() => import('./pages/Contracts')) },
+  { id: 'expenses', path: '/expenses', Component: lazy(() => import('./pages/Expenses')) },
+  { id: 'receipts', path: '/receipts', Component: lazy(() => import('./pages/Receipts')) },
+  { id: 'planned-expenses', path: '/planned-expenses', Component: lazy(() => import('./pages/PlannedExpenses')) },
+  { id: 'bank-import', path: '/bank-import', Component: lazy(() => import('./pages/BankImport')) },
+  { id: 'bank', path: '/bank', Component: lazy(() => import('./pages/BankTransactions')) },
+  { id: 'settings', path: '/settings', Component: lazy(() => import('./pages/Settings')) },
 ]
 
 function ProtectedRoute({ children }) {
@@ -89,7 +69,9 @@ function PersistentPages() {
     const isActive = route.id === activeRoute.id
     return (
       <div key={route.id} className={`route-cache-slot${isActive ? ' active' : ''}`} aria-hidden={!isActive}>
-        <PageComponent />
+        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>}>
+          <PageComponent />
+        </Suspense>
       </div>
     )
   })
