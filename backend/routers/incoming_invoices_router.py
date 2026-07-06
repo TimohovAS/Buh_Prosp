@@ -316,20 +316,23 @@ async def create_invoice(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    invoice = await create_incoming_invoice(
-        db,
-        invoice_number=data.invoice_number,
-        invoice_date=data.date,
-        client_id=data.client_id,
-        counterparty_name=data.counterparty_name,
-        project_id=data.project_id,
-        amount=data.amount,
-        currency=data.currency,
-        description=data.description,
-        note=data.note,
-        source=data.source,
-        created_by=current_user.id,
-    )
+    try:
+        invoice = await create_incoming_invoice(
+            db,
+            invoice_number=data.invoice_number,
+            invoice_date=data.date,
+            client_id=data.client_id,
+            counterparty_name=data.counterparty_name,
+            project_id=data.project_id,
+            amount=data.amount,
+            currency=data.currency,
+            description=data.description,
+            note=data.note,
+            source=data.source,
+            created_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     await db.commit()
     await db.refresh(invoice, ["client", "project"])
     return _serialize(invoice)
@@ -536,7 +539,7 @@ async def update_invoice(
     try:
         fields = data.model_dump(exclude_unset=True)
         await update_incoming_invoice(db, invoice, **fields)
-    except InvalidStatusTransition as exc:
+    except (InvalidStatusTransition, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     await db.commit()
     await db.refresh(invoice, ["client", "project"])

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.db_utils import get_unassigned_project_id
+from backend.db_utils import get_project_or_404, get_unassigned_project_id
 from backend.counterparty_loan_service import loan_totals
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
@@ -36,6 +36,13 @@ from backend.state_machine import (
 INCOMING_INVOICE_SOURCE = "incoming_invoice"
 
 
+async def _resolve_invoice_project_id(db: AsyncSession, project_id: int | None) -> int | None:
+    resolved_project_id = project_id or await get_unassigned_project_id(db)
+    if resolved_project_id is not None:
+        await get_project_or_404(db, resolved_project_id, exc_cls=ValueError)
+    return resolved_project_id
+
+
 async def create_incoming_invoice(
     db: AsyncSession,
     *,
@@ -52,7 +59,7 @@ async def create_incoming_invoice(
     efaktura_record_id: int | None = None,
     created_by: int | None = None,
 ) -> IncomingInvoice:
-    resolved_project_id = project_id or await get_unassigned_project_id(db)
+    resolved_project_id = await _resolve_invoice_project_id(db, project_id)
 
     expense = Expense(
         date=invoice_date,
@@ -98,6 +105,8 @@ async def update_incoming_invoice(
 ) -> IncomingInvoice:
     if invoice.status in {"paid", "cancelled"}:
         raise InvalidStatusTransition(f"IncomingInvoice: cannot edit invoice in status '{invoice.status}'.")
+    if "project_id" in fields and fields["project_id"] is not None:
+        fields["project_id"] = await _resolve_invoice_project_id(db, fields["project_id"])
     for key, value in fields.items():
         if value is not None:
             setattr(invoice, key, value)
