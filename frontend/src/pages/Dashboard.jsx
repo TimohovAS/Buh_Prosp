@@ -135,6 +135,21 @@ function IncomeExpensePie({ title, income, expenses }) {
   )
 }
 
+function DashboardAlertCard({ title, items, linkTo, linkLabel, isOverdue, renderItem }) {
+  const toneClass = isOverdue ? 'dashboard-alert-card--danger' : 'dashboard-alert-card--warning'
+  return (
+    <section className={`card dashboard-alert-card ${toneClass}`}>
+      <div className="dashboard-alert-head">
+        <div className="dashboard-alert-title">{title}</div>
+        <Link to={linkTo} className="btn btn-primary btn-sm dashboard-alert-link">
+          {linkLabel} {UI_ARROW}
+        </Link>
+      </div>
+      <div className="dashboard-alert-list">{items.map(renderItem)}</div>
+    </section>
+  )
+}
+
 export default function Dashboard() {
   const location = useLocation()
   const isActivePage = location.pathname === '/'
@@ -190,6 +205,12 @@ export default function Dashboard() {
     limitsData.vat_limit,
     limitsData.vat_percent
   )
+  const upcomingPlannedExpenses = data.upcoming_planned_expenses || []
+  const upcomingUnpaidObligations = data.upcoming_unpaid_obligations || []
+  const hasUpcomingPlannedExpenses = upcomingPlannedExpenses.length > 0
+  const hasUpcomingUnpaidObligations = upcomingUnpaidObligations.length > 0
+  const plannedExpensesOverdue = upcomingPlannedExpenses.some((item) => item.status === 'overdue')
+  const obligationsOverdue = upcomingUnpaidObligations.some((item) => item.status === 'overdue')
 
   return (
     <>
@@ -276,131 +297,66 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {data.upcoming_planned_expenses && data.upcoming_planned_expenses.length > 0 && (
-          <div
-            className="card"
-            style={{
-              marginBottom: '2rem',
-              borderColor: data.upcoming_planned_expenses.some((item) => item.status === 'overdue')
-                ? 'var(--color-danger)'
-                : 'var(--color-warning)',
-              borderWidth: 1,
-              borderStyle: 'solid',
-            }}
-          >
-            <div
-              className="card-title"
-              style={{
-                color: data.upcoming_planned_expenses.some((item) => item.status === 'overdue')
-                  ? 'var(--color-danger)'
-                  : 'var(--color-warning)',
-              }}
-            >
-              {data.upcoming_planned_expenses.some((item) => item.status === 'overdue')
-                ? `${UI_WARNING} ${tr('obligationsOverdue')} | ${tr('plannedExpenses')}`
-                : `${UI_WARNING} ${tr('obligationsDueSoon')} | ${tr('plannedExpenses')}`}
-            </div>
-            <div style={{ marginBottom: '0.75rem' }}>
-              {data.upcoming_planned_expenses.map((item, index) => (
-                <div
-                  key={`${item.planned_expense_id}-${item.due_date}-${index}`}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    marginBottom: '0.5rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>
-                    <strong>{item.name}</strong> | {fmt(item.amount)} {item.currency}
-                    <span
-                      style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}
-                    >
-                      ({item.due_date.split('-').reverse().join('.')})
-                    </span>
-                  </span>
-                  <span
-                    style={{
-                      color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)',
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                    }}
+        {(hasUpcomingPlannedExpenses || hasUpcomingUnpaidObligations) && (
+          <div className="dashboard-alert-grid">
+            {hasUpcomingPlannedExpenses ? (
+              <DashboardAlertCard
+                title={
+                  plannedExpensesOverdue
+                    ? `${UI_WARNING} ${tr('obligationsOverdue')} | ${tr('plannedExpenses')}`
+                    : `${UI_WARNING} ${tr('obligationsDueSoon')} | ${tr('plannedExpenses')}`
+                }
+                items={upcomingPlannedExpenses}
+                isOverdue={plannedExpensesOverdue}
+                linkTo="/planned-expenses"
+                linkLabel={tr('plannedExpenses')}
+                renderItem={(item, index) => (
+                  <div
+                    className="dashboard-alert-row"
+                    key={`${item.planned_expense_id}-${item.due_date}-${index}`}
                   >
-                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
-                    {formatObligationDays(item.days_until, tr)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Link to="/planned-expenses" className="btn btn-primary btn-sm">
-              {tr('plannedExpenses')} {UI_ARROW}
-            </Link>
-          </div>
-        )}
+                    <span className="dashboard-alert-main">
+                      <strong>{item.name}</strong> | {fmt(item.amount)} {item.currency}
+                      <span className="dashboard-alert-date">
+                        ({item.due_date.split('-').reverse().join('.')})
+                      </span>
+                    </span>
+                    <span className={`dashboard-alert-days${item.status === 'overdue' ? ' danger' : ''}`}>
+                      {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
+                      {formatObligationDays(item.days_until, tr)}
+                    </span>
+                  </div>
+                )}
+              />
+            ) : null}
 
-        {data.upcoming_unpaid_obligations && data.upcoming_unpaid_obligations.length > 0 && (
-          <div
-            className="card"
-            style={{
-              marginBottom: '2rem',
-              borderColor: data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue')
-                ? 'var(--color-danger)'
-                : 'var(--color-warning)',
-              borderWidth: 1,
-              borderStyle: 'solid',
-            }}
-          >
-            <div
-              className="card-title"
-              style={{
-                color: data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue')
-                  ? 'var(--color-danger)'
-                  : 'var(--color-warning)',
-              }}
-            >
-              {data.upcoming_unpaid_obligations.some((item) => item.status === 'overdue')
-                ? `${UI_WARNING} ${tr('obligationsOverdue')}`
-                : `${UI_WARNING} ${tr('obligationsDueSoon')}`}
-            </div>
-            <div style={{ marginBottom: '0.75rem' }}>
-              {data.upcoming_unpaid_obligations.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    marginBottom: '0.5rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>
-                    <strong>{item.payment_type_name}</strong> | {fmt(item.amount)} RSD
-                    <span
-                      style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginLeft: '0.5rem' }}
-                    >
-                      ({item.deadline.split('-').reverse().join('.')})
+            {hasUpcomingUnpaidObligations ? (
+              <DashboardAlertCard
+                title={
+                  obligationsOverdue
+                    ? `${UI_WARNING} ${tr('obligationsOverdue')}`
+                    : `${UI_WARNING} ${tr('obligationsDueSoon')}`
+                }
+                items={upcomingUnpaidObligations}
+                isOverdue={obligationsOverdue}
+                linkTo="/payments"
+                linkLabel={tr('goToPayments')}
+                renderItem={(item) => (
+                  <div className="dashboard-alert-row" key={item.id}>
+                    <span className="dashboard-alert-main">
+                      <strong>{item.payment_type_name}</strong> | {fmt(item.amount)} RSD
+                      <span className="dashboard-alert-date">
+                        ({item.deadline.split('-').reverse().join('.')})
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    style={{
-                      color: item.status === 'overdue' ? 'var(--color-danger)' : 'var(--color-warning)',
-                      fontWeight: 600,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
-                    {formatObligationDays(item.days_until, tr)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Link to="/payments" className="btn btn-primary btn-sm">
-              {tr('goToPayments')} {UI_ARROW}
-            </Link>
+                    <span className={`dashboard-alert-days${item.status === 'overdue' ? ' danger' : ''}`}>
+                      {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
+                      {formatObligationDays(item.days_until, tr)}
+                    </span>
+                  </div>
+                )}
+              />
+            ) : null}
           </div>
         )}
 
