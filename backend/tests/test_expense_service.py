@@ -10,12 +10,14 @@ from backend.expense_service import (
     clear_contract_if_project_mismatch,
     expense_amount_from_items,
     expense_description_from_items,
+    find_expense_duplicate_groups,
+    merge_duplicate_expenses,
     normalize_expense_items,
     resolve_expense_links,
     sync_bank_transactions_from_expense,
     sync_cash_entry_from_expense,
 )
-from backend.models import CashEntry, Contract, Expense, Project
+from backend.models import CashEntry, Contract, Expense, MonthlyObligation, PaymentType, Project
 from backend.tests.conftest import TEST_NOW
 
 NOW = TEST_NOW
@@ -201,3 +203,84 @@ async def test_sync_cash_entry_from_expense_updates_existing_cash_entry(db_sessi
     assert cash_entry.currency == "EUR"
     assert cash_entry.description == "Updated cash expense"
     assert cash_entry.note == "cash note"
+
+
+async def test_find_expense_duplicate_groups_groups_by_payment_reference(db_session, make_expense):
+    first = await make_expense(
+        db_session,
+        amount=Decimal("100.00"),
+        status="paid",
+        description="First duplicate",
+    )
+    first.bank_reference = "DUP-REF"
+    second = await make_expense(
+        db_session,
+        amount=Decimal("100.00"),
+        status="paid",
+        description="Second duplicate",
+    )
+    second.bank_reference = " dup-ref "
+    await make_expense(
+        db_session,
+        amount=Decimal("200.00"),
+        status="paid",
+        description="Different amount",
+    )
+    await db_session.flush()
+
+    groups = await find_expense_duplicate_groups(db_session, 2026, 7)
+
+    assert len(groups) == 1
+    assert groups[0].reason == "payment_reference"
+    assert groups[0].item_count == 2
+    assert {item.id for item in groups[0].items} == {first.id, second.id}
+
+
+async def test_merge_duplicate_expenses_relinks_bank_transaction_and_obligation(
+    db_session,
+    make_bank_tx,
+    make_expense,
+):
+    keep = await make_expense(
+        db_session,
+        amount=Decimal("100.00"),
+        status="paid",
+        description="Keep",
+    )
+    duplicate = await make_expense(
+        db_session,
+        amount=Decimal("100.00"),
+        status="paid",
+        description="Duplicate",
+    )
+    duplicate.bank_reference = "MERGE-REF"
+    duplicate.note = "duplicate note"
+    tx = await make_bank_tx(db_session, amount=Decimal("-100.00"), direction="out", bank_reference="MERGE-REF")
+    tx.status = "matched"
+    tx.matched_type = "expense"
+    tx.matched_id = duplicate.id
+    payment_type = PaymentType(code="merge-tax", name_sr="Porez")
+    db_session.add(payment_type)
+    await db_session.flush()
+    obligation = MonthlyObligation(
+        year=2026,
+        month=7,
+        payment_type_id=payment_type.id,
+        amount=Decimal("100.00"),
+        deadline=date(2026, 8, 15),
+        status="paid",
+        paid_date=date(2026, 7, 6),
+        expense_id=duplicate.id,
+        created_at=NOW,
+    )
+    db_session.add(obligation)
+    await db_session.flush()
+
+    result = await merge_duplicate_expenses(db_session, keep.id, [duplicate.id])
+
+    assert result.id == keep.id
+    assert result.bank_reference == "MERGE-REF"
+    assert result.note == "duplicate note"
+    assert tx.matched_id == keep.id
+    assert obligation.expense_id == keep.id
+    assert await db_session.get(Expense, duplicate.id) is None
