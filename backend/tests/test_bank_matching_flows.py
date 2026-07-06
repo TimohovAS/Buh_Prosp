@@ -6,10 +6,13 @@ from sqlalchemy import func, select
 
 from backend.bank_matching_service import (
     MATCH_TYPE_INCOME_ALLOCATION,
+    MATCH_TYPE_OWNER_FUNDS,
+    classify_transaction_as_owner_funds,
     detach_income_transaction_link,
     match_transaction,
     reconcile_income_payment_links,
     save_income_allocation,
+    suggest_matches,
     unmatch_transaction,
 )
 from backend.models import BankTransactionIncomeAllocation, Contract
@@ -324,3 +327,66 @@ async def test_reconcile_income_payment_links_is_idempotent(
         income.bank_reference,
     ) == first_snapshot
     assert allocation_count == 1
+
+
+@pytest.mark.asyncio
+async def test_owner_funds_classification_can_be_unmatched(
+    db_session,
+    make_bank_tx,
+    make_project,
+):
+    project = await make_project(db_session, code="PR-OWNER")
+    tx = await make_bank_tx(db_session, amount=Decimal("100.00"), direction="in", project_id=project.id)
+
+    classified_tx = await classify_transaction_as_owner_funds(db_session, tx.id)
+
+    assert classified_tx.status == "matched"
+    assert classified_tx.matched_type == MATCH_TYPE_OWNER_FUNDS
+    assert classified_tx.matched_id is None
+    assert classified_tx.project_id is None
+
+    unmatched_tx = await unmatch_transaction(db_session, tx.id)
+
+    assert unmatched_tx.status == "unmatched"
+    assert unmatched_tx.matched_type is None
+    assert unmatched_tx.matched_id is None
+    assert unmatched_tx.project_id is None
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_returns_income_candidate_without_fixing_score(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    income = await make_income(
+        db_session,
+        amount=Decimal("100.00"),
+        invoice_number="INV-2026-001",
+        client_name="Acme Doo",
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("100.00"),
+        direction="in",
+        counterparty_name="Acme Doo Beograd",
+        purpose="Payment for INV-2026-001",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert suggestions
+    assert suggestions[0]["id"] == income.id
+    assert suggestions[0]["type"] == "income"
+    assert suggestions[0]["section"] == "suggested"
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_ignores_owner_funds_transaction(
+    db_session,
+    make_bank_tx,
+):
+    tx = await make_bank_tx(db_session, amount=Decimal("100.00"), direction="in")
+    await classify_transaction_as_owner_funds(db_session, tx.id)
+
+    assert await suggest_matches(db_session, tx) == []
