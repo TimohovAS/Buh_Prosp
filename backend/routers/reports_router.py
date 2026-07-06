@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.bank_matching_service import MATCH_TYPE_OWNER_FUNDS
 from backend.database import get_db
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import BankTransaction, Enterprise, Income, User
 from backend.auth import get_current_user_required
 from reportlab.lib import colors
@@ -109,14 +110,15 @@ def _to_serbian_latin(value: str | None) -> str:
     return "".join(CYRILLIC_TO_LATIN.get(char, char) for char in text)
 
 
-def _format_amount(value: float | int | None) -> str:
-    amount = float(value or 0)
+def _format_amount(value: Decimal | float | int | None) -> str:
+    # КПО — официальный документ: форматируем из Decimal, без float-округлений.
+    amount = to_decimal(value or 0)
     formatted = f"{amount:,.2f}"
     return formatted.replace(",", "_").replace(".", ",").replace("_", ".")
 
 
 def _format_decimal_amount(value: Decimal | float | int | None) -> str:
-    return _format_amount(float(value or 0))
+    return _format_amount(value)
 
 
 def _format_sr_date(value: date | None) -> str:
@@ -125,12 +127,12 @@ def _format_sr_date(value: date | None) -> str:
     return value.strftime("%d.%m.%Y")
 
 
-def _split_kpo_amounts(income: Income) -> tuple[float, float]:
+def _split_kpo_amounts(income: Income) -> tuple[Decimal, Decimal]:
     contract_type = getattr(getattr(income, "contract", None), "contract_type", None)
-    amount = float(income.amount_rsd or 0)
+    amount = to_decimal(income.amount_rsd or 0)
     if contract_type in KPO_PRODUCTS_CONTRACT_TYPES:
-        return amount, 0.0
-    return 0.0, amount
+        return amount, ZERO_DECIMAL
+    return ZERO_DECIMAL, amount
 
 
 def _build_kpo_description(income: Income) -> str:
@@ -293,9 +295,9 @@ async def export_kpo_csv(
             "Ukupni prihodi od delatnosti",
         ]
     )
-    total_products = 0.0
-    total_services = 0.0
-    total_all = 0.0
+    total_products = ZERO_DECIMAL
+    total_services = ZERO_DECIMAL
+    total_all = ZERO_DECIMAL
     for index, income in enumerate(incomes, start=1):
         products_amount, services_amount = _split_kpo_amounts(income)
         total_amount = products_amount + services_amount
@@ -380,9 +382,9 @@ async def export_kpo_pdf(
             Paragraph("<b>Ukupni prihodi od delatnosti</b>", header_style),
         ]
     ]
-    total_products = 0.0
-    total_services = 0.0
-    total_all = 0.0
+    total_products = ZERO_DECIMAL
+    total_services = ZERO_DECIMAL
+    total_all = ZERO_DECIMAL
     body_style = ParagraphStyle(
         "KPOBody",
         parent=styles["BodyText"],
