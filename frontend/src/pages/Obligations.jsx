@@ -50,6 +50,7 @@ export default function Obligations() {
     paid_date: todayIso(),
     payment_reference: '',
   })
+  const [qrModal, setQrModal] = useState(null)
   const [settingsModal, setSettingsModal] = useState(false)
   const [decisionFormModal, setDecisionFormModal] = useState(null)
   const [decisionForm, setDecisionForm] = useState({
@@ -162,6 +163,16 @@ export default function Obligations() {
       payment_reference: obligation.payment_reference || '',
     })
     setPaidModal(obligation)
+  }
+
+  const openQrModal = async (obligation) => {
+    setQrModal({ obligation })
+    try {
+      const data = await api.obligations.ipsQr(obligation.id)
+      setQrModal({ obligation, data })
+    } catch (error) {
+      setQrModal({ obligation, error: error.message || tr('loadError') })
+    }
   }
 
   const handleMarkPaidSubmit = async (event) => {
@@ -406,12 +417,20 @@ export default function Obligations() {
                             {tr('markUnpaid')}
                           </button>
                         ) : (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => openPaidModal(obligation)}
-                          >
-                            {tr('markPaid')}
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={() => openQrModal(obligation)}
+                            >
+                              {tr('payQr')}
+                            </button>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => openPaidModal(obligation)}
+                            >
+                              {tr('markPaid')}
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -562,6 +581,59 @@ export default function Obligations() {
             </div>
           </form>
         ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={!!qrModal}
+        onClose={() => setQrModal(null)}
+        title={
+          qrModal
+            ? `${tr('payQrTitle')} — ${getTypeName(qrModal.obligation.payment_type_code)} ${monthNamesShort[qrModal.obligation.month - 1]} ${qrModal.obligation.year}`
+            : tr('payQrTitle')
+        }
+        maxWidth="420px"
+        closeOnOverlay
+      >
+        {qrModal?.error ? (
+          <div style={{ color: 'var(--color-danger)' }}>{qrModal.error}</div>
+        ) : !qrModal?.data ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem' }}>{tr('loading')}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', alignItems: 'center' }}>
+            <img
+              src={qrModal.data.qr_png}
+              alt="NBS IPS QR"
+              style={{ width: 240, height: 240, background: '#fff', padding: 10, borderRadius: 8 }}
+            />
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+              {tr('payQrScanHint')}
+            </div>
+            <div
+              style={{
+                width: '100%',
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                gap: '0.3rem 0.9rem',
+                fontSize: '0.9rem',
+              }}
+            >
+              <span style={{ color: 'var(--color-text-muted)' }}>{tr('recipient')}</span>
+              <span>{qrModal.data.recipient}</span>
+              <span style={{ color: 'var(--color-text-muted)' }}>{tr('recipientAccount')}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{qrModal.data.account}</span>
+              <span style={{ color: 'var(--color-text-muted)' }}>{tr('amount')}</span>
+              <span style={{ fontWeight: 700 }}>
+                {Number(qrModal.data.amount)?.toLocaleString('sr-RS')} {qrModal.data.currency}
+              </span>
+              <span style={{ color: 'var(--color-text-muted)' }}>{tr('pozivNaBroj')}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {qrModal.data.model} {qrModal.data.reference}
+              </span>
+              <span style={{ color: 'var(--color-text-muted)' }}>{tr('paymentPurpose')}</span>
+              <span>{qrModal.data.purpose}</span>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal

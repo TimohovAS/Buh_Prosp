@@ -812,6 +812,8 @@ class IPSQRData(BaseModel):
     purpose: str
     model: str
     reference: str
+    payload: str  # строка NBS IPS QR (K:PR|V:01|...)
+    qr_png: str  # data-URL PNG с QR-кодом
 
 
 # --- ContributionRates ---
