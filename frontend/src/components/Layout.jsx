@@ -329,7 +329,7 @@ export default function Layout({ lang, toggleLang, children }) {
           </button>
           <div className="mobile-topbar-copy">
             <strong>
-              ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v2</span>
+              ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v3</span>
             </strong>
             {enterpriseName ? <span>{enterpriseName}</span> : null}
           </div>
