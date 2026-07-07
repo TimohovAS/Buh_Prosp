@@ -17,14 +17,23 @@ if /I "%~1"=="--check" (
     exit /b 0
 )
 
-call :port_warning 8000 "Backend"
-call :port_warning 5173 "Frontend"
+call :is_port_listening 8000
+if errorlevel 1 (
+    echo Starting ProspEl backend...
+    start "ProspEl Backend" /D "%ROOT%" cmd /k ""%BACKEND_PY%" run.py"
+    call :wait_for_port 8000 "Backend" 30
+    if errorlevel 1 exit /b %ERRORLEVEL%
+) else (
+    echo Backend already running on http://127.0.0.1:8000
+)
 
-echo Starting ProspEl backend...
-start "ProspEl Backend" /D "%ROOT%" cmd /k ""%BACKEND_PY%" run.py"
-
-echo Starting ProspEl frontend...
-start "ProspEl Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev -- --host 127.0.0.1"
+call :is_port_listening 5173
+if errorlevel 1 (
+    echo Starting ProspEl frontend...
+    start "ProspEl Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev -- --host 127.0.0.1"
+) else (
+    echo Frontend already running on http://127.0.0.1:5173
+)
 
 echo.
 echo Backend:  http://127.0.0.1:8000
@@ -65,11 +74,36 @@ exit /b 0
 :port_warning
 set "PORT=%~1"
 set "NAME=%~2"
-netstat -ano | findstr ":%PORT%" | findstr "LISTENING" >nul
+call :is_port_listening %PORT%
 if not errorlevel 1 (
     echo WARNING: %NAME% port %PORT% already has a listening process.
 )
 exit /b 0
+
+:is_port_listening
+set "PORT=%~1"
+netstat -ano | findstr ":%PORT%" | findstr "LISTENING" >nul
+exit /b %ERRORLEVEL%
+
+:wait_for_port
+set "PORT=%~1"
+set "NAME=%~2"
+set "TRIES=%~3"
+echo Waiting for %NAME% on port %PORT%...
+:wait_for_port_loop
+call :is_port_listening %PORT%
+if not errorlevel 1 (
+    echo %NAME% is ready.
+    exit /b 0
+)
+if "%TRIES%"=="0" (
+    echo ERROR: %NAME% did not start on port %PORT%.
+    echo Check the opened %NAME% terminal window for the Python traceback.
+    exit /b 1
+)
+set /a TRIES-=1
+timeout /t 1 /nobreak >nul
+goto :wait_for_port_loop
 
 :help
 echo Usage:
