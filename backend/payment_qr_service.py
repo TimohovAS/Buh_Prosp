@@ -18,7 +18,7 @@ from backend.decimal_utils import to_decimal
 MAX_NAME_LENGTH = 70
 MAX_PURPOSE_LENGTH = 35
 MAX_REFERENCE_LENGTH = 25
-IPS_TAG_SEPARATOR = "\n"
+IPS_TAG_SEPARATOR = "|"
 
 
 def account_to_18_digits(account: str) -> str:
@@ -44,14 +44,21 @@ def account_to_18_digits(account: str) -> str:
 
 def format_ips_amount(amount) -> str:
     value = to_decimal(amount)
-    if value <= 0:
-        raise ValueError("Сумма для оплаты должна быть больше нуля")
+    if value < 0:
+        raise ValueError("Payment amount cannot be negative")
     return f"RSD{value.quantize(Decimal('0.01'))}".replace(".", ",")
 
 
 def _clean(value: str | None, max_length: int) -> str:
     # IPS tag separators are not allowed inside field values.
     return str(value or "").replace("|", " ").replace("\r", " ").replace("\n", " ").strip()[:max_length].rstrip()
+
+
+def normalize_ips_payment_purpose(purpose: str | None) -> str:
+    value = str(purpose or "").strip()
+    if value.startswith("Porez na pau") and value.endswith(". godinu"):
+        return value[: -len(" godinu")]
+    return value
 
 
 def build_ips_payload(
@@ -77,7 +84,7 @@ def build_ips_payload(
         tags.append(("P", _clean(payer_name, MAX_NAME_LENGTH)))
     if sifra_placanja:
         tags.append(("SF", _clean(sifra_placanja, 3)))
-    purpose = _clean(payment_purpose, MAX_PURPOSE_LENGTH)
+    purpose = _clean(normalize_ips_payment_purpose(payment_purpose), MAX_PURPOSE_LENGTH)
     if purpose:
         tags.append(("S", purpose))
     reference = "".join(ch for ch in str(poziv_na_broj or "") if ch.isdigit())

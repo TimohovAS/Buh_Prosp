@@ -104,10 +104,10 @@ def presets_2026() -> list[dict]:
             "payment_type_code": "tax",
             "year": 2026,
             "monthly_amount": 5122.16,
-            "recipient_account": "840-71122843-32",
+            "recipient_account": "840-711122843-32",
             "poziv_na_broj": "2624190000007887475",
             "poziv_na_broj_next": "2024190000008031910",
-            "payment_purpose": "Porez na paušalni prihod za YYYY. godinu",
+            "payment_purpose": "Porez na paušalni prihod za YYYY.",
         },
         {
             "payment_type_code": "pio",

@@ -22,7 +22,7 @@ from backend.schemas import (
     IPSQRData,
 )
 from backend.auth import get_current_user_required, require_edit_access
-from backend.payment_qr_service import build_ips_payload, render_qr_png_data_url
+from backend.payment_qr_service import build_ips_payload, normalize_ips_payment_purpose, render_qr_png_data_url
 from backend.payments_service import (
     ensure_payment_types,
     get_or_create_obligations,
@@ -415,13 +415,12 @@ async def get_ips_qr(
     payer = f"{e.name or 'Предузетник'}" if e else "Предузетник"
     if e and e.address:
         payer += f", {e.address}"
-    purpose = payment_purpose_with_year(dec.payment_purpose, ob.year)
+    purpose = normalize_ips_payment_purpose(payment_purpose_with_year(dec.payment_purpose, ob.year))
     try:
         payload = build_ips_payload(
             recipient_account=dec.recipient_account,
             recipient_name=dec.recipient_name,
-            amount=ob.amount,
-            payer_name=payer,
+            amount=0,
             sifra_placanja=dec.sifra_placanja,
             payment_purpose=purpose,
             model=dec.model,
