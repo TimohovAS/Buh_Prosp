@@ -4,6 +4,14 @@
 теги разделяются символом '|', счёт получателя кодируется 18 цифрами
 (банк 3 + номер с ведущими нулями до 13 + контрольные 2), сумма — с
 десятичной запятой, RO — модель контроля + позив на број без пробелов.
+
+Два требования, без которых банковские приложения пишут «неисправан QR»
+(проверено по эталонным QR из решений Пореской управы, tmp/*.pdf):
+1. Весь payload — ОДИН сегмент 8-битного byte-режима (UTF-8). Библиотека
+   qrcode по умолчанию дробит строку на numeric/alphanumeric/byte сегменты,
+   и строгий парсер IPS это не принимает.
+2. Текстовые поля — латиница (эталон банка на латинице); кириллицу
+   транслитерируем.
 """
 
 import base64
@@ -12,8 +20,10 @@ from io import BytesIO
 
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
+from qrcode.util import MODE_8BIT_BYTE, QRData
 
 from backend.decimal_utils import to_decimal
+from backend.text_utils import to_serbian_latin
 
 MAX_NAME_LENGTH = 70
 MAX_PURPOSE_LENGTH = 35
@@ -50,8 +60,9 @@ def format_ips_amount(amount) -> str:
 
 
 def _clean(value: str | None, max_length: int) -> str:
-    # IPS tag separators are not allowed inside field values.
-    return str(value or "").replace("|", " ").replace("\r", " ").replace("\n", " ").strip()[:max_length].rstrip()
+    # IPS tag separators are not allowed inside field values; text on Latin.
+    latin = to_serbian_latin(value)
+    return latin.replace("|", " ").replace("\r", " ").replace("\n", " ").strip()[:max_length].rstrip()
 
 
 def normalize_ips_payment_purpose(purpose: str | None) -> str:
@@ -96,7 +107,9 @@ def build_ips_payload(
 
 def render_qr_png_data_url(payload: str) -> str:
     qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=8, border=2)
-    qr.add_data(payload)
+    # Один сегмент 8-битного byte-режима (UTF-8), без авто-дробления на
+    # numeric/alphanumeric — иначе банковский парсер IPS QR его отвергает.
+    qr.add_data(QRData(payload.encode("utf-8"), mode=MODE_8BIT_BYTE))
     qr.make(fit=True)
     image = qr.make_image(fill_color="black", back_color="white")
     buffer = BytesIO()

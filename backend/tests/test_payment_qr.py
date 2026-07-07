@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 import pytest
+import qrcode
+from qrcode.util import MODE_8BIT_BYTE, QRData
 
 from backend.payment_qr_service import (
     account_to_18_digits,
@@ -23,9 +25,9 @@ def test_account_to_18_digits_rejects_malformed():
 
 
 def test_account_to_18_digits_rejects_bad_control_digits():
-    with pytest.raises(ValueError, match="kontrolnog|control|числа|С‡РёСЃР»Р°"):
+    with pytest.raises(ValueError, match="контрольного"):
         account_to_18_digits("840-71122843-32")
-    with pytest.raises(ValueError, match="kontrolnog|control|числа|С‡РёСЃР»Р°"):
+    with pytest.raises(ValueError, match="контрольного"):
         account_to_18_digits("840-711122843-33")
 
 
@@ -113,6 +115,36 @@ def test_build_ips_payload_reference_digits_only():
         poziv_na_broj="26-2419000 0007887475",
     )
     assert payload.endswith("RO:972624190000007887475")
+
+
+def test_build_ips_payload_transliterates_cyrillic_recipient():
+    # Эталон банка использует латиницу; кириллица в payload ломает разбор.
+    payload = build_ips_payload(
+        recipient_account="840-711122843-32",
+        recipient_name="Пореска управа Републике Србије",
+        amount=Decimal("5122.16"),
+        payment_purpose="Porez na paušalni prihod za 2026. godinu",
+        model="97",
+        poziv_na_broj="2624190000007887475",
+    )
+    assert "N:Poreska uprava Republike Srbije" in payload
+    assert not any("Ѐ" <= ch <= "ӿ" for ch in payload)
+
+
+def test_render_qr_uses_single_byte_segment():
+    # Один сегмент 8-битного byte-режима — иначе банк пишет «неисправан QR».
+    payload = build_ips_payload(
+        recipient_account="840-711122843-32",
+        recipient_name="Poreska uprava Republike Srbije",
+        amount=Decimal("5122.16"),
+        payment_purpose="Porez na paušalni prihod za 2026.",
+        model="97",
+        poziv_na_broj="2624190000007887475",
+    )
+    qr = qrcode.QRCode()
+    qr.add_data(QRData(payload.encode("utf-8"), mode=MODE_8BIT_BYTE))
+    qr.make(fit=True)
+    assert [d.mode for d in qr.data_list] == [MODE_8BIT_BYTE]
 
 
 def test_render_qr_png_returns_data_url():

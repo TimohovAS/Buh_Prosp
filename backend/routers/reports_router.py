@@ -14,6 +14,7 @@ from backend.bank_matching_service import MATCH_TYPE_OWNER_FUNDS
 from backend.database import get_db
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import BankTransaction, Enterprise, Income, User
+from backend.text_utils import to_serbian_latin
 from backend.auth import get_current_user_required
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -28,68 +29,6 @@ import reportlab
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 KPO_PRODUCTS_CONTRACT_TYPES = {"supply"}
-CYRILLIC_TO_LATIN = {
-    "А": "A",
-    "а": "a",
-    "Б": "B",
-    "б": "b",
-    "В": "V",
-    "в": "v",
-    "Г": "G",
-    "г": "g",
-    "Д": "D",
-    "д": "d",
-    "Ђ": "Dj",
-    "ђ": "dj",
-    "Е": "E",
-    "е": "e",
-    "Ж": "Z",
-    "ж": "z",
-    "З": "Z",
-    "з": "z",
-    "И": "I",
-    "и": "i",
-    "Ј": "J",
-    "ј": "j",
-    "К": "K",
-    "к": "k",
-    "Л": "L",
-    "л": "l",
-    "Љ": "Lj",
-    "љ": "lj",
-    "М": "M",
-    "м": "m",
-    "Н": "N",
-    "н": "n",
-    "Њ": "Nj",
-    "њ": "nj",
-    "О": "O",
-    "о": "o",
-    "П": "P",
-    "п": "p",
-    "Р": "R",
-    "р": "r",
-    "С": "S",
-    "с": "s",
-    "Т": "T",
-    "т": "t",
-    "Ћ": "C",
-    "ћ": "c",
-    "У": "U",
-    "у": "u",
-    "Ф": "F",
-    "ф": "f",
-    "Х": "H",
-    "х": "h",
-    "Ц": "C",
-    "ц": "c",
-    "Ч": "C",
-    "ч": "c",
-    "Џ": "Dz",
-    "џ": "dz",
-    "Ш": "S",
-    "ш": "s",
-}
 _UNICODE_FONT_NAME = "KPOVera"
 _UNICODE_FONT_REGISTERED = False
 
@@ -104,10 +43,7 @@ def _register_unicode_font() -> str:
 
 
 def _to_serbian_latin(value: str | None) -> str:
-    if value is None:
-        return ""
-    text = str(value)
-    return "".join(CYRILLIC_TO_LATIN.get(char, char) for char in text)
+    return to_serbian_latin(value)
 
 
 def _format_amount(value: Decimal | float | int | None) -> str:

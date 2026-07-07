@@ -420,7 +420,7 @@ async def get_ips_qr(
         payload = build_ips_payload(
             recipient_account=dec.recipient_account,
             recipient_name=dec.recipient_name,
-            amount=0,
+            amount=ob.amount,  # реальная сумма обязательства, чтобы не вводить вручную
             sifra_placanja=dec.sifra_placanja,
             payment_purpose=purpose,
             model=dec.model,
