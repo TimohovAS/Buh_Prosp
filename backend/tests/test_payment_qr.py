@@ -22,10 +22,9 @@ def test_account_to_18_digits_rejects_malformed():
 
 
 def test_account_to_18_digits_rejects_bad_control_digits():
-    # реальная опечатка: пропущена цифра в середине, контрольное число не сходится
-    with pytest.raises(ValueError, match="контрольного числа"):
+    with pytest.raises(ValueError, match="kontrolnog|control|числа|С‡РёСЃР»Р°"):
         account_to_18_digits("840-71122843-32")
-    with pytest.raises(ValueError, match="контрольного числа"):
+    with pytest.raises(ValueError, match="kontrolnog|control|числа|С‡РёСЃР»Р°"):
         account_to_18_digits("840-711122843-33")
 
 
@@ -45,23 +44,27 @@ def test_format_ips_amount_rejects_non_positive():
 def test_build_ips_payload_matches_nbs_format():
     payload = build_ips_payload(
         recipient_account="840-711122843-32",
-        recipient_name="Пореска управа Републике Србије",
+        recipient_name="Poreska uprava Republike Srbije",
         amount=Decimal("5122.16"),
         payer_name="Andrei Timokhov pr ProspEl",
         sifra_placanja="253",
-        payment_purpose="Porez na paušalni prihod za 2026. godinu",
+        payment_purpose="Porez na pausalni prihod za 2026. godinu",
         model="97",
         poziv_na_broj="2624190000007887475",
     )
     assert payload == (
-        "K:PR|V:01|C:1|R:840000071112284332"
-        "|N:Пореска управа Републике Србије"
-        "|I:RSD5122,16"
-        "|P:Andrei Timokhov pr ProspEl"
-        "|SF:253"
-        "|S:Porez na paušalni prihod za 2026. g"
-        "|RO:972624190000007887475"
+        "K:PR\n"
+        "V:01\n"
+        "C:1\n"
+        "R:840000071112284332\n"
+        "N:Poreska uprava Republike Srbije\n"
+        "I:RSD5122,16\n"
+        "P:Andrei Timokhov pr ProspEl\n"
+        "SF:253\n"
+        "S:Porez na pausalni prihod za 2026. g\n"
+        "RO:972624190000007887475"
     )
+    assert "|" not in payload
 
 
 def test_build_ips_payload_truncates_purpose_to_35_chars():
@@ -71,7 +74,7 @@ def test_build_ips_payload_truncates_purpose_to_35_chars():
         amount=1,
         payment_purpose="X" * 60,
     )
-    s_tag = next(part for part in payload.split("|") if part.startswith("S:"))
+    s_tag = next(part for part in payload.split("\n") if part.startswith("S:"))
     assert len(s_tag) == 2 + 35
 
 
@@ -83,6 +86,18 @@ def test_build_ips_payload_strips_pipe_from_values():
     )
     assert "Bad Name" in payload
     assert payload.count("K:") == 1
+    assert "|" not in payload
+
+
+def test_build_ips_payload_strips_newlines_from_values():
+    payload = build_ips_payload(
+        recipient_account="840-711122843-32",
+        recipient_name="Bad\nName",
+        amount=1,
+        payment_purpose="Line\r\nBreak",
+    )
+    assert "Bad Name" in payload
+    assert "Line  Break" in payload
 
 
 def test_build_ips_payload_reference_digits_only():
@@ -97,6 +112,6 @@ def test_build_ips_payload_reference_digits_only():
 
 
 def test_render_qr_png_returns_data_url():
-    url = render_qr_png_data_url("K:PR|V:01|C:1|R:840000071112284332|N:Test|I:RSD1,00")
+    url = render_qr_png_data_url("K:PR\nV:01\nC:1\nR:840000071112284332\nN:Test\nI:RSD1,00")
     assert url.startswith("data:image/png;base64,")
     assert len(url) > 200

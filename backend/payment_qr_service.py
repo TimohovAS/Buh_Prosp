@@ -18,6 +18,7 @@ from backend.decimal_utils import to_decimal
 MAX_NAME_LENGTH = 70
 MAX_PURPOSE_LENGTH = 35
 MAX_REFERENCE_LENGTH = 25
+IPS_TAG_SEPARATOR = "\n"
 
 
 def account_to_18_digits(account: str) -> str:
@@ -49,8 +50,8 @@ def format_ips_amount(amount) -> str:
 
 
 def _clean(value: str | None, max_length: int) -> str:
-    # '|' — разделитель тегов IPS, внутри значений недопустим
-    return str(value or "").replace("|", " ").strip()[:max_length].rstrip()
+    # IPS tag separators are not allowed inside field values.
+    return str(value or "").replace("|", " ").replace("\r", " ").replace("\n", " ").strip()[:max_length].rstrip()
 
 
 def build_ips_payload(
@@ -83,7 +84,7 @@ def build_ips_payload(
     if reference:
         model_digits = "".join(ch for ch in str(model or "") if ch.isdigit())
         tags.append(("RO", (model_digits + reference)[:MAX_REFERENCE_LENGTH]))
-    return "|".join(f"{key}:{value}" for key, value in tags)
+    return IPS_TAG_SEPARATOR.join(f"{key}:{value}" for key, value in tags)
 
 
 def render_qr_png_data_url(payload: str) -> str:
