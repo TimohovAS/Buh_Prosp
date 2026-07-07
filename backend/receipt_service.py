@@ -217,7 +217,7 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
         verification_url,
         headers={
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent": "ProspEl/2.1",
+            "User-Agent": "ProspEl/3.0",
         },
     )
     with opener.open(page_request, timeout=20) as response:
@@ -232,7 +232,7 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
     headers = {
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "User-Agent": "ProspEl/2.1",
+        "User-Agent": "ProspEl/3.0",
         "X-Requested-With": "XMLHttpRequest",
     }
     specs_request = Request("https://suf.purs.gov.rs/specifications", data=form_payload, headers=headers, method="POST")

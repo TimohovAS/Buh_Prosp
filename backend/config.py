@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     """Настройки приложения."""
 
     app_name: str = "ProspEl"
-    app_version: str = "2.1.0"
+    app_version: str = "3.0"
     app_env: Literal["dev", "prod"] = "dev"
     debug: bool = False
     database_url: str = "sqlite+aiosqlite:///./prospel.db"
