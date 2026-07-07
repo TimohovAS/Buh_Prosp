@@ -446,7 +446,7 @@ export default function Obligations() {
         isOpen={settingsModal}
         onClose={() => setSettingsModal(false)}
         title={tr('obligationsSettings')}
-        maxWidth="800px"
+        maxWidth="1080px"
         closeOnOverlay
         style={{ maxHeight: '90vh', overflow: 'auto' }}
       >

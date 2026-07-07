@@ -15,7 +15,9 @@ export default function Modal({
   const hasExplicitWidth = !!maxWidth || !!style?.width || !!className
   const modalStyle = {
     ...(resizable && !hasExplicitWidth ? { width: 'min(500px, 90vw)' } : {}),
-    ...(maxWidth ? { maxWidth } : {}),
+    // Для ресайзабельной модалки maxWidth — начальная ширина, а не потолок:
+    // жёсткий inline max-width не давал растягивать окно мышью шире начального.
+    ...(maxWidth ? (resizable ? { width: `min(${maxWidth}, 94vw)` } : { maxWidth }) : {}),
     ...(style || {}),
   }
 
