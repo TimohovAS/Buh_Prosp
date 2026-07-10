@@ -407,6 +407,90 @@ class Project(Base):
     incomes = relationship("Income", back_populates="project")
     expenses = relationship("Expense", back_populates="project")
     purchase_receipts = relationship("PurchaseReceipt", back_populates="project")
+    work_diary_entries = relationship("WorkDiaryEntry", back_populates="project")
+    work_diary_meta = relationship(
+        "WorkDiaryProjectMeta",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class WorkDiaryProjectMeta(Base):
+    """Project-level fields printed on construction diaries and work reports."""
+
+    __tablename__ = "work_diary_project_meta"
+    __table_args__ = (UniqueConstraint("project_id", name="uq_work_diary_project_meta_project_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    investor = Column(String(200))
+    permit_number = Column(String(100))
+    contractor = Column(String(200))
+    place = Column(String(200))
+    supervision = Column(String(200))
+    object_name = Column(String(200))
+    sector = Column(String(200))
+    responsible_person = Column(String(200))
+    billing_hourly_rate = Column(Numeric(14, 2), default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project", back_populates="work_diary_meta")
+
+
+class WorkDiaryEntry(Base):
+    """Daily work log entry used for work accounting and construction diary reports."""
+
+    __tablename__ = "work_diary_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=True, index=True)
+    description = Column(Text, nullable=False)
+    start_time = Column(String(5))
+    end_time = Column(String(5))
+    hours = Column(Numeric(8, 2), nullable=False, default=0)
+    regular_hours = Column(Numeric(8, 2), nullable=False, default=0)
+    overtime_hours = Column(Numeric(8, 2), nullable=False, default=0)
+    hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
+    overtime_multiplier = Column(Numeric(6, 4), nullable=False, default=1.14)
+    per_diem = Column(Boolean, default=False)
+    per_diem_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    lodging_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    food_allowance = Column(Boolean, default=False)
+    food_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    weather = Column(String(100))
+    temperature = Column(String(30))
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    project = relationship("Project", back_populates="work_diary_entries")
+    worker = relationship("Worker")
+    materials = relationship(
+        "WorkDiaryMaterial",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        order_by="WorkDiaryMaterial.line_no",
+    )
+
+
+class WorkDiaryMaterial(Base):
+    """Material or equipment consumed on a work diary entry."""
+
+    __tablename__ = "work_diary_materials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("work_diary_entries.id"), nullable=False, index=True)
+    line_no = Column(Integer, nullable=False, default=1)
+    description = Column(String(500), nullable=False)
+    quantity = Column(String(100))
+    amount = Column(Numeric(14, 2), nullable=False, default=0)
+
+    entry = relationship("WorkDiaryEntry", back_populates="materials")
 
 
 class BankTransaction(Base):

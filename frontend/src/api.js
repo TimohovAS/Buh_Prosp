@@ -320,6 +320,23 @@ export const api = {
       )
     },
   },
+  workDiaries: {
+    entries: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/work-diaries/entries${q ? `?${q}` : ''}`)
+    },
+    createEntry: (data) => request('/work-diaries/entries', { method: 'POST', body: JSON.stringify(data) }),
+    updateEntry: (id, data) =>
+      request(`/work-diaries/entries/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteEntry: (id) => request(`/work-diaries/entries/${id}`, { method: 'DELETE' }),
+    projectMeta: (projectId) => request(`/work-diaries/project-meta/${projectId}`),
+    updateProjectMeta: (projectId, data) =>
+      request(`/work-diaries/project-meta/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    summary: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/work-diaries/summary${q ? `?${q}` : ''}`)
+    },
+  },
 
   categories: {
     list: (params = {}) => {

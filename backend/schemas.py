@@ -156,6 +156,208 @@ class ProjectBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WorkDiaryProjectMetaBase(BaseModel):
+    investor: Optional[str] = None
+    permit_number: Optional[str] = None
+    contractor: Optional[str] = None
+    place: Optional[str] = None
+    supervision: Optional[str] = None
+    object_name: Optional[str] = None
+    sector: Optional[str] = None
+    responsible_person: Optional[str] = None
+    billing_hourly_rate: float = Field(default=0, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in (
+            "investor",
+            "permit_number",
+            "contractor",
+            "place",
+            "supervision",
+            "object_name",
+            "sector",
+            "responsible_person",
+        ):
+            if result.get(key) == "":
+                result[key] = None
+        return result
+
+
+class WorkDiaryProjectMetaResponse(WorkDiaryProjectMetaBase):
+    id: Optional[int] = None
+    project_id: int
+    project_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkDiaryMaterialBase(BaseModel):
+    description: str
+    quantity: Optional[str] = None
+    amount: float = Field(default=0, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        if result.get("quantity") == "":
+            result["quantity"] = None
+        return result
+
+
+class WorkDiaryMaterialCreate(WorkDiaryMaterialBase):
+    pass
+
+
+class WorkDiaryMaterialResponse(WorkDiaryMaterialBase):
+    id: int
+    line_no: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkDiaryEntryBase(BaseModel):
+    date: DateType
+    project_id: int
+    worker_id: Optional[int] = None
+    description: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    hours: Optional[float] = Field(default=None, ge=0)
+    hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    overtime_multiplier: float = Field(default=1.14, ge=1)
+    per_diem: bool = False
+    per_diem_amount: float = Field(default=0, ge=0)
+    lodging_amount: float = Field(default=0, ge=0)
+    food_allowance: bool = False
+    food_amount: float = Field(default=0, ge=0)
+    weather: Optional[str] = None
+    temperature: Optional[str] = None
+    note: Optional[str] = None
+    materials: list[WorkDiaryMaterialCreate] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in (
+            "worker_id",
+            "hours",
+            "hourly_rate_snapshot",
+            "start_time",
+            "end_time",
+            "weather",
+            "temperature",
+            "note",
+        ):
+            if result.get(key) == "":
+                result[key] = None
+        return result
+
+
+class WorkDiaryEntryCreate(WorkDiaryEntryBase):
+    pass
+
+
+class WorkDiaryEntryUpdate(BaseModel):
+    date: Optional[DateType] = None
+    project_id: Optional[int] = None
+    worker_id: Optional[int] = None
+    description: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    hours: Optional[float] = Field(default=None, ge=0)
+    hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    overtime_multiplier: Optional[float] = Field(default=None, ge=1)
+    per_diem: Optional[bool] = None
+    per_diem_amount: Optional[float] = Field(default=None, ge=0)
+    lodging_amount: Optional[float] = Field(default=None, ge=0)
+    food_allowance: Optional[bool] = None
+    food_amount: Optional[float] = Field(default=None, ge=0)
+    weather: Optional[str] = None
+    temperature: Optional[str] = None
+    note: Optional[str] = None
+    materials: Optional[list[WorkDiaryMaterialCreate]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in (
+            "project_id",
+            "worker_id",
+            "hours",
+            "hourly_rate_snapshot",
+            "start_time",
+            "end_time",
+            "weather",
+            "temperature",
+            "note",
+        ):
+            if result.get(key) == "":
+                result[key] = None
+        return result
+
+
+class WorkDiaryEntryResponse(BaseModel):
+    id: int
+    date: DateType
+    project_id: int
+    project_name: Optional[str] = None
+    worker_id: Optional[int] = None
+    worker_name: Optional[str] = None
+    description: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    hours: float
+    regular_hours: float
+    overtime_hours: float
+    hourly_rate_snapshot: float
+    overtime_multiplier: float
+    labor_amount: float
+    payout_amount: float
+    allowance_amount: float
+    material_amount: float
+    total_cost_amount: float
+    billable_amount: float
+    per_diem: bool
+    per_diem_amount: float
+    lodging_amount: float
+    food_allowance: bool
+    food_amount: float
+    weather: Optional[str] = None
+    temperature: Optional[str] = None
+    note: Optional[str] = None
+    materials: list[WorkDiaryMaterialResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class WorkDiarySummaryResponse(BaseModel):
+    entries_count: int
+    days_count: int
+    workers_count: int
+    hours: float
+    regular_hours: float
+    overtime_hours: float
+    labor_amount: float
+    allowance_amount: float
+    material_amount: float
+    total_cost_amount: float
+    billable_amount: float
+
+
 # --- Income ---
 class IncomeItemBase(BaseModel):
     name: str

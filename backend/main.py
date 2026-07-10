@@ -34,6 +34,7 @@ from backend.routers.incoming_invoices_router import router as incoming_invoices
 from backend.routers.receipts_router import router as receipts_router
 from backend.routers.counterparty_loans_router import router as counterparty_loans_router
 from backend.routers.workers_router import router as workers_router
+from backend.routers.work_diaries_router import router as work_diaries_router
 
 settings = get_settings()
 logger = logging.getLogger("prospel")
@@ -126,6 +127,7 @@ app.include_router(incoming_invoices_router, prefix="/api")
 app.include_router(counterparty_loans_router, prefix="/api")
 app.include_router(receipts_router, prefix="/api")
 app.include_router(workers_router, prefix="/api")
+app.include_router(work_diaries_router, prefix="/api")
 app.include_router(obligations_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(enterprise_router, prefix="/api")

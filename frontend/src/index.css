@@ -2416,6 +2416,193 @@ th {
   cursor: col-resize !important;
 }
 
+.work-diaries-filter-grid,
+.work-diaries-meta-grid,
+.work-diaries-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.work-diaries-save-meta {
+  align-self: end;
+}
+
+.work-diaries-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.work-diaries-summary-item {
+  border: 1px solid var(--color-border);
+  background: rgba(26, 35, 50, 0.8);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.work-diaries-summary-item span {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.work-diaries-summary-item strong {
+  font-size: 1rem;
+}
+
+.work-diaries-wide {
+  grid-column: 1 / -1;
+}
+
+.work-diaries-entry-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.work-diaries-allowances,
+.work-diaries-material-row {
+  display: grid;
+  grid-template-columns: max-content minmax(110px, 1fr) max-content minmax(110px, 1fr) minmax(130px, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.work-diaries-material-row {
+  grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) auto;
+  margin-top: 0.5rem;
+}
+
+.work-diaries-section-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.work-diaries-print-surface {
+  color: #111827;
+}
+
+.work-diary-print-page,
+.work-diary-report-page {
+  background: #fff;
+  color: #111827;
+  padding: 18mm;
+  margin-bottom: 1.25rem;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+
+.work-diary-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.2fr;
+  border: 2px solid #111827;
+  border-bottom: 0;
+}
+
+.work-diary-grid > div {
+  border-right: 1px solid #111827;
+  border-bottom: 1px solid #111827;
+  padding: 0.45rem 0.55rem;
+  min-height: 58px;
+  font-size: 0.78rem;
+}
+
+.work-diary-grid > div:nth-child(3n) {
+  border-right: 0;
+}
+
+.work-diary-title-cell {
+  text-align: center;
+}
+
+.work-diary-title-cell h2,
+.work-diary-report-page h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.work-diary-title-cell span {
+  display: inline-block;
+  margin: 0 0.25rem;
+}
+
+.work-diary-print-table,
+.work-diary-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #111827;
+  background: #fff;
+}
+
+.work-diary-print-table th,
+.work-diary-print-table td,
+.work-diary-report-table th,
+.work-diary-report-table td {
+  border: 1px solid #111827;
+  padding: 0.35rem 0.45rem;
+  color: #111827;
+  font-size: 0.74rem;
+  vertical-align: top;
+}
+
+.work-diary-print-table th {
+  width: 160px;
+  background: #f3f4f6;
+}
+
+.work-diary-print-table p {
+  margin: 0 0 0.35rem;
+}
+
+.work-diary-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 20mm;
+}
+
+.work-diary-signatures span {
+  border-top: 1px solid #111827;
+  padding-top: 0.4rem;
+  text-align: center;
+  font-size: 0.78rem;
+}
+
+.work-diary-report-header {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 2px solid #111827;
+  margin-bottom: 0.75rem;
+}
+
+.work-diary-report-header > div {
+  padding: 0.45rem 0.55rem;
+  border-right: 1px solid #111827;
+}
+
+.work-diary-report-header > div:last-child {
+  border-right: 0;
+}
+
+.work-diary-report-header span {
+  display: block;
+  color: #4b5563;
+  font-size: 0.7rem;
+}
+
+.work-diary-report-table tfoot td {
+  font-weight: 700;
+  background: #f3f4f6;
+}
+
 tr:hover td {
   background: var(--color-surface-hover);
 }
@@ -3563,4 +3750,72 @@ tr:hover td {
 
 .search-input-clear:hover {
   color: #ff7b7b;
+}
+
+@media (max-width: 860px) {
+  .work-diaries-allowances,
+  .work-diaries-material-row {
+    grid-template-columns: 1fr;
+  }
+
+  .work-diary-grid,
+  .work-diary-report-header {
+    grid-template-columns: 1fr;
+  }
+
+  .work-diary-grid > div,
+  .work-diary-report-header > div {
+    border-right: 0;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .sidebar,
+  .mobile-topbar,
+  .environment-banner,
+  .page-header,
+  .no-print {
+    display: none !important;
+  }
+
+  .app,
+  .main,
+  .route-cache-slot,
+  .route-cache-slot.active,
+  .page,
+  .page-body {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  .work-diaries-page .page-body > *:not(.work-diaries-print-surface) {
+    display: none !important;
+  }
+
+  .work-diaries-print-surface {
+    display: block !important;
+    color: #111827;
+  }
+
+  .work-diary-print-page,
+  .work-diary-report-page {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 8mm;
+    page-break-after: always;
+  }
+
+  .work-diary-print-page:last-child,
+  .work-diary-report-page:last-child {
+    page-break-after: auto;
+  }
 }

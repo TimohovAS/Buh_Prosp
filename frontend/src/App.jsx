@@ -40,6 +40,7 @@ const APP_PAGE_ROUTES = [
   { id: 'contracts', path: '/contracts', Component: lazy(() => import('./pages/Contracts')) },
   { id: 'expenses', path: '/expenses', Component: lazy(() => import('./pages/Expenses')) },
   { id: 'receipts', path: '/receipts', Component: lazy(() => import('./pages/Receipts')) },
+  { id: 'work-diaries', path: '/work-diaries', Component: lazy(() => import('./pages/WorkDiaries')) },
   {
     id: 'planned-expenses',
     path: '/planned-expenses',

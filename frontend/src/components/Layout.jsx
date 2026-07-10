@@ -13,6 +13,7 @@ import {
   Scale,
   CreditCard,
   CalendarDays,
+  ClipboardList,
   Landmark,
   Building2,
   ArrowRightLeft,
@@ -224,6 +225,11 @@ export default function Layout({ lang, toggleLang, children }) {
               <li>
                 <NavLink to="/receipts">
                   <QrCode size={18} /> {tr('receipts')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/work-diaries">
+                  <ClipboardList size={18} /> {tr('workDiariesTitle')}
                 </NavLink>
               </li>
               <li>
