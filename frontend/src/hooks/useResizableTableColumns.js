@@ -113,8 +113,18 @@ function restoreTables() {
   })
 }
 
+function getEventScopedTables(event) {
+  const target = event.target instanceof Element ? event.target : null
+  const eventOverlay = target?.closest('.modal-overlay')
+  if (eventOverlay) {
+    return getResizableTables().filter((table) => eventOverlay.contains(table))
+  }
+  if (document.querySelector('.modal-overlay')) return []
+  return getResizableTables()
+}
+
 function findResizableHeader(event) {
-  for (const table of getResizableTables()) {
+  for (const table of getEventScopedTables(event)) {
     const tableRect = table.getBoundingClientRect()
     if (event.clientY < tableRect.top || event.clientY > tableRect.bottom) continue
 
