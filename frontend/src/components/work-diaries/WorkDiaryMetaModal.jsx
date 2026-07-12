@@ -3,7 +3,6 @@ import { Save } from 'lucide-react'
 import { api } from '../../api'
 import { tr } from '../../i18n'
 import Modal from '../Modal'
-import { num } from './workDiaryUtils'
 
 const emptyMeta = {
   investor: '',
@@ -14,7 +13,6 @@ const emptyMeta = {
   object_name: '',
   sector: '',
   responsible_person: '',
-  billing_hourly_rate: '',
 }
 
 function metaFromResponse(data) {
@@ -27,7 +25,6 @@ function metaFromResponse(data) {
     object_name: data.object_name || '',
     sector: data.sector || '',
     responsible_person: data.responsible_person || '',
-    billing_hourly_rate: data.billing_hourly_rate || '',
   }
 }
 
@@ -44,10 +41,7 @@ export default function WorkDiaryMetaModal({ isOpen, onClose, projectId, project
     event.preventDefault()
     setSaving(true)
     try {
-      const saved = await api.workDiaries.updateProjectMeta(projectId, {
-        ...meta,
-        billing_hourly_rate: num(meta.billing_hourly_rate),
-      })
+      const saved = await api.workDiaries.updateProjectMeta(projectId, meta)
       setMeta(metaFromResponse(saved))
       await onSaved()
       onClose()
@@ -75,15 +69,12 @@ export default function WorkDiaryMetaModal({ isOpen, onClose, projectId, project
             ['object_name', tr('workDiariesObject')],
             ['sector', tr('workDiariesSector')],
             ['responsible_person', tr('workDiariesResponsible')],
-            ['billing_hourly_rate', tr('workDiariesBillingRate')],
           ].map(([key, label]) => (
             <label className="form-group" key={key}>
               <span className="form-label">{label}</span>
               <input
                 className="form-input"
-                type={key === 'billing_hourly_rate' ? 'number' : 'text'}
-                min="0"
-                step="0.01"
+                type="text"
                 value={meta[key]}
                 onChange={(event) => setMeta((prev) => ({ ...prev, [key]: event.target.value }))}
               />

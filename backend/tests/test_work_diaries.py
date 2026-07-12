@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from backend.models import Enterprise, User, WorkDiaryProjectMeta, Worker
+from backend.models import Enterprise, User, Worker
 from backend.routers.work_diaries_router import (
     create_entry,
     get_project_costs,
@@ -31,8 +31,8 @@ def _make_user(db_session, name="diary-admin"):
 async def test_work_diary_entry_supports_multiple_workers(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session)
-    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"))
-    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"))
+    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("300"))
+    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"), billing_hourly_rate=Decimal("450"))
     db_session.add_all([worker_a, worker_b])
     await db_session.flush()
 
@@ -56,18 +56,19 @@ async def test_work_diary_entry_supports_multiple_workers(db_session, make_proje
     assert entry.regular_person_hours == 16
     assert entry.overtime_person_hours == 0
     assert entry.team_hourly_rate_snapshot == 250
+    assert entry.team_billing_hourly_rate_snapshot == 750
     assert entry.labor_amount == 2000
+    assert entry.billable_amount == 6000
 
 
 @pytest.mark.asyncio
 async def test_work_diary_worker_filter_and_summary_use_all_assigned_workers(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-filter-admin")
-    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"))
-    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"))
+    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("100"))
+    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"), billing_hourly_rate=Decimal("100"))
     db_session.add_all([worker_a, worker_b])
     await db_session.flush()
-    db_session.add(WorkDiaryProjectMeta(project_id=project.id, billing_hourly_rate=Decimal("100")))
 
     entry = await create_entry(
         WorkDiaryEntryCreate(
@@ -94,6 +95,7 @@ async def test_work_diary_worker_filter_and_summary_use_all_assigned_workers(db_
     assert summary.overtime_person_hours == 0
     assert summary.stock_material_amount == 50
     assert summary.linked_material_amount == 0
+    assert entry.team_billing_hourly_rate_snapshot == 200
     assert entry.billable_amount == 850
 
 
@@ -130,7 +132,7 @@ async def test_work_diary_overtime_uses_legal_default_multiplier(db_session, mak
 async def test_work_diary_overtime_multiplier_comes_from_enterprise_settings(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-settings-admin")
-    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("200"))
     db_session.add_all([worker, Enterprise(name="Test", work_diary_overtime_multiplier=Decimal("1.5"))])
     await db_session.flush()
 
@@ -185,10 +187,9 @@ async def test_work_diary_per_diem_and_food_are_per_worker(db_session, make_proj
 async def test_work_diary_linked_material_is_not_double_counted(db_session, make_project, make_expense):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-material-admin")
-    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("200"))
     db_session.add(worker)
     await db_session.flush()
-    db_session.add(WorkDiaryProjectMeta(project_id=project.id, billing_hourly_rate=Decimal("200")))
     expense = await make_expense(
         db_session,
         amount=Decimal("500"),
@@ -284,8 +285,8 @@ async def test_work_diary_expense_options_show_only_active_project_expenses(db_s
 async def test_work_diary_entry_can_be_edited(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-edit-admin")
-    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"))
-    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"))
+    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("100"))
+    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"), billing_hourly_rate=Decimal("150"))
     db_session.add_all([worker_a, worker_b])
     await db_session.flush()
 
@@ -322,6 +323,8 @@ async def test_work_diary_entry_can_be_edited(db_session, make_project):
     assert updated.duration_hours == 3
     assert updated.person_hours == 6
     assert updated.team_hourly_rate_snapshot == 250
+    assert updated.team_billing_hourly_rate_snapshot == 250
+    assert updated.billable_amount == 840
     assert [(item.description, item.quantity, item.unit, item.amount) for item in updated.materials] == [
         ("Sealant", 2, "kom", 90),
     ]
@@ -369,6 +372,7 @@ def test_work_diary_payload_contract():
     assert "person_hours" not in fields
     assert "hours" not in fields
     assert "team_hourly_rate_snapshot" in fields
+    assert "team_billing_hourly_rate_snapshot" not in fields
     assert "hourly_rate_snapshot" not in fields
 
     with pytest.raises(ValidationError):

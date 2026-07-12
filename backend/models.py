@@ -80,6 +80,7 @@ class Worker(Base):
     phone = Column(String(50))
     note = Column(Text)
     regular_day_rate = Column(Numeric(14, 2), default=0)
+    billing_hourly_rate = Column(Numeric(14, 2), nullable=False, default=0)
     weekly_rate = Column(Numeric(14, 2), default=0)
     monthly_rate = Column(Numeric(14, 2), default=0)
     trip_pricing_mode = Column(String(30), nullable=False, default="allowances")  # allowances | fixed_plus_lodging
@@ -434,7 +435,6 @@ class WorkDiaryProjectMeta(Base):
     object_name = Column(String(200))
     sector = Column(String(200))
     responsible_person = Column(String(200))
-    billing_hourly_rate = Column(Numeric(14, 2), default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -456,6 +456,7 @@ class WorkDiaryEntry(Base):
     regular_duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
     overtime_duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
     team_hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
+    team_billing_hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
     overtime_multiplier = Column(Numeric(6, 4), nullable=False, default=1.26)
     per_diem = Column(Boolean, default=False)
     per_diem_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на одного работника в день

@@ -15,6 +15,7 @@ import {
   money,
   num,
   teamAutoRate,
+  teamBillingAutoRate,
   unitLabel,
   weatherLabel,
 } from './workDiaryUtils'
@@ -95,7 +96,6 @@ export default function WorkDiaryEntryModal({
   const [materials, setMaterials] = useState([])
   const [saving, setSaving] = useState(false)
   const [expenseOptions, setExpenseOptions] = useState([])
-  const [billingRate, setBillingRate] = useState(0)
   const [showAllowances, setShowAllowances] = useState(false)
   const [showDiaryDetails, setShowDiaryDetails] = useState(false)
 
@@ -112,12 +112,8 @@ export default function WorkDiaryEntryModal({
   useEffect(() => {
     if (!isOpen || !form.project_id) {
       setExpenseOptions([])
-      setBillingRate(0)
       return
     }
-    api.workDiaries.projectMeta(form.project_id).then((meta) => {
-      setBillingRate(num(meta.billing_hourly_rate))
-    })
     api.workDiaries.expenseOptions({ project_id: form.project_id }).then(setExpenseOptions)
   }, [isOpen, form.project_id])
 
@@ -127,6 +123,10 @@ export default function WorkDiaryEntryModal({
   )
 
   const autoRate = useMemo(() => teamAutoRate(workers, form.worker_ids), [workers, form.worker_ids])
+  const teamBillingRate = useMemo(
+    () => teamBillingAutoRate(workers, form.worker_ids),
+    [workers, form.worker_ids]
+  )
   const hasZeroRateWorker = useMemo(() => {
     const selected = new Set(form.worker_ids.map(Number))
     return workers.some((worker) => selected.has(worker.id) && defaultWorkerHourlyRate(worker) === 0)
@@ -153,8 +153,8 @@ export default function WorkDiaryEntryModal({
     form,
     materials: materialsForCalc,
     teamRate: effectiveRate,
+    teamBillingRate,
     overtimeMultiplier: effectiveMultiplier,
-    billingRate,
   })
 
   const setFormField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
@@ -342,6 +342,14 @@ export default function WorkDiaryEntryModal({
             </small>
             {hasZeroRateWorker ? (
               <small className="work-diaries-rate-warning">{tr('workDiariesRateZeroWarning')}</small>
+            ) : null}
+          </div>
+          <div className="form-group">
+            <span className="form-label">{tr('workDiariesTeamBillingRate')}</span>
+            <input className="form-input" type="number" value={teamBillingRate} readOnly />
+            <small className="work-diaries-rate-hint">{tr('workDiariesTeamBillingRateHint')}</small>
+            {teamBillingRate === 0 ? (
+              <small className="work-diaries-rate-warning">{tr('workDiariesBillingRateZeroWarning')}</small>
             ) : null}
           </div>
           <label className="form-group work-diaries-wide">

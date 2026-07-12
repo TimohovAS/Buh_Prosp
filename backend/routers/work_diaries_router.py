@@ -103,6 +103,10 @@ def _default_hourly_rate(worker: Worker | None) -> Decimal:
     return (day_rate / REGULAR_DAY_HOURS).quantize(Decimal("0.01")) if day_rate > 0 else Decimal("0")
 
 
+def _billing_hourly_rate(worker: Worker | None) -> Decimal:
+    return _dec(worker.billing_hourly_rate) if worker else Decimal("0")
+
+
 async def _default_overtime_multiplier(db: AsyncSession) -> Decimal:
     result = await db.execute(select(Enterprise.work_diary_overtime_multiplier).limit(1))
     value = result.scalar_one_or_none()
@@ -154,12 +158,14 @@ def _apply_calculated_fields(
     *,
     duration_hours: Decimal,
     team_hourly_rate: Decimal,
+    team_billing_hourly_rate: Decimal,
     overtime_multiplier: Decimal,
 ) -> None:
     entry.duration_hours = duration_hours
     entry.regular_duration_hours = min(duration_hours, REGULAR_DAY_HOURS)
     entry.overtime_duration_hours = max(duration_hours - REGULAR_DAY_HOURS, Decimal("0"))
     entry.team_hourly_rate_snapshot = team_hourly_rate
+    entry.team_billing_hourly_rate_snapshot = team_billing_hourly_rate
     entry.overtime_multiplier = overtime_multiplier
 
 
@@ -219,7 +225,7 @@ def _replace_materials(
     entry.materials = rows
 
 
-def _entry_amounts(entry: WorkDiaryEntry, meta: WorkDiaryProjectMeta | None = None) -> dict[str, Decimal]:
+def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
     worker_count = len(entry.workers)
     rate = _dec(entry.team_hourly_rate_snapshot)
     labor = _dec(entry.regular_duration_hours) * rate
@@ -238,9 +244,8 @@ def _entry_amounts(entry: WorkDiaryEntry, meta: WorkDiaryProjectMeta | None = No
         else:
             stock_materials += _dec(material.amount)
     materials = stock_materials + linked_materials
-    billing_rate = _dec(getattr(meta, "billing_hourly_rate", 0))
-    person_hours = _dec(entry.duration_hours) * worker_count
-    billable = person_hours * billing_rate + materials
+    billing_rate = _dec(entry.team_billing_hourly_rate_snapshot)
+    billable = _dec(entry.duration_hours) * billing_rate + materials
     return {
         "labor_amount": labor,
         "payout_amount": labor + allowances,
@@ -269,15 +274,8 @@ def _serialize_material(material: WorkDiaryMaterial) -> WorkDiaryMaterialRespons
     )
 
 
-async def _meta_by_project_ids(db: AsyncSession, project_ids: set[int]) -> dict[int, WorkDiaryProjectMeta]:
-    if not project_ids:
-        return {}
-    result = await db.execute(select(WorkDiaryProjectMeta).where(WorkDiaryProjectMeta.project_id.in_(project_ids)))
-    return {meta.project_id: meta for meta in result.scalars().all()}
-
-
-def _serialize_entry(entry: WorkDiaryEntry, meta: WorkDiaryProjectMeta | None = None) -> WorkDiaryEntryResponse:
-    amounts = _entry_amounts(entry, meta)
+def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
+    amounts = _entry_amounts(entry)
     workers = _entry_workers(entry)
     worker_count = len(workers)
     return WorkDiaryEntryResponse(
@@ -295,6 +293,7 @@ def _serialize_entry(entry: WorkDiaryEntry, meta: WorkDiaryProjectMeta | None = 
         regular_person_hours=_float(_dec(entry.regular_duration_hours) * worker_count),
         overtime_person_hours=_float(_dec(entry.overtime_duration_hours) * worker_count),
         team_hourly_rate_snapshot=_float(entry.team_hourly_rate_snapshot),
+        team_billing_hourly_rate_snapshot=_float(entry.team_billing_hourly_rate_snapshot),
         overtime_multiplier=_float(entry.overtime_multiplier),
         labor_amount=_float(amounts["labor_amount"]),
         payout_amount=_float(amounts["payout_amount"]),
@@ -332,7 +331,6 @@ def _serialize_meta(project: Project, meta: WorkDiaryProjectMeta | None) -> Work
             object_name=meta.object_name,
             sector=meta.sector,
             responsible_person=meta.responsible_person,
-            billing_hourly_rate=_float(meta.billing_hourly_rate),
         )
     return WorkDiaryProjectMetaResponse(project_id=project.id, project_name=project.name)
 
@@ -362,8 +360,7 @@ async def list_entries(
     query = query.order_by(WorkDiaryEntry.date.desc(), WorkDiaryEntry.id.desc())
     result = await db.execute(query)
     entries = result.scalars().all()
-    metas = await _meta_by_project_ids(db, {entry.project_id for entry in entries})
-    return [_serialize_entry(entry, metas.get(entry.project_id)) for entry in entries]
+    return [_serialize_entry(entry) for entry in entries]
 
 
 @router.post("/entries", response_model=WorkDiaryEntryResponse)
@@ -381,6 +378,7 @@ async def create_entry(
         if data.team_hourly_rate_snapshot is not None
         else sum((_default_hourly_rate(worker) for worker in workers), Decimal("0"))
     )
+    team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
     overtime_multiplier = (
         _dec(data.overtime_multiplier)
         if data.overtime_multiplier is not None
@@ -407,14 +405,14 @@ async def create_entry(
         entry,
         duration_hours=duration_hours,
         team_hourly_rate=team_hourly_rate,
+        team_billing_hourly_rate=team_billing_hourly_rate,
         overtime_multiplier=overtime_multiplier,
     )
     _replace_materials(entry, data.materials, material_expenses)
     db.add(entry)
     await db.commit()
     entry = await _get_entry(db, entry.id)
-    metas = await _meta_by_project_ids(db, {entry.project_id})
-    return _serialize_entry(entry, metas.get(entry.project_id))
+    return _serialize_entry(entry)
 
 
 @router.patch("/entries/{entry_id}", response_model=WorkDiaryEntryResponse)
@@ -479,6 +477,7 @@ async def update_entry(
         team_hourly_rate = sum((_default_hourly_rate(worker) for worker in workers), Decimal("0"))
     else:
         team_hourly_rate = _dec(entry.team_hourly_rate_snapshot)
+    team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
     if "overtime_multiplier" in dump:
         if dump["overtime_multiplier"] is None:
             overtime_multiplier = await _default_overtime_multiplier(db)
@@ -490,6 +489,7 @@ async def update_entry(
         entry,
         duration_hours=duration_hours,
         team_hourly_rate=team_hourly_rate,
+        team_billing_hourly_rate=team_billing_hourly_rate,
         overtime_multiplier=overtime_multiplier,
     )
     if data.materials is not None:
@@ -497,8 +497,7 @@ async def update_entry(
 
     await db.commit()
     entry = await _get_entry(db, entry.id)
-    metas = await _meta_by_project_ids(db, {entry.project_id})
-    return _serialize_entry(entry, metas.get(entry.project_id))
+    return _serialize_entry(entry)
 
 
 @router.delete("/entries/{entry_id}")

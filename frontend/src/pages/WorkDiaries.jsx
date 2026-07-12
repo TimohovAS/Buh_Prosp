@@ -26,7 +26,6 @@ const emptyMeta = {
   object_name: '',
   sector: '',
   responsible_person: '',
-  billing_hourly_rate: '',
 }
 
 function entryWorkerName(entry) {
@@ -125,7 +124,6 @@ export default function WorkDiaries() {
         object_name: data.object_name || '',
         sector: data.sector || '',
         responsible_person: data.responsible_person || '',
-        billing_hourly_rate: data.billing_hourly_rate || '',
       })
     })
   }, [filters.project_id])

@@ -86,6 +86,13 @@ export function teamAutoRate(workers, workerIds) {
     .reduce((sum, worker) => sum + defaultWorkerHourlyRate(worker), 0)
 }
 
+export function teamBillingAutoRate(workers, workerIds) {
+  const selected = new Set(workerIds.map(Number))
+  return workers
+    .filter((worker) => selected.has(worker.id))
+    .reduce((sum, worker) => sum + num(worker.billing_hourly_rate), 0)
+}
+
 function parseTimeToHours(value) {
   if (!value) return null
   const [h, m] = value.split(':').map(Number)
@@ -102,7 +109,7 @@ export function computeDurationHours(form) {
 }
 
 // Живой расчет в форме: та же логика, что и на бэкенде (см. work_diaries_router._entry_amounts)
-export function computeEntryTotals({ form, materials, teamRate, overtimeMultiplier, billingRate }) {
+export function computeEntryTotals({ form, materials, teamRate, teamBillingRate, overtimeMultiplier }) {
   const workerCount = form.worker_ids.length
   const duration = computeDurationHours(form)
   const regular = Math.min(duration, REGULAR_DAY_HOURS)
@@ -122,6 +129,6 @@ export function computeEntryTotals({ form, materials, teamRate, overtimeMultipli
     materials: materialsTotal,
     payout: labor + allowances,
     totalCost: labor + allowances + materialsTotal,
-    billable: billingRate > 0 ? personHours * billingRate + materialsTotal : null,
+    billable: duration * teamBillingRate + materialsTotal,
   }
 }

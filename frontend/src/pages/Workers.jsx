@@ -15,6 +15,7 @@ const emptyForm = {
   phone: '',
   note: '',
   regular_day_rate: '',
+  billing_hourly_rate: '',
   weekly_rate: '',
   monthly_rate: '',
   trip_pricing_mode: 'allowances',
@@ -98,6 +99,7 @@ export default function Workers() {
       phone: item.phone || '',
       note: item.note || '',
       regular_day_rate: item.regular_day_rate ?? '',
+      billing_hourly_rate: item.billing_hourly_rate ?? '',
       weekly_rate: item.weekly_rate ?? '',
       monthly_rate: item.monthly_rate ?? '',
       trip_pricing_mode: item.trip_pricing_mode || 'allowances',
@@ -115,6 +117,7 @@ export default function Workers() {
   const payloadFromForm = () => ({
     ...form,
     regular_day_rate: num(form.regular_day_rate),
+    billing_hourly_rate: num(form.billing_hourly_rate),
     weekly_rate: num(form.weekly_rate),
     monthly_rate: num(form.monthly_rate),
     trip_work_day_rate: num(form.trip_work_day_rate),
@@ -190,6 +193,7 @@ export default function Workers() {
                   <th>{tr('type')}</th>
                   <th>{tr('workerPayScheme')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('workerPerDayRate')}</th>
+                  <th style={{ textAlign: 'right' }}>{tr('workerBillingHourlyRate')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('workerWeeklyRate')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('workerMonthlyRate')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('workerTripDayRate')}</th>
@@ -199,11 +203,11 @@ export default function Workers() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8}>{tr('loading')}</td>
+                    <td colSpan={9}>{tr('loading')}</td>
                   </tr>
                 ) : sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>
                       {tr('workersEmpty')}
                     </td>
                   </tr>
@@ -214,6 +218,7 @@ export default function Workers() {
                       <td>{workerTypeLabel(item.worker_type)}</td>
                       <td>{paySchemeLabel(item.pay_scheme)}</td>
                       <td style={{ textAlign: 'right' }}>{fmtAmount(item.regular_day_rate)} RSD</td>
+                      <td style={{ textAlign: 'right' }}>{fmtAmount(item.billing_hourly_rate)} RSD</td>
                       <td style={{ textAlign: 'right' }}>{fmtAmount(item.weekly_rate)} RSD</td>
                       <td style={{ textAlign: 'right' }}>{fmtAmount(item.monthly_rate)} RSD</td>
                       <td style={{ textAlign: 'right' }}>
@@ -308,6 +313,17 @@ export default function Workers() {
                   step="0.01"
                   value={form.regular_day_rate}
                   onChange={(event) => setForm({ ...form, regular_day_rate: event.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('workerBillingHourlyRate')}</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.billing_hourly_rate}
+                  onChange={(event) => setForm({ ...form, billing_hourly_rate: event.target.value })}
                 />
               </div>
               <div className="form-group">

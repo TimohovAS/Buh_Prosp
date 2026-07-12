@@ -165,7 +165,6 @@ class WorkDiaryProjectMetaBase(BaseModel):
     object_name: Optional[str] = None
     sector: Optional[str] = None
     responsible_person: Optional[str] = None
-    billing_hourly_rate: float = Field(default=0, ge=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -374,6 +373,7 @@ class WorkDiaryEntryResponse(BaseModel):
     regular_person_hours: float
     overtime_person_hours: float
     team_hourly_rate_snapshot: float
+    team_billing_hourly_rate_snapshot: float
     overtime_multiplier: float
     labor_amount: float
     payout_amount: float
@@ -1621,6 +1621,7 @@ class WorkerBase(BaseModel):
     phone: Optional[str] = None
     note: Optional[str] = None
     regular_day_rate: Decimal = Field(default=0, ge=0)
+    billing_hourly_rate: Decimal = Field(default=0, ge=0)
     weekly_rate: Decimal = Field(default=0, ge=0)
     monthly_rate: Decimal = Field(default=0, ge=0)
     trip_pricing_mode: str = "allowances"
@@ -1657,6 +1658,7 @@ class WorkerUpdate(BaseModel):
     phone: Optional[str] = None
     note: Optional[str] = None
     regular_day_rate: Optional[Decimal] = Field(default=None, ge=0)
+    billing_hourly_rate: Optional[Decimal] = Field(default=None, ge=0)
     weekly_rate: Optional[Decimal] = Field(default=None, ge=0)
     monthly_rate: Optional[Decimal] = Field(default=None, ge=0)
     trip_pricing_mode: Optional[str] = None
