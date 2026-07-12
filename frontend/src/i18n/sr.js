@@ -832,14 +832,24 @@ const sr = {
   worker: 'Радник',
   workerAddTitle: 'Додај радника',
   workerAdvanceDayRate: 'Аванс/дан',
+  workerAdvanceDayRateTooltip:
+    'Износ аванса за један дан службеног пута. Користи се при исплати аванса и не повећава коначно обрачунати износ.',
   workerBillingHourlyRate: 'Цена човек-сата за клијента',
   workerBillingHourlyRateTooltip:
     'Продајна цена једног сата рада овог радника. Не утиче на његову зараду. У дневнику се цене изабраних радника сабирају у цену сата целе бригаде за клијента.',
   workerArchiveConfirm: 'Архивирати радника "{name}"?',
   workerEditTitle: 'Измени радника',
   workerFoodDayRate: 'Исхрана/дан',
+  workerFoodDayRateTooltip:
+    'Накнада за исхрану за један дан службеног пута. Множи се бројем дана и рачуна се само у режиму са додацима.',
   workerLodgingNightRate: 'Хотел/ноћ',
+  workerLodgingNightRateTooltip:
+    'Цена смештаја за једну ноћ. Множи се бројем ноћења; за период службеног пута ноћења су обично једно мање од броја дана.',
   workerMonthlyRate: 'Месечна тарифа',
+  workerMonthlyRateTooltip:
+    'Фиксни износ исплате за месец. Користи се при креирању исплате типа „Месечна“.',
+  workerNameTooltip: 'Име радника или назив извођача који ће бити приказан у исплатама и дневницима рада.',
+  workerNoteTooltip: 'Интерна напомена о раднику. Не учествује у обрачунима и не штампа се у дневнику рада.',
   workerPayMonthly: 'Месечно',
   workerPayoutAdvancePaid: 'Аванс већ исплаћен',
   workerPayoutCalculation: 'Обрачун',
@@ -865,11 +875,15 @@ const sr = {
   workerPayoutWorkDays: 'Радних дана',
   workerPayPerDay: 'По радном дану',
   workerPayScheme: 'Шема плаћања',
+  workerPaySchemeTooltip:
+    'Основни начин обрачуна исплате: по радном дану — дани × интерна тарифа по дану; недељно — фиксна недељна тарифа; месечно — фиксна месечна тарифа.',
   workerPayWeekly: 'Недељно',
   workerPerDayRate: 'Интерна тарифа по дану',
   workerPerDayRateTooltip:
     'Трошак компаније за редован осмочасовни радни дан радника. Цена коштања сата рачуна се аутоматски: тарифа по дану ÷ 8. На пример, 8 000 RSD ÷ 8 = 1 000 RSD/сат.',
   workerPerDiemRate: 'Дневница',
+  workerPerDiemRateTooltip:
+    'Дневна накнада за један дан службеног пута. Множи се бројем дана и рачуна се само у режиму са додацима.',
   allProjects: 'Сви пројекти',
   allWorkers: 'Сви радници',
   dateFrom: 'Датум од',
@@ -978,13 +992,21 @@ const sr = {
   workersSubtitle: 'Стални и привремени радници, тарифе и правила службених путева.',
   workersTitle: 'Радници',
   workerTripCalculation: 'Обрачун службеног пута',
+  workerTripCalculationTooltip:
+    'Одређује састав обрачуна: обичан режим сабира рад, дневницу, исхрану и смештај; фиксни режим рачуна само рад по фиксној тарифи и смештај.',
   workerTripDayRate: 'Службени пут/дан',
   workerTripModeAllowances: 'Рад + дневница + исхрана + смештај',
   workerTripModeFixed: 'Фиксна тарифа/дан + смештај',
   workerTripWorkDayRate: 'Рад на службеном путу/дан',
+  workerTripWorkDayRateTooltip:
+    'Накнада за рад за један дан службеног пута. Ако је вредност 0, програм користи интерну тарифу за обичан радни дан.',
   workerTypePermanent: 'Стални',
+  workerTypeTooltip:
+    'Категорија радника: стални или привремени. Користи се за евиденцију и филтрирање и сама не мења формулу исплате.',
   workerTypeTemporary: 'Привремени',
   workerWeeklyRate: 'Недељна тарифа',
+  workerWeeklyRateTooltip:
+    'Фиксни износ исплате за недељу. Користи се при креирању исплате типа „Недељна“.',
   year: 'Година',
   yearExpenses: 'Расходи за годину',
   yearIncome: 'Приход за годину',
