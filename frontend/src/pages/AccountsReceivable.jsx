@@ -4,6 +4,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import { UI_DASH, formatDateSr as formatDate, formatInteger as fmt } from '../utils/formatters'
@@ -73,6 +74,7 @@ export default function AccountsReceivable() {
     return (
       <div className="page">
         <h1>{tr('financeAR')}</h1>
+        <PageTabs group="finance" />
         <p>{tr('loading')}</p>
       </div>
     )
@@ -101,6 +103,8 @@ export default function AccountsReceivable() {
           </>
         }
       />
+
+      <PageTabs group="finance" />
 
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>

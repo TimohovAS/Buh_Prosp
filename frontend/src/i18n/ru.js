@@ -383,6 +383,7 @@ const ru = {
   financeNetProfit: 'Чистый результат',
   financeNoOverdue: 'Нет просроченных.',
   financeOverview: 'Финансы — обзор',
+  financeOverviewTab: 'Обзор',
   financePeriod: 'Период',
   financePeriodCustom: 'Свой диапазон',
   financePeriodMonth: 'Месяц',
@@ -787,7 +788,7 @@ const ru = {
   settleViaCash: 'Закрыть наличными',
   settleViaOffset: 'Взаимозачёт',
   showInactive: 'Показать неактивных',
-  sidebarBank: 'Банка',
+  sidebarBank: 'Банк',
   sidebarDirectories: 'Справочники',
   sidebarOperations: 'Операции',
   sidebarOverview: 'Обзор',
@@ -847,8 +848,10 @@ const ru = {
   workerMonthlyRate: 'Месячная ставка',
   workerMonthlyRateTooltip:
     'Фиксированная сумма выплаты за месяц. Используется при создании выплаты с типом «Месячная».',
-  workerNameTooltip: 'Имя работника или название исполнителя, которое будет показано в выплатах и дневниках работ.',
-  workerNoteTooltip: 'Внутренний комментарий о работнике. Не участвует в расчетах и не печатается в дневнике работ.',
+  workerNameTooltip:
+    'Имя работника или название исполнителя, которое будет показано в выплатах и дневниках работ.',
+  workerNoteTooltip:
+    'Внутренний комментарий о работнике. Не участвует в расчетах и не печатается в дневнике работ.',
   workerPayMonthly: 'Раз в месяц',
   workerPayoutAdvancePaid: 'Аванс уже выдан',
   workerPayoutCalculation: 'Расчет',

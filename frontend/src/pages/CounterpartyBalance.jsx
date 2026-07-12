@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import { formatMoney2OrDash as fmt } from '../utils/formatters'
@@ -71,6 +72,7 @@ export default function CounterpartyBalance() {
           />
         }
       />
+      <PageTabs group="counterparties" />
       <div className="page-body">
         {data && (
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>

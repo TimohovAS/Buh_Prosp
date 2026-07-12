@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import PageTabs from '../components/PageTabs'
 import SelectionSummary from '../components/SelectionSummary'
 import { formatMoney2 as fmtMoney } from '../utils/formatters'
 
@@ -146,6 +147,8 @@ export default function BankImport() {
       <div className="page-header">
         <h1 className="page-title">{tr('bankImport')}</h1>
       </div>
+
+      <PageTabs group="bank" />
 
       <div className="page-body">
         <div className="card" style={{ marginBottom: '1rem' }}>

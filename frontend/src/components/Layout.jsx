@@ -7,16 +7,13 @@ import {
   LayoutDashboard,
   LineChart,
   Wallet,
-  AlertCircle,
   FileText,
   FileInput,
   Scale,
   CreditCard,
-  CalendarDays,
   ClipboardList,
   Landmark,
   Building2,
-  ArrowRightLeft,
   Users,
   Briefcase,
   FolderKanban,
@@ -105,6 +102,13 @@ export default function Layout({ lang, toggleLang, children }) {
     }
   }, [mobileNavOpen])
 
+  // Пункт меню, объединяющий несколько маршрутов (табы на странице),
+  // остаётся подсвеченным и на «дочерних» маршрутах.
+  const navClassWith = (extraPrefixes) => {
+    return ({ isActive }) =>
+      isActive || extraPrefixes.some((prefix) => location.pathname.startsWith(prefix)) ? 'active' : ''
+  }
+
   const incomingInvoicesBadge =
     pendingCounts.incoming_invoices_pending_count > 0
       ? ` (${pendingCounts.incoming_invoices_pending_count})`
@@ -166,33 +170,13 @@ export default function Layout({ lang, toggleLang, children }) {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/finance" end>
+                <NavLink to="/finance">
                   <LineChart size={18} /> {tr('finance')}
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/finance/pnl">
-                  <LineChart size={18} /> {tr('pnlTitle')}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/finance/cashflow">
-                  <Wallet size={18} /> {tr('cashflowTitle')}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/finance/ar">
-                  <AlertCircle size={18} /> {tr('financeAR')}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/counterparty-balance">
+                <NavLink to="/counterparty-balance" className={navClassWith(['/counterparty-loans'])}>
                   <Scale size={18} /> {tr('counterpartyBalance')}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/counterparty-loans">
-                  <Landmark size={18} /> {tr('counterpartyLoans')}
                 </NavLink>
               </li>
             </ul>
@@ -218,7 +202,7 @@ export default function Layout({ lang, toggleLang, children }) {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/expenses">
+                <NavLink to="/expenses" className={navClassWith(['/planned-expenses'])}>
                   <CreditCard size={18} /> {tr('expenses')}
                 </NavLink>
               </li>
@@ -233,11 +217,6 @@ export default function Layout({ lang, toggleLang, children }) {
                 </NavLink>
               </li>
               <li>
-                <NavLink to="/planned-expenses">
-                  <CalendarDays size={18} /> {tr('plannedExpenses')}
-                </NavLink>
-              </li>
-              <li>
                 <NavLink to="/payments">
                   <Landmark size={18} /> {tr('payments')}
                 </NavLink>
@@ -249,7 +228,7 @@ export default function Layout({ lang, toggleLang, children }) {
             <div className="sidebar-group-title">{tr('sidebarBank')}</div>
             <ul className="sidebar-nav">
               <li>
-                <NavLink to="/bank">
+                <NavLink to="/bank" className={navClassWith(['/bank-import'])}>
                   <Building2 size={18} /> {tr('bankTransactions')}
                   {bankTransactionsBadge}
                 </NavLink>
@@ -257,11 +236,6 @@ export default function Layout({ lang, toggleLang, children }) {
               <li>
                 <NavLink to="/cash">
                   <Wallet size={18} /> {tr('cashRegister')}
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/bank-import">
-                  <ArrowRightLeft size={18} /> {tr('bankImport')}
                 </NavLink>
               </li>
             </ul>

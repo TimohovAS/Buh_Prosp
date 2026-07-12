@@ -4,6 +4,7 @@ import { api } from '../api'
 import { tr } from '../i18n'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import SearchInput from '../components/SearchInput'
 import StatusBadge from '../components/StatusBadge'
 import SortIndicator from '../components/SortIndicator'
@@ -275,6 +276,7 @@ export default function CounterpartyLoans() {
           </>
         }
       />
+      <PageTabs group="counterparties" />
       <div className="page-body">
         {typeFilter !== 'owner_funds' ? (
           <div className="card">

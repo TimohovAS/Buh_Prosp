@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import PageTabs from '../components/PageTabs'
 import { formatInteger as fmt } from '../utils/formatters'
 import { getPeriodRange } from '../utils/periods'
 
@@ -37,6 +38,8 @@ export default function CashFlow() {
   return (
     <div className="page">
       <h1>{tr('cashflowTitle')}</h1>
+
+      <PageTabs group="finance" />
 
       {/* Фильтр периода */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { BarChart, Bar, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
 import { tr } from '../i18n'
+import PageTabs from '../components/PageTabs'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import { formatInteger as fmt } from '../utils/formatters'
@@ -61,6 +62,8 @@ export default function ProfitAndLoss() {
           />
         </div>
       </div>
+
+      <PageTabs group="finance" />
 
       <div className="page-body">
         {loading && !data ? (

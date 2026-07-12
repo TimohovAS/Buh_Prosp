@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import PageTabs from '../components/PageTabs'
 import { formatInteger as fmt, localDateIso } from '../utils/formatters'
 import { getPeriodRange } from '../utils/periods'
 
@@ -135,6 +136,8 @@ export default function FinanceOverview() {
       <div className="page-header">
         <h1 className="page-title">{tr('financeOverview')}</h1>
       </div>
+
+      <PageTabs group="finance" />
 
       {error && (
         <div style={{ padding: '1rem', color: 'var(--color-danger)' }}>

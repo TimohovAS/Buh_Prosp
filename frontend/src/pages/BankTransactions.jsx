@@ -5,6 +5,7 @@ import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SelectionSummary from '../components/SelectionSummary'
@@ -1776,6 +1777,8 @@ export default function BankTransactions() {
           </>
         }
       />
+
+      <PageTabs group="bank" />
 
       <div className="page-body" ref={pageBodyRef}>
         <div className="card">

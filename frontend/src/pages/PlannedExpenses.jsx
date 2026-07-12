@@ -5,6 +5,7 @@ import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SharedStatusBadge from '../components/StatusBadge'
@@ -361,6 +362,8 @@ export default function PlannedExpenses() {
           </>
         }
       />
+
+      <PageTabs group="expenses" />
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {/* Upcoming payments */}

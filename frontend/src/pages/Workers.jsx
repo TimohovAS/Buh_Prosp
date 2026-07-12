@@ -298,7 +298,11 @@ export default function Workers() {
                 </select>
               </div>
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerPayScheme" tooltipKey="workerPaySchemeTooltip" align="right" />
+                <WorkerFieldLabel
+                  labelKey="workerPayScheme"
+                  tooltipKey="workerPaySchemeTooltip"
+                  align="right"
+                />
                 <select
                   className="form-input"
                   value={form.pay_scheme}
@@ -329,7 +333,10 @@ export default function Workers() {
                 />
               </div>
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerBillingHourlyRate" tooltipKey="workerBillingHourlyRateTooltip" />
+                <WorkerFieldLabel
+                  labelKey="workerBillingHourlyRate"
+                  tooltipKey="workerBillingHourlyRateTooltip"
+                />
                 <input
                   className="form-input"
                   type="number"
@@ -340,7 +347,11 @@ export default function Workers() {
                 />
               </div>
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerWeeklyRate" tooltipKey="workerWeeklyRateTooltip" align="right" />
+                <WorkerFieldLabel
+                  labelKey="workerWeeklyRate"
+                  tooltipKey="workerWeeklyRateTooltip"
+                  align="right"
+                />
                 <input
                   className="form-input"
                   type="number"
@@ -351,7 +362,11 @@ export default function Workers() {
                 />
               </div>
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerMonthlyRate" tooltipKey="workerMonthlyRateTooltip" align="right" />
+                <WorkerFieldLabel
+                  labelKey="workerMonthlyRate"
+                  tooltipKey="workerMonthlyRateTooltip"
+                  align="right"
+                />
                 <input
                   className="form-input"
                   type="number"
@@ -370,7 +385,10 @@ export default function Workers() {
               }}
             >
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerTripCalculation" tooltipKey="workerTripCalculationTooltip" />
+                <WorkerFieldLabel
+                  labelKey="workerTripCalculation"
+                  tooltipKey="workerTripCalculationTooltip"
+                />
                 <select
                   className="form-input"
                   value={form.trip_pricing_mode}
@@ -430,7 +448,11 @@ export default function Workers() {
                 </>
               ) : null}
               <div className="form-group">
-                <WorkerFieldLabel labelKey="workerAdvanceDayRate" tooltipKey="workerAdvanceDayRateTooltip" align="right" />
+                <WorkerFieldLabel
+                  labelKey="workerAdvanceDayRate"
+                  tooltipKey="workerAdvanceDayRateTooltip"
+                  align="right"
+                />
                 <input
                   className="form-input"
                   type="number"

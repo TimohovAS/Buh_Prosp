@@ -6,6 +6,7 @@ import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SelectionSummary from '../components/SelectionSummary'
@@ -911,6 +912,8 @@ export default function Expenses() {
           </>
         }
       />
+
+      <PageTabs group="expenses" />
 
       <div className="page-body">
         {pageError && (
