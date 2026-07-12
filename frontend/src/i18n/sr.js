@@ -832,7 +832,9 @@ const sr = {
   worker: 'Радник',
   workerAddTitle: 'Додај радника',
   workerAdvanceDayRate: 'Аванс/дан',
-  workerBillingHourlyRate: 'Цена човек-сата за фактуру',
+  workerBillingHourlyRate: 'Цена човек-сата за клијента',
+  workerBillingHourlyRateTooltip:
+    'Продајна цена једног сата рада овог радника. Не утиче на његову зараду. У дневнику се цене изабраних радника сабирају у цену сата целе бригаде за клијента.',
   workerArchiveConfirm: 'Архивирати радника "{name}"?',
   workerEditTitle: 'Измени радника',
   workerFoodDayRate: 'Исхрана/дан',
@@ -864,7 +866,9 @@ const sr = {
   workerPayPerDay: 'По радном дану',
   workerPayScheme: 'Шема плаћања',
   workerPayWeekly: 'Недељно',
-  workerPerDayRate: 'По радном дану',
+  workerPerDayRate: 'Интерна тарифа по дану',
+  workerPerDayRateTooltip:
+    'Трошак компаније за редован осмочасовни радни дан радника. Цена коштања сата рачуна се аутоматски: тарифа по дану ÷ 8. На пример, 8 000 RSD ÷ 8 = 1 000 RSD/сат.',
   workerPerDiemRate: 'Дневница',
   allProjects: 'Сви пројекти',
   allWorkers: 'Сви радници',
@@ -903,7 +907,9 @@ const sr = {
   workDiariesEntries: 'Записи',
   workDiariesFood: 'Исхрана',
   workDiariesFoodPerWorker: 'Исхрана (по раднику)',
-  workDiariesHourlyRate: 'Укупна сатница бригаде (трошак), RSD/сат',
+  workDiariesCostRateTooltip:
+    'Цена коштања једног сата рада целе бригаде. Аутоматски: збир интерних дневних тарифа изабраних радника, подељених са 8. Вредност се може променити само за овај запис.',
+  workDiariesHourlyRate: 'Цена коштања бригаде, RSD/сат',
   workDiariesInvestor: 'Инвеститор',
   workDiariesLabor: 'Рад',
   workDiariesLodging: 'Смештај',
@@ -914,8 +920,10 @@ const sr = {
   workDiariesMaterialSourceExpense: 'Из трошкова',
   workDiariesMaterialSourceStock: 'Са складишта',
   workDiariesMaterials: 'Материјал',
-  workDiariesTeamBillingRate: 'Цена бригаде за фактуру, RSD/сат',
+  workDiariesTeamBillingRate: 'Цена бригаде за клијента, RSD/сат',
   workDiariesTeamBillingRateHint: 'Збир цена човек-сата изабраних радника',
+  workDiariesTeamBillingRateTooltip:
+    'Продајна цена једног сата рада целе бригаде. Аутоматски се сабира из цена човек-сата изабраних радника. За фактурисање = сати рада × ова цена + материјал.',
   workDiariesMetaButton: 'Подаци о објекту',
   workDiariesMetaTitle: 'Подаци о објекту за штампане обрасце',
   workDiariesNewEntry: 'Нови запис',
@@ -937,7 +945,7 @@ const sr = {
   workDiariesSectionDiary: 'За грађевински дневник',
   workDiariesPrintHint: 'Прво изаберите пројекат и отворите дневник или извештај са записима.',
   workDiariesRateZeroWarning:
-    'Део изабраних радника нема дневну тарифу — ауто-сатница је нижа. Унесите укупну сатницу бригаде ручно.',
+    'За обрачун цене коштања неким радницима није попуњена „Интерна тарифа по дану“. Попуните је у одељку „Радници“ или ручно унесите цену коштања бригаде.',
   workDiariesSelectProject: 'Изаберите пројекат да бисте направили дневник или извештај.',
   workDiariesSelectProjectCosts: 'Изаберите пројекат да бисте израчунали трошкове по објекту.',
   workDiariesStart: 'Почетак',

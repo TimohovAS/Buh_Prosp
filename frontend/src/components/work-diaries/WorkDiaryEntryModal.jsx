@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from 'lucide-react'
 import { api } from '../../api'
 import { tr } from '../../i18n'
 import DatePicker from '../DatePicker'
+import FieldTooltip from '../FieldTooltip'
 import Modal from '../Modal'
 import MultiSelect from '../MultiSelect'
 import {
@@ -318,7 +319,10 @@ export default function WorkDiaryEntryModal({
             />
           </label>
           <div className="form-group">
-            <span className="form-label">{tr('workDiariesHourlyRate')}</span>
+            <span className="form-label field-label-with-tooltip">
+              {tr('workDiariesHourlyRate')}
+              <FieldTooltip text={tr('workDiariesCostRateTooltip')} />
+            </span>
             <input
               className="form-input"
               type="number"
@@ -345,7 +349,10 @@ export default function WorkDiaryEntryModal({
             ) : null}
           </div>
           <div className="form-group">
-            <span className="form-label">{tr('workDiariesTeamBillingRate')}</span>
+            <span className="form-label field-label-with-tooltip">
+              {tr('workDiariesTeamBillingRate')}
+              <FieldTooltip text={tr('workDiariesTeamBillingRateTooltip')} align="right" />
+            </span>
             <input className="form-input" type="number" value={teamBillingRate} readOnly />
             <small className="work-diaries-rate-hint">{tr('workDiariesTeamBillingRateHint')}</small>
             {teamBillingRate === 0 ? (

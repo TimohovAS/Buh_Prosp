@@ -702,6 +702,60 @@ textarea {
   transform: translateY(0);
 }
 
+.field-label-with-tooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.field-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: #9ec5ff;
+  cursor: help;
+  outline: none;
+}
+
+.field-tooltip-trigger {
+  display: block;
+}
+
+.field-tooltip-bubble {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.45rem);
+  width: min(320px, 72vw);
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  background: rgba(15, 20, 25, 0.99);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+  z-index: 100;
+}
+
+.field-tooltip-align-right .field-tooltip-bubble {
+  right: 0;
+  left: auto;
+}
+
+.field-tooltip:hover .field-tooltip-bubble,
+.field-tooltip:focus-within .field-tooltip-bubble {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .settings-field-value {
   font-weight: 600;
   line-height: 1.45;

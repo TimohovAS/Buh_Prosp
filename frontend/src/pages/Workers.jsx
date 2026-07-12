@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import Modal from '../components/Modal'
+import FieldTooltip from '../components/FieldTooltip'
 import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
@@ -305,7 +306,10 @@ export default function Workers() {
               }}
             >
               <div className="form-group">
-                <label className="form-label">{tr('workerPerDayRate')}</label>
+                <label className="form-label field-label-with-tooltip">
+                  {tr('workerPerDayRate')}
+                  <FieldTooltip text={tr('workerPerDayRateTooltip')} />
+                </label>
                 <input
                   className="form-input"
                   type="number"
@@ -316,7 +320,10 @@ export default function Workers() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{tr('workerBillingHourlyRate')}</label>
+                <label className="form-label field-label-with-tooltip">
+                  {tr('workerBillingHourlyRate')}
+                  <FieldTooltip text={tr('workerBillingHourlyRateTooltip')} align="right" />
+                </label>
                 <input
                   className="form-input"
                   type="number"

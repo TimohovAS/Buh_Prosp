@@ -831,7 +831,9 @@ const ru = {
   worker: 'Работник',
   workerAddTitle: 'Добавить работника',
   workerAdvanceDayRate: 'Аванс/день',
-  workerBillingHourlyRate: 'Цена человеко-часа для фактуры',
+  workerBillingHourlyRate: 'Цена человеко-часа для клиента',
+  workerBillingHourlyRateTooltip:
+    'Цена продажи одного часа работы этого сотрудника. Не влияет на его зарплату. В дневнике цены выбранных работников складываются в цену часа всей бригады для клиента.',
   workerArchiveConfirm: 'Архивировать работника "{name}"?',
   workerEditTitle: 'Изменить работника',
   workerFoodDayRate: 'Питание/день',
@@ -863,7 +865,9 @@ const ru = {
   workerPayPerDay: 'За выход',
   workerPayScheme: 'Схема оплаты',
   workerPayWeekly: 'Еженедельно',
-  workerPerDayRate: 'Ставка за выход',
+  workerPerDayRate: 'Внутренняя ставка за день',
+  workerPerDayRateTooltip:
+    'Затраты компании на обычный 8-часовой рабочий день сотрудника. Себестоимость часа рассчитывается автоматически: ставка за день ÷ 8. Например, 8 000 RSD ÷ 8 = 1 000 RSD/ч.',
   workerPerDiemRate: 'Дневница',
   allProjects: 'Все проекты',
   allWorkers: 'Все работники',
@@ -903,7 +907,9 @@ const ru = {
   workDiariesEntries: 'Записи',
   workDiariesFood: 'Питание',
   workDiariesFoodPerWorker: 'Питание (на человека)',
-  workDiariesHourlyRate: 'Общая ставка бригады (затраты), RSD/ч',
+  workDiariesCostRateTooltip:
+    'Себестоимость одного часа работы всей бригады. Автоматически: сумма внутренних дневных ставок выбранных работников, деленных на 8. Значение можно изменить только для этой записи.',
+  workDiariesHourlyRate: 'Себестоимость бригады, RSD/ч',
   workDiariesInvestor: 'Инвестор',
   workDiariesLabor: 'Работа',
   workDiariesLodging: 'Проживание',
@@ -914,8 +920,10 @@ const ru = {
   workDiariesMaterialSourceExpense: 'Из расходов',
   workDiariesMaterialSourceStock: 'Со склада',
   workDiariesMaterials: 'Материалы',
-  workDiariesTeamBillingRate: 'Цена бригады для фактуры, RSD/ч',
+  workDiariesTeamBillingRate: 'Цена бригады для клиента, RSD/ч',
   workDiariesTeamBillingRateHint: 'Сумма цен человеко-часа выбранных работников',
+  workDiariesTeamBillingRateTooltip:
+    'Цена продажи одного часа работы всей бригады. Автоматически складывается из цен человеко-часа выбранных работников. К фактурированию = часы работы × эта цена + материалы.',
   workDiariesMetaButton: 'Реквизиты объекта',
   workDiariesMetaTitle: 'Реквизиты объекта для печатных форм',
   workDiariesNewEntry: 'Новая запись',
@@ -937,7 +945,7 @@ const ru = {
   workDiariesSectionDiary: 'Для строительного дневника',
   workDiariesPrintHint: 'Сначала выберите проект и откройте дневник или отчет с записями.',
   workDiariesRateZeroWarning:
-    'У части выбранных работников нет дневной ставки — авто-ставка занижена. Укажите общую ставку бригады вручную.',
+    'Для расчета себестоимости у части работников не заполнена «Внутренняя ставка за день». Заполните ее в разделе «Работники» или укажите себестоимость бригады вручную.',
   workDiariesSelectProject: 'Выберите проект, чтобы сформировать дневник или отчет.',
   workDiariesSelectProjectCosts: 'Выберите проект, чтобы посчитать затраты по объекту.',
   workDiariesStart: 'Начало',
