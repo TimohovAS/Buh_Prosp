@@ -1,6 +1,22 @@
 # Handoff: Work Diaries Module
 
-Дата handoff: 2026-07-10 (обновлено после переработки Claude)
+Дата handoff: 2026-07-12
+
+## В работе 2026-07-12 (третья итерация, НЕ закоммичено)
+
+Ставка фактурирования переносится с проекта на работников:
+
+- у работника появляется `billing_hourly_rate` (таблица `workers`), поле редактируется на странице Работники;
+- из `work_diary_project_meta` колонка `billing_hourly_rate` удаляется;
+- запись дневника получает снапшот `team_billing_hourly_rate_snapshot` — сумма ставок фактурирования
+  выбранной бригады на момент записи;
+- Alembic-ревизия `20260712_0007_worker_billing_rates.py`: добавляет колонки и бэкфиллит снапшот
+  из старой проектной ставки × число работников записи (чтобы суммы к фактурированию не изменились);
+- затронуты: `backend/models.py`, `backend/schemas.py`, `backend/routers/work_diaries_router.py`,
+  `backend/tests/test_work_diaries.py`, `frontend/src/pages/Workers.jsx`, `frontend/src/pages/WorkDiaries.jsx`,
+  компоненты `work-diaries/`, i18n ru/sr.
+
+Перед коммитом прогнать полный набор проверок из раздела «Проверки» ниже.
 
 ## Переработка 2026-07-10 (вторая итерация)
 

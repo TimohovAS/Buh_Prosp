@@ -116,19 +116,20 @@ powershell -ExecutionPolicy Bypass -File .\backup_db.ps1
 
 ## 10) Обновления и доработки
 
-После `git push` с рабочего ПК:
+После `git push` с рабочего ПК (запускать от администратора):
 
 ```powershell
-.\update_prod.cmd
+.\!update_prod.cmd
 ```
 
 Скрипт делает:
 
 1. Бэкап БД (если есть `backup_db.ps1`)
-2. `git pull --ff-only origin main`
-3. Установку backend/frontend зависимостей
-4. Сборку frontend
-5. Перезапуск служб и health-check
+2. `git pull --ff-only` текущей ветки
+3. Установку backend-зависимостей и import-guard хелперов
+4. Alembic-миграции БД (`alembic upgrade head`); при ошибке службы не перезапускаются
+5. Установку frontend-зависимостей и сборку frontend
+6. Перезапуск служб и health-check backend/web
 
 ## 11) Удаление служб
 

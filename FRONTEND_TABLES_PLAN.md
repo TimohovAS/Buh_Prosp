@@ -1,9 +1,13 @@
 # План: распил страниц-гигантов и общий компонент сортируемых заголовков
 
 Цель: убрать дублирование табличных заголовков и раздробить страницы-гиганты
-(CashRegister 2223 строк, BankTransactions 2180, IncomingInvoices 1774,
-Settings 1761, Income 1641, Expenses 1580, Receipts 1554) на компоненты.
+(на 2026-07-12: CashRegister 2223 строк, BankTransactions 2180, Settings 1778,
+IncomingInvoices 1774, Income 1641, Expenses 1580, Receipts 1554) на компоненты.
 Ориентир: страница ≤ 500 строк.
+
+Статус: не начат. Прецедент распила уже есть — WorkDiaries.jsx (~430 строк)
+с компонентами в `src/components/work-diaries/`; использовать как образец
+для фазы 3.
 
 ## Правила (для каждого шага)
 
@@ -46,8 +50,8 @@ Settings 1761, Income 1641, Expenses 1580, Receipts 1554) на компонен�
 ## Фаза 2 — SortableTh на остальные списки
 
 По одному коммиту на 1–2 страницы: Contracts, Projects, PlannedExpenses,
-Obligations, CounterpartyLoans, Receipts, IncomingInvoices, Income, Expenses,
-BankTransactions, CashRegister. Механическая замена th → SortableTh, ничего
+Obligations, CounterpartyLoans, WorkDiaries, Receipts, IncomingInvoices,
+Income, Expenses, BankTransactions, CashRegister. Механическая замена th → SortableTh, ничего
 больше. После каждой — браузерная проверка сортировки/ресайза.
 
 ## Фаза 3 — распил гигантов (по одной странице за сессию)
