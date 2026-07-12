@@ -1,0 +1,613 @@
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from 'lucide-react'
+import { api } from '../../api'
+import { tr } from '../../i18n'
+import DatePicker from '../DatePicker'
+import Modal from '../Modal'
+import MultiSelect from '../MultiSelect'
+import {
+  MATERIAL_UNITS,
+  WEATHER_CODES,
+  computeEntryTotals,
+  dateLabel,
+  defaultWorkerHourlyRate,
+  hours,
+  money,
+  num,
+  teamAutoRate,
+  unitLabel,
+  weatherLabel,
+} from './workDiaryUtils'
+
+const todayIso = () => new Date().toISOString().slice(0, 10)
+
+const emptyForm = {
+  date: todayIso(),
+  project_id: '',
+  worker_ids: [],
+  description: '',
+  start_time: '07:00',
+  end_time: '15:00',
+  duration_hours: '',
+  team_hourly_rate_snapshot: '',
+  per_diem: false,
+  per_diem_amount: '',
+  lodging_amount: '',
+  food_allowance: false,
+  food_amount: '',
+  weather: '',
+  temperature: '',
+  note: '',
+}
+
+const emptyMaterial = { description: '', quantity: '', unit: '', source: 'stock', expense_id: '', amount: '' }
+
+function formFromEntry(entry, defaultProjectId) {
+  if (!entry) {
+    return { ...emptyForm, date: todayIso(), project_id: defaultProjectId || '' }
+  }
+  const hasTimeRange = Boolean(entry.start_time && entry.end_time)
+  return {
+    date: entry.date,
+    project_id: String(entry.project_id),
+    worker_ids: [...(entry.worker_ids || [])],
+    description: entry.description || '',
+    start_time: entry.start_time || '',
+    end_time: entry.end_time || '',
+    duration_hours: hasTimeRange ? '' : String(entry.duration_hours ?? ''),
+    team_hourly_rate_snapshot:
+      entry.team_hourly_rate_snapshot == null ? '' : String(entry.team_hourly_rate_snapshot),
+    per_diem: Boolean(entry.per_diem),
+    per_diem_amount: entry.per_diem_amount ? String(entry.per_diem_amount) : '',
+    lodging_amount: entry.lodging_amount ? String(entry.lodging_amount) : '',
+    food_allowance: Boolean(entry.food_allowance),
+    food_amount: entry.food_amount ? String(entry.food_amount) : '',
+    weather: entry.weather || '',
+    temperature: entry.temperature || '',
+    note: entry.note || '',
+  }
+}
+
+function materialsFromEntry(entry) {
+  return (entry?.materials || []).map((material) => ({
+    description: material.description || '',
+    quantity: material.quantity == null ? '' : String(material.quantity),
+    unit: material.unit || '',
+    source: material.source || 'stock',
+    expense_id: material.expense_id ? String(material.expense_id) : '',
+    amount: material.amount ? String(material.amount) : '',
+    expense_description: material.expense_description || '',
+    expense_date: material.expense_date || '',
+  }))
+}
+
+export default function WorkDiaryEntryModal({
+  isOpen,
+  onClose,
+  onSaved,
+  entry,
+  projects,
+  workers,
+  defaultProjectId,
+  overtimeMultiplier,
+}) {
+  const [form, setForm] = useState(emptyForm)
+  const [materials, setMaterials] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [expenseOptions, setExpenseOptions] = useState([])
+  const [billingRate, setBillingRate] = useState(0)
+  const [showAllowances, setShowAllowances] = useState(false)
+  const [showDiaryDetails, setShowDiaryDetails] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    setForm(formFromEntry(entry, defaultProjectId))
+    setMaterials(materialsFromEntry(entry))
+    setShowAllowances(
+      Boolean(entry && (entry.per_diem || entry.food_allowance || num(entry.lodging_amount) > 0))
+    )
+    setShowDiaryDetails(Boolean(entry && (entry.weather || entry.temperature || entry.note)))
+  }, [isOpen, entry, defaultProjectId])
+
+  useEffect(() => {
+    if (!isOpen || !form.project_id) {
+      setExpenseOptions([])
+      setBillingRate(0)
+      return
+    }
+    api.workDiaries.projectMeta(form.project_id).then((meta) => {
+      setBillingRate(num(meta.billing_hourly_rate))
+    })
+    api.workDiaries.expenseOptions({ project_id: form.project_id }).then(setExpenseOptions)
+  }, [isOpen, form.project_id])
+
+  const workerOptions = useMemo(
+    () => workers.map((worker) => ({ value: worker.id, label: worker.name })),
+    [workers]
+  )
+
+  const autoRate = useMemo(() => teamAutoRate(workers, form.worker_ids), [workers, form.worker_ids])
+  const hasZeroRateWorker = useMemo(() => {
+    const selected = new Set(form.worker_ids.map(Number))
+    return workers.some((worker) => selected.has(worker.id) && defaultWorkerHourlyRate(worker) === 0)
+  }, [workers, form.worker_ids])
+
+  const manualRate = form.team_hourly_rate_snapshot
+  const effectiveRate = manualRate === '' ? autoRate : num(manualRate)
+  const effectiveMultiplier = entry ? num(entry.overtime_multiplier) : num(overtimeMultiplier)
+
+  // Для расчета материалов пустая сумма привязанной строки означает всю сумму расхода
+  const materialsForCalc = useMemo(
+    () =>
+      materials.map((item) => {
+        if (item.source === 'expense' && item.amount === '' && item.expense_id) {
+          const option = expenseOptions.find((o) => String(o.id) === String(item.expense_id))
+          return { amount: option ? option.amount : num(item.expense_amount) }
+        }
+        return { amount: num(item.amount) }
+      }),
+    [materials, expenseOptions]
+  )
+
+  const totals = computeEntryTotals({
+    form,
+    materials: materialsForCalc,
+    teamRate: effectiveRate,
+    overtimeMultiplier: effectiveMultiplier,
+    billingRate,
+  })
+
+  const setFormField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
+
+  const updateMaterial = (index, patch) => {
+    setMaterials((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+  }
+
+  const materialExpenseOptions = useMemo(() => {
+    // Привязанный расход отредактированной записи может выпасть из списка — добавляем его вручную
+    const known = new Set(expenseOptions.map((option) => String(option.id)))
+    const extras = materials
+      .filter((item) => item.expense_id && !known.has(String(item.expense_id)))
+      .map((item) => ({
+        id: Number(item.expense_id),
+        date: item.expense_date,
+        description: item.expense_description || item.description,
+        amount: num(item.amount),
+      }))
+    return [...extras, ...expenseOptions]
+  }, [expenseOptions, materials])
+
+  const close = () => {
+    if (saving) return
+    onClose()
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const payload = {
+        ...form,
+        project_id: Number(form.project_id),
+        worker_ids: form.worker_ids.map(Number),
+        start_time: form.start_time || null,
+        end_time: form.end_time || null,
+        duration_hours: form.duration_hours === '' ? null : num(form.duration_hours),
+        team_hourly_rate_snapshot: manualRate === '' ? null : num(manualRate),
+        per_diem_amount: num(form.per_diem_amount),
+        lodging_amount: num(form.lodging_amount),
+        food_amount: num(form.food_amount),
+        materials: materials
+          .filter(
+            (item) =>
+              (item.source === 'stock' && item.description.trim()) ||
+              (item.source === 'expense' && item.expense_id)
+          )
+          .map((item) => ({
+            description: item.description.trim(),
+            quantity: item.quantity === '' ? null : num(item.quantity),
+            unit: item.unit || null,
+            source: item.source,
+            expense_id: item.source === 'expense' ? Number(item.expense_id) : null,
+            amount: num(item.amount),
+          })),
+      }
+      if (entry) {
+        await api.workDiaries.updateEntry(entry.id, payload)
+      } else {
+        await api.workDiaries.createEntry(payload)
+      }
+      await onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={close}
+      title={tr(entry ? 'workDiariesEditEntry' : 'workDiariesNewEntry')}
+      maxWidth="1120px"
+      resizable={false}
+      bodyClassName="work-diaries-entry-modal-body"
+    >
+      <form className="work-diaries-entry-form" onSubmit={submit}>
+        <div className="work-diaries-form-grid">
+          <label className="form-group">
+            <span className="form-label">{tr('date')}</span>
+            <DatePicker value={form.date} required onChange={(value) => setFormField('date', value)} />
+          </label>
+          <label className="form-group">
+            <span className="form-label">{tr('project')}</span>
+            <select
+              className="form-input"
+              value={form.project_id}
+              required
+              onChange={(event) => setFormField('project_id', event.target.value)}
+            >
+              <option value="">{tr('select')}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="form-group">
+            <span className="form-label">{tr('workDiariesWorkersLabel')} *</span>
+            <MultiSelect
+              options={workerOptions}
+              value={form.worker_ids}
+              onChange={(value) => setFormField('worker_ids', value)}
+              placeholder={tr('workDiariesWorkersPlaceholder')}
+              emptyText={tr('workersEmpty')}
+              clearLabel={tr('workDiariesClearWorkers')}
+              ariaLabel={tr('workDiariesWorkersLabel')}
+            />
+          </div>
+          <label className="form-group">
+            <span className="form-label">{tr('workDiariesStart')}</span>
+            <input
+              className="form-input"
+              type="time"
+              value={form.start_time}
+              onChange={(event) => {
+                const value = event.target.value
+                setForm((prev) => ({
+                  ...prev,
+                  start_time: value,
+                  duration_hours: value ? '' : prev.duration_hours,
+                }))
+              }}
+            />
+          </label>
+          <label className="form-group">
+            <span className="form-label">{tr('workDiariesEnd')}</span>
+            <input
+              className="form-input"
+              type="time"
+              value={form.end_time}
+              onChange={(event) => {
+                const value = event.target.value
+                setForm((prev) => ({
+                  ...prev,
+                  end_time: value,
+                  duration_hours: value ? '' : prev.duration_hours,
+                }))
+              }}
+            />
+          </label>
+          <label className="form-group">
+            <span className="form-label">{tr('workDiariesDurationManual')}</span>
+            <input
+              className="form-input"
+              type="number"
+              min="0.25"
+              step="0.25"
+              value={form.duration_hours}
+              onChange={(event) => {
+                const value = event.target.value
+                setForm((prev) => ({
+                  ...prev,
+                  duration_hours: value,
+                  start_time: value ? '' : prev.start_time,
+                  end_time: value ? '' : prev.end_time,
+                }))
+              }}
+            />
+          </label>
+          <div className="form-group">
+            <span className="form-label">{tr('workDiariesHourlyRate')}</span>
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={manualRate}
+              placeholder={autoRate > 0 ? String(Math.round(autoRate * 100) / 100) : ''}
+              onChange={(event) => setFormField('team_hourly_rate_snapshot', event.target.value)}
+            />
+            <small className="work-diaries-rate-hint">
+              {tr('workDiariesAutoRate')}: {money(autoRate)}
+              {manualRate !== '' && num(manualRate) !== autoRate ? (
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setFormField('team_hourly_rate_snapshot', '')}
+                >
+                  {tr('workDiariesApplyAutoRate')}
+                </button>
+              ) : null}
+            </small>
+            {hasZeroRateWorker ? (
+              <small className="work-diaries-rate-warning">{tr('workDiariesRateZeroWarning')}</small>
+            ) : null}
+          </div>
+          <label className="form-group work-diaries-wide">
+            <span className="form-label">{tr('workDiariesDescription')}</span>
+            <textarea
+              className="form-input"
+              rows={3}
+              value={form.description}
+              required
+              onChange={(event) => setFormField('description', event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="work-diaries-materials">
+          <div className="work-diaries-section-row">
+            <strong>{tr('workDiariesMaterials')}</strong>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
+            >
+              <Plus size={16} /> {tr('add')}
+            </button>
+          </div>
+          {materials.map((material, index) => (
+            <div className="work-diaries-material-block" key={index}>
+              <div className="work-diaries-material-row">
+                <select
+                  className="form-input"
+                  value={material.source}
+                  onChange={(event) =>
+                    updateMaterial(index, {
+                      source: event.target.value,
+                      expense_id: '',
+                      amount: '',
+                    })
+                  }
+                >
+                  <option value="stock">{tr('workDiariesMaterialSourceStock')}</option>
+                  <option value="expense">{tr('workDiariesMaterialSourceExpense')}</option>
+                </select>
+                <input
+                  className="form-input"
+                  value={material.description}
+                  placeholder={tr('description')}
+                  onChange={(event) => updateMaterial(index, { description: event.target.value })}
+                />
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={material.quantity}
+                  placeholder={tr('quantity')}
+                  onChange={(event) => updateMaterial(index, { quantity: event.target.value })}
+                />
+                <select
+                  className="form-input"
+                  value={material.unit}
+                  onChange={(event) => updateMaterial(index, { unit: event.target.value })}
+                >
+                  <option value="">{tr('unit')}</option>
+                  {MATERIAL_UNITS.map((code) => (
+                    <option key={code} value={code}>
+                      {unitLabel(code)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={material.amount}
+                  placeholder={
+                    material.source === 'expense' ? tr('workDiariesMaterialExpenseAmountHint') : tr('amount')
+                  }
+                  onChange={(event) => updateMaterial(index, { amount: event.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger"
+                  onClick={() => setMaterials((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              {material.source === 'expense' ? (
+                <div className="work-diaries-material-expense-row">
+                  {materialExpenseOptions.length === 0 ? (
+                    <span className="work-diaries-material-empty">{tr('workDiariesMaterialNoExpenses')}</span>
+                  ) : (
+                    <select
+                      className="form-input"
+                      value={material.expense_id}
+                      required
+                      onChange={(event) => {
+                        const option = materialExpenseOptions.find((o) => String(o.id) === event.target.value)
+                        updateMaterial(index, {
+                          expense_id: event.target.value,
+                          description: material.description || (option ? option.description : ''),
+                        })
+                      }}
+                    >
+                      <option value="">{tr('workDiariesMaterialExpensePick')}</option>
+                      {materialExpenseOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {dateLabel(option.date)} — {option.description} — {money(option.amount)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="work-diaries-collapse">
+          <button
+            type="button"
+            className="work-diaries-collapse-toggle"
+            onClick={() => setShowAllowances((prev) => !prev)}
+          >
+            {showAllowances ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {tr('workDiariesSectionAllowances')}
+            {!showAllowances && totals.allowances > 0 ? <span> — {money(totals.allowances)}</span> : null}
+          </button>
+          {showAllowances ? (
+            <div className="work-diaries-allowances">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.per_diem}
+                  onChange={(event) => setFormField('per_diem', event.target.checked)}
+                />{' '}
+                {tr('workDiariesPerDiemPerWorker')}
+              </label>
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.per_diem_amount}
+                placeholder={tr('amount')}
+                onChange={(event) => setFormField('per_diem_amount', event.target.value)}
+              />
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.food_allowance}
+                  onChange={(event) => setFormField('food_allowance', event.target.checked)}
+                />{' '}
+                {tr('workDiariesFoodPerWorker')}
+              </label>
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.food_amount}
+                placeholder={tr('amount')}
+                onChange={(event) => setFormField('food_amount', event.target.value)}
+              />
+              <span className="work-diaries-allowance-label">{tr('workDiariesLodgingTotal')}</span>
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.lodging_amount}
+                placeholder={tr('amount')}
+                onChange={(event) => setFormField('lodging_amount', event.target.value)}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <div className="work-diaries-collapse">
+          <button
+            type="button"
+            className="work-diaries-collapse-toggle"
+            onClick={() => setShowDiaryDetails((prev) => !prev)}
+          >
+            {showDiaryDetails ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {tr('workDiariesSectionDiary')}
+          </button>
+          {showDiaryDetails ? (
+            <div className="work-diaries-form-grid">
+              <label className="form-group">
+                <span className="form-label">{tr('workDiariesWeather')}</span>
+                <select
+                  className="form-input"
+                  value={form.weather}
+                  onChange={(event) => setFormField('weather', event.target.value)}
+                >
+                  <option value="">{tr('select')}</option>
+                  {WEATHER_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {weatherLabel(code)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-group">
+                <span className="form-label">{tr('workDiariesTemperature')}</span>
+                <input
+                  className="form-input"
+                  value={form.temperature}
+                  onChange={(event) => setFormField('temperature', event.target.value)}
+                />
+              </label>
+              <label className="form-group work-diaries-wide">
+                <span className="form-label">{tr('note')}</span>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={form.note}
+                  onChange={(event) => setFormField('note', event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="work-diaries-live-calc">
+          <strong>{tr('workDiariesCalcSummary')}:</strong>
+          <span>
+            {tr('workDiariesPersonHours')}: <b>{hours(totals.personHours)}</b>
+            {totals.overtimePersonHours > 0
+              ? ` (${tr('workDiariesCalcOvertime')}: ${hours(totals.overtimePersonHours)})`
+              : ''}
+          </span>
+          <span>
+            {tr('workDiariesLabor')}: <b>{money(totals.labor)}</b>
+          </span>
+          {totals.allowances > 0 ? (
+            <span>
+              {tr('workDiariesSectionAllowances')}: <b>{money(totals.allowances)}</b>
+            </span>
+          ) : null}
+          {totals.materials > 0 ? (
+            <span>
+              {tr('workDiariesMaterials')}: <b>{money(totals.materials)}</b>
+            </span>
+          ) : null}
+          <span>
+            {tr('workDiariesPayout')}: <b>{money(totals.payout)}</b>
+          </span>
+          {totals.billable != null ? (
+            <span>
+              {tr('workDiariesBillable')}: <b>{money(totals.billable)}</b>
+            </span>
+          ) : null}
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={close}>
+            {tr('cancel')}
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving || form.worker_ids.length === 0}>
+            <Save size={16} /> {saving ? tr('saving') : tr('save')}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}

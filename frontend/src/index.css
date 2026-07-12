@@ -2425,8 +2425,31 @@ th {
   align-items: end;
 }
 
-.work-diaries-save-meta {
-  align-self: end;
+.work-diaries-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.work-diaries-tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.work-diaries-tab:hover {
+  color: var(--color-text);
+}
+
+.work-diaries-tab.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
 }
 
 .work-diaries-summary {
@@ -2455,8 +2478,169 @@ th {
   font-size: 1rem;
 }
 
+.work-diaries-empty-state {
+  color: var(--color-text);
+  text-align: center;
+  padding: 2rem;
+}
+
+.work-diaries-hours-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.work-diaries-hours-cell strong,
+.work-diaries-hours-cell span {
+  display: block;
+}
+
+.work-diaries-hours-cell span {
+  margin-top: 0.15rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.work-diaries-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
 .work-diaries-wide {
   grid-column: 1 / -1;
+}
+
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+
+.multi-select-trigger {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.multi-select-trigger.is-open {
+  border-color: var(--color-accent);
+}
+
+.multi-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-select-value.is-placeholder,
+.multi-select-empty {
+  color: var(--color-text-muted);
+}
+
+.multi-select-count {
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.multi-select-chevron {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  transition: transform 0.16s ease;
+}
+
+.multi-select-trigger.is-open .multi-select-chevron {
+  transform: rotate(180deg);
+}
+
+.multi-select-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  min-width: 230px;
+  padding: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #151d29;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
+}
+
+.multi-select-clear {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 0.45rem 0.55rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.multi-select-clear:hover {
+  color: var(--color-text);
+}
+
+.multi-select-options {
+  max-height: 230px;
+  overflow-y: auto;
+  padding-top: 0.2rem;
+}
+
+.multi-select-option {
+  min-height: 38px;
+  padding: 0.45rem 0.55rem;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+
+.multi-select-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.multi-select-option input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.multi-select-empty {
+  display: block;
+  padding: 0.65rem;
+  font-size: 0.85rem;
+}
+
+.work-diaries-page .react-datepicker-wrapper {
+  display: block;
+  width: 100%;
+}
+
+.work-diaries-entry-modal-body .form-group {
+  margin-bottom: 0;
+}
+
+.work-diaries-entry-modal-body .work-diaries-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  align-items: start;
 }
 
 .work-diaries-entry-form {
@@ -2468,14 +2652,37 @@ th {
 .work-diaries-allowances,
 .work-diaries-material-row {
   display: grid;
-  grid-template-columns: max-content minmax(110px, 1fr) max-content minmax(110px, 1fr) minmax(130px, 1fr);
+  grid-template-columns: max-content minmax(110px, 1fr) max-content minmax(110px, 1fr) max-content minmax(
+      130px,
+      1fr
+    );
   gap: 0.75rem;
   align-items: center;
 }
 
+.work-diaries-allowance-label {
+  font-size: 0.85rem;
+}
+
 .work-diaries-material-row {
-  grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) auto;
+  grid-template-columns:
+    minmax(120px, max-content) minmax(180px, 2fr) minmax(85px, 0.7fr) minmax(75px, 0.6fr)
+    minmax(120px, 1fr) auto;
   margin-top: 0.5rem;
+}
+
+.work-diaries-material-block + .work-diaries-material-block {
+  margin-top: 0.35rem;
+}
+
+.work-diaries-material-expense-row {
+  margin-top: 0.35rem;
+  padding-left: 0.25rem;
+}
+
+.work-diaries-material-empty {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
 }
 
 .work-diaries-section-row {
@@ -2483,6 +2690,122 @@ th {
   justify-content: space-between;
   gap: 0.75rem;
   align-items: center;
+}
+
+.work-diaries-collapse {
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.6rem;
+}
+
+.work-diaries-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 0;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  margin-bottom: 0.5rem;
+}
+
+.work-diaries-collapse-toggle span {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.work-diaries-rate-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.work-diaries-rate-hint .btn-link {
+  background: none;
+  border: 0;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.78rem;
+  text-decoration: underline;
+}
+
+.work-diaries-rate-warning {
+  display: block;
+  color: var(--color-danger);
+  margin-top: 0.25rem;
+}
+
+.work-diaries-live-calc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  background: rgba(26, 35, 50, 0.8);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  font-size: 0.85rem;
+}
+
+.work-diaries-live-calc span {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.work-diaries-live-calc b {
+  color: var(--color-text);
+}
+
+.work-diaries-costs h3 {
+  margin: 0 0 1rem;
+}
+
+.work-diaries-costs-table {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+}
+
+.work-diaries-costs-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.work-diaries-costs-amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-diaries-costs-table tfoot td {
+  font-weight: 700;
+  border-bottom: 0;
+  border-top: 2px solid var(--color-border);
+}
+
+.work-diaries-costs-muted td,
+.work-diaries-costs-muted {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.work-diaries-costs-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.work-diaries-costs-hint {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  margin: 0.75rem 0 0;
+  max-width: 640px;
 }
 
 .work-diaries-print-surface {
@@ -3756,6 +4079,10 @@ tr:hover td {
   .work-diaries-allowances,
   .work-diaries-material-row {
     grid-template-columns: 1fr;
+  }
+
+  .work-diaries-tabs {
+    flex-wrap: wrap;
   }
 
   .work-diary-grid,

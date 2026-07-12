@@ -187,6 +187,8 @@ class Enterprise(Base):
     backup_manual_retention_count = Column(Integer)
     backup_pre_restore_retention_count = Column(Integer)
     backup_scheduler_check_minutes = Column(Integer)
+    # Коэффициент оплаты сверхурочных в дневниках работ (Закон о раде РС: минимум +26% => 1.26)
+    work_diary_overtime_multiplier = Column(Numeric(6, 4), default=1.26)
 
 
 class EfakturaImportRecord(Base):
@@ -447,21 +449,20 @@ class WorkDiaryEntry(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
-    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=True, index=True)
     description = Column(Text, nullable=False)
     start_time = Column(String(5))
     end_time = Column(String(5))
-    hours = Column(Numeric(8, 2), nullable=False, default=0)
-    regular_hours = Column(Numeric(8, 2), nullable=False, default=0)
-    overtime_hours = Column(Numeric(8, 2), nullable=False, default=0)
-    hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
-    overtime_multiplier = Column(Numeric(6, 4), nullable=False, default=1.14)
+    duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
+    regular_duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
+    overtime_duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
+    team_hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
+    overtime_multiplier = Column(Numeric(6, 4), nullable=False, default=1.26)
     per_diem = Column(Boolean, default=False)
-    per_diem_amount = Column(Numeric(14, 2), nullable=False, default=0)
-    lodging_amount = Column(Numeric(14, 2), nullable=False, default=0)
+    per_diem_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на одного работника в день
+    lodging_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на всю бригаду (жильё целиком)
     food_allowance = Column(Boolean, default=False)
-    food_amount = Column(Numeric(14, 2), nullable=False, default=0)
-    weather = Column(String(100))
+    food_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на одного работника в день
+    weather = Column(String(20))  # код: sunny | cloudy | rain | snow | wind | fog
     temperature = Column(String(30))
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -469,7 +470,11 @@ class WorkDiaryEntry(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     project = relationship("Project", back_populates="work_diary_entries")
-    worker = relationship("Worker")
+    workers = relationship(
+        "Worker",
+        secondary="work_diary_entry_workers",
+        order_by="Worker.name",
+    )
     materials = relationship(
         "WorkDiaryMaterial",
         back_populates="entry",
@@ -478,8 +483,21 @@ class WorkDiaryEntry(Base):
     )
 
 
+class WorkDiaryEntryWorker(Base):
+    """Workers assigned to a work diary entry."""
+
+    __tablename__ = "work_diary_entry_workers"
+
+    entry_id = Column(Integer, ForeignKey("work_diary_entries.id"), primary_key=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), primary_key=True, index=True)
+
+
 class WorkDiaryMaterial(Base):
-    """Material or equipment consumed on a work diary entry."""
+    """Material or equipment consumed on a work diary entry.
+
+    source="expense": стоимость уже учтена в расходах проекта (expense_id) и не
+    прибавляется к затратам объекта повторно. source="stock": со склада, стоимость — оценка.
+    """
 
     __tablename__ = "work_diary_materials"
 
@@ -487,10 +505,14 @@ class WorkDiaryMaterial(Base):
     entry_id = Column(Integer, ForeignKey("work_diary_entries.id"), nullable=False, index=True)
     line_no = Column(Integer, nullable=False, default=1)
     description = Column(String(500), nullable=False)
-    quantity = Column(String(100))
+    quantity = Column(Numeric(12, 3))
+    unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h
+    source = Column(String(20), nullable=False, default="stock")  # stock | expense
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, index=True)
     amount = Column(Numeric(14, 2), nullable=False, default=0)
 
     entry = relationship("WorkDiaryEntry", back_populates="materials")
+    expense = relationship("Expense")
 
 
 class BankTransaction(Base):

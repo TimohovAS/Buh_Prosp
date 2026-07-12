@@ -196,9 +196,15 @@ class WorkDiaryProjectMetaResponse(WorkDiaryProjectMetaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+WORK_DIARY_MATERIAL_UNITS = ("kom", "m", "m2", "m3", "kg", "t", "l", "pak", "h")
+
+
 class WorkDiaryMaterialBase(BaseModel):
     description: str
-    quantity: Optional[str] = None
+    quantity: Optional[float] = Field(default=None, gt=0)
+    unit: Optional[str] = None
+    source: Literal["stock", "expense"] = "stock"
+    expense_id: Optional[int] = None
     amount: float = Field(default=0, ge=0)
 
     @model_validator(mode="before")
@@ -207,32 +213,55 @@ class WorkDiaryMaterialBase(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        if result.get("quantity") == "":
-            result["quantity"] = None
+        for key in ("quantity", "unit", "expense_id"):
+            if result.get(key) == "":
+                result[key] = None
         return result
+
+    @field_validator("unit")
+    @classmethod
+    def validate_unit(cls, value):
+        if value is not None and value not in WORK_DIARY_MATERIAL_UNITS:
+            raise ValueError("Unknown material unit")
+        return value
+
+    @model_validator(mode="after")
+    def validate_expense_link(self):
+        if self.source == "expense" and self.expense_id is None:
+            raise ValueError("expense_id is required when source is 'expense'")
+        if self.source == "stock":
+            self.expense_id = None
+        return self
 
 
 class WorkDiaryMaterialCreate(WorkDiaryMaterialBase):
     pass
 
 
-class WorkDiaryMaterialResponse(WorkDiaryMaterialBase):
+class WorkDiaryMaterialResponse(BaseModel):
     id: int
     line_no: int
-
-    model_config = ConfigDict(from_attributes=True)
+    description: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    source: str
+    expense_id: Optional[int] = None
+    expense_date: Optional[DateType] = None
+    expense_description: Optional[str] = None
+    amount: float
 
 
 class WorkDiaryEntryBase(BaseModel):
     date: DateType
     project_id: int
-    worker_id: Optional[int] = None
+    worker_ids: list[int] = Field(min_length=1)
     description: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    hours: Optional[float] = Field(default=None, ge=0)
-    hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
-    overtime_multiplier: float = Field(default=1.14, ge=1)
+    duration_hours: Optional[float] = Field(default=None, gt=0)
+    team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    # None => коэффициент из настроек предприятия
+    overtime_multiplier: Optional[float] = Field(default=None, ge=1)
     per_diem: bool = False
     per_diem_amount: float = Field(default=0, ge=0)
     lodging_amount: float = Field(default=0, ge=0)
@@ -243,6 +272,15 @@ class WorkDiaryEntryBase(BaseModel):
     note: Optional[str] = None
     materials: list[WorkDiaryMaterialCreate] = Field(default_factory=list)
 
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("worker_ids", mode="before")
+    @classmethod
+    def normalize_worker_ids(cls, value):
+        if value in (None, ""):
+            return []
+        return list(dict.fromkeys(value))
+
     @model_validator(mode="before")
     @classmethod
     def normalize_empty_values(cls, data):
@@ -250,9 +288,9 @@ class WorkDiaryEntryBase(BaseModel):
             return data
         result = dict(data)
         for key in (
-            "worker_id",
-            "hours",
-            "hourly_rate_snapshot",
+            "duration_hours",
+            "team_hourly_rate_snapshot",
+            "overtime_multiplier",
             "start_time",
             "end_time",
             "weather",
@@ -271,12 +309,12 @@ class WorkDiaryEntryCreate(WorkDiaryEntryBase):
 class WorkDiaryEntryUpdate(BaseModel):
     date: Optional[DateType] = None
     project_id: Optional[int] = None
-    worker_id: Optional[int] = None
+    worker_ids: Optional[list[int]] = Field(default=None, min_length=1)
     description: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    hours: Optional[float] = Field(default=None, ge=0)
-    hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    duration_hours: Optional[float] = Field(default=None, gt=0)
+    team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
     per_diem: Optional[bool] = None
     per_diem_amount: Optional[float] = Field(default=None, ge=0)
@@ -288,6 +326,17 @@ class WorkDiaryEntryUpdate(BaseModel):
     note: Optional[str] = None
     materials: Optional[list[WorkDiaryMaterialCreate]] = None
 
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("worker_ids", mode="before")
+    @classmethod
+    def normalize_worker_ids(cls, value):
+        if value is None:
+            return None
+        if value == "":
+            return []
+        return list(dict.fromkeys(value))
+
     @model_validator(mode="before")
     @classmethod
     def normalize_empty_values(cls, data):
@@ -296,9 +345,9 @@ class WorkDiaryEntryUpdate(BaseModel):
         result = dict(data)
         for key in (
             "project_id",
-            "worker_id",
-            "hours",
-            "hourly_rate_snapshot",
+            "duration_hours",
+            "team_hourly_rate_snapshot",
+            "overtime_multiplier",
             "start_time",
             "end_time",
             "weather",
@@ -315,20 +364,23 @@ class WorkDiaryEntryResponse(BaseModel):
     date: DateType
     project_id: int
     project_name: Optional[str] = None
-    worker_id: Optional[int] = None
-    worker_name: Optional[str] = None
+    worker_ids: list[int] = Field(default_factory=list)
+    worker_names: list[str] = Field(default_factory=list)
     description: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    hours: float
-    regular_hours: float
-    overtime_hours: float
-    hourly_rate_snapshot: float
+    duration_hours: float
+    person_hours: float
+    regular_person_hours: float
+    overtime_person_hours: float
+    team_hourly_rate_snapshot: float
     overtime_multiplier: float
     labor_amount: float
     payout_amount: float
     allowance_amount: float
     material_amount: float
+    stock_material_amount: float
+    linked_material_amount: float
     total_cost_amount: float
     billable_amount: float
     per_diem: bool
@@ -348,12 +400,44 @@ class WorkDiarySummaryResponse(BaseModel):
     entries_count: int
     days_count: int
     workers_count: int
-    hours: float
-    regular_hours: float
-    overtime_hours: float
+    person_hours: float
+    regular_person_hours: float
+    overtime_person_hours: float
     labor_amount: float
+    payout_amount: float
     allowance_amount: float
     material_amount: float
+    stock_material_amount: float
+    linked_material_amount: float
+    total_cost_amount: float
+    billable_amount: float
+
+
+class WorkDiaryExpenseOptionResponse(BaseModel):
+    """Расход проекта, доступный для привязки строки материалов."""
+
+    id: int
+    date: DateType
+    description: str
+    amount: float
+    source: str
+    status: str
+
+
+class WorkDiaryProjectCostsResponse(BaseModel):
+    """Затраты по объекту: расходы из модуля Расходы + труд и складские материалы из дневника."""
+
+    project_id: int
+    project_name: Optional[str] = None
+    date_from: Optional[DateType] = None
+    date_to: Optional[DateType] = None
+    entries_count: int
+    expenses_amount: float
+    labor_amount: float
+    allowance_amount: float
+    stock_material_amount: float
+    # Справочно: материалы дневника, уже учтенные внутри expenses_amount
+    linked_material_amount: float
     total_cost_amount: float
     billable_amount: float
 
@@ -805,6 +889,8 @@ class EnterpriseBase(BaseModel):
     opening_cash_balance: Optional[Decimal] = Decimal("0.00")
     opening_cash_date: Optional[DateType] = None
     emblem_data_url: Optional[str] = None
+    # Закон о раде РС: надбавка за сверхурочные минимум +26% => коэффициент не ниже 1.26
+    work_diary_overtime_multiplier: Optional[Decimal] = Field(default=Decimal("1.26"), ge=1)
 
     @field_validator("emblem_data_url", mode="before")
     @classmethod

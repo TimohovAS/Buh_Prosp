@@ -100,6 +100,7 @@ export default function Settings() {
     main_activity_code: '',
     opening_cash_balance: 0,
     opening_cash_date: `${currentYear}-01-01`,
+    work_diary_overtime_multiplier: 1.26,
   })
 
   const currentUser = getUser()
@@ -391,6 +392,7 @@ export default function Settings() {
             main_activity_code: response.main_activity_code || '',
             opening_cash_balance: response.opening_cash_balance ?? 0,
             opening_cash_date: response.opening_cash_date || defaultDate,
+            work_diary_overtime_multiplier: response.work_diary_overtime_multiplier ?? 1.26,
           })
         }
       })
@@ -1556,6 +1558,21 @@ export default function Settings() {
                 className="form-input"
                 style={{ width: '100%' }}
               />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('workDiariesOvertimeMultiplier')}</label>
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                className="form-input"
+                value={form.work_diary_overtime_multiplier}
+                onChange={(event) => setForm({ ...form, work_diary_overtime_multiplier: event.target.value })}
+                required
+              />
+              <small style={{ color: 'var(--color-text-muted)' }}>
+                {tr('workDiariesOvertimeMultiplierHint')}
+              </small>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>

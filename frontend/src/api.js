@@ -336,6 +336,14 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/work-diaries/summary${q ? `?${q}` : ''}`)
     },
+    expenseOptions: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/work-diaries/expense-options${q ? `?${q}` : ''}`)
+    },
+    projectCosts: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/work-diaries/project-costs${q ? `?${q}` : ''}`)
+    },
   },
 
   categories: {
