@@ -71,6 +71,10 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         self.assertIsNone(root.find("cbc:ProfileID", namespaces=NS))
         self.assertEqual(root.findtext("cbc:InvoiceTypeCode", namespaces=NS), "380")
         self.assertEqual(root.findtext("cac:TaxTotal/cbc:TaxAmount", namespaces=NS), "0.00")
+        self.assertEqual(
+            root.findtext("cac:Delivery/cbc:ActualDeliveryDate", namespaces=NS),
+            "2026-06-26",
+        )
         self.assertIsNone(root.find(".//cbc:TaxExemptionReasonCode", namespaces=NS))
         self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:ID", namespaces=NS), "O")
         self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:Percent", namespaces=NS), "0.00")

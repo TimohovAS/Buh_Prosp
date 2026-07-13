@@ -128,6 +128,9 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
     customer_address = client.address if client else None
     _party(invoice, "AccountingCustomerParty", customer_name, customer_pib, customer_address)
 
+    delivery = _sub(invoice, CAC_NS, "Delivery")
+    _sub(delivery, CBC_NS, "ActualDeliveryDate", income.issued_date.isoformat())
+
     tax_total = _sub(invoice, CAC_NS, "TaxTotal")
     _sub(tax_total, CBC_NS, "TaxAmount", "0.00", currencyID=currency)
     tax_subtotal = _sub(tax_total, CAC_NS, "TaxSubtotal")
