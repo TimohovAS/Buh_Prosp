@@ -2165,6 +2165,50 @@ tr.row-reversal {
   padding: 0.45rem 0.65rem;
 }
 
+.income-efaktura-fields {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.income-efaktura-fields > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.income-efaktura-fields > summary::-webkit-details-marker {
+  display: none;
+}
+
+.income-efaktura-fields > summary::after {
+  content: '+';
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+.income-efaktura-fields[open] > summary::after {
+  content: '-';
+}
+
+.income-efaktura-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.75rem;
+  padding-top: 0.65rem;
+}
+
+.income-efaktura-fields-grid .form-group {
+  margin-bottom: 0;
+}
+
 .income-modal-main .table-wrap th,
 .income-modal-main .table-wrap td {
   padding: 0.45rem 0.55rem;
@@ -2342,7 +2386,8 @@ tr.row-reversal {
   }
 
   .income-form-grid,
-  .income-form-grid-dates {
+  .income-form-grid-dates,
+  .income-efaktura-fields-grid {
     grid-template-columns: 1fr;
   }
 

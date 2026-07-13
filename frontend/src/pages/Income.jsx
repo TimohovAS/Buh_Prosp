@@ -30,6 +30,15 @@ const PAYMENT_TYPE_KEYS = {
   closing: 'contractPaymentClosing',
 }
 const INCOME_UNIT_OPTIONS = ['kom', 'sat', 'dan', 'm', 'm2', 'm3', 'kg', 'l', 'set', 'usl']
+const EFAKTURA_REFERENCE_FIELDS = [
+  { name: 'efaktura_contract_number', label: 'efakturaContractNumber' },
+  { name: 'efaktura_order_reference', label: 'efakturaOrderReference' },
+  { name: 'efaktura_framework_agreement_number', label: 'efakturaFrameworkAgreementNumber' },
+  { name: 'efaktura_object_code', label: 'efakturaObjectCode' },
+  { name: 'efaktura_buyer_reference', label: 'efakturaBuyerReference' },
+  { name: 'efaktura_payment_reference', label: 'efakturaPaymentReference' },
+  { name: 'efaktura_payment_model', label: 'efakturaPaymentModel', maxLength: 10 },
+]
 const newIncomeLine = () => ({
   name: '',
   quantity: '1',
@@ -96,6 +105,7 @@ export default function Income() {
   const [itemSuggestions, setItemSuggestions] = useState([])
   const [itemSearchSuggestions, setItemSearchSuggestions] = useState([])
   const [activeLineIndex, setActiveLineIndex] = useState(null)
+  const [efakturaFieldsOpen, setEfakturaFieldsOpen] = useState(false)
   const [form, setForm] = useState({
     date: todayIso(),
     due_date: '',
@@ -105,6 +115,13 @@ export default function Income() {
     contract_payment_type: '',
     project_id: '',
     description: '',
+    efaktura_contract_number: '',
+    efaktura_order_reference: '',
+    efaktura_framework_agreement_number: '',
+    efaktura_object_code: '',
+    efaktura_buyer_reference: '',
+    efaktura_payment_reference: '',
+    efaktura_payment_model: '',
     amount_rsd: '',
     items: [newIncomeLine()],
     note: '',
@@ -224,6 +241,13 @@ export default function Income() {
       contract_payment_type: '',
       project_id: unassignedProject ? String(unassignedProject.id) : '',
       description: '',
+      efaktura_contract_number: '',
+      efaktura_order_reference: '',
+      efaktura_framework_agreement_number: '',
+      efaktura_object_code: '',
+      efaktura_buyer_reference: '',
+      efaktura_payment_reference: '',
+      efaktura_payment_model: '',
       amount_rsd: '',
       items: [newIncomeLine()],
       note: '',
@@ -231,6 +255,7 @@ export default function Income() {
     setForm(defaultForm)
     setSubmitError('')
     setPageError('')
+    setEfakturaFieldsOpen(false)
     setModal('add')
   }
 
@@ -244,6 +269,13 @@ export default function Income() {
       contract_payment_type: item.contract_payment_type || '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
       description: item.description || '',
+      efaktura_contract_number: item.efaktura_contract_number || '',
+      efaktura_order_reference: item.efaktura_order_reference || '',
+      efaktura_framework_agreement_number: item.efaktura_framework_agreement_number || '',
+      efaktura_object_code: item.efaktura_object_code || '',
+      efaktura_buyer_reference: item.efaktura_buyer_reference || '',
+      efaktura_payment_reference: item.efaktura_payment_reference || '',
+      efaktura_payment_model: item.efaktura_payment_model || '',
       amount_rsd: item.amount_rsd,
       items: item.items?.length
         ? item.items.map((line) => ({
@@ -259,6 +291,9 @@ export default function Income() {
     })
     setSubmitError('')
     setPageError('')
+    setEfakturaFieldsOpen(
+      EFAKTURA_REFERENCE_FIELDS.some(({ name }) => String(item[name] || '').trim())
+    )
     setModal({ type: 'edit', id: item.id })
   }
 
@@ -295,6 +330,14 @@ export default function Income() {
         contract_payment_type: form.contract_payment_type || null,
         project_id: toInt(form.project_id) ?? (unassignedProject ? unassignedProject.id : null),
         description: form.description || null,
+        efaktura_contract_number: form.efaktura_contract_number?.trim() || null,
+        efaktura_order_reference: form.efaktura_order_reference?.trim() || null,
+        efaktura_framework_agreement_number:
+          form.efaktura_framework_agreement_number?.trim() || null,
+        efaktura_object_code: form.efaktura_object_code?.trim() || null,
+        efaktura_buyer_reference: form.efaktura_buyer_reference?.trim() || null,
+        efaktura_payment_reference: form.efaktura_payment_reference?.trim() || null,
+        efaktura_payment_model: form.efaktura_payment_model?.trim() || null,
         amount_rsd: normalizedItems.length ? itemsTotal : parseFloat(form.amount_rsd) || 0,
         items: normalizedItems,
         note: form.note || null,
@@ -1009,6 +1052,14 @@ export default function Income() {
                 <span className="record-field-label">{tr('description')}</span>
                 <div className="record-field-text">{detailModal.description || UI_DASH}</div>
               </div>
+              {EFAKTURA_REFERENCE_FIELDS.map(({ name, label }) =>
+                detailModal[name] ? (
+                  <div className="record-field" key={name}>
+                    <span className="record-field-label">{tr(label)}</span>
+                    <span className="record-field-value">{detailModal[name]}</span>
+                  </div>
+                ) : null
+              )}
               {detailModal.items?.length ? (
                 <div className="record-field full">
                   <span className="record-field-label">{tr('invoiceItems')}</span>
@@ -1414,6 +1465,27 @@ export default function Income() {
                   placeholder={tr('incomeDescriptionPlaceholder')}
                 />
               </div>
+              <details
+                className="income-efaktura-fields"
+                open={efakturaFieldsOpen}
+                onToggle={(event) => setEfakturaFieldsOpen(event.currentTarget.open)}
+              >
+                <summary>{tr('efakturaAdditionalFields')}</summary>
+                <div className="income-efaktura-fields-grid">
+                  {EFAKTURA_REFERENCE_FIELDS.map(({ name, label, maxLength }) => (
+                    <div className="form-group" key={name}>
+                      <label className="form-label">{tr(label)}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={form[name]}
+                        maxLength={maxLength}
+                        onChange={(event) => setForm({ ...form, [name]: event.target.value })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </details>
               <div className="form-group">
                 <div
                   style={{

@@ -60,6 +60,20 @@ def _payment_account(value: str | None) -> str:
     return (value or "").replace("-", "").replace(" ", "").strip()
 
 
+def _text(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def _payment_id(reference: str | None, model: str | None) -> str:
+    normalized_reference = _text(reference)
+    normalized_model = _text(model)
+    if not normalized_reference:
+        return ""
+    if normalized_model:
+        return f"(mod{normalized_model}) {normalized_reference}"
+    return normalized_reference
+
+
 def _sub(parent: ET.Element, ns: str, name: str, text: str | None = None, **attrs: str) -> ET.Element:
     node = ET.SubElement(parent, _tag(ns, name), attrs)
     if text is not None:
@@ -135,6 +149,31 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
         _sub(invoice, CBC_NS, "Note", income.note)
     _sub(invoice, CBC_NS, "DocumentCurrencyCode", currency)
 
+    buyer_reference = _text(income.efaktura_buyer_reference)
+    if buyer_reference:
+        _sub(invoice, CBC_NS, "BuyerReference", buyer_reference)
+
+    order_reference = _text(income.efaktura_order_reference)
+    if order_reference:
+        order = _sub(invoice, CAC_NS, "OrderReference")
+        _sub(order, CBC_NS, "ID", order_reference)
+
+    framework_agreement_number = _text(income.efaktura_framework_agreement_number)
+    if framework_agreement_number:
+        framework = _sub(invoice, CAC_NS, "OriginatorDocumentReference")
+        _sub(framework, CBC_NS, "ID", framework_agreement_number)
+
+    contract_number = _text(income.efaktura_contract_number)
+    if contract_number:
+        contract = _sub(invoice, CAC_NS, "ContractDocumentReference")
+        _sub(contract, CBC_NS, "ID", contract_number)
+
+    object_code = _text(income.efaktura_object_code)
+    if object_code:
+        object_reference = _sub(invoice, CAC_NS, "AdditionalDocumentReference")
+        _sub(object_reference, CBC_NS, "ID", object_code)
+        _sub(object_reference, CBC_NS, "DocumentTypeCode", "130")
+
     _party(
         invoice,
         "AccountingSupplierParty",
@@ -160,11 +199,15 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
     _sub(delivery, CBC_NS, "ActualDeliveryDate", income.issued_date.isoformat())
 
     payment_account = _payment_account(enterprise.bank_account)
-    if payment_account:
+    payment_id = _payment_id(income.efaktura_payment_reference, income.efaktura_payment_model)
+    if payment_account or payment_id:
         payment_means = _sub(invoice, CAC_NS, "PaymentMeans")
         _sub(payment_means, CBC_NS, "PaymentMeansCode", "30")
-        payee_account = _sub(payment_means, CAC_NS, "PayeeFinancialAccount")
-        _sub(payee_account, CBC_NS, "ID", payment_account)
+        if payment_id:
+            _sub(payment_means, CBC_NS, "PaymentID", payment_id)
+        if payment_account:
+            payee_account = _sub(payment_means, CAC_NS, "PayeeFinancialAccount")
+            _sub(payee_account, CBC_NS, "ID", payment_account)
 
     tax_total = _sub(invoice, CAC_NS, "TaxTotal")
     _sub(tax_total, CBC_NS, "TaxAmount", "0.00", currencyID=currency)

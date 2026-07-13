@@ -521,6 +521,13 @@ class IncomeBase(BaseModel):
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
     income_type: Optional[str] = None  # advance | intermediate | final | other
+    efaktura_contract_number: Optional[str] = None
+    efaktura_order_reference: Optional[str] = None
+    efaktura_framework_agreement_number: Optional[str] = None
+    efaktura_object_code: Optional[str] = None
+    efaktura_buyer_reference: Optional[str] = None
+    efaktura_payment_reference: Optional[str] = None
+    efaktura_payment_model: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -542,11 +549,26 @@ class IncomeCreate(IncomeBase):
             data["issued_date"] = data.pop("date", None)
         return data
 
-    @field_validator("client_id", "contract_id", "contract_payment_type", "project_id", mode="before")
+    @field_validator(
+        "client_id",
+        "contract_id",
+        "contract_payment_type",
+        "project_id",
+        "efaktura_contract_number",
+        "efaktura_order_reference",
+        "efaktura_framework_agreement_number",
+        "efaktura_object_code",
+        "efaktura_buyer_reference",
+        "efaktura_payment_reference",
+        "efaktura_payment_model",
+        mode="before",
+    )
     @classmethod
     def empty_str_to_none(cls, v):
         if v == "" or v is None:
             return None
+        if isinstance(v, str):
+            return v.strip() or None
         return v
 
 
@@ -564,6 +586,13 @@ class IncomeUpdate(BaseModel):
     is_paid: Optional[bool] = None
     paid_date: Optional[DateType] = None
     project_id: Optional[int] = None
+    efaktura_contract_number: Optional[str] = None
+    efaktura_order_reference: Optional[str] = None
+    efaktura_framework_agreement_number: Optional[str] = None
+    efaktura_object_code: Optional[str] = None
+    efaktura_buyer_reference: Optional[str] = None
+    efaktura_payment_reference: Optional[str] = None
+    efaktura_payment_model: Optional[str] = None
     note: Optional[str] = None
     items: Optional[list[IncomeItemCreate]] = None
 
@@ -584,6 +613,19 @@ class IncomeUpdate(BaseModel):
             result["contract_payment_type"] == "" or result["contract_payment_type"] is None
         ):
             result["contract_payment_type"] = None
+        for key in (
+            "efaktura_contract_number",
+            "efaktura_order_reference",
+            "efaktura_framework_agreement_number",
+            "efaktura_object_code",
+            "efaktura_buyer_reference",
+            "efaktura_payment_reference",
+            "efaktura_payment_model",
+        ):
+            if key in result:
+                result[key] = str(result[key]).strip() if result[key] is not None else None
+                if not result[key]:
+                    result[key] = None
         if result.get("contract_id") is None:
             result["contract_payment_type"] = None
         return result

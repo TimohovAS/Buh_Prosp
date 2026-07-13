@@ -62,6 +62,13 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
             client_name="Buyer",
             amount_rsd=Decimal("1200"),
             currency="RSD",
+            efaktura_contract_number="UG-2026-15",
+            efaktura_order_reference="PO-2026-22",
+            efaktura_framework_agreement_number="OS-2026-03",
+            efaktura_object_code="Kasarna 20",
+            efaktura_buyer_reference="INT-ROUTE-7",
+            efaktura_payment_reference="123456/2026",
+            efaktura_payment_model="97",
         )
         income.items = [
             IncomeItem(
@@ -85,6 +92,24 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         self.assertEqual(root.findtext("cbc:CustomizationID", namespaces=NS), SERBIAN_CIUS_CUSTOMIZATION_ID)
         self.assertIsNone(root.find("cbc:ProfileID", namespaces=NS))
         self.assertEqual(root.findtext("cbc:InvoiceTypeCode", namespaces=NS), "380")
+        self.assertEqual(root.findtext("cbc:BuyerReference", namespaces=NS), "INT-ROUTE-7")
+        self.assertEqual(root.findtext("cac:OrderReference/cbc:ID", namespaces=NS), "PO-2026-22")
+        self.assertEqual(
+            root.findtext("cac:OriginatorDocumentReference/cbc:ID", namespaces=NS),
+            "OS-2026-03",
+        )
+        self.assertEqual(
+            root.findtext("cac:ContractDocumentReference/cbc:ID", namespaces=NS),
+            "UG-2026-15",
+        )
+        self.assertEqual(
+            root.findtext("cac:AdditionalDocumentReference/cbc:ID", namespaces=NS),
+            "Kasarna 20",
+        )
+        self.assertEqual(
+            root.findtext("cac:AdditionalDocumentReference/cbc:DocumentTypeCode", namespaces=NS),
+            "130",
+        )
         self.assertEqual(root.findtext("cac:TaxTotal/cbc:TaxAmount", namespaces=NS), "0.00")
         self.assertEqual(
             root.findtext("cac:Delivery/cbc:ActualDeliveryDate", namespaces=NS),
@@ -134,6 +159,10 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
                 namespaces=NS,
             ),
             "87654321",
+        )
+        self.assertEqual(
+            root.findtext("cac:PaymentMeans/cbc:PaymentID", namespaces=NS),
+            "(mod97) 123456/2026",
         )
         self.assertEqual(
             root.findtext(

@@ -320,6 +320,13 @@ async def create_income(
         or {"advance": "advance", "intermediate": "intermediate", "closing": "final"}.get(
             data.contract_payment_type or "", None
         ),
+        efaktura_contract_number=data.efaktura_contract_number,
+        efaktura_order_reference=data.efaktura_order_reference,
+        efaktura_framework_agreement_number=data.efaktura_framework_agreement_number,
+        efaktura_object_code=data.efaktura_object_code,
+        efaktura_buyer_reference=data.efaktura_buyer_reference,
+        efaktura_payment_reference=data.efaktura_payment_reference,
+        efaktura_payment_model=data.efaktura_payment_model,
         note=data.note,
         created_by=current_user.id,
     )

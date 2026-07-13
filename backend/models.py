@@ -671,6 +671,13 @@ class Income(Base):
 
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     income_type = Column(String(20), nullable=True)  # advance | intermediate | final | other
+    efaktura_contract_number = Column(String(200), nullable=True)
+    efaktura_order_reference = Column(String(200), nullable=True)
+    efaktura_framework_agreement_number = Column(String(200), nullable=True)
+    efaktura_object_code = Column(String(200), nullable=True)
+    efaktura_buyer_reference = Column(String(200), nullable=True)
+    efaktura_payment_reference = Column(String(200), nullable=True)
+    efaktura_payment_model = Column(String(10), nullable=True)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
