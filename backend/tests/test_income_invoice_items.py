@@ -74,6 +74,56 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         self.assertIsNone(root.find(".//cbc:TaxExemptionReasonCode", namespaces=NS))
         self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:ID", namespaces=NS), "O")
         self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:Percent", namespaces=NS), "0.00")
+        self.assertEqual(
+            root.findtext("cac:AccountingSupplierParty/cac:Party/cbc:EndpointID", namespaces=NS),
+            "123456789",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "RS123456789",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "RS987654321",
+        )
+
+    def test_efaktura_xml_does_not_duplicate_existing_pib_prefix(self):
+        enterprise = Enterprise(name="Seller", pib="RS123456789")
+        client = Client(name="Buyer", pib="rs987654321")
+        income = Income(
+            issued_date=date(2026, 7, 13),
+            invoice_number="0031-2026",
+            client_name="Buyer",
+            amount_rsd=Decimal("500000"),
+            currency="RSD",
+        )
+
+        root = ET.fromstring(build_income_efaktura_xml(income, enterprise, client))
+
+        self.assertEqual(
+            root.findtext("cac:AccountingSupplierParty/cac:Party/cbc:EndpointID", namespaces=NS),
+            "123456789",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "RS123456789",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "RS987654321",
+        )
 
     def test_parse_efaktura_invoice_extracts_line_prices(self):
         xml = b"""<?xml version="1.0" encoding="UTF-8"?>

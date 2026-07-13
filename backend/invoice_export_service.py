@@ -47,6 +47,18 @@ def _unit_code(value: str | None) -> str:
     }.get(normalized, normalized.upper() or "H87")
 
 
+def _pib_number(value: str | None) -> str:
+    normalized = (value or "").strip().upper()
+    if normalized.startswith("RS"):
+        normalized = normalized[2:].strip()
+    return normalized
+
+
+def _vat_identifier(value: str | None) -> str:
+    pib = _pib_number(value)
+    return f"RS{pib}" if pib else ""
+
+
 def _sub(parent: ET.Element, ns: str, name: str, text: str | None = None, **attrs: str) -> ET.Element:
     node = ET.SubElement(parent, _tag(ns, name), attrs)
     if text is not None:
@@ -57,8 +69,9 @@ def _sub(parent: ET.Element, ns: str, name: str, text: str | None = None, **attr
 def _party(parent: ET.Element, tag_name: str, name: str | None, pib: str | None, address: str | None) -> None:
     party_wrapper = _sub(parent, CAC_NS, tag_name)
     party = _sub(party_wrapper, CAC_NS, "Party")
-    if pib:
-        _sub(party, CBC_NS, "EndpointID", pib, schemeID="9948")
+    pib_number = _pib_number(pib)
+    if pib_number:
+        _sub(party, CBC_NS, "EndpointID", pib_number, schemeID="9948")
 
     if address:
         postal_address = _sub(party, CAC_NS, "PostalAddress")
@@ -67,7 +80,7 @@ def _party(parent: ET.Element, tag_name: str, name: str | None, pib: str | None,
         _sub(country, CBC_NS, "IdentificationCode", "RS")
 
     party_tax_scheme = _sub(party, CAC_NS, "PartyTaxScheme")
-    _sub(party_tax_scheme, CBC_NS, "CompanyID", pib or "")
+    _sub(party_tax_scheme, CBC_NS, "CompanyID", _vat_identifier(pib))
     tax_scheme = _sub(party_tax_scheme, CAC_NS, "TaxScheme")
     _sub(tax_scheme, CBC_NS, "ID", "VAT")
 
