@@ -2761,6 +2761,14 @@ th {
 .work-diaries-material-expense-row {
   margin-top: 0.35rem;
   padding-left: 0.25rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.work-diaries-material-expense-row > :only-child {
+  grid-column: 1 / -1;
 }
 
 .work-diaries-material-empty {

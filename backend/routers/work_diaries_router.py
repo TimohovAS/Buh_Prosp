@@ -20,7 +20,10 @@ from backend.expense_service import CASH_TRANSFER_SOURCE, visible_expense_condit
 from backend.models import (
     Enterprise,
     Expense,
+    ExpenseItem,
     Project,
+    PurchaseReceipt,
+    PurchaseReceiptItem,
     User,
     WorkDiaryEntry,
     WorkDiaryMaterial,
@@ -28,9 +31,11 @@ from backend.models import (
     Worker,
 )
 from backend.schemas import (
+    WORK_DIARY_MATERIAL_UNITS,
     WorkDiaryEntryCreate,
     WorkDiaryEntryResponse,
     WorkDiaryEntryUpdate,
+    WorkDiaryExpenseItemOption,
     WorkDiaryExpenseOptionResponse,
     WorkDiaryMaterialCreate,
     WorkDiaryMaterialResponse,
@@ -512,6 +517,60 @@ async def delete_entry(
     return {"ok": True}
 
 
+def _unit_from_item_name(name: str) -> str | None:
+    """Чеки ПУ пишут единицу в конце названия: «KLEMA ... /kom» — вытаскиваем её."""
+    tail = name.rsplit("/", 1)
+    if len(tail) != 2:
+        return None
+    unit = tail[1].strip().lower()
+    return unit if unit in WORK_DIARY_MATERIAL_UNITS else None
+
+
+async def _load_expense_item_options(
+    db: AsyncSession, expense_ids: list[int]
+) -> dict[int, list[WorkDiaryExpenseItemOption]]:
+    """Позиции расходов: свои позиции фактуры, иначе позиции связанного кассового чека."""
+    if not expense_ids:
+        return {}
+    items_by_expense: dict[int, list[WorkDiaryExpenseItemOption]] = {}
+
+    expense_items_result = await db.execute(
+        select(ExpenseItem)
+        .where(ExpenseItem.expense_id.in_(expense_ids))
+        .order_by(ExpenseItem.expense_id, ExpenseItem.line_no, ExpenseItem.id)
+    )
+    for item in expense_items_result.scalars().all():
+        items_by_expense.setdefault(item.expense_id, []).append(
+            WorkDiaryExpenseItemOption(
+                name=item.name,
+                quantity=_float(item.quantity) if item.quantity is not None else None,
+                unit=_unit_from_item_name(item.name),
+                unit_price=_float(item.unit_price) if item.unit_price is not None else None,
+                total_amount=_float(item.total_amount),
+            )
+        )
+
+    remaining_ids = [expense_id for expense_id in expense_ids if expense_id not in items_by_expense]
+    if remaining_ids:
+        receipt_items_result = await db.execute(
+            select(PurchaseReceipt.expense_id, PurchaseReceiptItem)
+            .join(PurchaseReceiptItem, PurchaseReceiptItem.receipt_id == PurchaseReceipt.id)
+            .where(PurchaseReceipt.expense_id.in_(remaining_ids))
+            .order_by(PurchaseReceiptItem.receipt_id, PurchaseReceiptItem.line_no, PurchaseReceiptItem.id)
+        )
+        for expense_id, item in receipt_items_result.all():
+            items_by_expense.setdefault(expense_id, []).append(
+                WorkDiaryExpenseItemOption(
+                    name=item.name,
+                    quantity=_float(item.quantity) if item.quantity is not None else None,
+                    unit=_unit_from_item_name(item.name),
+                    unit_price=_float(item.unit_price) if item.unit_price is not None else None,
+                    total_amount=_float(item.total_amount),
+                )
+            )
+    return items_by_expense
+
+
 @router.get("/expense-options", response_model=list[WorkDiaryExpenseOptionResponse])
 async def list_expense_options(
     project_id: int = Query(...),
@@ -520,7 +579,7 @@ async def list_expense_options(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Расходы проекта, к которым можно привязать строку материалов."""
+    """Расходы проекта, к которым можно привязать строку материалов (с позициями чеков/фактур)."""
     await _get_project(db, project_id)
     query = select(Expense).where(
         Expense.project_id == project_id,
@@ -536,6 +595,8 @@ async def list_expense_options(
         query = query.where(Expense.date <= date_to)
     query = query.order_by(Expense.date.desc(), Expense.id.desc()).limit(EXPENSE_OPTIONS_LIMIT)
     result = await db.execute(query)
+    expenses = result.scalars().all()
+    items_by_expense = await _load_expense_item_options(db, [expense.id for expense in expenses])
     return [
         WorkDiaryExpenseOptionResponse(
             id=expense.id,
@@ -544,8 +605,9 @@ async def list_expense_options(
             amount=_float(expense.amount),
             source=expense.source,
             status=expense.status,
+            items=items_by_expense.get(expense.id, []),
         )
-        for expense in result.scalars().all()
+        for expense in expenses
     ]
 
 

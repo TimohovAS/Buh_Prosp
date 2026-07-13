@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader'
 import SortIndicator from '../components/SortIndicator'
 import WorkDiaryCostsTab from '../components/work-diaries/WorkDiaryCostsTab'
 import WorkDiaryEntryModal from '../components/work-diaries/WorkDiaryEntryModal'
+import WorkDiaryMaterialsTab from '../components/work-diaries/WorkDiaryMaterialsTab'
 import WorkDiaryMetaModal from '../components/work-diaries/WorkDiaryMetaModal'
 import WorkDiaryPrintDiary from '../components/work-diaries/WorkDiaryPrintDiary'
 import WorkDiaryPrintReport from '../components/work-diaries/WorkDiaryPrintReport'
@@ -40,11 +41,12 @@ function groupByDate(entries) {
   }, {})
 }
 
-const TABS = ['entries', 'costs', 'diary', 'report']
+const TABS = ['entries', 'costs', 'materials', 'diary', 'report']
 
 const TAB_LABEL_KEYS = {
   entries: 'workDiariesEntries',
   costs: 'workDiariesCosts',
+  materials: 'workDiariesMaterials',
   diary: 'workDiariesDiary',
   report: 'workDiariesReport',
 }
@@ -403,6 +405,8 @@ export default function WorkDiaries() {
             dateTo={filters.date_to}
           />
         ) : null}
+
+        {tab === 'materials' ? <WorkDiaryMaterialsTab entries={entries} loading={loading} /> : null}
 
         {tab === 'diary' ? (
           !filters.project_id ? (

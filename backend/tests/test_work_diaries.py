@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from backend.models import Enterprise, User, Worker
+from backend.models import Enterprise, ExpenseItem, PurchaseReceipt, PurchaseReceiptItem, User, Worker
 from backend.routers.work_diaries_router import (
     create_entry,
     get_project_costs,
@@ -279,6 +279,75 @@ async def test_work_diary_expense_options_show_only_active_project_expenses(db_s
     assert [option.id for option in options] == [visible.id]
     assert options[0].description == "Kabl"
     assert options[0].amount == 500
+    assert options[0].items == []
+
+
+@pytest.mark.asyncio
+async def test_work_diary_expense_options_include_receipt_and_invoice_items(db_session, make_project, make_expense):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-items-admin")
+
+    receipt_expense = await make_expense(
+        db_session, amount=Decimal("2180"), status="paid", description="FARBARA", project_id=project.id
+    )
+    receipt = PurchaseReceipt(
+        verification_url="https://suf.purs.gov.rs/v/?vl=test",
+        qr_hash="hash-items-test",
+        total_amount=Decimal("2180"),
+        expense_id=receipt_expense.id,
+    )
+    db_session.add(receipt)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            PurchaseReceiptItem(
+                receipt_id=receipt.id,
+                line_no=1,
+                name="KLEMA 2X0,2-4MM2 /kom",
+                quantity=Decimal("5"),
+                unit_price=Decimal("100"),
+                total_amount=Decimal("500"),
+            ),
+            PurchaseReceiptItem(
+                receipt_id=receipt.id,
+                line_no=2,
+                name="Kabal N2XH 3x2.5 /m",
+                quantity=Decimal("20"),
+                unit_price=Decimal("84"),
+                total_amount=Decimal("1680"),
+            ),
+        ]
+    )
+
+    invoice_expense = await make_expense(
+        db_session, amount=Decimal("300"), status="paid", description="eFaktura", project_id=project.id
+    )
+    db_session.add(
+        ExpenseItem(
+            expense_id=invoice_expense.id,
+            line_no=1,
+            name="Postarina",
+            quantity=Decimal("1"),
+            unit_price=Decimal("300"),
+            total_amount=Decimal("300"),
+        )
+    )
+    await db_session.flush()
+
+    options = await list_expense_options(project.id, None, None, db_session, user)
+    options_by_id = {option.id: option for option in options}
+
+    receipt_items = options_by_id[receipt_expense.id].items
+    assert [item.name for item in receipt_items] == ["KLEMA 2X0,2-4MM2 /kom", "Kabal N2XH 3x2.5 /m"]
+    assert receipt_items[0].unit == "kom"
+    assert receipt_items[1].unit == "m"
+    assert receipt_items[1].quantity == 20
+    assert receipt_items[1].unit_price == 84
+    assert receipt_items[1].total_amount == 1680
+
+    invoice_items = options_by_id[invoice_expense.id].items
+    assert [item.name for item in invoice_items] == ["Postarina"]
+    assert invoice_items[0].unit is None
 
 
 @pytest.mark.asyncio

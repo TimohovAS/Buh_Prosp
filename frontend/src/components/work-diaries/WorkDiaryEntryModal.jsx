@@ -42,7 +42,16 @@ const emptyForm = {
   note: '',
 }
 
-const emptyMaterial = { description: '', quantity: '', unit: '', source: 'stock', expense_id: '', amount: '' }
+const emptyMaterial = {
+  description: '',
+  quantity: '',
+  unit: '',
+  source: 'stock',
+  expense_id: '',
+  amount: '',
+  item_index: '',
+  unit_price: '',
+}
 
 function formFromEntry(entry, defaultProjectId) {
   if (!entry) {
@@ -78,6 +87,8 @@ function materialsFromEntry(entry) {
     source: material.source || 'stock',
     expense_id: material.expense_id ? String(material.expense_id) : '',
     amount: material.amount ? String(material.amount) : '',
+    item_index: '',
+    unit_price: '',
     expense_description: material.expense_description || '',
     expense_date: material.expense_date || '',
   }))
@@ -162,6 +173,39 @@ export default function WorkDiaryEntryModal({
 
   const updateMaterial = (index, patch) => {
     setMaterials((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+  }
+
+  const materialRowFromItem = (option, item, itemIndex) => ({
+    ...emptyMaterial,
+    source: 'expense',
+    expense_id: String(option.id),
+    item_index: String(itemIndex),
+    description: item.name,
+    quantity: item.quantity == null ? '' : String(item.quantity),
+    unit: item.unit || '',
+    unit_price: item.unit_price == null ? '' : String(item.unit_price),
+    amount: item.total_amount ? String(item.total_amount) : '',
+  })
+
+  // Выбор позиции чека/фактуры автозаполняет строку; пустой выбор — весь расход целиком
+  const applyExpenseItem = (index, option, itemIndexValue) => {
+    if (itemIndexValue === '') {
+      updateMaterial(index, { item_index: '', unit_price: '' })
+      return
+    }
+    const item = (option?.items || [])[Number(itemIndexValue)]
+    if (!item) return
+    updateMaterial(index, materialRowFromItem(option, item, itemIndexValue))
+  }
+
+  const addAllExpenseItems = (index, option) => {
+    const items = option?.items || []
+    if (items.length === 0) return
+    setMaterials((prev) => [
+      ...prev.slice(0, index),
+      ...items.map((item, itemIndex) => materialRowFromItem(option, item, itemIndex)),
+      ...prev.slice(index + 1),
+    ])
   }
 
   const materialExpenseOptions = useMemo(() => {
@@ -393,6 +437,8 @@ export default function WorkDiaryEntryModal({
                       source: event.target.value,
                       expense_id: '',
                       amount: '',
+                      item_index: '',
+                      unit_price: '',
                     })
                   }
                 >
@@ -412,7 +458,16 @@ export default function WorkDiaryEntryModal({
                   step="0.001"
                   value={material.quantity}
                   placeholder={tr('quantity')}
-                  onChange={(event) => updateMaterial(index, { quantity: event.target.value })}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    const patch = { quantity: value }
+                    // Строка из позиции чека: сумма пересчитывается по цене за единицу
+                    const unitPrice = num(material.unit_price)
+                    if (unitPrice > 0 && value !== '') {
+                      patch.amount = String(Math.round(num(value) * unitPrice * 100) / 100)
+                    }
+                    updateMaterial(index, patch)
+                  }}
                 />
                 <select
                   className="form-input"
@@ -450,25 +505,69 @@ export default function WorkDiaryEntryModal({
                   {materialExpenseOptions.length === 0 ? (
                     <span className="work-diaries-material-empty">{tr('workDiariesMaterialNoExpenses')}</span>
                   ) : (
-                    <select
-                      className="form-input"
-                      value={material.expense_id}
-                      required
-                      onChange={(event) => {
-                        const option = materialExpenseOptions.find((o) => String(o.id) === event.target.value)
-                        updateMaterial(index, {
-                          expense_id: event.target.value,
-                          description: material.description || (option ? option.description : ''),
-                        })
-                      }}
-                    >
-                      <option value="">{tr('workDiariesMaterialExpensePick')}</option>
-                      {materialExpenseOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {dateLabel(option.date)} — {option.description} — {money(option.amount)}
-                        </option>
-                      ))}
-                    </select>
+                    (() => {
+                      const selectedOption = materialExpenseOptions.find(
+                        (o) => String(o.id) === String(material.expense_id)
+                      )
+                      const expenseItems = selectedOption?.items || []
+                      return (
+                        <>
+                          <select
+                            className="form-input"
+                            value={material.expense_id}
+                            required
+                            onChange={(event) => {
+                              const option = materialExpenseOptions.find(
+                                (o) => String(o.id) === event.target.value
+                              )
+                              updateMaterial(index, {
+                                expense_id: event.target.value,
+                                description: material.description || (option ? option.description : ''),
+                                item_index: '',
+                                unit_price: '',
+                              })
+                            }}
+                          >
+                            <option value="">{tr('workDiariesMaterialExpensePick')}</option>
+                            {materialExpenseOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {dateLabel(option.date)} — {option.description} — {money(option.amount)}
+                              </option>
+                            ))}
+                          </select>
+                          {expenseItems.length > 0 ? (
+                            <>
+                              <select
+                                className="form-input"
+                                value={material.item_index}
+                                onChange={(event) =>
+                                  applyExpenseItem(index, selectedOption, event.target.value)
+                                }
+                              >
+                                <option value="">{tr('workDiariesMaterialWholeExpense')}</option>
+                                {expenseItems.map((item, itemIndex) => (
+                                  <option key={itemIndex} value={itemIndex}>
+                                    {item.name}
+                                    {item.quantity != null
+                                      ? ` — ${item.quantity}${item.unit ? ` ${unitLabel(item.unit)}` : ''}`
+                                      : ''}{' '}
+                                    — {money(item.total_amount)}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                title={tr('workDiariesMaterialAddAllItemsHint')}
+                                onClick={() => addAllExpenseItems(index, selectedOption)}
+                              >
+                                <Plus size={14} /> {tr('workDiariesMaterialAddAllItems')}
+                              </button>
+                            </>
+                          ) : null}
+                        </>
+                      )
+                    })()
                   )}
                 </div>
               ) : null}

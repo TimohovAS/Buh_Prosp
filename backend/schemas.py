@@ -413,6 +413,16 @@ class WorkDiarySummaryResponse(BaseModel):
     billable_amount: float
 
 
+class WorkDiaryExpenseItemOption(BaseModel):
+    """Позиция чека или фактуры внутри расхода — для автозаполнения строки материалов."""
+
+    name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    total_amount: float
+
+
 class WorkDiaryExpenseOptionResponse(BaseModel):
     """Расход проекта, доступный для привязки строки материалов."""
 
@@ -422,6 +432,7 @@ class WorkDiaryExpenseOptionResponse(BaseModel):
     amount: float
     source: str
     status: str
+    items: list[WorkDiaryExpenseItemOption] = Field(default_factory=list)
 
 
 class WorkDiaryProjectCostsResponse(BaseModel):
