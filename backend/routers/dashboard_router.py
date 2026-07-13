@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlalchemy import or_
 
 from backend.auth import get_current_user_required
@@ -17,8 +16,8 @@ from backend.date_utils import coerce_date, days_between
 from backend.models import (
     BankTransaction,
     BankTransactionIncomeAllocation,
+    CashEntry,
     Expense,
-    Income,
     IncomingInvoice,
     MonthlyObligation,
     PaymentType,
@@ -30,7 +29,7 @@ from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
 from backend.schemas import (
-    DashboardIncomeResponse,
+    DashboardIncomingInvoiceItem,
     DashboardStats,
     IncomeLimitStatus,
     PendingLinkCountsResponse,
@@ -249,20 +248,37 @@ async def get_dashboard(
             )
     upcoming_planned.sort(key=lambda item: item.due_date)
 
-    recent_result = await db.execute(
-        select(Income)
-        .where(Income.status != "cancelled")
-        .options(selectinload(Income.client))
-        .order_by(Income.issued_date.desc(), Income.id.desc())
-        .limit(5)
+    cash_in_result = await db.scalar(
+        select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "in")
     )
-    recent_items = recent_result.scalars().all()
-    recent_incomes = []
-    for income in recent_items:
-        payload = DashboardIncomeResponse.model_validate(income).model_dump()
-        if income.client:
-            payload["client_name"] = income.client.name
-        recent_incomes.append(DashboardIncomeResponse(**payload))
+    cash_out_result = await db.scalar(
+        select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")
+    )
+    cash_register_balance = to_decimal(cash_in_result or ZERO_DECIMAL) - to_decimal(cash_out_result or ZERO_DECIMAL)
+
+    unpaid_invoices_result = await db.execute(
+        select(IncomingInvoice)
+        .where(IncomingInvoice.status.in_(["unpaid", "partial"]))
+        .order_by(IncomingInvoice.date.asc(), IncomingInvoice.id.asc())
+    )
+    unpaid_invoices = unpaid_invoices_result.scalars().all()
+    unpaid_incoming_total = ZERO_DECIMAL
+    unpaid_incoming_items = []
+    for invoice in unpaid_invoices:
+        remaining = to_decimal(invoice.amount) - to_decimal(invoice.settled_amount or ZERO_DECIMAL)
+        if remaining <= 0:
+            continue
+        unpaid_incoming_total += remaining
+        invoice_date = coerce_date(invoice.date)
+        unpaid_incoming_items.append(
+            DashboardIncomingInvoiceItem(
+                id=invoice.id,
+                invoice_number=invoice.invoice_number,
+                counterparty_name=invoice.counterparty_name,
+                date=invoice_date.isoformat() if invoice_date else "",
+                remaining=remaining,
+            )
+        )
 
     return DashboardStats(
         year_income=year_income,
@@ -286,11 +302,13 @@ async def get_dashboard(
             exceeded_6m=limit_status["exceeded_6m"],
             exceeded_8m=limit_status["exceeded_8m"],
         ),
+        cash_register_balance=cash_register_balance,
         unpaid_payments_count=unpaid_payments_count,
         upcoming_payment_date=upcoming_payment_date,
         upcoming_unpaid_obligations=upcoming_obligations,
         upcoming_planned_expenses=upcoming_planned,
-        recent_incomes=recent_incomes,
+        unpaid_incoming_invoices=unpaid_incoming_items[:5],
+        unpaid_incoming_total=unpaid_incoming_total,
     )
 
 

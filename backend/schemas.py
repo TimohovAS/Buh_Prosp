@@ -804,18 +804,6 @@ class IncomePaymentDetailsResponse(BaseModel):
     linked_transactions: list[IncomePaymentTransactionResponse] = Field(default_factory=list)
 
 
-class DashboardIncomeResponse(BaseModel):
-    """Упрощённый ответ для панели."""
-
-    id: int
-    issued_date: DateType = Field(serialization_alias="date")
-    invoice_number: str
-    client_name: Optional[str] = None
-    amount_rsd: Decimal
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # --- Contract ---
 class ContractItemBase(BaseModel):
     description: str
@@ -1236,6 +1224,16 @@ class UpcomingPlannedItem(BaseModel):
     days_until: int
 
 
+class DashboardIncomingInvoiceItem(BaseModel):
+    """Неоплаченная входящая фактура для блока кредиторки на панели."""
+
+    id: int
+    invoice_number: str
+    counterparty_name: str
+    date: str  # YYYY-MM-DD
+    remaining: Decimal
+
+
 class DashboardStats(BaseModel):
     year_income: Decimal
     month_income: Decimal
@@ -1245,13 +1243,15 @@ class DashboardStats(BaseModel):
     balance_year: Decimal  # year_income - year_expenses
     balance_all_time: Decimal
     financial_result_all_time: Decimal
+    cash_register_balance: Decimal  # текущий остаток наличных в кассе
     planned_expenses_until_month_end: Decimal  # планируемые расходы + обязательные платежи до конца месяца
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None
     upcoming_unpaid_obligations: list[UpcomingObligationItem] = []
     upcoming_planned_expenses: list[UpcomingPlannedItem] = []
-    recent_incomes: list[DashboardIncomeResponse]
+    unpaid_incoming_invoices: list[DashboardIncomingInvoiceItem] = []
+    unpaid_incoming_total: Decimal = Decimal("0")
 
 
 class PendingLinkCountsResponse(BaseModel):
