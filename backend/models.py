@@ -710,7 +710,7 @@ class IncomeItem(Base):
     unit = Column(String(20), default="kom")
     unit_price = Column(Numeric(14, 2), nullable=False, default=0)
     total_amount = Column(Numeric(14, 2), nullable=False, default=0)
-    tax_category = Column(String(20), nullable=False, default="O")
+    tax_category = Column(String(20), nullable=False, default="SS")
     tax_rate = Column(Numeric(5, 2), nullable=False, default=0)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)

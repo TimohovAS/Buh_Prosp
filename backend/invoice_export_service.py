@@ -7,13 +7,10 @@ from backend.models import Client, Enterprise, Income, IncomeItem
 UBL_INVOICE_NS = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
 CBC_NS = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
 CAC_NS = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-SERBIAN_CIUS_CUSTOMIZATION_ID = "urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.rs:srbdt:2021"
-NON_VAT_CATEGORY = "O"
+SERBIAN_CIUS_CUSTOMIZATION_ID = "urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.rs:srbdt:2022"
+NON_VAT_CATEGORY = "SS"
 NON_VAT_RATE = Decimal("0")
-NON_VAT_EXEMPTION_REASON = "Nije u sistemu PDV-a"
-# TODO: Add cbc:TaxExemptionReasonCode after confirming the exact Serbian
-# eFaktura code for a small non-VAT taxpayer / pausalac. Do not reuse
-# PDV-RS-11-1-4: that code belongs to a different exemption basis.
+NON_VAT_EXEMPTION_REASON_CODE = "PDV-RS-33"
 
 ET.register_namespace("", UBL_INVOICE_NS)
 ET.register_namespace("cbc", CBC_NS)
@@ -59,6 +56,10 @@ def _vat_identifier(value: str | None) -> str:
     return f"RS{pib}" if pib else ""
 
 
+def _payment_account(value: str | None) -> str:
+    return (value or "").replace("-", "").replace(" ", "").strip()
+
+
 def _sub(parent: ET.Element, ns: str, name: str, text: str | None = None, **attrs: str) -> ET.Element:
     node = ET.SubElement(parent, _tag(ns, name), attrs)
     if text is not None:
@@ -66,12 +67,22 @@ def _sub(parent: ET.Element, ns: str, name: str, text: str | None = None, **attr
     return node
 
 
-def _party(parent: ET.Element, tag_name: str, name: str | None, pib: str | None, address: str | None) -> None:
+def _party(
+    parent: ET.Element,
+    tag_name: str,
+    name: str | None,
+    pib: str | None,
+    registration_number: str | None,
+    address: str | None,
+) -> None:
     party_wrapper = _sub(parent, CAC_NS, tag_name)
     party = _sub(party_wrapper, CAC_NS, "Party")
     pib_number = _pib_number(pib)
     if pib_number:
         _sub(party, CBC_NS, "EndpointID", pib_number, schemeID="9948")
+
+    party_name = _sub(party, CAC_NS, "PartyName")
+    _sub(party_name, CBC_NS, "Name", name or "")
 
     if address:
         postal_address = _sub(party, CAC_NS, "PostalAddress")
@@ -86,6 +97,8 @@ def _party(parent: ET.Element, tag_name: str, name: str | None, pib: str | None,
 
     legal_entity = _sub(party, CAC_NS, "PartyLegalEntity")
     _sub(legal_entity, CBC_NS, "RegistrationName", name or "")
+    if registration_number:
+        _sub(legal_entity, CBC_NS, "CompanyID", registration_number.strip())
 
 
 def _line_items(income: Income) -> list[IncomeItem]:
@@ -122,14 +135,36 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
         _sub(invoice, CBC_NS, "Note", income.note)
     _sub(invoice, CBC_NS, "DocumentCurrencyCode", currency)
 
-    _party(invoice, "AccountingSupplierParty", enterprise.name, enterprise.pib, enterprise.address)
+    _party(
+        invoice,
+        "AccountingSupplierParty",
+        enterprise.name,
+        enterprise.pib,
+        enterprise.maticni_broj,
+        enterprise.address,
+    )
     customer_name = client.name if client else income.client_name
     customer_pib = client.pib if client else None
+    customer_registration_number = client.maticni_broj if client else None
     customer_address = client.address if client else None
-    _party(invoice, "AccountingCustomerParty", customer_name, customer_pib, customer_address)
+    _party(
+        invoice,
+        "AccountingCustomerParty",
+        customer_name,
+        customer_pib,
+        customer_registration_number,
+        customer_address,
+    )
 
     delivery = _sub(invoice, CAC_NS, "Delivery")
     _sub(delivery, CBC_NS, "ActualDeliveryDate", income.issued_date.isoformat())
+
+    payment_account = _payment_account(enterprise.bank_account)
+    if payment_account:
+        payment_means = _sub(invoice, CAC_NS, "PaymentMeans")
+        _sub(payment_means, CBC_NS, "PaymentMeansCode", "30")
+        payee_account = _sub(payment_means, CAC_NS, "PayeeFinancialAccount")
+        _sub(payee_account, CBC_NS, "ID", payment_account)
 
     tax_total = _sub(invoice, CAC_NS, "TaxTotal")
     _sub(tax_total, CBC_NS, "TaxAmount", "0.00", currencyID=currency)
@@ -139,7 +174,7 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
     tax_category = _sub(tax_subtotal, CAC_NS, "TaxCategory")
     _sub(tax_category, CBC_NS, "ID", NON_VAT_CATEGORY)
     _sub(tax_category, CBC_NS, "Percent", "0.00")
-    _sub(tax_category, CBC_NS, "TaxExemptionReason", NON_VAT_EXEMPTION_REASON)
+    _sub(tax_category, CBC_NS, "TaxExemptionReasonCode", NON_VAT_EXEMPTION_REASON_CODE)
     tax_scheme = _sub(tax_category, CAC_NS, "TaxScheme")
     _sub(tax_scheme, CBC_NS, "ID", "VAT")
 

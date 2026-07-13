@@ -173,7 +173,7 @@ def _normalize_income_items(items: list[IncomeItemCreate] | None) -> tuple[list[
                 "unit": (item.unit or "kom").strip() or "kom",
                 "unit_price": unit_price,
                 "total_amount": total_amount,
-                "tax_category": "O",
+                "tax_category": "SS",
                 "tax_rate": ZERO_DECIMAL,
                 "note": item.note,
             }
@@ -470,7 +470,7 @@ async def income_item_suggestions(
                     quantity=item.quantity or Decimal("1"),
                     unit_price=item.unit_price or ZERO_DECIMAL,
                     total_amount=item.total_amount or ZERO_DECIMAL,
-                    tax_category="O",
+                    tax_category="SS",
                     tax_rate=ZERO_DECIMAL,
                     invoice_id=income.id,
                     invoice_number=income.invoice_number,

@@ -39,12 +39,23 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         )
 
         self.assertEqual(total, Decimal("1000"))
-        self.assertEqual(items[0]["tax_category"], "O")
+        self.assertEqual(items[0]["tax_category"], "SS")
         self.assertEqual(items[0]["tax_rate"], Decimal("0"))
 
     def test_efaktura_xml_uses_serbian_non_vat_profile(self):
-        enterprise = Enterprise(name="Seller", pib="123456789", address="Seller address")
-        client = Client(name="Buyer", pib="987654321", address="Buyer address")
+        enterprise = Enterprise(
+            name="Seller",
+            pib="123456789",
+            maticni_broj="12345678",
+            address="Seller address",
+            bank_account="190-0000000015781-14",
+        )
+        client = Client(
+            name="Buyer",
+            pib="987654321",
+            maticni_broj="87654321",
+            address="Buyer address",
+        )
         income = Income(
             issued_date=date(2026, 6, 26),
             invoice_number="0001-2026",
@@ -67,6 +78,10 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
 
         root = ET.fromstring(build_income_efaktura_xml(income, enterprise, client))
 
+        self.assertEqual(
+            SERBIAN_CIUS_CUSTOMIZATION_ID,
+            "urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.rs:srbdt:2022",
+        )
         self.assertEqual(root.findtext("cbc:CustomizationID", namespaces=NS), SERBIAN_CIUS_CUSTOMIZATION_ID)
         self.assertIsNone(root.find("cbc:ProfileID", namespaces=NS))
         self.assertEqual(root.findtext("cbc:InvoiceTypeCode", namespaces=NS), "380")
@@ -75,8 +90,18 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
             root.findtext("cac:Delivery/cbc:ActualDeliveryDate", namespaces=NS),
             "2026-06-26",
         )
-        self.assertIsNone(root.find(".//cbc:TaxExemptionReasonCode", namespaces=NS))
-        self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:ID", namespaces=NS), "O")
+        self.assertEqual(
+            root.findtext("cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:ID", namespaces=NS),
+            "SS",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode",
+                namespaces=NS,
+            ),
+            "PDV-RS-33",
+        )
+        self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:ID", namespaces=NS), "SS")
         self.assertEqual(root.findtext(".//cac:ClassifiedTaxCategory/cbc:Percent", namespaces=NS), "0.00")
         self.assertEqual(
             root.findtext("cac:AccountingSupplierParty/cac:Party/cbc:EndpointID", namespaces=NS),
@@ -95,6 +120,27 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
                 namespaces=NS,
             ),
             "RS987654321",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "12345678",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID",
+                namespaces=NS,
+            ),
+            "87654321",
+        )
+        self.assertEqual(
+            root.findtext(
+                "cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID",
+                namespaces=NS,
+            ),
+            "190000000001578114",
         )
 
     def test_efaktura_xml_does_not_duplicate_existing_pib_prefix(self):

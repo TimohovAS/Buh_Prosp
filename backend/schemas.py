@@ -460,7 +460,7 @@ class IncomeItemBase(BaseModel):
     unit: str = "kom"
     unit_price: Decimal = Decimal("0.00")
     total_amount: Optional[Decimal] = None
-    tax_category: str = "O"
+    tax_category: str = "SS"
     tax_rate: Decimal = Decimal("0.00")
     note: Optional[str] = None
 
@@ -493,7 +493,7 @@ class IncomeItemSuggestion(BaseModel):
     quantity: Decimal = Decimal("1")
     unit_price: Decimal = Decimal("0.00")
     total_amount: Decimal = Decimal("0.00")
-    tax_category: str = "O"
+    tax_category: str = "SS"
     tax_rate: Decimal = Decimal("0.00")
     invoice_id: Optional[int] = None
     invoice_number: Optional[str] = None
