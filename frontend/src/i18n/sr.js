@@ -940,6 +940,7 @@ const sr = {
   workDiariesLodgingTotal: 'Смештај (укупно)',
   workDiariesMaterialExpenseAmountHint: 'Празно — цео износ трошка',
   workDiariesMaterialExpensePick: 'Изаберите трошак пројекта',
+  workDiariesMaterialCost: 'Вредност материјала',
   workDiariesMaterialAddAllItems: 'Све ставке',
   workDiariesMaterialAddAllItemsHint: 'Додај све ставке рачуна као посебне редове',
   workDiariesMaterialNoExpenses: 'Пројекат нема одговарајућих трошкова',

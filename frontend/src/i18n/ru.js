@@ -943,6 +943,7 @@ const ru = {
   workDiariesLodgingTotal: 'Проживание (всего)',
   workDiariesMaterialExpenseAmountHint: 'Пусто — вся сумма расхода',
   workDiariesMaterialExpensePick: 'Выберите расход проекта',
+  workDiariesMaterialCost: 'Стоимость материалов',
   workDiariesMaterialAddAllItems: 'Все позиции',
   workDiariesMaterialAddAllItemsHint: 'Добавить все позиции чека отдельными строками',
   workDiariesMaterialNoExpenses: 'У проекта нет подходящих расходов',

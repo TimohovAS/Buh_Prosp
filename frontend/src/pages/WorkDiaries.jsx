@@ -154,6 +154,7 @@ export default function WorkDiaries() {
       workers: (entry) => entryWorkerName(entry),
       person_hours: (entry) => entry.person_hours,
       total_cost: (entry) => entry.total_cost_amount,
+      materials: (entry) => entry.material_amount,
       billable: (entry) => entry.billable_amount,
     }[sortCol]
     if (!accessor) return entries
@@ -337,6 +338,7 @@ export default function WorkDiaries() {
                     <th>{tr('workDiariesDescription')}</th>
                     {sortableTh('person_hours', tr('workDiariesPersonHours'), true)}
                     {sortableTh('total_cost', tr('workDiariesTotalCost'), true)}
+                    {sortableTh('materials', tr('workDiariesMaterialCost'), true)}
                     {sortableTh('billable', tr('workDiariesBillable'), true)}
                     <th className="no-print"></th>
                   </tr>
@@ -344,11 +346,11 @@ export default function WorkDiaries() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={8}>{tr('loading')}</td>
+                      <td colSpan={9}>{tr('loading')}</td>
                     </tr>
                   ) : sortedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>
+                      <td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>
                         {tr('workDiariesEmpty')}
                       </td>
                     </tr>
@@ -366,6 +368,7 @@ export default function WorkDiaries() {
                           </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>{money(entry.total_cost_amount)}</td>
+                        <td style={{ textAlign: 'right' }}>{money(entry.material_amount)}</td>
                         <td style={{ textAlign: 'right' }}>{money(entry.billable_amount)}</td>
                         <td className="no-print">
                           <div className="work-diaries-row-actions">
