@@ -410,7 +410,7 @@ export default function CashRegister() {
     const weeklyRate = toNumber(selectedWorker.weekly_rate)
     const monthlyRate = toNumber(selectedWorker.monthly_rate)
     const tripPricingMode = selectedWorker.trip_pricing_mode || 'allowances'
-    const tripWorkDayRate = toNumber(selectedWorker.trip_work_day_rate) || regularDayRate
+    const tripWorkDayRate = toNumber(selectedWorker.trip_work_day_rate)
     const perDiemRate =
       tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_per_diem_rate)
     const foodRate = tripPricingMode === 'fixed_plus_lodging' ? 0 : toNumber(selectedWorker.trip_food_rate)

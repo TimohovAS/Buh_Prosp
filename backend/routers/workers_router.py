@@ -128,8 +128,6 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
     trip_work_day_rate = _dec(
         data.trip_work_day_rate if data.trip_work_day_rate is not None else worker.trip_work_day_rate
     )
-    if trip_work_day_rate <= ZERO_DECIMAL:
-        trip_work_day_rate = regular_day_rate
     if trip_pricing_mode == "fixed_plus_lodging":
         trip_per_diem_rate = ZERO_DECIMAL
         trip_food_rate = ZERO_DECIMAL
