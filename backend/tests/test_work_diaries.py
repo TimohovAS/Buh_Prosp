@@ -400,6 +400,54 @@ async def test_work_diary_entry_can_be_edited(db_session, make_project):
 
 
 @pytest.mark.asyncio
+async def test_work_diary_billable_amount_can_be_overridden_and_reset(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-billable-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("200"))
+    db_session.add(worker)
+    await db_session.flush()
+
+    created = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Adjusted invoice work",
+            duration_hours=4,
+            billable_amount_override=Decimal("900"),
+            materials=[WorkDiaryMaterialCreate(description="Cable", quantity=1, unit="m", amount=50)],
+        ),
+        db_session,
+        user,
+    )
+
+    assert created.calculated_billable_amount == 850
+    assert created.billable_amount_override == 900
+    assert created.billable_amount == 900
+    summary = await get_summary(project.id, None, None, None, db_session, user)
+    assert summary.billable_amount == 900
+
+    zeroed = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(billable_amount_override=Decimal("0")),
+        db_session,
+        user,
+    )
+    assert zeroed.calculated_billable_amount == 850
+    assert zeroed.billable_amount_override == 0
+    assert zeroed.billable_amount == 0
+
+    reset = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(billable_amount_override=None),
+        db_session,
+        user,
+    )
+    assert reset.billable_amount_override is None
+    assert reset.billable_amount == reset.calculated_billable_amount == 850
+
+
+@pytest.mark.asyncio
 async def test_work_diary_patch_duration_overrides_stored_times(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-duration-admin")
@@ -442,6 +490,8 @@ def test_work_diary_payload_contract():
     assert "hours" not in fields
     assert "team_hourly_rate_snapshot" in fields
     assert "team_billing_hourly_rate_snapshot" not in fields
+    assert "billable_amount_override" in fields
+    assert "calculated_billable_amount" not in fields
     assert "hourly_rate_snapshot" not in fields
 
     with pytest.raises(ValidationError):

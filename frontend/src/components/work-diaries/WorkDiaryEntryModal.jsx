@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { api } from '../../api'
 import { tr } from '../../i18n'
 import DatePicker from '../DatePicker'
@@ -32,6 +32,7 @@ const emptyForm = {
   end_time: '15:00',
   duration_hours: '',
   team_hourly_rate_snapshot: '',
+  billable_amount_override: '',
   per_diem: false,
   per_diem_amount: '',
   lodging_amount: '',
@@ -68,6 +69,8 @@ function formFromEntry(entry, defaultProjectId) {
     duration_hours: hasTimeRange ? '' : String(entry.duration_hours ?? ''),
     team_hourly_rate_snapshot:
       entry.team_hourly_rate_snapshot == null ? '' : String(entry.team_hourly_rate_snapshot),
+    billable_amount_override:
+      entry.billable_amount_override == null ? '' : String(entry.billable_amount_override),
     per_diem: Boolean(entry.per_diem),
     per_diem_amount: entry.per_diem_amount ? String(entry.per_diem_amount) : '',
     lodging_amount: entry.lodging_amount ? String(entry.lodging_amount) : '',
@@ -239,6 +242,8 @@ export default function WorkDiaryEntryModal({
         end_time: form.end_time || null,
         duration_hours: form.duration_hours === '' ? null : num(form.duration_hours),
         team_hourly_rate_snapshot: manualRate === '' ? null : num(manualRate),
+        billable_amount_override:
+          form.billable_amount_override === '' ? null : num(form.billable_amount_override),
         per_diem_amount: num(form.per_diem_amount),
         lodging_amount: num(form.lodging_amount),
         food_amount: num(form.food_amount),
@@ -402,6 +407,37 @@ export default function WorkDiaryEntryModal({
             {teamBillingRate === 0 ? (
               <small className="work-diaries-rate-warning">{tr('workDiariesBillingRateZeroWarning')}</small>
             ) : null}
+          </div>
+          <div className="form-group work-diaries-wide work-diaries-billable-override">
+            <span className="form-label field-label-with-tooltip">
+              {tr('workDiariesBillableOverride')}
+              <FieldTooltip text={tr('workDiariesBillableOverrideTooltip')} />
+            </span>
+            <div className="work-diaries-billable-override-control">
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.billable_amount_override}
+                placeholder={String(Math.round(totals.calculatedBillable * 100) / 100)}
+                onChange={(event) => setFormField('billable_amount_override', event.target.value)}
+              />
+              {totals.billableAdjusted ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary work-diaries-billable-reset"
+                  onClick={() => setFormField('billable_amount_override', '')}
+                  title={tr('workDiariesBillableReset')}
+                  aria-label={tr('workDiariesBillableReset')}
+                >
+                  <RotateCcw size={16} />
+                </button>
+              ) : null}
+            </div>
+            <small className="work-diaries-rate-hint">
+              {tr('workDiariesBillableAuto')}: {money(totals.calculatedBillable)}
+            </small>
           </div>
           <label className="form-group work-diaries-wide">
             <span className="form-label">{tr('workDiariesDescription')}</span>
@@ -711,6 +747,7 @@ export default function WorkDiaryEntryModal({
               {tr('workDiariesBillable')}: <b>{money(totals.billable)}</b>
             </span>
           ) : null}
+          {totals.billableAdjusted ? <span>{tr('workDiariesBillableAdjusted')}</span> : null}
         </div>
 
         <div className="modal-actions">

@@ -2635,6 +2635,22 @@ th {
   display: block;
 }
 
+.work-diaries-billable-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.work-diaries-billable-cell strong,
+.work-diaries-billable-cell span {
+  display: block;
+}
+
+.work-diaries-billable-cell span {
+  margin-top: 0.15rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
 .work-diaries-hours-cell span {
   margin-top: 0.15rem;
   color: var(--color-text-muted);
@@ -2887,6 +2903,23 @@ th {
   display: block;
   color: var(--color-danger);
   margin-top: 0.25rem;
+}
+
+.work-diaries-billable-override-control {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) 42px;
+  gap: 0.5rem;
+  max-width: 410px;
+}
+
+.work-diaries-billable-reset {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .work-diaries-live-calc {

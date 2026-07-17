@@ -259,6 +259,7 @@ class WorkDiaryEntryBase(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    billable_amount_override: Optional[float] = Field(default=None, ge=0)
     # None => коэффициент из настроек предприятия
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
     per_diem: bool = False
@@ -289,6 +290,7 @@ class WorkDiaryEntryBase(BaseModel):
         for key in (
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "billable_amount_override",
             "overtime_multiplier",
             "start_time",
             "end_time",
@@ -314,6 +316,7 @@ class WorkDiaryEntryUpdate(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    billable_amount_override: Optional[float] = Field(default=None, ge=0)
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
     per_diem: Optional[bool] = None
     per_diem_amount: Optional[float] = Field(default=None, ge=0)
@@ -346,6 +349,7 @@ class WorkDiaryEntryUpdate(BaseModel):
             "project_id",
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "billable_amount_override",
             "overtime_multiplier",
             "start_time",
             "end_time",
@@ -374,6 +378,7 @@ class WorkDiaryEntryResponse(BaseModel):
     overtime_person_hours: float
     team_hourly_rate_snapshot: float
     team_billing_hourly_rate_snapshot: float
+    billable_amount_override: Optional[float] = None
     overtime_multiplier: float
     labor_amount: float
     payout_amount: float
@@ -382,6 +387,7 @@ class WorkDiaryEntryResponse(BaseModel):
     stock_material_amount: float
     linked_material_amount: float
     total_cost_amount: float
+    calculated_billable_amount: float
     billable_amount: float
     per_diem: bool
     per_diem_amount: float

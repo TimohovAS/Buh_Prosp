@@ -912,6 +912,12 @@ const ru = {
   workDiariesAutoRate: 'Авто-ставка бригады',
   workDiariesBillingRateZeroWarning: 'У выбранных работников не задана цена человеко-часа для фактуры.',
   workDiariesBillable: 'К фактурированию',
+  workDiariesBillableAdjusted: 'Сумма скорректирована вручную',
+  workDiariesBillableAuto: 'Автоматический расчет',
+  workDiariesBillableOverride: 'К фактурированию вручную, RSD',
+  workDiariesBillableOverrideTooltip:
+    'Итоговая сумма, которая будет использована при создании фактуры на основе этой записи. Оставьте поле пустым для автоматического расчета: часы × цена бригады для клиента + материалы.',
+  workDiariesBillableReset: 'Вернуть автоматический расчет',
   workDiariesCalcOvertime: 'в т.ч. сверхурочные',
   workDiariesCalcSummary: 'Расчет',
   workDiariesClearWorkers: 'Очистить выбор',

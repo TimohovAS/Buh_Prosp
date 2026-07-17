@@ -120,6 +120,8 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
   if (form.food_allowance) allowances += num(form.food_amount) * workerCount
   const materialsTotal = materials.reduce((sum, item) => sum + num(item.amount), 0)
   const personHours = duration * workerCount
+  const calculatedBillable = duration * teamBillingRate + materialsTotal
+  const billableAdjusted = form.billable_amount_override !== '' && form.billable_amount_override != null
   return {
     duration,
     personHours,
@@ -129,6 +131,8 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
     materials: materialsTotal,
     payout: labor + allowances,
     totalCost: labor + allowances + materialsTotal,
-    billable: duration * teamBillingRate + materialsTotal,
+    calculatedBillable,
+    billableAdjusted,
+    billable: billableAdjusted ? num(form.billable_amount_override) : calculatedBillable,
   }
 }

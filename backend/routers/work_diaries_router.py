@@ -250,7 +250,12 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
             stock_materials += _dec(material.amount)
     materials = stock_materials + linked_materials
     billing_rate = _dec(entry.team_billing_hourly_rate_snapshot)
-    billable = _dec(entry.duration_hours) * billing_rate + materials
+    calculated_billable = _dec(entry.duration_hours) * billing_rate + materials
+    billable = (
+        calculated_billable
+        if entry.billable_amount_override is None
+        else _dec(entry.billable_amount_override)
+    )
     return {
         "labor_amount": labor,
         "payout_amount": labor + allowances,
@@ -259,6 +264,7 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
         "stock_material_amount": stock_materials,
         "linked_material_amount": linked_materials,
         "total_cost_amount": labor + allowances + materials,
+        "calculated_billable_amount": calculated_billable,
         "billable_amount": billable,
     }
 
@@ -299,6 +305,9 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         overtime_person_hours=_float(_dec(entry.overtime_duration_hours) * worker_count),
         team_hourly_rate_snapshot=_float(entry.team_hourly_rate_snapshot),
         team_billing_hourly_rate_snapshot=_float(entry.team_billing_hourly_rate_snapshot),
+        billable_amount_override=(
+            _float(entry.billable_amount_override) if entry.billable_amount_override is not None else None
+        ),
         overtime_multiplier=_float(entry.overtime_multiplier),
         labor_amount=_float(amounts["labor_amount"]),
         payout_amount=_float(amounts["payout_amount"]),
@@ -307,6 +316,7 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         stock_material_amount=_float(amounts["stock_material_amount"]),
         linked_material_amount=_float(amounts["linked_material_amount"]),
         total_cost_amount=_float(amounts["total_cost_amount"]),
+        calculated_billable_amount=_float(amounts["calculated_billable_amount"]),
         billable_amount=_float(amounts["billable_amount"]),
         per_diem=bool(entry.per_diem),
         per_diem_amount=_float(entry.per_diem_amount),
@@ -400,6 +410,9 @@ async def create_entry(
         lodging_amount=_dec(data.lodging_amount),
         food_allowance=data.food_allowance,
         food_amount=_dec(data.food_amount),
+        billable_amount_override=(
+            _dec(data.billable_amount_override) if data.billable_amount_override is not None else None
+        ),
         weather=data.weather,
         temperature=data.temperature,
         note=data.note,
@@ -462,6 +475,12 @@ async def update_entry(
         entry.per_diem_amount = _dec(dump["per_diem_amount"])
     if "food_amount" in dump:
         entry.food_amount = _dec(dump["food_amount"])
+    if "billable_amount_override" in dump:
+        entry.billable_amount_override = (
+            _dec(dump["billable_amount_override"])
+            if dump["billable_amount_override"] is not None
+            else None
+        )
 
     # Явная длительность без явных времен означает ручной ввод: старые времена сбрасываются,
     # иначе они бы молча перекрыли переданное значение.

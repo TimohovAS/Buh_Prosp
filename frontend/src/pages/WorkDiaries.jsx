@@ -383,7 +383,14 @@ export default function WorkDiaries() {
                         </td>
                         <td style={{ textAlign: 'right' }}>{money(entry.total_cost_amount)}</td>
                         <td style={{ textAlign: 'right' }}>{money(entry.material_amount)}</td>
-                        <td style={{ textAlign: 'right' }}>{money(entry.billable_amount)}</td>
+                        <td className="work-diaries-billable-cell">
+                          <strong>{money(entry.billable_amount)}</strong>
+                          {entry.billable_amount_override != null ? (
+                            <span>
+                              {tr('workDiariesBillableAuto')}: {money(entry.calculated_billable_amount)}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="no-print">
                           <div className="work-diaries-row-actions">
                             <button

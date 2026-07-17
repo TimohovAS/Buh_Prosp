@@ -910,6 +910,12 @@ const sr = {
   workDiariesAutoRate: 'Ауто-сатница бригаде',
   workDiariesBillingRateZeroWarning: 'Изабраним радницима није задата цена човек-сата за фактуру.',
   workDiariesBillable: 'За фактурисање',
+  workDiariesBillableAdjusted: 'Износ је ручно коригован',
+  workDiariesBillableAuto: 'Аутоматски обрачун',
+  workDiariesBillableOverride: 'Ручни износ за фактурисање, RSD',
+  workDiariesBillableOverrideTooltip:
+    'Коначни износ који ће се користити при изради фактуре на основу овог записа. Оставите поље празно за аутоматски обрачун: сати × цена бригаде за клијента + материјал.',
+  workDiariesBillableReset: 'Врати аутоматски обрачун',
   workDiariesCalcOvertime: 'од тога прековремени',
   workDiariesCalcSummary: 'Обрачун',
   workDiariesClearWorkers: 'Очисти избор',
