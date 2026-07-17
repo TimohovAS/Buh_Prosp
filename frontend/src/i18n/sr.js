@@ -233,6 +233,8 @@ const sr = {
   dashboardApTitle: 'Обавезе — дугујемо',
   dashboardArTitle: 'Дебиторка — дугују нам',
   dashboardDueDate: 'Рок',
+  dashboardBankAvailable: 'Банка доступно',
+  dashboardBankStatement: 'Банка по изводима',
   dashboardMoneyNow: 'Расположива средства',
   date: 'Датум',
   dateOfPayment: 'датум уплате',

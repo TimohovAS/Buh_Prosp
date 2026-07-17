@@ -1284,6 +1284,9 @@ class DashboardStats(BaseModel):
     balance_month: Decimal  # month_income - month_expenses
     balance_year: Decimal  # year_income - year_expenses
     balance_all_time: Decimal
+    available_bank_balance: Decimal = Decimal("0")
+    pending_cash_withdrawal_total: Decimal = Decimal("0")
+    available_money_now: Decimal = Decimal("0")
     financial_result_all_time: Decimal
     cash_register_balance: Decimal  # текущий остаток наличных в кассе
     planned_expenses_until_month_end: Decimal  # планируемые расходы + обязательные платежи до конца месяца

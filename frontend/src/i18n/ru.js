@@ -233,6 +233,8 @@ const ru = {
   dashboardApTitle: 'Кредиторка — мы должны',
   dashboardArTitle: 'Дебиторка — нам должны',
   dashboardDueDate: 'Срок',
+  dashboardBankAvailable: 'Банк доступно',
+  dashboardBankStatement: 'Банк по выпискам',
   dashboardMoneyNow: 'Деньги сейчас',
   date: 'Дата',
   dateOfPayment: 'дата оплаты',

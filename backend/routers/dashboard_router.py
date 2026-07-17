@@ -255,6 +255,16 @@ async def get_dashboard(
         select(func.coalesce(func.sum(CashEntry.amount), 0)).where(CashEntry.direction == "out")
     )
     cash_register_balance = to_decimal(cash_in_result or ZERO_DECIMAL) - to_decimal(cash_out_result or ZERO_DECIMAL)
+    pending_cash_withdrawal_result = await db.scalar(
+        select(func.coalesce(func.sum(CashEntry.amount), 0)).where(
+            CashEntry.entry_type == "pending_withdrawal",
+            CashEntry.direction == "in",
+            CashEntry.bank_transaction_id.is_(None),
+        )
+    )
+    pending_cash_withdrawal_total = to_decimal(pending_cash_withdrawal_result or ZERO_DECIMAL)
+    available_bank_balance = balance_all_time - pending_cash_withdrawal_total
+    available_money_now = available_bank_balance + cash_register_balance
 
     unpaid_invoices_result = await db.execute(
         select(IncomingInvoice)
@@ -288,6 +298,9 @@ async def get_dashboard(
         balance_month=balance_month,
         balance_year=balance_year,
         balance_all_time=balance_all_time,
+        available_bank_balance=available_bank_balance,
+        pending_cash_withdrawal_total=pending_cash_withdrawal_total,
+        available_money_now=available_money_now,
         financial_result_all_time=financial_result_all_time,
         planned_expenses_until_month_end=planned_expenses_until_month_end,
         income_limit_status=IncomeLimitStatus(

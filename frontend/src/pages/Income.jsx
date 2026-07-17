@@ -291,9 +291,7 @@ export default function Income() {
     })
     setSubmitError('')
     setPageError('')
-    setEfakturaFieldsOpen(
-      EFAKTURA_REFERENCE_FIELDS.some(({ name }) => String(item[name] || '').trim())
-    )
+    setEfakturaFieldsOpen(EFAKTURA_REFERENCE_FIELDS.some(({ name }) => String(item[name] || '').trim()))
     setModal({ type: 'edit', id: item.id })
   }
 
@@ -332,8 +330,7 @@ export default function Income() {
         description: form.description || null,
         efaktura_contract_number: form.efaktura_contract_number?.trim() || null,
         efaktura_order_reference: form.efaktura_order_reference?.trim() || null,
-        efaktura_framework_agreement_number:
-          form.efaktura_framework_agreement_number?.trim() || null,
+        efaktura_framework_agreement_number: form.efaktura_framework_agreement_number?.trim() || null,
         efaktura_object_code: form.efaktura_object_code?.trim() || null,
         efaktura_buyer_reference: form.efaktura_buyer_reference?.trim() || null,
         efaktura_payment_reference: form.efaktura_payment_reference?.trim() || null,

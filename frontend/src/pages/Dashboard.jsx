@@ -42,6 +42,40 @@ function SummaryCard({ title, value, subtitle, tone = 'accent', valueColor, char
   )
 }
 
+function MoneyNowCard({ value, bankAvailable, bankStatement, cashBalance, pendingWithdrawals }) {
+  const hasPendingWithdrawals = Number(pendingWithdrawals || 0) > 0
+  return (
+    <div className="card dashboard-summary-card dashboard-summary-card--muted">
+      <div className="dashboard-summary-row">
+        <div className="dashboard-summary-main">
+          <div className="card-title">{tr('dashboardMoneyNow')}</div>
+          <div className="dashboard-summary-value" style={{ color: getMetricColor(value) }}>
+            {fmtCurrency(value)}
+          </div>
+          <div className="dashboard-money-breakdown">
+            <span>
+              {tr('dashboardBankAvailable')}: {fmtCurrency(bankAvailable)}
+            </span>
+            <span>
+              {tr('cash')}: {fmtCurrency(cashBalance)}
+            </span>
+            {hasPendingWithdrawals ? (
+              <span className="dashboard-money-pending">
+                {tr('cashPendingWithdrawalTotal')}: -{fmtCurrency(pendingWithdrawals)}
+              </span>
+            ) : null}
+            {hasPendingWithdrawals ? (
+              <span>
+                {tr('dashboardBankStatement')}: {fmtCurrency(bankStatement)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MiniIncomeExpenseDonut({ income, expenses }) {
   const data = [
     { name: tr('income'), value: Number(income ?? 0), color: 'var(--color-success)' },
@@ -208,7 +242,13 @@ export default function Dashboard() {
     })
     .slice(0, 7)
   const unpaidIncoming = data.unpaid_incoming_invoices || []
-  const moneyNow = Number(data.balance_all_time) + Number(data.cash_register_balance ?? 0)
+  const bankStatementBalance = Number(data.balance_all_time ?? 0)
+  const pendingCashWithdrawals = Number(data.pending_cash_withdrawal_total ?? 0)
+  const bankAvailableBalance = Number(
+    data.available_bank_balance ?? bankStatementBalance - pendingCashWithdrawals
+  )
+  const cashRegisterBalance = Number(data.cash_register_balance ?? 0)
+  const moneyNow = Number(data.available_money_now ?? bankAvailableBalance + cashRegisterBalance)
 
   return (
     <>
@@ -234,12 +274,12 @@ export default function Dashboard() {
             subtitle={`${tr('yearIncome')}: ${fmtCurrency(data.year_income)}${UI_SEPARATOR}${tr('yearExpenses')}: ${fmtCurrency(data.year_expenses)}`}
             chart={<MiniIncomeExpenseDonut income={data.year_income} expenses={data.year_expenses} />}
           />
-          <SummaryCard
-            title={tr('dashboardMoneyNow')}
+          <MoneyNowCard
             value={moneyNow}
-            valueColor={getMetricColor(moneyNow)}
-            tone="muted"
-            subtitle={`${tr('bank')}: ${fmtCurrency(data.balance_all_time)}${UI_SEPARATOR}${tr('cash')}: ${fmtCurrency(data.cash_register_balance ?? 0)}`}
+            bankAvailable={bankAvailableBalance}
+            bankStatement={bankStatementBalance}
+            cashBalance={cashRegisterBalance}
+            pendingWithdrawals={pendingCashWithdrawals}
           />
           <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>

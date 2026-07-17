@@ -927,6 +927,21 @@ textarea {
   line-height: 1.6;
 }
 
+.dashboard-money-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.dashboard-money-pending {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
 .dashboard-summary-links {
   display: flex;
   gap: 1rem;
