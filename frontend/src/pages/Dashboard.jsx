@@ -249,6 +249,8 @@ export default function Dashboard() {
   )
   const cashRegisterBalance = Number(data.cash_register_balance ?? 0)
   const moneyNow = Number(data.available_money_now ?? bankAvailableBalance + cashRegisterBalance)
+  const tripSettlementRemaining = Number(data.trip_settlement_remaining_total ?? 0)
+  const tripSettlementCount = Number(data.trip_settlement_open_count ?? 0)
 
   return (
     <>
@@ -282,9 +284,23 @@ export default function Dashboard() {
             pendingWithdrawals={pendingCashWithdrawals}
           />
           <div className="card dashboard-summary-card dashboard-summary-card--warning">
+            <div className="card-title">{tr('dashboardTripSettlements')}</div>
+            <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
+              {fmtCurrency(tripSettlementRemaining)}
+            </div>
+            <div className="dashboard-summary-note">
+              {tr('dashboardOpenTripSettlements', { count: tripSettlementCount })}
+            </div>
+            <div className="dashboard-summary-links">
+              <Link to="/cash" className="dashboard-link">
+                {tr('cash')} {UI_ARROW}
+              </Link>
+            </div>
+          </div>
+          <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>
             <div className="dashboard-summary-label">
-              {tr('plannedExpenses')} + {tr('payments')}
+              {tr('plannedExpenses')} + {tr('payments')} + {tr('tripSettlements')}
             </div>
             <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
               {fmtCurrency(data.planned_expenses_until_month_end)}

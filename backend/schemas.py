@@ -1290,6 +1290,9 @@ class DashboardStats(BaseModel):
     financial_result_all_time: Decimal
     cash_register_balance: Decimal  # текущий остаток наличных в кассе
     planned_expenses_until_month_end: Decimal  # планируемые расходы + обязательные платежи до конца месяца
+    trip_settlement_remaining_total: Decimal = Decimal("0")
+    trip_settlement_open_count: int = 0
+    trip_settlement_until_month_end: Decimal = Decimal("0")
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None

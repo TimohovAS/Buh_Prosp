@@ -37,6 +37,7 @@ from backend.schemas import (
     UpcomingPlannedItem,
 )
 from backend.services import get_income_limit_status, get_income_total
+from backend.worker_payout_service import get_open_trip_settlement_summary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 settings = get_settings()
@@ -191,6 +192,9 @@ async def get_dashboard(
     )
     planned_expenses_until_month_end += obligations_sum_until_month_end
 
+    trip_settlement_summary = await get_open_trip_settlement_summary(db, due_by=month_end)
+    planned_expenses_until_month_end += trip_settlement_summary.due_total
+
     approaching_days = 14
     upcoming_obligations = []
     for obligation in sorted(unpaid_obligations, key=lambda item: item.deadline):
@@ -303,6 +307,9 @@ async def get_dashboard(
         available_money_now=available_money_now,
         financial_result_all_time=financial_result_all_time,
         planned_expenses_until_month_end=planned_expenses_until_month_end,
+        trip_settlement_remaining_total=trip_settlement_summary.total,
+        trip_settlement_open_count=trip_settlement_summary.count,
+        trip_settlement_until_month_end=trip_settlement_summary.due_total,
         income_limit_status=IncomeLimitStatus(
             year_income=limit_status["year_income"],
             income_12m=limit_status["income_12m"],
