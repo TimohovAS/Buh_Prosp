@@ -31,6 +31,7 @@ from backend.planned_expenses_service import payment_dates_in_range, planned_exp
 from backend.schemas import (
     DashboardIncomingInvoiceItem,
     DashboardStats,
+    DashboardTripSettlementItem,
     IncomeLimitStatus,
     PendingLinkCountsResponse,
     UpcomingObligationItem,
@@ -194,6 +195,17 @@ async def get_dashboard(
 
     trip_settlement_summary = await get_open_trip_settlement_summary(db, due_by=month_end)
     planned_expenses_until_month_end += trip_settlement_summary.due_total
+    open_trip_settlements = [
+        DashboardTripSettlementItem(
+            payout_id=item.payout_id,
+            worker_name=item.worker_name,
+            remaining_amount=item.remaining_amount,
+            period_start=item.period_start.isoformat() if item.period_start else None,
+            period_end=item.period_end.isoformat(),
+            days_until=days_between(item.period_end, today, absolute=False),
+        )
+        for item in trip_settlement_summary.items
+    ]
 
     approaching_days = 14
     upcoming_obligations = []
@@ -310,6 +322,7 @@ async def get_dashboard(
         trip_settlement_remaining_total=trip_settlement_summary.total,
         trip_settlement_open_count=trip_settlement_summary.count,
         trip_settlement_until_month_end=trip_settlement_summary.due_total,
+        open_trip_settlements=open_trip_settlements,
         income_limit_status=IncomeLimitStatus(
             year_income=limit_status["year_income"],
             income_12m=limit_status["income_12m"],

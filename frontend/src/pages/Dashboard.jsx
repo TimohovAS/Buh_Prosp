@@ -250,7 +250,7 @@ export default function Dashboard() {
   const cashRegisterBalance = Number(data.cash_register_balance ?? 0)
   const moneyNow = Number(data.available_money_now ?? bankAvailableBalance + cashRegisterBalance)
   const tripSettlementRemaining = Number(data.trip_settlement_remaining_total ?? 0)
-  const tripSettlementCount = Number(data.trip_settlement_open_count ?? 0)
+  const openTripSettlements = data.open_trip_settlements || []
   const hasOpenTripSettlements = tripSettlementRemaining > 0
 
   return (
@@ -386,16 +386,21 @@ export default function Dashboard() {
             {hasOpenTripSettlements ? (
               <DashboardAlertCard
                 title={`${UI_WARNING} ${tr('dashboardTripSettlements')}`}
-                items={[{ count: tripSettlementCount, total: tripSettlementRemaining }]}
+                items={openTripSettlements}
                 isOverdue={false}
                 linkTo="/cash"
                 linkLabel={tr('cash')}
                 renderItem={(item) => (
-                  <div className="dashboard-alert-row" key="trip-settlements">
+                  <div className="dashboard-alert-row" key={item.payout_id}>
                     <span className="dashboard-alert-main">
-                      <strong>{tr('dashboardOpenTripSettlements', { count: item.count })}</strong>
+                      <strong>{item.worker_name}</strong> | {fmtCurrency(item.remaining_amount)}
+                      <span className="dashboard-alert-date">
+                        ({item.period_end.split('-').reverse().join('.')})
+                      </span>
                     </span>
-                    <span className="dashboard-alert-days">{fmtCurrency(item.total)}</span>
+                    <span className={`dashboard-alert-days${item.days_until < 0 ? ' danger' : ''}`}>
+                      {formatObligationDays(item.days_until, tr)}
+                    </span>
                   </div>
                 )}
               />

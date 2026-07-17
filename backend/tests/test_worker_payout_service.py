@@ -77,3 +77,7 @@ async def test_open_trip_settlements_exclude_closed_and_future_from_month_foreca
     assert summary.total == Decimal("35000")
     assert summary.due_total == Decimal("15000")
     assert summary.count == 2
+    assert [(item.worker_name, item.remaining_amount, item.period_end) for item in summary.items] == [
+        ("First worker", Decimal("15000"), date(2026, 7, 20)),
+        ("Second worker", Decimal("20000"), date(2026, 8, 5)),
+    ]

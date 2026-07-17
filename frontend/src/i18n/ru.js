@@ -236,7 +236,6 @@ const ru = {
   dashboardBankAvailable: 'Банк доступно',
   dashboardBankStatement: 'Банк по выпискам',
   dashboardMoneyNow: 'Деньги сейчас',
-  dashboardOpenTripSettlements: 'Незакрытых расчётов: {count}',
   dashboardTripSettlements: 'К выплате по командировкам',
   date: 'Дата',
   dateOfPayment: 'дата оплаты',

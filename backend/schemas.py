@@ -1276,6 +1276,15 @@ class DashboardIncomingInvoiceItem(BaseModel):
     remaining: Decimal
 
 
+class DashboardTripSettlementItem(BaseModel):
+    payout_id: int
+    worker_name: str
+    remaining_amount: Decimal
+    period_start: Optional[str] = None
+    period_end: str
+    days_until: int
+
+
 class DashboardStats(BaseModel):
     year_income: Decimal
     month_income: Decimal
@@ -1293,6 +1302,7 @@ class DashboardStats(BaseModel):
     trip_settlement_remaining_total: Decimal = Decimal("0")
     trip_settlement_open_count: int = 0
     trip_settlement_until_month_end: Decimal = Decimal("0")
+    open_trip_settlements: list[DashboardTripSettlementItem] = Field(default_factory=list)
     income_limit_status: IncomeLimitStatus
     unpaid_payments_count: int
     upcoming_payment_date: Optional[str] = None

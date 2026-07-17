@@ -236,7 +236,6 @@ const sr = {
   dashboardBankAvailable: 'Банка доступно',
   dashboardBankStatement: 'Банка по изводима',
   dashboardMoneyNow: 'Расположива средства',
-  dashboardOpenTripSettlements: 'Незатворених обрачуна: {count}',
   dashboardTripSettlements: 'За исплату по службеним путовањима',
   date: 'Датум',
   dateOfPayment: 'датум уплате',
