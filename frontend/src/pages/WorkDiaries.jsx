@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Building2, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -52,6 +53,8 @@ const TAB_LABEL_KEYS = {
 }
 
 export default function WorkDiaries() {
+  const location = useLocation()
+  const isActivePage = location.pathname === '/work-diaries'
   const [projects, setProjects] = useState([])
   const [workers, setWorkers] = useState([])
   const [entries, setEntries] = useState([])
@@ -95,21 +98,27 @@ export default function WorkDiaries() {
       .finally(() => setLoading(false))
   }, [queryParams])
 
-  useEffect(() => {
-    Promise.all([api.projects.list({ show_archived: false }), api.workers.list({ active: true })]).then(
+  const loadReferenceData = useCallback(() => {
+    return Promise.all([api.projects.list({ show_archived: false }), api.workers.list({ active: true })]).then(
       ([projectData, workerData]) => {
         setProjects(projectData)
         setWorkers(workerData)
       }
     )
-    api.enterprise.get().then((enterprise) => {
-      setOvertimeMultiplier(Number(enterprise?.work_diary_overtime_multiplier) || DEFAULT_OVERTIME_MULTIPLIER)
-    })
   }, [])
 
   useEffect(() => {
+    if (!isActivePage) return
+    loadReferenceData()
+    api.enterprise.get().then((enterprise) => {
+      setOvertimeMultiplier(Number(enterprise?.work_diary_overtime_multiplier) || DEFAULT_OVERTIME_MULTIPLIER)
+    })
+  }, [isActivePage, loadReferenceData])
+
+  useEffect(() => {
+    if (!isActivePage) return
     loadEntries()
-  }, [loadEntries])
+  }, [isActivePage, loadEntries])
 
   const loadMeta = useCallback(() => {
     if (!filters.project_id) {
@@ -131,8 +140,9 @@ export default function WorkDiaries() {
   }, [filters.project_id])
 
   useEffect(() => {
+    if (!isActivePage) return
     loadMeta()
-  }, [loadMeta])
+  }, [isActivePage, loadMeta])
 
   const setFilter = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
@@ -169,9 +179,13 @@ export default function WorkDiaries() {
     return sortAsc ? sorted : sorted.reverse()
   }, [entries, sortCol, sortAsc])
 
-  const openNewEntry = () => {
-    setEditingEntry(null)
-    setEntryModalOpen(true)
+  const openNewEntry = async () => {
+    try {
+      await loadReferenceData()
+    } finally {
+      setEditingEntry(null)
+      setEntryModalOpen(true)
+    }
   }
 
   const openEditEntry = (entry) => {
