@@ -251,6 +251,7 @@ export default function Dashboard() {
   const moneyNow = Number(data.available_money_now ?? bankAvailableBalance + cashRegisterBalance)
   const tripSettlementRemaining = Number(data.trip_settlement_remaining_total ?? 0)
   const tripSettlementCount = Number(data.trip_settlement_open_count ?? 0)
+  const hasOpenTripSettlements = tripSettlementRemaining > 0
 
   return (
     <>
@@ -283,20 +284,6 @@ export default function Dashboard() {
             cashBalance={cashRegisterBalance}
             pendingWithdrawals={pendingCashWithdrawals}
           />
-          <div className="card dashboard-summary-card dashboard-summary-card--warning">
-            <div className="card-title">{tr('dashboardTripSettlements')}</div>
-            <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
-              {fmtCurrency(tripSettlementRemaining)}
-            </div>
-            <div className="dashboard-summary-note">
-              {tr('dashboardOpenTripSettlements', { count: tripSettlementCount })}
-            </div>
-            <div className="dashboard-summary-links">
-              <Link to="/cash" className="dashboard-link">
-                {tr('cash')} {UI_ARROW}
-              </Link>
-            </div>
-          </div>
           <div className="card dashboard-summary-card dashboard-summary-card--warning">
             <div className="card-title">{tr('plannedUntilMonthEnd')}</div>
             <div className="dashboard-summary-label">
@@ -335,7 +322,7 @@ export default function Dashboard() {
           />
         </div>
 
-        {(hasUpcomingPlannedExpenses || hasUpcomingUnpaidObligations) && (
+        {(hasUpcomingPlannedExpenses || hasUpcomingUnpaidObligations || hasOpenTripSettlements) && (
           <div className="dashboard-alert-grid">
             {hasUpcomingPlannedExpenses ? (
               <DashboardAlertCard
@@ -391,6 +378,24 @@ export default function Dashboard() {
                       {item.status === 'overdue' ? `${tr('obligationsOverdue')} ` : ''}
                       {formatObligationDays(item.days_until, tr)}
                     </span>
+                  </div>
+                )}
+              />
+            ) : null}
+
+            {hasOpenTripSettlements ? (
+              <DashboardAlertCard
+                title={`${UI_WARNING} ${tr('dashboardTripSettlements')}`}
+                items={[{ count: tripSettlementCount, total: tripSettlementRemaining }]}
+                isOverdue={false}
+                linkTo="/cash"
+                linkLabel={tr('cash')}
+                renderItem={(item) => (
+                  <div className="dashboard-alert-row" key="trip-settlements">
+                    <span className="dashboard-alert-main">
+                      <strong>{tr('dashboardOpenTripSettlements', { count: item.count })}</strong>
+                    </span>
+                    <span className="dashboard-alert-days">{fmtCurrency(item.total)}</span>
                   </div>
                 )}
               />
