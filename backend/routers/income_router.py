@@ -189,6 +189,25 @@ def _replace_income_items(income: Income, items: list[IncomeItemCreate] | None) 
     return total if normalized else None
 
 
+def _income_items_match(income: Income, items: list[IncomeItemCreate]) -> bool:
+    normalized, _ = _normalize_income_items(items)
+    existing = [
+        {
+            "line_no": index,
+            "name": (item.name or "").strip(),
+            "quantity": to_decimal(item.quantity or ZERO_DECIMAL),
+            "unit": (item.unit or "kom").strip() or "kom",
+            "unit_price": to_decimal(item.unit_price or ZERO_DECIMAL),
+            "total_amount": to_decimal(item.total_amount or ZERO_DECIMAL),
+            "tax_category": item.tax_category or "SS",
+            "tax_rate": to_decimal(item.tax_rate or ZERO_DECIMAL),
+            "note": item.note,
+        }
+        for index, item in enumerate(income.items, start=1)
+    ]
+    return normalized == existing
+
+
 def _income_response(income: Income) -> IncomeResponse:
     data = IncomeResponse.model_validate(income).model_dump()
     if income.client:
@@ -616,7 +635,11 @@ async def update_income(
     current_user: User = Depends(require_edit_access),
 ):
     """Обновить запись дохода."""
-    r = await db.execute(select(Income).options(selectinload(Income.items)).where(Income.id == income_id))
+    r = await db.execute(
+        select(Income)
+        .options(selectinload(Income.items), selectinload(Income.work_diary_allocations))
+        .where(Income.id == income_id)
+    )
     income = r.scalar_one_or_none()
     if not income:
         raise HTTPException(404, "Запись не найдена")
@@ -624,6 +647,30 @@ async def update_income(
         raise HTTPException(400, "Cancelled income cannot be updated")
     requested_items = data.items if "items" in data.model_fields_set else None
     dump = data.model_dump(exclude_unset=True, exclude={"items"})
+    if income.work_diary_allocations:
+        if requested_items is not None:
+            if not _income_items_match(income, requested_items):
+                raise HTTPException(
+                    409,
+                    "Invoice lines created from work diaries cannot be changed. Cancel the invoice and create a new one.",
+                )
+            requested_items = None
+        protected_values = {
+            "amount_rsd": to_decimal(income.amount_rsd or ZERO_DECIMAL),
+            "project_id": income.project_id,
+            "client_id": income.client_id,
+        }
+        for field, current_value in protected_values.items():
+            if field not in dump:
+                continue
+            requested_value = dump[field]
+            if field == "amount_rsd":
+                requested_value = to_decimal(requested_value or ZERO_DECIMAL)
+            if requested_value != current_value:
+                raise HTTPException(
+                    409,
+                    "Invoice amount, project and client are fixed by linked work diary entries.",
+                )
     payment_fields_requested = "paid_date" in dump or "is_paid" in dump
     requested_paid_date = dump.pop("paid_date", income.paid_date) if "paid_date" in dump else income.paid_date
     requested_is_paid = dump.pop("is_paid", None) if "is_paid" in dump else None

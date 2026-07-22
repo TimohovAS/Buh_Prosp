@@ -5,9 +5,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from backend.models import Enterprise, ExpenseItem, PurchaseReceipt, PurchaseReceiptItem, User, Worker
+from backend.models import Client, Enterprise, ExpenseItem, PurchaseReceipt, PurchaseReceiptItem, User, Worker
+from backend.routers.income_router import delete_income, update_income
 from backend.routers.work_diaries_router import (
+    create_invoice_from_entries,
     create_entry,
+    delete_entry,
     get_project_costs,
     get_summary,
     list_entries,
@@ -17,7 +20,11 @@ from backend.routers.work_diaries_router import (
 from backend.schemas import (
     WorkDiaryEntryCreate,
     WorkDiaryEntryUpdate,
+    WorkDiaryInvoiceCreate,
+    WorkDiaryInvoiceLineCreate,
     WorkDiaryMaterialCreate,
+    IncomeItemCreate,
+    IncomeUpdate,
 )
 
 
@@ -445,6 +452,161 @@ async def test_work_diary_billable_amount_can_be_overridden_and_reset(db_session
     )
     assert reset.billable_amount_override is None
     assert reset.billable_amount == reset.calculated_billable_amount == 850
+
+
+@pytest.mark.asyncio
+async def test_work_diary_entries_support_partial_invoicing_and_release_on_cancel(db_session, make_project):
+    client = Client(name="Invoice client")
+    db_session.add(client)
+    await db_session.flush()
+    project = await make_project(db_session)
+    project.client_id = client.id
+    user = _make_user(db_session, "diary-invoice-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("250"))
+    db_session.add(worker)
+    await db_session.flush()
+
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Invoice work",
+            duration_hours=4,
+        ),
+        db_session,
+        user,
+    )
+
+    first_invoice = await create_invoice_from_entries(
+        WorkDiaryInvoiceCreate(
+            issued_date=date(2026, 7, 17),
+            lines=[WorkDiaryInvoiceLineCreate(entry_id=entry.id, name="First part", amount=Decimal("600"))],
+        ),
+        db_session,
+        user,
+    )
+
+    partially_invoiced = (await list_entries(project.id, None, None, None, db_session, user))[0]
+    assert first_invoice.amount_rsd == 600
+    assert partially_invoiced.billing_status == "partially_invoiced"
+    assert partially_invoiced.invoiced_amount == 600
+    assert partially_invoiced.remaining_billable_amount == 400
+    assert partially_invoiced.invoice_links[0].invoice_number == first_invoice.invoice_number
+
+    updated_invoice = await update_income(
+        first_invoice.income_id,
+        IncomeUpdate(
+            due_date=date(2026, 7, 31),
+            client_id=client.id,
+            project_id=project.id,
+            amount_rsd=Decimal("600"),
+            items=[
+                IncomeItemCreate(
+                    name="First part",
+                    quantity=Decimal("1"),
+                    unit="usl",
+                    unit_price=Decimal("600"),
+                    total_amount=Decimal("600"),
+                    note=f"Work diary entry #{entry.id}, 10.07.2026",
+                )
+            ],
+        ),
+        db_session,
+        user,
+    )
+    assert updated_invoice.due_date == date(2026, 7, 31)
+
+    with pytest.raises(HTTPException) as invoice_line_error:
+        await update_income(
+            first_invoice.income_id,
+            IncomeUpdate(
+                items=[
+                    IncomeItemCreate(
+                        name="Changed line",
+                        quantity=Decimal("1"),
+                        unit="usl",
+                        unit_price=Decimal("600"),
+                        total_amount=Decimal("600"),
+                    )
+                ]
+            ),
+            db_session,
+            user,
+        )
+    assert invoice_line_error.value.status_code == 409
+
+    with pytest.raises(HTTPException) as update_error:
+        await update_entry(
+            entry.id,
+            WorkDiaryEntryUpdate(description="Changed after invoice"),
+            db_session,
+            user,
+        )
+    assert update_error.value.status_code == 409
+
+    with pytest.raises(HTTPException) as delete_error:
+        await delete_entry(entry.id, db_session, user)
+    assert delete_error.value.status_code == 409
+
+    second_invoice = await create_invoice_from_entries(
+        WorkDiaryInvoiceCreate(
+            issued_date=date(2026, 7, 17),
+            lines=[WorkDiaryInvoiceLineCreate(entry_id=entry.id, name="Final part", amount=Decimal("400"))],
+        ),
+        db_session,
+        user,
+    )
+    fully_invoiced = (await list_entries(project.id, None, None, None, db_session, user))[0]
+    summary = await get_summary(project.id, None, None, None, db_session, user)
+    assert fully_invoiced.billing_status == "invoiced"
+    assert fully_invoiced.invoiced_amount == 1000
+    assert fully_invoiced.remaining_billable_amount == 0
+    assert summary.billable_amount == 1000
+    assert summary.invoiced_amount == 1000
+    assert summary.remaining_billable_amount == 0
+
+    await delete_income(second_invoice.income_id, db_session, user)
+    after_second_cancel = (await list_entries(project.id, None, None, None, db_session, user))[0]
+    assert after_second_cancel.billing_status == "partially_invoiced"
+    assert after_second_cancel.remaining_billable_amount == 400
+
+    await delete_income(first_invoice.income_id, db_session, user)
+    after_all_cancelled = (await list_entries(project.id, None, None, None, db_session, user))[0]
+    assert after_all_cancelled.billing_status == "not_invoiced"
+    assert after_all_cancelled.invoiced_amount == 0
+    assert after_all_cancelled.remaining_billable_amount == 1000
+
+
+@pytest.mark.asyncio
+async def test_work_diary_invoice_requires_project_client(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-invoice-client-admin")
+    worker = Worker(name="Ana", billing_hourly_rate=Decimal("100"))
+    db_session.add(worker)
+    await db_session.flush()
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="No client",
+            duration_hours=1,
+        ),
+        db_session,
+        user,
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await create_invoice_from_entries(
+            WorkDiaryInvoiceCreate(
+                issued_date=date(2026, 7, 17),
+                lines=[WorkDiaryInvoiceLineCreate(entry_id=entry.id, name="Work", amount=Decimal("100"))],
+            ),
+            db_session,
+            user,
+        )
+    assert error.value.status_code == 400
 
 
 @pytest.mark.asyncio

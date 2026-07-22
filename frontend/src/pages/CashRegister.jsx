@@ -1257,26 +1257,6 @@ export default function CashRegister() {
             </div>
 
             <div className="card cash-register-list-card">
-              <SelectionSummary
-                count={selectedEntries.length}
-                items={[
-                  {
-                    label: tr('selectedIn'),
-                    value: `+${fmtAmount(selectedTotals.in)} RSD`,
-                    tone: 'positive',
-                  },
-                  {
-                    label: tr('selectedOut'),
-                    value: `-${fmtAmount(selectedTotals.out)} RSD`,
-                    tone: 'negative',
-                  },
-                  {
-                    label: tr('selectedNet'),
-                    value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`,
-                    tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
-                  },
-                ]}
-              />
               <div className="table-wrap cash-register-table-wrap">
                 <table className="cash-list-table">
                   <thead>
@@ -1423,6 +1403,28 @@ export default function CashRegister() {
           </>
         )}
       </div>
+
+      <SelectionSummary
+        count={selectedEntries.length}
+        items={[
+          {
+            label: tr('selectedIn'),
+            value: `+${fmtAmount(selectedTotals.in)} RSD`,
+            tone: 'positive',
+          },
+          {
+            label: tr('selectedOut'),
+            value: `-${fmtAmount(selectedTotals.out)} RSD`,
+            tone: 'negative',
+          },
+          {
+            label: tr('selectedNet'),
+            value: `${selectedTotals.net >= 0 ? '+' : '-'}${fmtAmount(Math.abs(selectedTotals.net))} RSD`,
+            tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
+          },
+        ]}
+        onClear={() => setSelectedIds([])}
+      />
 
       <Modal
         isOpen={!!detailModal}

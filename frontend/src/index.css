@@ -1160,20 +1160,29 @@ tr.row-reversal {
 }
 
 .selection-summary {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  margin-bottom: 0.75rem;
-  border: 1px solid rgba(59, 130, 246, 0.22);
+  gap: 0.65rem 1.25rem;
+  width: calc(100% - 20px);
+  margin-inline: 10px;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.08);
-  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+  color: var(--color-text-muted);
 }
 
 .selection-summary-count {
-  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.selection-summary-count strong {
+  color: var(--color-text);
 }
 
 .selection-summary-item {
@@ -1193,6 +1202,15 @@ tr.row-reversal {
 
 .selection-summary-item-negative strong {
   color: var(--color-danger);
+}
+
+.selection-summary-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .record-cell-ellipsis {
@@ -2664,6 +2682,161 @@ th {
   white-space: nowrap;
 }
 
+.work-diaries-select-cell {
+  width: 42px;
+  min-width: 42px;
+  text-align: center;
+}
+
+.work-diaries-select-cell input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.work-diaries-invoice-links {
+  min-width: 130px;
+}
+
+.work-diaries-invoice-link {
+  display: block;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  padding: 0.1rem 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.work-diaries-invoice-link:hover {
+  text-decoration: underline;
+}
+
+.work-diaries-invoice-links small,
+.work-diaries-cancelled-invoice {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.work-diaries-invoice-form {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 1rem;
+  height: 100%;
+}
+
+.modal.work-diaries-invoice-modal {
+  height: min(860px, calc(100vh - 2rem));
+  max-height: 94vh;
+}
+
+.work-diaries-invoice-modal-body {
+  overflow: hidden;
+}
+
+.work-diaries-invoice-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+}
+
+.work-diaries-invoice-context strong {
+  color: var(--color-text);
+}
+
+.work-diaries-invoice-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.work-diaries-invoice-grid .form-group,
+.work-diaries-invoice-form > .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.work-diaries-invoice-description {
+  grid-column: span 3;
+}
+
+.work-diaries-invoice-lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.work-diaries-invoice-lines-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.work-diaries-invoice-lines table {
+  width: 100%;
+  min-width: 700px;
+}
+
+.work-diaries-invoice-lines th:first-child,
+.work-diaries-invoice-lines td:first-child,
+.work-diaries-invoice-lines th:nth-child(3),
+.work-diaries-invoice-lines td:nth-child(3),
+.work-diaries-invoice-lines th:nth-child(4),
+.work-diaries-invoice-lines td:nth-child(4) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.work-diaries-invoice-line-cell {
+  width: 100%;
+  min-width: 420px;
+}
+
+.work-diaries-invoice-line-input {
+  field-sizing: content;
+  min-height: 2.45rem;
+  overflow: hidden;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.work-diaries-invoice-amount,
+.work-diaries-invoice-total {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-diaries-invoice-amount-input {
+  width: 112px;
+  min-width: 112px;
+  text-align: right;
+}
+
+.work-diaries-invoice-amount-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.work-diaries-invoice-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-top: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .work-diaries-wide {
   grid-column: 1 / -1;
 }
@@ -4028,6 +4201,10 @@ tr:hover td {
     height: 100dvh;
   }
 
+  .selection-summary {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+
   .page-header {
     flex-direction: column;
     align-items: flex-start;
@@ -4090,6 +4267,19 @@ tr:hover td {
   .page-header-actions > * {
     flex: 1 1 calc(50% - 0.25rem);
     min-width: 0;
+  }
+
+  .work-diaries-invoice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .work-diaries-invoice-description {
+    grid-column: auto;
+  }
+
+  .selection-summary-actions {
+    margin-left: 0;
+    width: 100%;
   }
 
   .record-detail-grid,

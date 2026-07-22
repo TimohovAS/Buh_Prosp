@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -75,6 +75,7 @@ const unitOptionsForLine = (unit) => {
 
 export default function Income() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/income'
   const [items, setItems] = useState([])
   const [clients, setClients] = useState([])
@@ -562,6 +563,18 @@ export default function Income() {
 
   const unassignedProject = findUnassignedProject(projects)
   const unassignedProjectId = unassignedProject ? String(unassignedProject.id) : ''
+
+  useEffect(() => {
+    const incomeId = location.state?.openIncomeId
+    if (!isActivePage || !incomeId) return
+    api.income
+      .get(incomeId)
+      .then((item) => openEdit(item))
+      .catch((error) => setPageError(error.message || tr('loadError')))
+    navigate('/income', { replace: true, state: null })
+    // openEdit intentionally uses the latest reference data already loaded by this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActivePage, location.state?.openIncomeId, navigate])
   const selectedClientId = form.client_id ? String(form.client_id) : ''
   const incomeProjectFilter = useCallback(
     (project) => {
@@ -832,16 +845,6 @@ export default function Income() {
             <button className="btn btn-secondary" onClick={exportPdf}>
               {tr('exportKpo')} PDF
             </button>
-            <button
-              className="btn btn-secondary"
-              disabled={selectedIds.length === 0}
-              onClick={() => {
-                setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
-                setModalAssign(true)
-              }}
-            >
-              {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
-            </button>
             <button className="btn btn-primary" onClick={openAdd}>
               {tr('add')}
             </button>
@@ -856,10 +859,6 @@ export default function Income() {
           </div>
         )}
         <div className="card">
-          <SelectionSummary
-            count={selectedItems.length}
-            items={[{ label: tr('selectedAmount'), value: `${formatMoney(selectedTotal)} RSD` }]}
-          />
           <div className="table-wrap">
             <table className="income-list-table">
               <thead>
@@ -989,6 +988,24 @@ export default function Income() {
           </div>
         </div>
       </div>
+
+      <SelectionSummary
+        count={selectedItems.length}
+        items={[{ label: tr('selectedAmount'), value: `${formatMoney(selectedTotal)} RSD` }]}
+        actions={
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary"
+            onClick={() => {
+              setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
+              setModalAssign(true)
+            }}
+          >
+            {tr('assignProject')}
+          </button>
+        }
+        onClear={() => setSelectedIds([])}
+      />
 
       <EntityDetailModal
         isOpen={!!detailModal}

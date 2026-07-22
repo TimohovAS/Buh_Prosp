@@ -483,6 +483,12 @@ class WorkDiaryEntry(Base):
         cascade="all, delete-orphan",
         order_by="WorkDiaryMaterial.line_no",
     )
+    invoice_allocations = relationship(
+        "WorkDiaryInvoiceAllocation",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        order_by="WorkDiaryInvoiceAllocation.id",
+    )
 
 
 class WorkDiaryEntryWorker(Base):
@@ -701,6 +707,11 @@ class Income(Base):
         cascade="all, delete-orphan",
         order_by="IncomeItem.line_no.asc()",
     )
+    work_diary_allocations = relationship(
+        "WorkDiaryInvoiceAllocation",
+        back_populates="income",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def contract_number(self) -> Optional[str]:
@@ -724,6 +735,41 @@ class IncomeItem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     income = relationship("Income", back_populates="items", foreign_keys=[income_id])
+    work_diary_allocations = relationship(
+        "WorkDiaryInvoiceAllocation",
+        back_populates="income_item",
+    )
+
+
+class WorkDiaryInvoiceAllocation(Base):
+    """Amount from a work diary entry included in an outgoing invoice."""
+
+    __tablename__ = "work_diary_invoice_allocations"
+    __table_args__ = (
+        UniqueConstraint(
+            "work_diary_entry_id",
+            "income_id",
+            name="uq_work_diary_invoice_allocation_entry_income",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_diary_entry_id = Column(
+        Integer,
+        ForeignKey("work_diary_entries.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    income_id = Column(Integer, ForeignKey("income.id", ondelete="CASCADE"), nullable=False, index=True)
+    income_item_id = Column(Integer, ForeignKey("income_items.id", ondelete="SET NULL"), nullable=True, index=True)
+    amount = Column(Numeric(14, 2), nullable=False)
+    source_amount_snapshot = Column(Numeric(14, 2), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    entry = relationship("WorkDiaryEntry", back_populates="invoice_allocations")
+    income = relationship("Income", back_populates="work_diary_allocations")
+    income_item = relationship("IncomeItem", back_populates="work_diary_allocations")
 
 
 class Contract(Base):

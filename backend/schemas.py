@@ -362,6 +362,13 @@ class WorkDiaryEntryUpdate(BaseModel):
         return result
 
 
+class WorkDiaryInvoiceLinkResponse(BaseModel):
+    income_id: int
+    invoice_number: str
+    invoice_status: str
+    amount: float
+
+
 class WorkDiaryEntryResponse(BaseModel):
     id: int
     date: DateType
@@ -389,6 +396,10 @@ class WorkDiaryEntryResponse(BaseModel):
     total_cost_amount: float
     calculated_billable_amount: float
     billable_amount: float
+    invoiced_amount: float
+    remaining_billable_amount: float
+    billing_status: Literal["not_invoiced", "partially_invoiced", "invoiced"]
+    invoice_links: list[WorkDiaryInvoiceLinkResponse] = Field(default_factory=list)
     per_diem: bool
     per_diem_amount: float
     lodging_amount: float
@@ -417,6 +428,62 @@ class WorkDiarySummaryResponse(BaseModel):
     linked_material_amount: float
     total_cost_amount: float
     billable_amount: float
+    invoiced_amount: float
+    remaining_billable_amount: float
+
+
+class WorkDiaryInvoiceLineCreate(BaseModel):
+    entry_id: int
+    name: str
+    amount: Decimal = Field(gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value):
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("Invoice line name is required")
+        return normalized
+
+
+class WorkDiaryInvoiceCreate(BaseModel):
+    issued_date: DateType
+    due_date: Optional[DateType] = None
+    invoice_number: Optional[str] = None
+    contract_id: Optional[int] = None
+    contract_payment_type: Optional[Literal["advance", "intermediate", "closing"]] = None
+    description: Optional[str] = None
+    note: Optional[str] = None
+    lines: list[WorkDiaryInvoiceLineCreate] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("due_date", "invoice_number", "contract_id", "contract_payment_type", "description", "note"):
+            if result.get(key) == "":
+                result[key] = None
+        return result
+
+    @model_validator(mode="after")
+    def validate_unique_entries(self):
+        entry_ids = [line.entry_id for line in self.lines]
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ValueError("Each work diary entry can appear only once in an invoice")
+        if self.due_date is not None and self.due_date < self.issued_date:
+            raise ValueError("Due date cannot be before invoice date")
+        if self.contract_id is None:
+            self.contract_payment_type = None
+        return self
+
+
+class WorkDiaryInvoiceCreateResponse(BaseModel):
+    income_id: int
+    invoice_number: str
+    amount_rsd: Decimal
+    entries_count: int
 
 
 class WorkDiaryExpenseItemOption(BaseModel):

@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,14 +19,18 @@ from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
 from backend.expense_service import CASH_TRANSFER_SOURCE, visible_expense_condition
 from backend.models import (
+    Contract,
     Enterprise,
     Expense,
     ExpenseItem,
+    Income,
+    IncomeItem,
     Project,
     PurchaseReceipt,
     PurchaseReceiptItem,
     User,
     WorkDiaryEntry,
+    WorkDiaryInvoiceAllocation,
     WorkDiaryMaterial,
     WorkDiaryProjectMeta,
     Worker,
@@ -37,6 +42,9 @@ from backend.schemas import (
     WorkDiaryEntryUpdate,
     WorkDiaryExpenseItemOption,
     WorkDiaryExpenseOptionResponse,
+    WorkDiaryInvoiceCreate,
+    WorkDiaryInvoiceCreateResponse,
+    WorkDiaryInvoiceLinkResponse,
     WorkDiaryMaterialCreate,
     WorkDiaryMaterialResponse,
     WorkDiaryProjectCostsResponse,
@@ -44,6 +52,8 @@ from backend.schemas import (
     WorkDiaryProjectMetaResponse,
     WorkDiarySummaryResponse,
 )
+from backend.income_service import has_invoice_duplicate, invoice_year_from_number, to_number_year_format
+from backend.services import allocate_next_invoice_number
 
 router = APIRouter(prefix="/work-diaries", tags=["work-diaries"])
 
@@ -51,6 +61,7 @@ REGULAR_DAY_HOURS = Decimal("8")
 # Закон о раде РС, чл. 108: надбавка за сверхурочные — минимум +26%
 DEFAULT_OVERTIME_MULTIPLIER = Decimal("1.26")
 EXPENSE_OPTIONS_LIMIT = 300
+INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
 
 
 def _dec(value) -> Decimal:
@@ -149,7 +160,9 @@ async def _get_entry(db: AsyncSession, entry_id: int) -> WorkDiaryEntry:
             selectinload(WorkDiaryEntry.project),
             selectinload(WorkDiaryEntry.workers),
             selectinload(WorkDiaryEntry.materials).selectinload(WorkDiaryMaterial.expense),
+            selectinload(WorkDiaryEntry.invoice_allocations).selectinload(WorkDiaryInvoiceAllocation.income),
         )
+        .execution_options(populate_existing=True)
         .where(WorkDiaryEntry.id == entry_id)
     )
     entry = result.scalar_one_or_none()
@@ -269,6 +282,50 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
     }
 
 
+def _active_invoice_allocations(entry: WorkDiaryEntry) -> list[WorkDiaryInvoiceAllocation]:
+    return [
+        allocation
+        for allocation in entry.invoice_allocations
+        if allocation.income is not None and allocation.income.status != "cancelled"
+    ]
+
+
+def _entry_billing(entry: WorkDiaryEntry, billable_amount: Decimal) -> dict:
+    active_allocations = _active_invoice_allocations(entry)
+    invoiced_amount = sum((_dec(allocation.amount) for allocation in active_allocations), Decimal("0"))
+    remaining_amount = max(billable_amount - invoiced_amount, Decimal("0"))
+    if invoiced_amount <= 0:
+        billing_status = "not_invoiced"
+    elif remaining_amount > 0:
+        billing_status = "partially_invoiced"
+    else:
+        billing_status = "invoiced"
+    links = [
+        WorkDiaryInvoiceLinkResponse(
+            income_id=allocation.income_id,
+            invoice_number=allocation.income.invoice_number,
+            invoice_status=allocation.income.status,
+            amount=_float(allocation.amount),
+        )
+        for allocation in entry.invoice_allocations
+        if allocation.income is not None
+    ]
+    return {
+        "invoiced_amount": invoiced_amount,
+        "remaining_billable_amount": remaining_amount,
+        "billing_status": billing_status,
+        "invoice_links": links,
+    }
+
+
+def _ensure_entry_not_invoiced(entry: WorkDiaryEntry) -> None:
+    if _active_invoice_allocations(entry):
+        raise HTTPException(
+            409,
+            "Work diary entry is linked to an active invoice. Cancel the invoice before changing the entry.",
+        )
+
+
 def _serialize_material(material: WorkDiaryMaterial) -> WorkDiaryMaterialResponse:
     expense = material.expense
     return WorkDiaryMaterialResponse(
@@ -287,6 +344,7 @@ def _serialize_material(material: WorkDiaryMaterial) -> WorkDiaryMaterialRespons
 
 def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
     amounts = _entry_amounts(entry)
+    billing = _entry_billing(entry, amounts["billable_amount"])
     workers = _entry_workers(entry)
     worker_count = len(workers)
     return WorkDiaryEntryResponse(
@@ -318,6 +376,10 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         total_cost_amount=_float(amounts["total_cost_amount"]),
         calculated_billable_amount=_float(amounts["calculated_billable_amount"]),
         billable_amount=_float(amounts["billable_amount"]),
+        invoiced_amount=_float(billing["invoiced_amount"]),
+        remaining_billable_amount=_float(billing["remaining_billable_amount"]),
+        billing_status=billing["billing_status"],
+        invoice_links=billing["invoice_links"],
         per_diem=bool(entry.per_diem),
         per_diem_amount=_float(entry.per_diem_amount),
         lodging_amount=_float(entry.lodging_amount),
@@ -363,7 +425,8 @@ async def list_entries(
         selectinload(WorkDiaryEntry.project),
         selectinload(WorkDiaryEntry.workers),
         selectinload(WorkDiaryEntry.materials).selectinload(WorkDiaryMaterial.expense),
-    )
+        selectinload(WorkDiaryEntry.invoice_allocations).selectinload(WorkDiaryInvoiceAllocation.income),
+    ).execution_options(populate_existing=True)
     if project_id is not None:
         query = query.where(WorkDiaryEntry.project_id == project_id)
     if worker_id is not None:
@@ -441,6 +504,7 @@ async def update_entry(
     current_user: User = Depends(require_edit_access),
 ):
     entry = await _get_entry(db, entry_id)
+    _ensure_entry_not_invoiced(entry)
     dump = data.model_dump(exclude_unset=True)
     next_project_id = dump.get("project_id", entry.project_id)
     await _get_project(db, next_project_id)
@@ -531,9 +595,171 @@ async def delete_entry(
     current_user: User = Depends(require_edit_access),
 ):
     entry = await _get_entry(db, entry_id)
+    _ensure_entry_not_invoiced(entry)
     await db.delete(entry)
     await db.commit()
     return {"ok": True}
+
+
+async def _invoice_number(
+    db: AsyncSession,
+    issued_date: date,
+    requested_number: str | None,
+) -> tuple[str, int]:
+    year = issued_date.year
+    normalized_requested = (requested_number or "").strip()
+    if normalized_requested:
+        invoice_number = to_number_year_format(normalized_requested, year)
+        invoice_year = invoice_year_from_number(invoice_number) or year
+        if await has_invoice_duplicate(db, invoice_number, invoice_year):
+            raise HTTPException(409, "Invoice number already exists for this year.")
+        return invoice_number, invoice_year
+
+    for _ in range(50):
+        sequence_number = await allocate_next_invoice_number(db, year)
+        invoice_number = f"{sequence_number:04d}-{year}"
+        if not await has_invoice_duplicate(db, invoice_number, year):
+            return invoice_number, year
+    raise HTTPException(409, INVOICE_ALLOCATE_DETAIL)
+
+
+@router.post("/invoices", response_model=WorkDiaryInvoiceCreateResponse)
+async def create_invoice_from_entries(
+    data: WorkDiaryInvoiceCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    entry_ids = [line.entry_id for line in data.lines]
+    result = await db.execute(
+        select(WorkDiaryEntry)
+        .options(
+            selectinload(WorkDiaryEntry.project).selectinload(Project.client),
+            selectinload(WorkDiaryEntry.workers),
+            selectinload(WorkDiaryEntry.materials).selectinload(WorkDiaryMaterial.expense),
+            selectinload(WorkDiaryEntry.invoice_allocations).selectinload(WorkDiaryInvoiceAllocation.income),
+        )
+        .execution_options(populate_existing=True)
+        .where(WorkDiaryEntry.id.in_(entry_ids))
+    )
+    entries_by_id = {entry.id: entry for entry in result.scalars().all()}
+    missing_ids = [entry_id for entry_id in entry_ids if entry_id not in entries_by_id]
+    if missing_ids:
+        raise HTTPException(404, f"Work diary entry not found: {missing_ids[0]}")
+
+    entries = [entries_by_id[entry_id] for entry_id in entry_ids]
+    project_ids = {entry.project_id for entry in entries}
+    if len(project_ids) != 1:
+        raise HTTPException(400, "All selected work diary entries must belong to the same project.")
+    project = entries[0].project
+    if project is None or project.client_id is None or project.client is None:
+        raise HTTPException(400, "The selected project must have a client before an invoice can be created.")
+    if project.is_internal:
+        raise HTTPException(400, "Internal projects cannot be invoiced.")
+
+    contract = None
+    if data.contract_id is not None:
+        contract_result = await db.execute(select(Contract).where(Contract.id == data.contract_id))
+        contract = contract_result.scalar_one_or_none()
+        if contract is None:
+            raise HTTPException(404, "Contract not found")
+        if contract.client_id != project.client_id:
+            raise HTTPException(400, "The selected contract belongs to a different client.")
+        if contract.project_id is not None and contract.project_id != project.id:
+            raise HTTPException(400, "The selected contract belongs to a different project.")
+        if contract.status == "cancelled":
+            raise HTTPException(400, "A cancelled contract cannot be used for an invoice.")
+
+    normalized_lines: list[tuple[WorkDiaryEntry, str, Decimal, Decimal]] = []
+    for line in data.lines:
+        entry = entries_by_id[line.entry_id]
+        source_amount = _entry_amounts(entry)["billable_amount"].quantize(Decimal("0.01"))
+        remaining_amount = _entry_billing(entry, source_amount)["remaining_billable_amount"].quantize(
+            Decimal("0.01")
+        )
+        line_amount = _dec(line.amount).quantize(Decimal("0.01"))
+        if remaining_amount <= 0:
+            raise HTTPException(409, f"Work diary entry {entry.id} is already fully invoiced.")
+        if line_amount > remaining_amount:
+            raise HTTPException(
+                409,
+                f"Invoice amount for work diary entry {entry.id} exceeds the remaining billable amount.",
+            )
+        normalized_lines.append((entry, line.name[:500], line_amount, source_amount))
+
+    invoice_number, invoice_year = await _invoice_number(db, data.issued_date, data.invoice_number)
+    amount_rsd = sum((line[2] for line in normalized_lines), Decimal("0"))
+    period_start = min(entry.date for entry in entries)
+    period_end = max(entry.date for entry in entries)
+    period_label = period_start.strftime("%d.%m.%Y")
+    if period_end != period_start:
+        period_label = f"{period_label} - {period_end.strftime('%d.%m.%Y')}"
+    description = (data.description or f"Radovi po projektu {project.name}, period {period_label}").strip()[:500]
+    income_type = {
+        "advance": "advance",
+        "intermediate": "intermediate",
+        "closing": "final",
+    }.get(data.contract_payment_type or "", "other")
+    income = Income(
+        issued_date=data.issued_date,
+        due_date=data.due_date,
+        invoice_number=invoice_number,
+        invoice_year=invoice_year,
+        client_id=project.client_id,
+        client_name=project.client.name,
+        contract_id=contract.id if contract is not None else None,
+        contract_payment_type=data.contract_payment_type if contract is not None else None,
+        description=description,
+        amount_rsd=amount_rsd,
+        currency="RSD",
+        exchange_rate=1.0,
+        is_paid=False,
+        paid_amount=Decimal("0"),
+        status="issued",
+        project_id=project.id,
+        income_type=income_type,
+        note=data.note,
+        created_by=current_user.id,
+    )
+    try:
+        db.add(income)
+        await db.flush()
+
+        for line_no, (entry, line_name, line_amount, source_amount) in enumerate(normalized_lines, start=1):
+            income_item = IncomeItem(
+                income_id=income.id,
+                line_no=line_no,
+                name=line_name,
+                quantity=Decimal("1"),
+                unit="usl",
+                unit_price=line_amount,
+                total_amount=line_amount,
+                tax_category="SS",
+                tax_rate=Decimal("0"),
+                note=f"Work diary entry #{entry.id}, {entry.date.strftime('%d.%m.%Y')}",
+            )
+            db.add(income_item)
+            await db.flush()
+            db.add(
+                WorkDiaryInvoiceAllocation(
+                    work_diary_entry_id=entry.id,
+                    income_id=income.id,
+                    income_item_id=income_item.id,
+                    amount=line_amount,
+                    source_amount_snapshot=source_amount,
+                    created_by=current_user.id,
+                )
+            )
+
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "The invoice could not be created because the data changed. Refresh and retry.") from exc
+    return WorkDiaryInvoiceCreateResponse(
+        income_id=income.id,
+        invoice_number=income.invoice_number,
+        amount_rsd=income.amount_rsd,
+        entries_count=len(normalized_lines),
+    )
 
 
 def _unit_from_item_name(name: str) -> str | None:
@@ -688,6 +914,8 @@ async def get_summary(
         linked_material_amount=sum(entry.linked_material_amount for entry in entries),
         total_cost_amount=sum(entry.total_cost_amount for entry in entries),
         billable_amount=sum(entry.billable_amount for entry in entries),
+        invoiced_amount=sum(entry.invoiced_amount for entry in entries),
+        remaining_billable_amount=sum(entry.remaining_billable_amount for entry in entries),
     )
 
 

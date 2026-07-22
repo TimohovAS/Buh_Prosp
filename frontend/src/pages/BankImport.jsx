@@ -133,6 +133,20 @@ export default function BankImport() {
     }))
   }
 
+  const clearSelectedTransactions = () => {
+    setSelections((current) => {
+      const next = { ...current }
+      transactions.forEach((transaction, index) => {
+        next[index] = {
+          ...(next[index] || {}),
+          selected: false,
+          type: next[index]?.type ?? transaction.type,
+        }
+      })
+      return next
+    })
+  }
+
   const selectedTransactions = useMemo(
     () => transactions.filter((_, index) => selections[index]?.selected ?? true),
     [transactions, selections]
@@ -190,14 +204,7 @@ export default function BankImport() {
               <h3 style={{ margin: 0 }}>
                 {tr('bankImportTransactions')} ({transactions.length})
               </h3>
-              <button className="btn btn-primary" onClick={handleApply} disabled={applying}>
-                {applying ? tr('importing') : tr('importSelected')}
-              </button>
             </div>
-            <SelectionSummary
-              count={selectedTransactions.length}
-              items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
-            />
             <div className="table-wrap">
               <table>
                 <thead>
@@ -299,6 +306,17 @@ export default function BankImport() {
           </div>
         )}
       </div>
+
+      <SelectionSummary
+        count={selectedTransactions.length}
+        items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
+        actions={
+          <button type="button" className="btn btn-sm btn-primary" onClick={handleApply} disabled={applying}>
+            {applying ? tr('importing') : tr('importSelected')}
+          </button>
+        }
+        onClear={clearSelectedTransactions}
+      />
     </>
   )
 }

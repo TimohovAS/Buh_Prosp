@@ -882,25 +882,6 @@ export default function Expenses() {
             />
             <button
               className="btn btn-secondary"
-              disabled={selectedIds.length === 0}
-              onClick={() => {
-                setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
-                setModalAssign(true)
-              }}
-            >
-              {tr('assignProject')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
-            </button>
-            {isAdmin ? (
-              <button
-                className="btn btn-danger"
-                disabled={selectedIds.length === 0}
-                onClick={() => handleAdminHardDelete(selectedIds)}
-              >
-                {tr('adminHardDeleteSelected')} {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
-              </button>
-            ) : null}
-            <button
-              className="btn btn-secondary"
               onClick={handleExportCsv}
               disabled={loading || filtered.length === 0}
             >
@@ -1019,10 +1000,6 @@ export default function Expenses() {
         )}
 
         <div className="card">
-          <SelectionSummary
-            count={selectedItems.length}
-            items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
-          />
           <div className="table-wrap">
             <table className="expenses-list-table">
               <thead>
@@ -1158,6 +1135,35 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+
+      <SelectionSummary
+        count={selectedItems.length}
+        items={[{ label: tr('selectedAmount'), value: `${fmtMoney(selectedTotal)} RSD` }]}
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={() => {
+                setAssignProjectId(unassignedProject ? String(unassignedProject.id) : '')
+                setModalAssign(true)
+              }}
+            >
+              {tr('assignProject')}
+            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => handleAdminHardDelete(selectedIds)}
+              >
+                {tr('adminHardDeleteSelected')}
+              </button>
+            ) : null}
+          </>
+        }
+        onClear={() => setSelectedIds([])}
+      />
 
       <EntityDetailModal
         isOpen={!!detailModal || detailLoading || !!detailError}

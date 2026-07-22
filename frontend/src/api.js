@@ -329,6 +329,8 @@ export const api = {
     updateEntry: (id, data) =>
       request(`/work-diaries/entries/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteEntry: (id) => request(`/work-diaries/entries/${id}`, { method: 'DELETE' }),
+    createInvoice: (data) =>
+      request('/work-diaries/invoices', { method: 'POST', body: JSON.stringify(data) }),
     projectMeta: (projectId) => request(`/work-diaries/project-meta/${projectId}`),
     updateProjectMeta: (projectId, data) =>
       request(`/work-diaries/project-meta/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),

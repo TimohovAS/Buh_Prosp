@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { Building2, FileText, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import PageHeader from '../components/PageHeader'
+import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
 import WorkDiaryCostsTab from '../components/work-diaries/WorkDiaryCostsTab'
 import WorkDiaryEntryModal from '../components/work-diaries/WorkDiaryEntryModal'
+import WorkDiaryInvoiceModal from '../components/work-diaries/WorkDiaryInvoiceModal'
 import WorkDiaryMaterialsTab from '../components/work-diaries/WorkDiaryMaterialsTab'
 import WorkDiaryMetaModal from '../components/work-diaries/WorkDiaryMetaModal'
 import WorkDiaryPrintDiary from '../components/work-diaries/WorkDiaryPrintDiary'
@@ -54,6 +56,7 @@ const TAB_LABEL_KEYS = {
 
 export default function WorkDiaries() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/work-diaries'
   const [projects, setProjects] = useState([])
   const [workers, setWorkers] = useState([])
@@ -66,6 +69,9 @@ export default function WorkDiaries() {
   const [entryModalOpen, setEntryModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
   const [metaModalOpen, setMetaModalOpen] = useState(false)
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
+  const [billingFilter, setBillingFilter] = useState('')
   const [sortCol, setSortCol] = useState('date')
   const [sortAsc, setSortAsc] = useState(false)
   const [filters, setFilters] = useState({
@@ -99,12 +105,13 @@ export default function WorkDiaries() {
   }, [queryParams])
 
   const loadReferenceData = useCallback(() => {
-    return Promise.all([api.projects.list({ show_archived: false }), api.workers.list({ active: true })]).then(
-      ([projectData, workerData]) => {
-        setProjects(projectData)
-        setWorkers(workerData)
-      }
-    )
+    return Promise.all([
+      api.projects.list({ show_archived: false }),
+      api.workers.list({ active: true }),
+    ]).then(([projectData, workerData]) => {
+      setProjects(projectData)
+      setWorkers(workerData)
+    })
   }, [])
 
   useEffect(() => {
@@ -145,6 +152,7 @@ export default function WorkDiaries() {
   }, [isActivePage, loadMeta])
 
   const setFilter = (key, value) => {
+    setSelectedIds([])
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -179,6 +187,73 @@ export default function WorkDiaries() {
     return sortAsc ? sorted : sorted.reverse()
   }, [entries, sortCol, sortAsc])
 
+  const displayedEntries = useMemo(
+    () =>
+      billingFilter ? sortedEntries.filter((entry) => entry.billing_status === billingFilter) : sortedEntries,
+    [billingFilter, sortedEntries]
+  )
+
+  const selectedEntries = useMemo(
+    () => entries.filter((entry) => selectedIds.includes(entry.id)),
+    [entries, selectedIds]
+  )
+  const selectedEntryProjectId = selectedEntries[0]?.project_id || null
+  const invoiceProject = useMemo(() => {
+    const projectId = selectedEntryProjectId || filters.project_id
+    return projects.find((project) => String(project.id) === String(projectId)) || null
+  }, [projects, selectedEntryProjectId, filters.project_id])
+
+  const canInvoiceEntry = useCallback(
+    (entry) => {
+      const project = projects.find((item) => String(item.id) === String(entry.project_id))
+      return (
+        Number(entry.remaining_billable_amount) > 0 && Boolean(project?.client_id) && !project?.is_internal
+      )
+    },
+    [projects]
+  )
+
+  const toggleEntrySelection = (entry) => {
+    if (!canInvoiceEntry(entry)) return
+    setSelectedIds((current) => {
+      if (current.includes(entry.id)) return current.filter((id) => id !== entry.id)
+      const currentProjectId = entries.find((item) => current.includes(item.id))?.project_id
+      if (currentProjectId && String(currentProjectId) !== String(entry.project_id)) return current
+      return [...current, entry.id]
+    })
+  }
+
+  const selectAllProjectEntries = () => {
+    const projectId = selectedEntryProjectId || filters.project_id
+    if (!projectId) return
+    const ids = displayedEntries
+      .filter((entry) => String(entry.project_id) === String(projectId) && canInvoiceEntry(entry))
+      .map((entry) => entry.id)
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.includes(id))
+    setSelectedIds(allSelected ? [] : ids)
+  }
+
+  const selectableProjectEntries = useMemo(() => {
+    const projectId = selectedEntryProjectId || filters.project_id
+    if (!projectId) return []
+    return displayedEntries.filter(
+      (entry) => String(entry.project_id) === String(projectId) && canInvoiceEntry(entry)
+    )
+  }, [canInvoiceEntry, displayedEntries, filters.project_id, selectedEntryProjectId])
+  const allSelectableSelected =
+    selectableProjectEntries.length > 0 &&
+    selectableProjectEntries.every((entry) => selectedIds.includes(entry.id))
+
+  const billingStatusBadge = (entry) => {
+    const status = entry.billing_status || 'not_invoiced'
+    const badgeClass = {
+      not_invoiced: 'badge-muted',
+      partially_invoiced: 'badge-warning',
+      invoiced: 'badge-success',
+    }[status]
+    return <span className={`badge ${badgeClass}`}>{tr(`workDiariesBillingStatus_${status}`)}</span>
+  }
+
   const openNewEntry = async () => {
     try {
       await loadReferenceData()
@@ -207,6 +282,13 @@ export default function WorkDiaries() {
     if (!confirm(tr('workDiariesDeleteConfirm'))) return
     await api.workDiaries.deleteEntry(entry.id)
     loadEntries()
+  }
+
+  const handleInvoiceCreated = async (createdInvoice) => {
+    setInvoiceModalOpen(false)
+    setSelectedIds([])
+    await loadEntries()
+    navigate('/income', { state: { openIncomeId: createdInvoice.income_id } })
   }
 
   const sortedForPrint = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries])
@@ -318,6 +400,24 @@ export default function WorkDiaries() {
                 placeholder={tr('dateTo')}
               />
             </label>
+            <label className="form-group">
+              <span className="form-label">{tr('workDiariesBillingStatus')}</span>
+              <select
+                className="form-input"
+                value={billingFilter}
+                onChange={(event) => {
+                  setBillingFilter(event.target.value)
+                  setSelectedIds([])
+                }}
+              >
+                <option value="">{tr('workDiariesBillingStatusAll')}</option>
+                <option value="not_invoiced">{tr('workDiariesBillingStatus_not_invoiced')}</option>
+                <option value="partially_invoiced">
+                  {tr('workDiariesBillingStatus_partially_invoiced')}
+                </option>
+                <option value="invoiced">{tr('workDiariesBillingStatus_invoiced')}</option>
+              </select>
+            </label>
           </div>
         </div>
 
@@ -330,7 +430,9 @@ export default function WorkDiaries() {
               [tr('workDiariesLabor'), money(summary?.labor_amount)],
               [tr('workDiariesPayout'), money(summary?.payout_amount)],
               [tr('workDiariesMaterials'), money(summary?.material_amount)],
-              [tr('workDiariesBillable'), money(summary?.billable_amount)],
+              [tr('workDiariesBillableTotal'), money(summary?.billable_amount)],
+              [tr('workDiariesInvoiced'), money(summary?.invoiced_amount)],
+              [tr('workDiariesRemainingToInvoice'), money(summary?.remaining_billable_amount)],
             ].map(([label, value]) => (
               <div className="work-diaries-summary-item" key={label}>
                 <span>{label}</span>
@@ -346,6 +448,15 @@ export default function WorkDiaries() {
               <table>
                 <thead>
                   <tr>
+                    <th className="no-print work-diaries-select-cell">
+                      <input
+                        type="checkbox"
+                        checked={allSelectableSelected}
+                        disabled={!selectableProjectEntries.length}
+                        onChange={selectAllProjectEntries}
+                        aria-label={tr('workDiariesSelectAll')}
+                      />
+                    </th>
                     {sortableTh('date', tr('date'))}
                     {sortableTh('project', tr('project'))}
                     {sortableTh('workers', tr('worker'))}
@@ -354,67 +465,125 @@ export default function WorkDiaries() {
                     {sortableTh('total_cost', tr('workDiariesTotalCost'), true)}
                     {sortableTh('materials', tr('workDiariesMaterialCost'), true)}
                     {sortableTh('billable', tr('workDiariesBillable'), true)}
+                    <th>{tr('workDiariesBillingStatus')}</th>
+                    <th>{tr('workDiariesInvoice')}</th>
                     <th className="no-print"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9}>{tr('loading')}</td>
+                      <td colSpan={12}>{tr('loading')}</td>
                     </tr>
-                  ) : sortedEntries.length === 0 ? (
+                  ) : displayedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>
+                      <td colSpan={12} style={{ color: 'var(--color-text-muted)' }}>
                         {tr('workDiariesEmpty')}
                       </td>
                     </tr>
                   ) : (
-                    sortedEntries.map((entry) => (
-                      <tr key={entry.id}>
-                        <td className="date-cell">{dateLabel(entry.date)}</td>
-                        <td>{entry.project_name}</td>
-                        <td>{entryWorkerName(entry)}</td>
-                        <td>{entry.description}</td>
-                        <td className="work-diaries-hours-cell">
-                          <strong>{hours(entry.person_hours)}</strong>
-                          <span>
-                            {hours(entry.duration_hours)} × {entry.worker_ids.length}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{money(entry.total_cost_amount)}</td>
-                        <td style={{ textAlign: 'right' }}>{money(entry.material_amount)}</td>
-                        <td className="work-diaries-billable-cell">
-                          <strong>{money(entry.billable_amount)}</strong>
-                          {entry.billable_amount_override != null ? (
+                    displayedEntries.map((entry) => {
+                      const selected = selectedIds.includes(entry.id)
+                      const differentProjectSelected =
+                        selectedEntryProjectId && String(selectedEntryProjectId) !== String(entry.project_id)
+                      const entryCanBeSelected = canInvoiceEntry(entry) && !differentProjectSelected
+                      const activeLinks = (entry.invoice_links || []).filter(
+                        (link) => link.invoice_status !== 'cancelled'
+                      )
+                      const cancelledLinks = (entry.invoice_links || []).filter(
+                        (link) => link.invoice_status === 'cancelled'
+                      )
+                      const entryLocked = entry.billing_status !== 'not_invoiced'
+                      return (
+                        <tr key={entry.id} className={selected ? 'record-row-selected' : ''}>
+                          <td className="no-print work-diaries-select-cell">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              disabled={!entryCanBeSelected}
+                              onChange={() => toggleEntrySelection(entry)}
+                              title={
+                                differentProjectSelected
+                                  ? tr('workDiariesInvoiceSameProject')
+                                  : !entryCanBeSelected
+                                    ? tr('workDiariesInvoiceUnavailable')
+                                    : undefined
+                              }
+                              aria-label={tr('workDiariesInvoiceSelectEntry')}
+                            />
+                          </td>
+                          <td className="date-cell">{dateLabel(entry.date)}</td>
+                          <td>{entry.project_name}</td>
+                          <td>{entryWorkerName(entry)}</td>
+                          <td>{entry.description}</td>
+                          <td className="work-diaries-hours-cell">
+                            <strong>{hours(entry.person_hours)}</strong>
                             <span>
-                              {tr('workDiariesBillableAuto')}: {money(entry.calculated_billable_amount)}
+                              {hours(entry.duration_hours)} × {entry.worker_ids.length}
                             </span>
-                          ) : null}
-                        </td>
-                        <td className="no-print">
-                          <div className="work-diaries-row-actions">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => openEditEntry(entry)}
-                              title={tr('workDiariesEdit')}
-                              aria-label={tr('workDiariesEdit')}
-                            >
-                              <Pencil size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-danger"
-                              onClick={() => deleteEntry(entry)}
-                              title={tr('delete')}
-                              aria-label={tr('delete')}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{money(entry.total_cost_amount)}</td>
+                          <td style={{ textAlign: 'right' }}>{money(entry.material_amount)}</td>
+                          <td className="work-diaries-billable-cell">
+                            <strong>{money(entry.billable_amount)}</strong>
+                            {entry.billable_amount_override != null ? (
+                              <span>
+                                {tr('workDiariesBillableAuto')}: {money(entry.calculated_billable_amount)}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>{billingStatusBadge(entry)}</td>
+                          <td className="work-diaries-invoice-links">
+                            {activeLinks.map((link) => (
+                              <button
+                                type="button"
+                                className="work-diaries-invoice-link"
+                                key={link.income_id}
+                                onClick={() =>
+                                  navigate('/income', { state: { openIncomeId: link.income_id } })
+                                }
+                              >
+                                {link.invoice_number}
+                              </button>
+                            ))}
+                            {!activeLinks.length && cancelledLinks.length ? (
+                              <span className="work-diaries-cancelled-invoice">
+                                {tr('workDiariesInvoiceCancelled')} {cancelledLinks.at(-1).invoice_number}
+                              </span>
+                            ) : null}
+                            {entry.billing_status === 'partially_invoiced' ? (
+                              <small>
+                                {tr('workDiariesRemaining')}: {money(entry.remaining_billable_amount)}
+                              </small>
+                            ) : null}
+                          </td>
+                          <td className="no-print">
+                            <div className="work-diaries-row-actions">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => openEditEntry(entry)}
+                                disabled={entryLocked}
+                                title={entryLocked ? tr('workDiariesInvoiceLocked') : tr('workDiariesEdit')}
+                                aria-label={tr('workDiariesEdit')}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-danger"
+                                onClick={() => deleteEntry(entry)}
+                                disabled={entryLocked}
+                                title={entryLocked ? tr('workDiariesInvoiceLocked') : tr('delete')}
+                                aria-label={tr('delete')}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -461,6 +630,31 @@ export default function WorkDiaries() {
         ) : null}
       </div>
 
+      {tab === 'entries' && selectedEntries.length ? (
+        <SelectionSummary
+          count={selectedEntries.length}
+          countLabel={tr('workDiariesInvoiceSelected')}
+          items={[
+            {
+              label: tr('workDiariesInvoiceSelectedTotal'),
+              value: money(
+                selectedEntries.reduce((sum, entry) => sum + Number(entry.remaining_billable_amount || 0), 0)
+              ),
+            },
+          ]}
+          actions={
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => setInvoiceModalOpen(true)}
+            >
+              <FileText size={16} /> {tr('workDiariesCreateInvoice')}
+            </button>
+          }
+          onClear={() => setSelectedIds([])}
+        />
+      ) : null}
+
       <WorkDiaryEntryModal
         isOpen={entryModalOpen}
         onClose={closeEntryModal}
@@ -480,6 +674,13 @@ export default function WorkDiaries() {
           await loadMeta()
           await loadEntries()
         }}
+      />
+      <WorkDiaryInvoiceModal
+        isOpen={invoiceModalOpen}
+        onClose={() => setInvoiceModalOpen(false)}
+        onCreated={handleInvoiceCreated}
+        entries={selectedEntries}
+        project={invoiceProject}
       />
     </div>
   )

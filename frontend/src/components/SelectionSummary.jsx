@@ -1,12 +1,19 @@
 import { tr } from '../i18n'
 
-export default function SelectionSummary({ count, items = [] }) {
+export default function SelectionSummary({
+  count,
+  items = [],
+  actions = null,
+  onClear = null,
+  countLabel = tr('selectedRows'),
+  clearLabel = tr('clearSelection'),
+}) {
   if (!count) return null
 
   return (
-    <div className="selection-summary">
+    <div className="selection-summary no-print" aria-live="polite">
       <span className="selection-summary-count">
-        {tr('selectedRows')}: {count}
+        {countLabel}: <strong>{count}</strong>
       </span>
       {items.map((item) => (
         <span
@@ -17,6 +24,16 @@ export default function SelectionSummary({ count, items = [] }) {
           <strong>{item.value}</strong>
         </span>
       ))}
+      {actions || onClear ? (
+        <div className="selection-summary-actions">
+          {actions}
+          {onClear ? (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={onClear}>
+              {clearLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

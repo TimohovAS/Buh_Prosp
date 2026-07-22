@@ -1764,16 +1764,6 @@ export default function BankTransactions() {
               onChange={setSearch}
               style={{ minWidth: 180 }}
             />
-            {selectedIds.length > 0 && (
-              <>
-                <button className="btn btn-secondary" onClick={handleExportSelectedExcel}>
-                  {tr('bankTxExportSelectedExcel')} ({selectedIds.length})
-                </button>
-                <button className="btn btn-secondary" onClick={openAssignModal}>
-                  {tr('assignProject')} ({selectedIds.length})
-                </button>
-              </>
-            )}
           </>
         }
       />
@@ -1782,22 +1772,6 @@ export default function BankTransactions() {
 
       <div className="page-body" ref={pageBodyRef}>
         <div className="card">
-          <SelectionSummary
-            count={selectedTransactions.length}
-            items={[
-              { label: tr('selectedIn'), value: `+${formatMoney(selectedTotals.in)} RSD`, tone: 'positive' },
-              {
-                label: tr('selectedOut'),
-                value: `-${formatMoney(selectedTotals.out)} RSD`,
-                tone: 'negative',
-              },
-              {
-                label: tr('selectedNet'),
-                value: `${selectedTotals.net >= 0 ? '+' : '-'}${formatMoney(Math.abs(selectedTotals.net))} RSD`,
-                tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
-              },
-            ]}
-          />
           <div className="table-wrap">
             <table>
               <thead>
@@ -1932,6 +1906,34 @@ export default function BankTransactions() {
           </div>
         </div>
       </div>
+
+      <SelectionSummary
+        count={selectedTransactions.length}
+        items={[
+          { label: tr('selectedIn'), value: `+${formatMoney(selectedTotals.in)} RSD`, tone: 'positive' },
+          {
+            label: tr('selectedOut'),
+            value: `-${formatMoney(selectedTotals.out)} RSD`,
+            tone: 'negative',
+          },
+          {
+            label: tr('selectedNet'),
+            value: `${selectedTotals.net >= 0 ? '+' : '-'}${formatMoney(Math.abs(selectedTotals.net))} RSD`,
+            tone: selectedTotals.net >= 0 ? 'positive' : 'negative',
+          },
+        ]}
+        actions={
+          <>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={handleExportSelectedExcel}>
+              {tr('bankTxExportSelectedExcel')}
+            </button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={openAssignModal}>
+              {tr('assignProject')}
+            </button>
+          </>
+        }
+        onClear={() => setSelectedIds([])}
+      />
 
       <Modal
         isOpen={!!matchTx}
