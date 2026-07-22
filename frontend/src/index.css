@@ -2973,6 +2973,52 @@ th {
   align-items: start;
 }
 
+.work-diaries-time-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  min-height: 42px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+}
+
+.work-diaries-time-range-control:focus-within {
+  border-color: var(--color-accent);
+}
+
+.work-diaries-time-range-endpoint {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+  cursor: pointer;
+}
+
+.work-diaries-time-range-endpoint > span {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.work-diaries-time-range-endpoint input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  color-scheme: dark;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.work-diaries-time-range-arrow {
+  margin-inline: 0.35rem;
+  color: var(--color-text-muted);
+}
+
 .work-diaries-entry-form {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { api } from '../../api'
 import { tr } from '../../i18n'
 import DatePicker from '../DatePicker'
@@ -52,6 +52,20 @@ const emptyMaterial = {
   amount: '',
   item_index: '',
   unit_price: '',
+}
+
+function formatDuration(value) {
+  const totalMinutes = Math.max(0, Math.round(num(value) * 60))
+  const durationHours = Math.floor(totalMinutes / 60)
+  const durationMinutes = totalMinutes % 60
+  const parts = []
+  if (durationHours > 0) {
+    parts.push(tr('workDiariesDurationHoursShort', { value: durationHours }))
+  }
+  if (durationMinutes > 0) {
+    parts.push(tr('workDiariesDurationMinutesShort', { value: durationMinutes }))
+  }
+  return parts.join(' ')
 }
 
 function formFromEntry(entry, defaultProjectId) {
@@ -171,6 +185,10 @@ export default function WorkDiaryEntryModal({
     teamBillingRate,
     overtimeMultiplier: effectiveMultiplier,
   })
+  const durationText = formatDuration(totals.duration)
+  const timeRangeLabel = durationText
+    ? tr('workDiariesTimeRangeWithDuration', { duration: durationText })
+    : tr('workDiariesTimeRange')
 
   const setFormField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
@@ -316,57 +334,46 @@ export default function WorkDiaryEntryModal({
               ariaLabel={tr('workDiariesWorkersLabel')}
             />
           </div>
-          <label className="form-group">
-            <span className="form-label">{tr('workDiariesStart')}</span>
-            <input
-              className="form-input"
-              type="time"
-              value={form.start_time}
-              onChange={(event) => {
-                const value = event.target.value
-                setForm((prev) => ({
-                  ...prev,
-                  start_time: value,
-                  duration_hours: value ? '' : prev.duration_hours,
-                }))
-              }}
-            />
-          </label>
-          <label className="form-group">
-            <span className="form-label">{tr('workDiariesEnd')}</span>
-            <input
-              className="form-input"
-              type="time"
-              value={form.end_time}
-              onChange={(event) => {
-                const value = event.target.value
-                setForm((prev) => ({
-                  ...prev,
-                  end_time: value,
-                  duration_hours: value ? '' : prev.duration_hours,
-                }))
-              }}
-            />
-          </label>
-          <label className="form-group">
-            <span className="form-label">{tr('workDiariesDurationManual')}</span>
-            <input
-              className="form-input"
-              type="number"
-              min="0.25"
-              step="0.25"
-              value={form.duration_hours}
-              onChange={(event) => {
-                const value = event.target.value
-                setForm((prev) => ({
-                  ...prev,
-                  duration_hours: value,
-                  start_time: value ? '' : prev.start_time,
-                  end_time: value ? '' : prev.end_time,
-                }))
-              }}
-            />
-          </label>
+          <div className="form-group work-diaries-time-range-group">
+            <span className="form-label">{timeRangeLabel}</span>
+            <div className="work-diaries-time-range-control">
+              <label className="work-diaries-time-range-endpoint">
+                <span>{tr('workDiariesStart')}</span>
+                <input
+                  type="time"
+                  value={form.start_time}
+                  aria-label={tr('workDiariesStart')}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setForm((prev) => ({
+                      ...prev,
+                      start_time: value,
+                      duration_hours: value ? '' : prev.duration_hours,
+                    }))
+                  }}
+                />
+              </label>
+              <ArrowRight className="work-diaries-time-range-arrow" size={18} aria-hidden="true" />
+              <label className="work-diaries-time-range-endpoint">
+                <span>{tr('workDiariesEnd')}</span>
+                <input
+                  type="time"
+                  value={form.end_time}
+                  aria-label={tr('workDiariesEnd')}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setForm((prev) => ({
+                      ...prev,
+                      end_time: value,
+                      duration_hours: value ? '' : prev.duration_hours,
+                    }))
+                  }}
+                />
+              </label>
+            </div>
+          </div>
           <div className="form-group">
             <span className="form-label field-label-with-tooltip">
               {tr('workDiariesHourlyRate')}
@@ -408,7 +415,7 @@ export default function WorkDiaryEntryModal({
               <small className="work-diaries-rate-warning">{tr('workDiariesBillingRateZeroWarning')}</small>
             ) : null}
           </div>
-          <div className="form-group work-diaries-wide work-diaries-billable-override">
+          <div className="form-group work-diaries-billable-override">
             <span className="form-label field-label-with-tooltip">
               {tr('workDiariesBillableOverride')}
               <FieldTooltip text={tr('workDiariesBillableOverrideTooltip')} />
