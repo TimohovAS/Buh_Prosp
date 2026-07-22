@@ -122,6 +122,7 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
   const personHours = duration * workerCount
   const calculatedBillable = duration * teamBillingRate + materialsTotal
   const billableAdjusted = form.billable_amount_override !== '' && form.billable_amount_override != null
+  const billable = billableAdjusted ? num(form.billable_amount_override) : calculatedBillable
   return {
     duration,
     personHours,
@@ -132,7 +133,8 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
     payout: labor + allowances,
     totalCost: labor + allowances + materialsTotal,
     calculatedBillable,
+    billableLabor: Math.max(billable - materialsTotal, 0),
     billableAdjusted,
-    billable: billableAdjusted ? num(form.billable_amount_override) : calculatedBillable,
+    billable,
   }
 }

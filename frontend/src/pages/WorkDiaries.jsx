@@ -428,8 +428,13 @@ export default function WorkDiaries() {
               [tr('workDiariesWorkers'), summary?.workers_count || 0],
               [tr('workDiariesPersonHours'), hours(summary?.person_hours)],
               [tr('workDiariesLabor'), money(summary?.labor_amount)],
-              [tr('workDiariesPayout'), money(summary?.payout_amount)],
               [tr('workDiariesMaterials'), money(summary?.material_amount)],
+              [
+                tr('workDiariesCustomerLabor'),
+                money(
+                  Math.max(Number(summary?.billable_amount || 0) - Number(summary?.material_amount || 0), 0)
+                ),
+              ],
               [tr('workDiariesBillableTotal'), money(summary?.billable_amount)],
               [tr('workDiariesInvoiced'), money(summary?.invoiced_amount)],
               [tr('workDiariesRemainingToInvoice'), money(summary?.remaining_billable_amount)],

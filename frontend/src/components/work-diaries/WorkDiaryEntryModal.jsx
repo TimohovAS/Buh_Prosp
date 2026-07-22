@@ -454,13 +454,6 @@ export default function WorkDiaryEntryModal({
         <div className="work-diaries-materials">
           <div className="work-diaries-section-row">
             <strong>{tr('workDiariesMaterials')}</strong>
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
-            >
-              <Plus size={16} /> {tr('add')}
-            </button>
           </div>
           {materials.map((material, index) => (
             <div className="work-diaries-material-block" key={index}>
@@ -609,6 +602,15 @@ export default function WorkDiaryEntryModal({
               ) : null}
             </div>
           ))}
+          <div className="work-diaries-material-add-row">
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
+            >
+              <Plus size={16} /> {tr('add')}
+            </button>
+          </div>
         </div>
 
         <div className="work-diaries-collapse">
@@ -740,7 +742,7 @@ export default function WorkDiaryEntryModal({
             </span>
           ) : null}
           <span>
-            {tr('workDiariesPayout')}: <b>{money(totals.payout)}</b>
+            {tr('workDiariesCustomerLabor')}: <b>{money(totals.billableLabor)}</b>
           </span>
           {totals.billable != null ? (
             <span>
