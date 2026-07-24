@@ -1012,6 +1012,7 @@ const ru = {
   workDiariesMaterialSourceExpense: 'Из расходов',
   workDiariesMaterialSourceStock: 'Со склада',
   workDiariesMaterialItemPick: 'Выберите позицию',
+  workDiariesMaterialLegacyWholeExpense: 'Весь расход целиком (сохранено ранее)',
   workDiariesMaterialWholeExpense: 'Вся доступная сумма расхода',
   workDiariesMaterials: 'Материалы',
   workDiariesMaterialsEmpty: 'Материалов по выбранным фильтрам нет',

@@ -1009,6 +1009,7 @@ const sr = {
   workDiariesMaterialSourceExpense: 'Из трошкова',
   workDiariesMaterialSourceStock: 'Са складишта',
   workDiariesMaterialItemPick: 'Изаберите позицију',
+  workDiariesMaterialLegacyWholeExpense: 'Цео трошак (раније сачувано)',
   workDiariesMaterialWholeExpense: 'Цео расположиви износ трошка',
   workDiariesMaterials: 'Материјал',
   workDiariesMaterialsEmpty: 'Нема материјала за изабране филтере',

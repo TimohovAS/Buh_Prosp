@@ -55,6 +55,7 @@ const emptyMaterial = {
   source_item_type: '',
   source_item_id: '',
   unit_price: '',
+  legacy_whole_expense: false,
 }
 
 function formatDuration(value) {
@@ -121,6 +122,11 @@ function materialsFromEntry(entry) {
     unit_price: material.unit_price_snapshot == null ? '' : String(material.unit_price_snapshot),
     expense_description: material.expense_description || '',
     expense_date: material.expense_date || '',
+    legacy_whole_expense:
+      material.source === 'expense' &&
+      Boolean(material.expense_id) &&
+      !material.source_item_type &&
+      !material.source_item_id,
   }))
 }
 
@@ -573,6 +579,7 @@ export default function WorkDiaryEntryModal({
                       source_item_type: '',
                       source_item_id: '',
                       unit_price: '',
+                      legacy_whole_expense: false,
                     })
                   }
                 >
@@ -659,6 +666,7 @@ export default function WorkDiaryEntryModal({
                         return optionMaterials.length === 0
                       })
                       const expenseItems = selectedOption?.items || []
+                      const requiresExpenseItem = expenseItems.length > 0 && !material.legacy_whole_expense
                       const availableExpenseItems = expenseItems.filter((item) => !item.is_used)
                       const selectedExpenseItemKeys = new Set(
                         materials
@@ -694,6 +702,7 @@ export default function WorkDiaryEntryModal({
                                 source_item_type: '',
                                 source_item_id: '',
                                 unit_price: '',
+                                legacy_whole_expense: false,
                               })
                             }}
                           >
@@ -710,15 +719,15 @@ export default function WorkDiaryEntryModal({
                               <select
                                 className="form-input"
                                 value={materialItemKey(material)}
-                                required={expenseItems.length > 0}
+                                required={requiresExpenseItem}
                                 onChange={(event) =>
                                   applyExpenseItem(index, selectedOption, event.target.value)
                                 }
                               >
-                                <option value="" disabled={expenseItems.length > 0}>
-                                  {expenseItems.length > 0
-                                    ? tr('workDiariesMaterialItemPick')
-                                    : tr('workDiariesMaterialWholeExpense')}
+                                <option value="" disabled={requiresExpenseItem}>
+                                  {material.legacy_whole_expense
+                                    ? tr('workDiariesMaterialLegacyWholeExpense')
+                                    : tr('workDiariesMaterialItemPick')}
                                 </option>
                                 {expenseItems.map((item) => {
                                   const itemKey = materialItemKey(item)
