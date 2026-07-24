@@ -454,6 +454,9 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     option = next(option for option in options if option.id == expense.id)
     assert option.used_amount == 500
     assert option.remaining_amount == 1680
+    assert option.items[0].used_quantity == 5
+    assert option.items[0].remaining_quantity == 0
+    assert option.items[0].remaining_amount == 0
     assert option.items[0].is_used is True
 
     current_entry_options = await list_expense_options(
@@ -467,6 +470,9 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     current_option = next(option for option in current_entry_options if option.id == expense.id)
     assert current_option.used_amount == 0
     assert current_option.remaining_amount == 2180
+    assert current_option.items[0].used_quantity == 0
+    assert current_option.items[0].remaining_quantity == 5
+    assert current_option.items[0].remaining_amount == 500
     assert current_option.items[0].is_used is False
 
     entry = await update_entry(
@@ -492,6 +498,13 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     assert entry.materials[0].quantity == 2
     assert entry.materials[0].amount == 200
     assert entry.materials[0].unit_price_snapshot == 100
+
+    options = await list_expense_options(project.id, None, None, db_session, user)
+    option = next(option for option in options if option.id == expense.id)
+    assert option.items[0].used_quantity == 2
+    assert option.items[0].remaining_quantity == 3
+    assert option.items[0].remaining_amount == 300
+    assert option.items[0].is_used is False
 
     duplicate_material = WorkDiaryMaterialCreate(
         description=item.name,
@@ -540,20 +553,54 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     assert exc_info.value.status_code == 409
     assert "whole expense" in exc_info.value.detail
 
+    second_entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 11),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Use part of remaining quantity",
+            duration_hours=1,
+            materials=[duplicate_material],
+        ),
+        db_session,
+        user,
+    )
+    assert second_entry.materials[0].quantity == 1
+    assert second_entry.materials[0].amount == 100
+
+    options = await list_expense_options(project.id, None, None, db_session, user)
+    option = next(option for option in options if option.id == expense.id)
+    assert option.items[0].used_quantity == 3
+    assert option.items[0].remaining_quantity == 2
+    assert option.items[0].remaining_amount == 200
+    assert option.items[0].is_used is False
+
     with pytest.raises(HTTPException) as exc_info:
         await create_entry(
             WorkDiaryEntryCreate(
-                date=date(2026, 7, 11),
+                date=date(2026, 7, 12),
                 project_id=project.id,
                 worker_ids=[worker.id],
-                description="Duplicate source item",
+                description="Too many units",
                 duration_hours=1,
-                materials=[duplicate_material],
+                materials=[
+                    WorkDiaryMaterialCreate(
+                        description=item.name,
+                        quantity=3,
+                        unit="kom",
+                        source="expense",
+                        expense_id=expense.id,
+                        source_item_type="receipt_item",
+                        source_item_id=item.id,
+                        amount=300,
+                    )
+                ],
             ),
             db_session,
             user,
         )
     assert exc_info.value.status_code == 409
+    assert "2.000 units available" in exc_info.value.detail
 
     with pytest.raises(HTTPException) as exc_info:
         await create_entry(

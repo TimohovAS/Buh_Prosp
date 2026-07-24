@@ -235,10 +235,20 @@ export default function WorkDiaryEntryModal({
     source_item_type: item.source_item_type,
     source_item_id: String(item.source_item_id),
     description: item.name,
-    quantity: item.quantity == null ? '' : String(item.quantity),
+    quantity:
+      item.remaining_quantity == null
+        ? item.quantity == null
+          ? ''
+          : String(item.quantity)
+        : String(item.remaining_quantity),
     unit: item.unit || '',
     unit_price: item.unit_price == null ? '' : String(item.unit_price),
-    amount: item.total_amount ? String(item.total_amount) : '',
+    amount:
+      item.remaining_amount == null
+        ? item.total_amount
+          ? String(item.total_amount)
+          : ''
+        : String(item.remaining_amount),
   })
 
   // Выбор позиции чека/фактуры автозаполняет строку; пустой выбор — весь расход целиком
@@ -322,6 +332,14 @@ export default function WorkDiaryEntryModal({
       }))
     return [...extras, ...expenseOptions]
   }, [expenseOptions, materials])
+
+  const sourceItemForMaterial = (material) => {
+    if (material.source !== 'expense' || !material.expense_id) return null
+    const option = materialExpenseOptions.find(
+      (candidate) => String(candidate.id) === String(material.expense_id)
+    )
+    return (option?.items || []).find((candidate) => materialItemKey(candidate) === materialItemKey(material))
+  }
 
   const close = () => {
     if (saving) return
@@ -596,6 +614,7 @@ export default function WorkDiaryEntryModal({
                   className="form-input"
                   type="number"
                   min="0"
+                  max={sourceItemForMaterial(material)?.remaining_quantity ?? undefined}
                   step="0.001"
                   value={material.quantity}
                   placeholder={tr('quantity')}
@@ -731,6 +750,8 @@ export default function WorkDiaryEntryModal({
                                 </option>
                                 {expenseItems.map((item) => {
                                   const itemKey = materialItemKey(item)
+                                  const availableQuantity = item.remaining_quantity ?? item.quantity
+                                  const availableAmount = item.remaining_amount ?? item.total_amount
                                   const selectedElsewhere =
                                     selectedExpenseItemKeys.has(itemKey) &&
                                     itemKey !== materialItemKey(material)
@@ -738,10 +759,12 @@ export default function WorkDiaryEntryModal({
                                   return (
                                     <option key={itemKey} value={itemKey} disabled={unavailable}>
                                       {item.name}
-                                      {item.quantity != null
-                                        ? ` — ${item.quantity}${item.unit ? ` ${unitLabel(item.unit)}` : ''}`
+                                      {availableQuantity != null
+                                        ? ` — ${tr('workDiariesMaterialAvailable')}: ${availableQuantity}${
+                                            item.unit ? ` ${unitLabel(item.unit)}` : ''
+                                          }`
                                         : ''}{' '}
-                                      — {money(item.total_amount)}
+                                      — {money(availableAmount)}
                                       {unavailable ? ` — ${tr('workDiariesMaterialItemUsed')}` : ''}
                                     </option>
                                   )

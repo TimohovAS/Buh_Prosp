@@ -523,6 +523,10 @@ class WorkDiaryExpenseItemOption(BaseModel):
     unit: Optional[str] = None
     unit_price: Optional[float] = None
     total_amount: float
+    used_quantity: float = 0
+    remaining_quantity: Optional[float] = None
+    used_amount: float = 0
+    remaining_amount: float = 0
     is_used: bool = False
 
 

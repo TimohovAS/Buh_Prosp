@@ -64,6 +64,8 @@ DEFAULT_OVERTIME_MULTIPLIER = Decimal("1.26")
 DEFAULT_MATERIAL_BILLING_MULTIPLIER = Decimal("1.2")
 EXPENSE_OPTIONS_LIMIT = 300
 INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
+MATERIAL_AMOUNT_TOLERANCE = Decimal("0.005")
+MATERIAL_QUANTITY_TOLERANCE = Decimal("0.0005")
 
 
 def _dec(value) -> Decimal:
@@ -199,7 +201,22 @@ def _apply_calculated_fields(
 class _MaterialExpenseContext:
     expenses_by_id: dict[int, Expense]
     resolved_amounts: list[Decimal]
+    resolved_quantities: list[Decimal | None]
     unit_prices: list[Decimal | None]
+
+
+@dataclass
+class _MaterialSourceAllocation:
+    quantity: Decimal = Decimal("0")
+    amount: Decimal = Decimal("0")
+
+
+@dataclass
+class _MaterialSourceItem:
+    expense_id: int
+    quantity: Decimal | None
+    unit_price: Decimal | None
+    total_amount: Decimal
 
 
 async def _allocated_material_amounts(
@@ -224,15 +241,21 @@ async def _allocated_material_amounts(
     return {expense_id: _dec(amount) for expense_id, amount in result.all()}
 
 
-async def _allocated_source_item_keys(
+async def _allocated_source_item_totals(
     db: AsyncSession,
     expense_ids: set[int] | list[int],
     *,
     exclude_entry_id: int | None = None,
-) -> set[tuple[str, int]]:
+) -> dict[tuple[str, int], _MaterialSourceAllocation]:
     if not expense_ids:
-        return set()
-    query = select(WorkDiaryMaterial.source_item_type, WorkDiaryMaterial.source_item_id).where(
+        return {}
+    query = select(
+        WorkDiaryMaterial.source_item_type,
+        WorkDiaryMaterial.source_item_id,
+        WorkDiaryMaterial.quantity,
+        WorkDiaryMaterial.unit_price_snapshot,
+        WorkDiaryMaterial.amount,
+    ).where(
         WorkDiaryMaterial.source == "expense",
         WorkDiaryMaterial.expense_id.in_(expense_ids),
         WorkDiaryMaterial.source_item_type.is_not(None),
@@ -241,7 +264,35 @@ async def _allocated_source_item_keys(
     if exclude_entry_id is not None:
         query = query.where(WorkDiaryMaterial.entry_id != exclude_entry_id)
     result = await db.execute(query)
-    return {(item_type, item_id) for item_type, item_id in result.all()}
+    allocations: dict[tuple[str, int], _MaterialSourceAllocation] = {}
+    for item_type, item_id, quantity, unit_price, amount in result.all():
+        key = (item_type, item_id)
+        allocation = allocations.setdefault(key, _MaterialSourceAllocation())
+        allocated_amount = _dec(amount)
+        allocated_quantity = _dec(quantity) if quantity is not None else Decimal("0")
+        snapshot_price = _dec(unit_price)
+        if quantity is None and snapshot_price > 0 and allocated_amount > 0:
+            allocated_quantity = allocated_amount / snapshot_price
+        allocation.quantity += allocated_quantity
+        allocation.amount += allocated_amount
+    return allocations
+
+
+def _source_item_balance(
+    quantity: Decimal | None,
+    total_amount: Decimal,
+    allocation: _MaterialSourceAllocation,
+) -> tuple[Decimal, Decimal | None, Decimal, bool]:
+    used_quantity = max(allocation.quantity, Decimal("0"))
+    remaining_quantity = max(quantity - used_quantity, Decimal("0")) if quantity is not None and quantity > 0 else None
+    used_amount = min(max(allocation.amount, Decimal("0")), total_amount)
+    remaining_amount = max(total_amount - used_amount, Decimal("0"))
+    is_used = (
+        remaining_quantity <= MATERIAL_QUANTITY_TOLERANCE
+        if remaining_quantity is not None
+        else remaining_amount <= MATERIAL_AMOUNT_TOLERANCE
+    )
+    return used_quantity, remaining_quantity, remaining_amount, is_used
 
 
 async def _load_material_expenses(
@@ -256,6 +307,7 @@ async def _load_material_expenses(
         return _MaterialExpenseContext(
             expenses_by_id={},
             resolved_amounts=[_dec(item.amount) for item in materials],
+            resolved_quantities=[_dec(item.quantity) if item.quantity is not None else None for item in materials],
             unit_prices=[
                 _dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None for item in materials
             ],
@@ -293,22 +345,22 @@ async def _load_material_expenses(
     item_keys = set(requested_item_keys)
     if len(item_keys) != len(requested_item_keys):
         raise HTTPException(409, "A material position cannot be used more than once in a work diary entry.")
-    allocated_item_keys = await _allocated_source_item_keys(
+    allocated_source_items = await _allocated_source_item_totals(
         db,
         expense_ids,
         exclude_entry_id=entry_id,
     )
-    if item_keys & allocated_item_keys:
-        raise HTTPException(409, "A material position is already used in another work diary entry.")
 
-    source_items: dict[tuple[str, int], tuple[int, Decimal | None]] = {}
+    source_items: dict[tuple[str, int], _MaterialSourceItem] = {}
     expense_item_ids = [item_id for item_type, item_id in item_keys if item_type == "expense_item"]
     if expense_item_ids:
         item_result = await db.execute(select(ExpenseItem).where(ExpenseItem.id.in_(expense_item_ids)))
         for item in item_result.scalars().all():
-            source_items[("expense_item", item.id)] = (
-                item.expense_id,
-                _dec(item.unit_price) if item.unit_price is not None else None,
+            source_items[("expense_item", item.id)] = _MaterialSourceItem(
+                expense_id=item.expense_id,
+                quantity=_dec(item.quantity) if item.quantity is not None else None,
+                unit_price=_dec(item.unit_price) if item.unit_price is not None else None,
+                total_amount=_dec(item.total_amount),
             )
     receipt_item_ids = [item_id for item_type, item_id in item_keys if item_type == "receipt_item"]
     if receipt_item_ids:
@@ -319,9 +371,11 @@ async def _load_material_expenses(
         )
         for item, expense_id in item_result.all():
             if expense_id is not None:
-                source_items[("receipt_item", item.id)] = (
-                    expense_id,
-                    _dec(item.unit_price) if item.unit_price is not None else None,
+                source_items[("receipt_item", item.id)] = _MaterialSourceItem(
+                    expense_id=expense_id,
+                    quantity=_dec(item.quantity) if item.quantity is not None else None,
+                    unit_price=_dec(item.unit_price) if item.unit_price is not None else None,
+                    total_amount=_dec(item.total_amount),
                 )
 
     allocated_by_expense = await _allocated_material_amounts(
@@ -338,27 +392,73 @@ async def _load_material_expenses(
     }
     requested_by_expense: dict[int, Decimal] = {}
     resolved_amounts: list[Decimal] = []
+    resolved_quantities: list[Decimal | None] = []
     unit_prices: list[Decimal | None] = []
     for item in materials:
         if item.source != "expense" or not item.expense_id:
             resolved_amounts.append(_dec(item.amount))
+            resolved_quantities.append(_dec(item.quantity) if item.quantity is not None else None)
             unit_prices.append(_dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None)
             continue
         key = (item.source_item_type, item.source_item_id) if item.source_item_type and item.source_item_id else None
         source_item = source_items.get(key) if key else None
         if key is not None and source_item is None:
             raise HTTPException(404, "Linked source item not found")
-        if source_item is not None and source_item[0] != item.expense_id:
+        if source_item is not None and source_item.expense_id != item.expense_id:
             raise HTTPException(400, "Linked source item belongs to a different expense")
         amount = _dec(item.amount)
-        if amount <= 0:
+        quantity = _dec(item.quantity) if item.quantity is not None else None
+        unit_price = _dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None
+        if source_item is not None and key is not None:
+            allocation = allocated_source_items.get(key, _MaterialSourceAllocation())
+            _, remaining_quantity, remaining_item_amount, is_used = _source_item_balance(
+                source_item.quantity,
+                source_item.total_amount,
+                allocation,
+            )
+            if is_used:
+                raise HTTPException(409, "A material position has no remaining quantity.")
+            effective_unit_price = source_item.unit_price
+            if (
+                (effective_unit_price is None or effective_unit_price <= 0)
+                and source_item.quantity is not None
+                and source_item.quantity > 0
+            ):
+                effective_unit_price = source_item.total_amount / source_item.quantity
+            if remaining_quantity is not None:
+                if quantity is None:
+                    if amount > 0 and effective_unit_price is not None and effective_unit_price > 0:
+                        quantity = (amount / effective_unit_price).quantize(Decimal("0.001"))
+                    else:
+                        quantity = remaining_quantity
+                if quantity > remaining_quantity + MATERIAL_QUANTITY_TOLERANCE:
+                    raise HTTPException(
+                        409,
+                        (
+                            f"Material position has only {remaining_quantity:.3f} units available, "
+                            f"but {quantity:.3f} units were requested."
+                        ),
+                    )
+                if quantity >= remaining_quantity - MATERIAL_QUANTITY_TOLERANCE:
+                    amount = remaining_item_amount
+                elif effective_unit_price is not None and effective_unit_price > 0:
+                    amount = (quantity * effective_unit_price).quantize(Decimal("0.01"))
+            elif amount <= 0:
+                amount = remaining_item_amount
+            if amount > remaining_item_amount + MATERIAL_AMOUNT_TOLERANCE:
+                raise HTTPException(
+                    409,
+                    (
+                        f"Material position has only {remaining_item_amount:.2f} RSD available, "
+                        f"but {amount:.2f} RSD was requested."
+                    ),
+                )
+            unit_price = effective_unit_price
+        if amount <= 0 and source_item is None:
             amount = available_by_expense[item.expense_id]
         resolved_amounts.append(amount)
-        unit_prices.append(
-            source_item[1]
-            if source_item is not None
-            else (_dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None)
-        )
+        resolved_quantities.append(quantity)
+        unit_prices.append(unit_price)
         requested_by_expense[item.expense_id] = requested_by_expense.get(item.expense_id, Decimal("0")) + amount
 
     for expense_id, requested_amount in requested_by_expense.items():
@@ -374,6 +474,7 @@ async def _load_material_expenses(
     return _MaterialExpenseContext(
         expenses_by_id=expenses_by_id,
         resolved_amounts=resolved_amounts,
+        resolved_quantities=resolved_quantities,
         unit_prices=unit_prices,
     )
 
@@ -400,7 +501,7 @@ def _replace_materials(
             WorkDiaryMaterial(
                 line_no=len(rows) + 1,
                 description=description,
-                quantity=item.quantity,
+                quantity=context.resolved_quantities[index],
                 unit=item.unit,
                 source=item.source,
                 expense_id=expense.id if expense else None,
@@ -962,10 +1063,43 @@ def _unit_from_item_name(name: str) -> str | None:
     return unit if unit in WORK_DIARY_MATERIAL_UNITS else None
 
 
+def _expense_item_option(
+    *,
+    source_item_type: str,
+    source_item_id: int,
+    name: str,
+    quantity,
+    unit_price,
+    total_amount,
+    allocation: _MaterialSourceAllocation,
+) -> WorkDiaryExpenseItemOption:
+    source_quantity = _dec(quantity) if quantity is not None else None
+    source_total_amount = _dec(total_amount)
+    used_quantity, remaining_quantity, remaining_amount, is_used = _source_item_balance(
+        source_quantity,
+        source_total_amount,
+        allocation,
+    )
+    return WorkDiaryExpenseItemOption(
+        source_item_type=source_item_type,
+        source_item_id=source_item_id,
+        name=name,
+        quantity=_float(quantity) if quantity is not None else None,
+        unit=_unit_from_item_name(name),
+        unit_price=_float(unit_price) if unit_price is not None else None,
+        total_amount=_float(source_total_amount),
+        used_quantity=_float(used_quantity),
+        remaining_quantity=_float(remaining_quantity) if remaining_quantity is not None else None,
+        used_amount=_float(min(max(allocation.amount, Decimal("0")), source_total_amount)),
+        remaining_amount=_float(remaining_amount),
+        is_used=is_used,
+    )
+
+
 async def _load_expense_item_options(
     db: AsyncSession,
     expense_ids: list[int],
-    used_item_keys: set[tuple[str, int]],
+    allocated_source_items: dict[tuple[str, int], _MaterialSourceAllocation],
 ) -> dict[int, list[WorkDiaryExpenseItemOption]]:
     """Позиции расходов: свои позиции фактуры, иначе позиции связанного кассового чека."""
     if not expense_ids:
@@ -978,16 +1112,16 @@ async def _load_expense_item_options(
         .order_by(ExpenseItem.expense_id, ExpenseItem.line_no, ExpenseItem.id)
     )
     for item in expense_items_result.scalars().all():
+        key = ("expense_item", item.id)
         items_by_expense.setdefault(item.expense_id, []).append(
-            WorkDiaryExpenseItemOption(
-                source_item_type="expense_item",
+            _expense_item_option(
+                source_item_type=key[0],
                 source_item_id=item.id,
                 name=item.name,
-                quantity=_float(item.quantity) if item.quantity is not None else None,
-                unit=_unit_from_item_name(item.name),
-                unit_price=_float(item.unit_price) if item.unit_price is not None else None,
-                total_amount=_float(item.total_amount),
-                is_used=("expense_item", item.id) in used_item_keys,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                total_amount=item.total_amount,
+                allocation=allocated_source_items.get(key, _MaterialSourceAllocation()),
             )
         )
 
@@ -1000,16 +1134,16 @@ async def _load_expense_item_options(
             .order_by(PurchaseReceiptItem.receipt_id, PurchaseReceiptItem.line_no, PurchaseReceiptItem.id)
         )
         for expense_id, item in receipt_items_result.all():
+            key = ("receipt_item", item.id)
             items_by_expense.setdefault(expense_id, []).append(
-                WorkDiaryExpenseItemOption(
-                    source_item_type="receipt_item",
+                _expense_item_option(
+                    source_item_type=key[0],
                     source_item_id=item.id,
                     name=item.name,
-                    quantity=_float(item.quantity) if item.quantity is not None else None,
-                    unit=_unit_from_item_name(item.name),
-                    unit_price=_float(item.unit_price) if item.unit_price is not None else None,
-                    total_amount=_float(item.total_amount),
-                    is_used=("receipt_item", item.id) in used_item_keys,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    total_amount=item.total_amount,
+                    allocation=allocated_source_items.get(key, _MaterialSourceAllocation()),
                 )
             )
     return items_by_expense
@@ -1044,12 +1178,12 @@ async def list_expense_options(
     result = await db.execute(query)
     expenses = result.scalars().all()
     expense_ids = [expense.id for expense in expenses]
-    used_item_keys = await _allocated_source_item_keys(
+    allocated_source_items = await _allocated_source_item_totals(
         db,
         expense_ids,
         exclude_entry_id=entry_id,
     )
-    items_by_expense = await _load_expense_item_options(db, expense_ids, used_item_keys)
+    items_by_expense = await _load_expense_item_options(db, expense_ids, allocated_source_items)
     allocated_by_expense = await _allocated_material_amounts(
         db,
         expense_ids,
