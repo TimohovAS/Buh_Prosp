@@ -522,6 +522,30 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
                 date=date(2026, 7, 11),
                 project_id=project.id,
                 worker_ids=[worker.id],
+                description="Mixed source item and whole expense",
+                duration_hours=1,
+                materials=[
+                    duplicate_material,
+                    WorkDiaryMaterialCreate(
+                        description=expense.description,
+                        source="expense",
+                        expense_id=expense.id,
+                        amount=100,
+                    ),
+                ],
+            ),
+            db_session,
+            user,
+        )
+    assert exc_info.value.status_code == 409
+    assert "whole expense" in exc_info.value.detail
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_entry(
+            WorkDiaryEntryCreate(
+                date=date(2026, 7, 11),
+                project_id=project.id,
+                worker_ids=[worker.id],
                 description="Duplicate source item",
                 duration_hours=1,
                 materials=[duplicate_material],

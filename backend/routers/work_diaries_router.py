@@ -271,6 +271,20 @@ async def _load_material_expenses(
         if expense.status == "reversed" or expense.reversal_of_id or expense.reversed_expense_id:
             raise HTTPException(400, "Linked expense is reversed")
 
+    expense_link_modes: dict[int, set[str]] = {}
+    whole_expense_counts: dict[int, int] = {}
+    for item in materials:
+        if item.source != "expense" or not item.expense_id:
+            continue
+        mode = "position" if item.source_item_type and item.source_item_id else "whole"
+        expense_link_modes.setdefault(item.expense_id, set()).add(mode)
+        if mode == "whole":
+            whole_expense_counts[item.expense_id] = whole_expense_counts.get(item.expense_id, 0) + 1
+    if any(len(modes) > 1 for modes in expense_link_modes.values()):
+        raise HTTPException(409, "Expense positions cannot be combined with the whole expense.")
+    if any(count > 1 for count in whole_expense_counts.values()):
+        raise HTTPException(409, "The whole expense cannot be used more than once in a work diary entry.")
+
     requested_item_keys = [
         (item.source_item_type, item.source_item_id)
         for item in materials
