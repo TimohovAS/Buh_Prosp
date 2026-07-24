@@ -952,6 +952,7 @@ const ru = {
   workDiariesRemainingToInvoice: 'Осталось фактурировать',
   workDiariesSelectAll: 'Выбрать все доступные записи проекта',
   workDiariesBillable: 'К фактурированию',
+  workDiariesBillableAdjustment: 'Коррекция к фактурированию',
   workDiariesBillableAdjusted: 'Сумма скорректирована вручную',
   workDiariesBillableAuto: 'Автоматический расчет',
   workDiariesBillableOverride: 'К фактурированию вручную, RSD',

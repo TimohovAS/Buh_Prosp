@@ -950,6 +950,7 @@ const sr = {
   workDiariesRemainingToInvoice: 'Преостало за фактурисање',
   workDiariesSelectAll: 'Изабери све расположиве записе пројекта',
   workDiariesBillable: 'За фактурисање',
+  workDiariesBillableAdjustment: 'Корекција за фактурисање',
   workDiariesBillableAdjusted: 'Износ је ручно коригован',
   workDiariesBillableAuto: 'Аутоматски обрачун',
   workDiariesBillableOverride: 'Ручни износ за фактурисање, RSD',

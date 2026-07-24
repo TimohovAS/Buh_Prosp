@@ -832,6 +832,11 @@ export default function WorkDiaryEntryModal({
           <span>
             {tr('workDiariesCustomerLabor')}: <b>{money(totals.billableLabor)}</b>
           </span>
+          {totals.billableAdjusted ? (
+            <span>
+              {tr('workDiariesBillableAdjustment')}: <b>{money(totals.billableAdjustment)}</b>
+            </span>
+          ) : null}
           {totals.billable != null ? (
             <span>
               {tr('workDiariesBillable')}: <b>{money(totals.billable)}</b>
