@@ -204,6 +204,9 @@ class WorkDiaryMaterialBase(BaseModel):
     unit: Optional[str] = None
     source: Literal["stock", "expense"] = "stock"
     expense_id: Optional[int] = None
+    source_item_type: Optional[Literal["expense_item", "receipt_item"]] = None
+    source_item_id: Optional[int] = None
+    unit_price_snapshot: Optional[float] = Field(default=None, ge=0)
     amount: float = Field(default=0, ge=0)
 
     @model_validator(mode="before")
@@ -212,7 +215,14 @@ class WorkDiaryMaterialBase(BaseModel):
         if not isinstance(data, dict):
             return data
         result = dict(data)
-        for key in ("quantity", "unit", "expense_id"):
+        for key in (
+            "quantity",
+            "unit",
+            "expense_id",
+            "source_item_type",
+            "source_item_id",
+            "unit_price_snapshot",
+        ):
             if result.get(key) == "":
                 result[key] = None
         return result
@@ -228,8 +238,14 @@ class WorkDiaryMaterialBase(BaseModel):
     def validate_expense_link(self):
         if self.source == "expense" and self.expense_id is None:
             raise ValueError("expense_id is required when source is 'expense'")
+        if (self.source_item_type is None) != (self.source_item_id is None):
+            raise ValueError("source_item_type and source_item_id must be provided together")
+        if self.source_item_type is not None and self.source != "expense":
+            raise ValueError("A source item can only be linked to an expense material")
         if self.source == "stock":
             self.expense_id = None
+            self.source_item_type = None
+            self.source_item_id = None
         return self
 
 
@@ -245,6 +261,9 @@ class WorkDiaryMaterialResponse(BaseModel):
     unit: Optional[str] = None
     source: str
     expense_id: Optional[int] = None
+    source_item_type: Optional[str] = None
+    source_item_id: Optional[int] = None
+    unit_price_snapshot: Optional[float] = None
     expense_date: Optional[DateType] = None
     expense_description: Optional[str] = None
     amount: float
@@ -259,7 +278,8 @@ class WorkDiaryEntryBase(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
-    material_billing_multiplier: float = Field(default=1.2, gt=0)
+    # None => коэффициент из настроек предприятия
+    material_billing_multiplier: Optional[float] = Field(default=None, gt=0)
     billable_amount_override: Optional[float] = Field(default=None, ge=0)
     # None => коэффициент из настроек предприятия
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
@@ -496,6 +516,8 @@ class WorkDiaryInvoiceCreateResponse(BaseModel):
 class WorkDiaryExpenseItemOption(BaseModel):
     """Позиция чека или фактуры внутри расхода — для автозаполнения строки материалов."""
 
+    source_item_type: Literal["expense_item", "receipt_item"]
+    source_item_id: int
     name: str
     quantity: Optional[float] = None
     unit: Optional[str] = None
@@ -512,6 +534,8 @@ class WorkDiaryExpenseOptionResponse(BaseModel):
     amount: float
     source: str
     status: str
+    used_amount: float = 0
+    remaining_amount: float = 0
     items: list[WorkDiaryExpenseItemOption] = Field(default_factory=list)
 
 
@@ -1012,6 +1036,7 @@ class EnterpriseBase(BaseModel):
     emblem_data_url: Optional[str] = None
     # Закон о раде РС: надбавка за сверхурочные минимум +26% => коэффициент не ниже 1.26
     work_diary_overtime_multiplier: Optional[Decimal] = Field(default=Decimal("1.26"), ge=1)
+    work_diary_material_billing_multiplier: Decimal = Field(default=Decimal("1.2"), gt=0)
 
     @field_validator("emblem_data_url", mode="before")
     @classmethod

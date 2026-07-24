@@ -6,6 +6,7 @@
 (source="stock", стоимость — оценка, прибавляется к затратам объекта).
 """
 
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
@@ -60,6 +61,7 @@ router = APIRouter(prefix="/work-diaries", tags=["work-diaries"])
 REGULAR_DAY_HOURS = Decimal("8")
 # Закон о раде РС, чл. 108: надбавка за сверхурочные — минимум +26%
 DEFAULT_OVERTIME_MULTIPLIER = Decimal("1.26")
+DEFAULT_MATERIAL_BILLING_MULTIPLIER = Decimal("1.2")
 EXPENSE_OPTIONS_LIMIT = 300
 INVOICE_ALLOCATE_DETAIL = "Could not allocate a unique invoice number for this year."
 
@@ -129,6 +131,12 @@ async def _default_overtime_multiplier(db: AsyncSession) -> Decimal:
     return _dec(value) if value else DEFAULT_OVERTIME_MULTIPLIER
 
 
+async def _default_material_billing_multiplier(db: AsyncSession) -> Decimal:
+    result = await db.execute(select(Enterprise.work_diary_material_billing_multiplier).limit(1))
+    value = result.scalar_one_or_none()
+    return _dec(value) if value else DEFAULT_MATERIAL_BILLING_MULTIPLIER
+
+
 async def _get_project(db: AsyncSession, project_id: int) -> Project:
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
@@ -187,15 +195,52 @@ def _apply_calculated_fields(
     entry.overtime_multiplier = overtime_multiplier
 
 
+@dataclass
+class _MaterialExpenseContext:
+    expenses_by_id: dict[int, Expense]
+    resolved_amounts: list[Decimal]
+    unit_prices: list[Decimal | None]
+
+
+async def _allocated_material_amounts(
+    db: AsyncSession,
+    expense_ids: set[int] | list[int],
+    *,
+    exclude_entry_id: int | None = None,
+) -> dict[int, Decimal]:
+    if not expense_ids:
+        return {}
+    query = (
+        select(WorkDiaryMaterial.expense_id, func.coalesce(func.sum(WorkDiaryMaterial.amount), 0))
+        .where(
+            WorkDiaryMaterial.source == "expense",
+            WorkDiaryMaterial.expense_id.in_(expense_ids),
+        )
+        .group_by(WorkDiaryMaterial.expense_id)
+    )
+    if exclude_entry_id is not None:
+        query = query.where(WorkDiaryMaterial.entry_id != exclude_entry_id)
+    result = await db.execute(query)
+    return {expense_id: _dec(amount) for expense_id, amount in result.all()}
+
+
 async def _load_material_expenses(
     db: AsyncSession,
     project_id: int,
     materials: list[WorkDiaryMaterialCreate],
-) -> dict[int, Expense]:
+    *,
+    entry_id: int | None = None,
+) -> _MaterialExpenseContext:
     expense_ids = {item.expense_id for item in materials if item.source == "expense" and item.expense_id}
     if not expense_ids:
-        return {}
-    result = await db.execute(select(Expense).where(Expense.id.in_(expense_ids)))
+        return _MaterialExpenseContext(
+            expenses_by_id={},
+            resolved_amounts=[_dec(item.amount) for item in materials],
+            unit_prices=[
+                _dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None for item in materials
+            ],
+        )
+    result = await db.execute(select(Expense).where(Expense.id.in_(expense_ids)).with_for_update())
     expenses_by_id = {expense.id: expense for expense in result.scalars().all()}
     for expense_id in expense_ids:
         expense = expenses_by_id.get(expense_id)
@@ -205,7 +250,85 @@ async def _load_material_expenses(
             raise HTTPException(400, "Linked expense belongs to a different project")
         if expense.status == "reversed" or expense.reversal_of_id or expense.reversed_expense_id:
             raise HTTPException(400, "Linked expense is reversed")
-    return expenses_by_id
+
+    item_keys = {
+        (item.source_item_type, item.source_item_id)
+        for item in materials
+        if item.source == "expense" and item.source_item_type and item.source_item_id
+    }
+    source_items: dict[tuple[str, int], tuple[int, Decimal | None]] = {}
+    expense_item_ids = [item_id for item_type, item_id in item_keys if item_type == "expense_item"]
+    if expense_item_ids:
+        item_result = await db.execute(select(ExpenseItem).where(ExpenseItem.id.in_(expense_item_ids)))
+        for item in item_result.scalars().all():
+            source_items[("expense_item", item.id)] = (
+                item.expense_id,
+                _dec(item.unit_price) if item.unit_price is not None else None,
+            )
+    receipt_item_ids = [item_id for item_type, item_id in item_keys if item_type == "receipt_item"]
+    if receipt_item_ids:
+        item_result = await db.execute(
+            select(PurchaseReceiptItem, PurchaseReceipt.expense_id)
+            .join(PurchaseReceipt, PurchaseReceipt.id == PurchaseReceiptItem.receipt_id)
+            .where(PurchaseReceiptItem.id.in_(receipt_item_ids))
+        )
+        for item, expense_id in item_result.all():
+            if expense_id is not None:
+                source_items[("receipt_item", item.id)] = (
+                    expense_id,
+                    _dec(item.unit_price) if item.unit_price is not None else None,
+                )
+
+    allocated_by_expense = await _allocated_material_amounts(
+        db,
+        expense_ids,
+        exclude_entry_id=entry_id,
+    )
+    available_by_expense = {
+        expense_id: max(
+            _dec(expense.amount) - allocated_by_expense.get(expense_id, Decimal("0")),
+            Decimal("0"),
+        )
+        for expense_id, expense in expenses_by_id.items()
+    }
+    requested_by_expense: dict[int, Decimal] = {}
+    resolved_amounts: list[Decimal] = []
+    unit_prices: list[Decimal | None] = []
+    for item in materials:
+        if item.source != "expense" or not item.expense_id:
+            resolved_amounts.append(_dec(item.amount))
+            unit_prices.append(_dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None)
+            continue
+        key = (item.source_item_type, item.source_item_id) if item.source_item_type and item.source_item_id else None
+        source_item = source_items.get(key) if key else None
+        if source_item is not None and source_item[0] != item.expense_id:
+            raise HTTPException(400, "Linked source item belongs to a different expense")
+        amount = _dec(item.amount)
+        if amount <= 0:
+            amount = available_by_expense[item.expense_id]
+        resolved_amounts.append(amount)
+        unit_prices.append(
+            source_item[1]
+            if source_item is not None
+            else (_dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None)
+        )
+        requested_by_expense[item.expense_id] = requested_by_expense.get(item.expense_id, Decimal("0")) + amount
+
+    for expense_id, requested_amount in requested_by_expense.items():
+        available_amount = available_by_expense[expense_id]
+        if requested_amount > available_amount + Decimal("0.005"):
+            raise HTTPException(
+                409,
+                (
+                    f"Expense {expense_id} has only {available_amount:.2f} RSD available, "
+                    f"but {requested_amount:.2f} RSD was requested."
+                ),
+            )
+    return _MaterialExpenseContext(
+        expenses_by_id=expenses_by_id,
+        resolved_amounts=resolved_amounts,
+        unit_prices=unit_prices,
+    )
 
 
 def _validate_existing_material_links(entry: WorkDiaryEntry, project_id: int) -> None:
@@ -218,17 +341,14 @@ def _validate_existing_material_links(entry: WorkDiaryEntry, project_id: int) ->
 def _replace_materials(
     entry: WorkDiaryEntry,
     materials: list[WorkDiaryMaterialCreate],
-    expenses_by_id: dict[int, Expense],
+    context: _MaterialExpenseContext,
 ) -> None:
     rows: list[WorkDiaryMaterial] = []
-    for item in materials:
-        expense = expenses_by_id.get(item.expense_id) if item.source == "expense" else None
+    for index, item in enumerate(materials):
+        expense = context.expenses_by_id.get(item.expense_id) if item.source == "expense" else None
         description = item.description.strip() or (expense.description if expense else "")
         if not description:
             continue
-        amount = _dec(item.amount)
-        if expense is not None and amount <= 0:
-            amount = _dec(expense.amount)
         rows.append(
             WorkDiaryMaterial(
                 line_no=len(rows) + 1,
@@ -237,7 +357,10 @@ def _replace_materials(
                 unit=item.unit,
                 source=item.source,
                 expense_id=expense.id if expense else None,
-                amount=amount,
+                source_item_type=item.source_item_type if expense else None,
+                source_item_id=item.source_item_id if expense else None,
+                unit_price_snapshot=context.unit_prices[index],
+                amount=context.resolved_amounts[index],
             )
         )
     entry.materials = rows
@@ -266,11 +389,7 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
     material_billing_multiplier = _dec(entry.material_billing_multiplier)
     billable_materials = materials * material_billing_multiplier
     calculated_billable = _dec(entry.duration_hours) * billing_rate + billable_materials
-    billable = (
-        calculated_billable
-        if entry.billable_amount_override is None
-        else _dec(entry.billable_amount_override)
-    )
+    billable = calculated_billable if entry.billable_amount_override is None else _dec(entry.billable_amount_override)
     return {
         "labor_amount": labor,
         "payout_amount": labor + allowances,
@@ -339,6 +458,11 @@ def _serialize_material(material: WorkDiaryMaterial) -> WorkDiaryMaterialRespons
         unit=material.unit,
         source=material.source,
         expense_id=material.expense_id,
+        source_item_type=material.source_item_type,
+        source_item_id=material.source_item_id,
+        unit_price_snapshot=(
+            _float(material.unit_price_snapshot) if material.unit_price_snapshot is not None else None
+        ),
         expense_date=getattr(expense, "date", None),
         expense_description=getattr(expense, "description", None),
         amount=_float(material.amount),
@@ -426,12 +550,16 @@ async def list_entries(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    query = select(WorkDiaryEntry).options(
-        selectinload(WorkDiaryEntry.project),
-        selectinload(WorkDiaryEntry.workers),
-        selectinload(WorkDiaryEntry.materials).selectinload(WorkDiaryMaterial.expense),
-        selectinload(WorkDiaryEntry.invoice_allocations).selectinload(WorkDiaryInvoiceAllocation.income),
-    ).execution_options(populate_existing=True)
+    query = (
+        select(WorkDiaryEntry)
+        .options(
+            selectinload(WorkDiaryEntry.project),
+            selectinload(WorkDiaryEntry.workers),
+            selectinload(WorkDiaryEntry.materials).selectinload(WorkDiaryMaterial.expense),
+            selectinload(WorkDiaryEntry.invoice_allocations).selectinload(WorkDiaryInvoiceAllocation.income),
+        )
+        .execution_options(populate_existing=True)
+    )
     if project_id is not None:
         query = query.where(WorkDiaryEntry.project_id == project_id)
     if worker_id is not None:
@@ -454,7 +582,7 @@ async def create_entry(
 ):
     await _get_project(db, data.project_id)
     workers = await _get_workers(db, data.worker_ids)
-    material_expenses = await _load_material_expenses(db, data.project_id, data.materials)
+    material_context = await _load_material_expenses(db, data.project_id, data.materials)
     duration_hours = _calculate_duration_hours(data.start_time, data.end_time, data.duration_hours)
     team_hourly_rate = (
         _dec(data.team_hourly_rate_snapshot)
@@ -467,6 +595,11 @@ async def create_entry(
         if data.overtime_multiplier is not None
         else await _default_overtime_multiplier(db)
     )
+    material_billing_multiplier = (
+        _dec(data.material_billing_multiplier)
+        if data.material_billing_multiplier is not None
+        else await _default_material_billing_multiplier(db)
+    )
     entry = WorkDiaryEntry(
         date=data.date,
         project_id=data.project_id,
@@ -478,7 +611,7 @@ async def create_entry(
         lodging_amount=_dec(data.lodging_amount),
         food_allowance=data.food_allowance,
         food_amount=_dec(data.food_amount),
-        material_billing_multiplier=_dec(data.material_billing_multiplier),
+        material_billing_multiplier=material_billing_multiplier,
         billable_amount_override=(
             _dec(data.billable_amount_override) if data.billable_amount_override is not None else None
         ),
@@ -495,7 +628,7 @@ async def create_entry(
         team_billing_hourly_rate=team_billing_hourly_rate,
         overtime_multiplier=overtime_multiplier,
     )
-    _replace_materials(entry, data.materials, material_expenses)
+    _replace_materials(entry, data.materials, material_context)
     db.add(entry)
     await db.commit()
     entry = await _get_entry(db, entry.id)
@@ -515,9 +648,14 @@ async def update_entry(
     next_project_id = dump.get("project_id", entry.project_id)
     await _get_project(db, next_project_id)
     if data.materials is not None:
-        material_expenses = await _load_material_expenses(db, next_project_id, data.materials)
+        material_context = await _load_material_expenses(
+            db,
+            next_project_id,
+            data.materials,
+            entry_id=entry.id,
+        )
     else:
-        material_expenses = {}
+        material_context = None
         _validate_existing_material_links(entry, next_project_id)
     workers_changed = "worker_ids" in dump
     if workers_changed:
@@ -549,9 +687,7 @@ async def update_entry(
         entry.material_billing_multiplier = _dec(dump["material_billing_multiplier"])
     if "billable_amount_override" in dump:
         entry.billable_amount_override = (
-            _dec(dump["billable_amount_override"])
-            if dump["billable_amount_override"] is not None
-            else None
+            _dec(dump["billable_amount_override"]) if dump["billable_amount_override"] is not None else None
         )
 
     # Явная длительность без явных времен означает ручной ввод: старые времена сбрасываются,
@@ -589,7 +725,7 @@ async def update_entry(
         overtime_multiplier=overtime_multiplier,
     )
     if data.materials is not None:
-        _replace_materials(entry, data.materials, material_expenses)
+        _replace_materials(entry, data.materials, material_context)
 
     await db.commit()
     entry = await _get_entry(db, entry.id)
@@ -681,9 +817,7 @@ async def create_invoice_from_entries(
     for line in data.lines:
         entry = entries_by_id[line.entry_id]
         source_amount = _entry_amounts(entry)["billable_amount"].quantize(Decimal("0.01"))
-        remaining_amount = _entry_billing(entry, source_amount)["remaining_billable_amount"].quantize(
-            Decimal("0.01")
-        )
+        remaining_amount = _entry_billing(entry, source_amount)["remaining_billable_amount"].quantize(Decimal("0.01"))
         line_amount = _dec(line.amount).quantize(Decimal("0.01"))
         if remaining_amount <= 0:
             raise HTTPException(409, f"Work diary entry {entry.id} is already fully invoiced.")
@@ -761,7 +895,9 @@ async def create_invoice_from_entries(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(409, "The invoice could not be created because the data changed. Refresh and retry.") from exc
+        raise HTTPException(
+            409, "The invoice could not be created because the data changed. Refresh and retry."
+        ) from exc
     return WorkDiaryInvoiceCreateResponse(
         income_id=income.id,
         invoice_number=income.invoice_number,
@@ -795,6 +931,8 @@ async def _load_expense_item_options(
     for item in expense_items_result.scalars().all():
         items_by_expense.setdefault(item.expense_id, []).append(
             WorkDiaryExpenseItemOption(
+                source_item_type="expense_item",
+                source_item_id=item.id,
                 name=item.name,
                 quantity=_float(item.quantity) if item.quantity is not None else None,
                 unit=_unit_from_item_name(item.name),
@@ -814,6 +952,8 @@ async def _load_expense_item_options(
         for expense_id, item in receipt_items_result.all():
             items_by_expense.setdefault(expense_id, []).append(
                 WorkDiaryExpenseItemOption(
+                    source_item_type="receipt_item",
+                    source_item_id=item.id,
                     name=item.name,
                     quantity=_float(item.quantity) if item.quantity is not None else None,
                     unit=_unit_from_item_name(item.name),
@@ -831,8 +971,11 @@ async def list_expense_options(
     date_to: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
+    entry_id: int | None = Query(None),
 ):
     """Расходы проекта, к которым можно привязать строку материалов (с позициями чеков/фактур)."""
+    if not isinstance(entry_id, int):
+        entry_id = None
     await _get_project(db, project_id)
     query = select(Expense).where(
         Expense.project_id == project_id,
@@ -849,7 +992,13 @@ async def list_expense_options(
     query = query.order_by(Expense.date.desc(), Expense.id.desc()).limit(EXPENSE_OPTIONS_LIMIT)
     result = await db.execute(query)
     expenses = result.scalars().all()
-    items_by_expense = await _load_expense_item_options(db, [expense.id for expense in expenses])
+    expense_ids = [expense.id for expense in expenses]
+    items_by_expense = await _load_expense_item_options(db, expense_ids)
+    allocated_by_expense = await _allocated_material_amounts(
+        db,
+        expense_ids,
+        exclude_entry_id=entry_id,
+    )
     return [
         WorkDiaryExpenseOptionResponse(
             id=expense.id,
@@ -858,6 +1007,13 @@ async def list_expense_options(
             amount=_float(expense.amount),
             source=expense.source,
             status=expense.status,
+            used_amount=_float(allocated_by_expense.get(expense.id)),
+            remaining_amount=_float(
+                max(
+                    _dec(expense.amount) - allocated_by_expense.get(expense.id, Decimal("0")),
+                    Decimal("0"),
+                )
+            ),
             items=items_by_expense.get(expense.id, []),
         )
         for expense in expenses

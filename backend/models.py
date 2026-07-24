@@ -190,6 +190,7 @@ class Enterprise(Base):
     backup_scheduler_check_minutes = Column(Integer)
     # Коэффициент оплаты сверхурочных в дневниках работ (Закон о раде РС: минимум +26% => 1.26)
     work_diary_overtime_multiplier = Column(Numeric(6, 4), default=1.26)
+    work_diary_material_billing_multiplier = Column(Numeric(8, 4), nullable=False, default=1.2)
 
 
 class EfakturaImportRecord(Base):
@@ -518,6 +519,9 @@ class WorkDiaryMaterial(Base):
     unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h
     source = Column(String(20), nullable=False, default="stock")  # stock | expense
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, index=True)
+    source_item_type = Column(String(20), nullable=True)  # expense_item | receipt_item
+    source_item_id = Column(Integer, nullable=True)
+    unit_price_snapshot = Column(Numeric(14, 2), nullable=True)
     amount = Column(Numeric(14, 2), nullable=False, default=0)
 
     entry = relationship("WorkDiaryEntry", back_populates="materials")

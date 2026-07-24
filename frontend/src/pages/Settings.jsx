@@ -5,6 +5,7 @@ import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
+import { DEFAULT_MATERIAL_BILLING_MULTIPLIER } from '../components/work-diaries/workDiaryUtils'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
@@ -101,6 +102,7 @@ export default function Settings() {
     opening_cash_balance: 0,
     opening_cash_date: `${currentYear}-01-01`,
     work_diary_overtime_multiplier: 1.26,
+    work_diary_material_billing_multiplier: DEFAULT_MATERIAL_BILLING_MULTIPLIER,
   })
 
   const currentUser = getUser()
@@ -393,6 +395,8 @@ export default function Settings() {
             opening_cash_balance: response.opening_cash_balance ?? 0,
             opening_cash_date: response.opening_cash_date || defaultDate,
             work_diary_overtime_multiplier: response.work_diary_overtime_multiplier ?? 1.26,
+            work_diary_material_billing_multiplier:
+              response.work_diary_material_billing_multiplier ?? DEFAULT_MATERIAL_BILLING_MULTIPLIER,
           })
         }
       })
@@ -1572,6 +1576,26 @@ export default function Settings() {
               />
               <small style={{ color: 'var(--color-text-muted)' }}>
                 {tr('workDiariesOvertimeMultiplierHint')}
+              </small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('workDiariesMaterialBillingMultiplier')}</label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                className="form-input"
+                value={form.work_diary_material_billing_multiplier}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    work_diary_material_billing_multiplier: event.target.value,
+                  })
+                }
+                required
+              />
+              <small style={{ color: 'var(--color-text-muted)' }}>
+                {tr('workDiariesMaterialBillingMultiplierSettingHint')}
               </small>
             </div>
             <div className="modal-actions">

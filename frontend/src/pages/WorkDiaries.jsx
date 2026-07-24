@@ -15,6 +15,7 @@ import WorkDiaryMetaModal from '../components/work-diaries/WorkDiaryMetaModal'
 import WorkDiaryPrintDiary from '../components/work-diaries/WorkDiaryPrintDiary'
 import WorkDiaryPrintReport from '../components/work-diaries/WorkDiaryPrintReport'
 import {
+  DEFAULT_MATERIAL_BILLING_MULTIPLIER,
   DEFAULT_OVERTIME_MULTIPLIER,
   dateLabel,
   hours,
@@ -64,6 +65,9 @@ export default function WorkDiaries() {
   const [summary, setSummary] = useState(null)
   const [meta, setMeta] = useState(emptyMeta)
   const [overtimeMultiplier, setOvertimeMultiplier] = useState(DEFAULT_OVERTIME_MULTIPLIER)
+  const [materialBillingMultiplier, setMaterialBillingMultiplier] = useState(
+    DEFAULT_MATERIAL_BILLING_MULTIPLIER
+  )
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('entries')
   const [entryModalOpen, setEntryModalOpen] = useState(false)
@@ -119,6 +123,9 @@ export default function WorkDiaries() {
     loadReferenceData()
     api.enterprise.get().then((enterprise) => {
       setOvertimeMultiplier(Number(enterprise?.work_diary_overtime_multiplier) || DEFAULT_OVERTIME_MULTIPLIER)
+      setMaterialBillingMultiplier(
+        Number(enterprise?.work_diary_material_billing_multiplier) || DEFAULT_MATERIAL_BILLING_MULTIPLIER
+      )
     })
   }, [isActivePage, loadReferenceData])
 
@@ -705,6 +712,7 @@ export default function WorkDiaries() {
         workers={workers}
         defaultProjectId={filters.project_id}
         overtimeMultiplier={overtimeMultiplier}
+        materialBillingMultiplier={materialBillingMultiplier}
       />
       <WorkDiaryMetaModal
         isOpen={metaModalOpen}

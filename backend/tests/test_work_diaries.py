@@ -142,7 +142,16 @@ async def test_work_diary_overtime_multiplier_comes_from_enterprise_settings(db_
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-settings-admin")
     worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("200"))
-    db_session.add_all([worker, Enterprise(name="Test", work_diary_overtime_multiplier=Decimal("1.5"))])
+    db_session.add_all(
+        [
+            worker,
+            Enterprise(
+                name="Test",
+                work_diary_overtime_multiplier=Decimal("1.5"),
+                work_diary_material_billing_multiplier=Decimal("1.35"),
+            ),
+        ]
+    )
     await db_session.flush()
 
     entry = await create_entry(
@@ -158,6 +167,7 @@ async def test_work_diary_overtime_multiplier_comes_from_enterprise_settings(db_
     )
 
     assert entry.overtime_multiplier == 1.5
+    assert entry.material_billing_multiplier == 1.35
     assert entry.labor_amount == 8 * 100 + 2 * 100 * 1.5
 
 
@@ -364,10 +374,144 @@ async def test_work_diary_expense_options_include_receipt_and_invoice_items(db_s
     assert receipt_items[1].quantity == 20
     assert receipt_items[1].unit_price == 84
     assert receipt_items[1].total_amount == 1680
+    assert receipt_items[1].source_item_type == "receipt_item"
+    assert receipt_items[1].source_item_id is not None
 
     invoice_items = options_by_id[invoice_expense.id].items
     assert [item.name for item in invoice_items] == ["Postarina"]
     assert invoice_items[0].unit is None
+    assert invoice_items[0].source_item_type == "expense_item"
+    assert invoice_items[0].source_item_id is not None
+
+
+@pytest.mark.asyncio
+async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
+    db_session,
+    make_project,
+    make_expense,
+):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-material-allocation-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    db_session.add(worker)
+    expense = await make_expense(
+        db_session,
+        amount=Decimal("2180"),
+        status="paid",
+        description="FARBARA",
+        project_id=project.id,
+    )
+    receipt = PurchaseReceipt(
+        verification_url="https://suf.purs.gov.rs/v/?vl=allocation",
+        qr_hash="hash-allocation-test",
+        total_amount=Decimal("2180"),
+        expense_id=expense.id,
+    )
+    db_session.add(receipt)
+    await db_session.flush()
+    item = PurchaseReceiptItem(
+        receipt_id=receipt.id,
+        line_no=1,
+        name="KLEMA 2X0,2-4MM2 /kom",
+        quantity=Decimal("5"),
+        unit_price=Decimal("100"),
+        total_amount=Decimal("500"),
+    )
+    db_session.add(item)
+    await db_session.flush()
+
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Wiring",
+            duration_hours=4,
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description=item.name,
+                    quantity=5,
+                    unit="kom",
+                    source="expense",
+                    expense_id=expense.id,
+                    source_item_type="receipt_item",
+                    source_item_id=item.id,
+                    unit_price_snapshot=999,
+                    amount=500,
+                )
+            ],
+        ),
+        db_session,
+        user,
+    )
+
+    saved_material = entry.materials[0]
+    assert saved_material.source_item_type == "receipt_item"
+    assert saved_material.source_item_id == item.id
+    assert saved_material.unit_price_snapshot == 100
+
+    options = await list_expense_options(project.id, None, None, db_session, user)
+    option = next(option for option in options if option.id == expense.id)
+    assert option.used_amount == 500
+    assert option.remaining_amount == 1680
+
+    current_entry_options = await list_expense_options(
+        project.id,
+        None,
+        None,
+        db_session,
+        user,
+        entry.id,
+    )
+    current_option = next(option for option in current_entry_options if option.id == expense.id)
+    assert current_option.used_amount == 0
+    assert current_option.remaining_amount == 2180
+
+    entry = await update_entry(
+        entry.id,
+        WorkDiaryEntryUpdate(
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description=item.name,
+                    quantity=2,
+                    unit="kom",
+                    source="expense",
+                    expense_id=expense.id,
+                    source_item_type="receipt_item",
+                    source_item_id=item.id,
+                    unit_price_snapshot=100,
+                    amount=200,
+                )
+            ]
+        ),
+        db_session,
+        user,
+    )
+    assert entry.materials[0].quantity == 2
+    assert entry.materials[0].amount == 200
+    assert entry.materials[0].unit_price_snapshot == 100
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_entry(
+            WorkDiaryEntryCreate(
+                date=date(2026, 7, 11),
+                project_id=project.id,
+                worker_ids=[worker.id],
+                description="Over-allocation",
+                duration_hours=1,
+                materials=[
+                    WorkDiaryMaterialCreate(
+                        description="Too much",
+                        source="expense",
+                        expense_id=expense.id,
+                        amount=2000,
+                    )
+                ],
+            ),
+            db_session,
+            user,
+        )
+    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio
@@ -688,6 +832,14 @@ def test_work_diary_material_validation():
 
     with pytest.raises(ValidationError):
         WorkDiaryMaterialCreate(description="Kabl", unit="unknown")
+
+    with pytest.raises(ValidationError):
+        WorkDiaryMaterialCreate(
+            description="Kabl",
+            source="expense",
+            expense_id=5,
+            source_item_type="receipt_item",
+        )
 
     stock = WorkDiaryMaterialCreate(description="Kabl", source="stock", expense_id=5)
     assert stock.expense_id is None

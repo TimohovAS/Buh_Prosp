@@ -3,6 +3,7 @@ import { formatInteger as fmtAmount } from '../../utils/formatters'
 
 export const REGULAR_DAY_HOURS = 8
 export const DEFAULT_OVERTIME_MULTIPLIER = 1.26
+export const DEFAULT_MATERIAL_BILLING_MULTIPLIER = 1.2
 
 export const WEATHER_CODES = ['sunny', 'cloudy', 'rain', 'snow', 'wind', 'fog']
 
@@ -119,7 +120,8 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
   if (form.per_diem) allowances += num(form.per_diem_amount) * workerCount
   if (form.food_allowance) allowances += num(form.food_amount) * workerCount
   const materialsTotal = materials.reduce((sum, item) => sum + num(item.amount), 0)
-  const materialBillingMultiplier = num(form.material_billing_multiplier) || 1.2
+  const materialBillingMultiplier =
+    num(form.material_billing_multiplier) || DEFAULT_MATERIAL_BILLING_MULTIPLIER
   const billableMaterials = materialsTotal * materialBillingMultiplier
   const personHours = duration * workerCount
   const calculatedBillable = duration * teamBillingRate + billableMaterials
