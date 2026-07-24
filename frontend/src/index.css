@@ -2693,6 +2693,22 @@ th {
   accent-color: var(--color-accent);
 }
 
+.work-diaries-checkbox-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.work-diaries-checkbox-wrapper.is-disabled {
+  cursor: not-allowed;
+}
+
+.work-diaries-checkbox-wrapper.is-disabled input {
+  pointer-events: none;
+}
+
 .work-diaries-invoice-links {
   min-width: 130px;
 }
@@ -2965,7 +2981,14 @@ th {
 }
 
 .work-diaries-entry-modal-body .form-group {
+  min-width: 0;
   margin-bottom: 0;
+}
+
+.work-diaries-entry-modal-body {
+  container-name: work-diary-entry;
+  container-type: inline-size;
+  overflow-x: hidden;
 }
 
 .work-diaries-entry-modal-body .work-diaries-form-grid {
@@ -3023,6 +3046,8 @@ th {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .work-diaries-allowances,
@@ -3045,6 +3070,17 @@ th {
     minmax(120px, max-content) minmax(180px, 2fr) minmax(85px, 0.7fr) minmax(75px, 0.6fr)
     minmax(120px, 1fr) auto;
   margin-top: 0.5rem;
+}
+
+.work-diaries-materials,
+.work-diaries-material-block,
+.work-diaries-material-row > *,
+.work-diaries-material-expense-row > * {
+  min-width: 0;
+}
+
+.work-diaries-material-row > .btn {
+  justify-self: end;
 }
 
 .work-diaries-material-block + .work-diaries-material-block {
@@ -3166,6 +3202,29 @@ th {
 
 .work-diaries-live-calc b {
   color: var(--color-text);
+}
+
+@container work-diary-entry (max-width: 760px) {
+  .work-diaries-material-row {
+    grid-template-columns: minmax(120px, 0.9fr) minmax(0, 2fr) minmax(90px, 0.7fr);
+  }
+
+  .work-diaries-material-expense-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@container work-diary-entry (max-width: 520px) {
+  .work-diaries-entry-modal-body .work-diaries-form-grid,
+  .work-diaries-material-row,
+  .work-diaries-material-expense-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .work-diaries-material-expense-row > *,
+  .work-diaries-material-expense-row > :only-child {
+    grid-column: 1;
+  }
 }
 
 .work-diaries-costs h3 {

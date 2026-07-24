@@ -938,7 +938,13 @@ const sr = {
   workDiariesInvoiceSelected: 'Изабрано записа',
   workDiariesInvoiceSelectedTotal: 'Расположиви износ',
   workDiariesInvoiceThisAmount: 'У ову фактуру',
-  workDiariesInvoiceUnavailable: 'Запис је већ потпуно фактурисан или пројекат нема клијента.',
+  workDiariesInvoiceSelectProjectFirst: 'Да бисте изабрали све записе, прво изаберите пројекат.',
+  workDiariesInvoiceUnavailableAlreadyInvoiced: 'Није могуће изабрати: запис је већ потпуно фактурисан.',
+  workDiariesInvoiceUnavailableInternalProject: 'Није могуће изабрати: интерни пројекти се не фактуришу.',
+  workDiariesInvoiceUnavailableMissingClient:
+    'Није могуће изабрати: пројекат нема клијента. Унесите клијента у податке пројекта.',
+  workDiariesInvoiceUnavailableNoAmount: 'Није могуће изабрати: расположиви износ за фактурисање је нула.',
+  workDiariesInvoiceUnavailableNoEntries: 'Изабрани пројекат нема доступних записа.',
   workDiariesInvoiced: 'Фактурисано',
   workDiariesRemaining: 'Остатак',
   workDiariesRemainingToInvoice: 'Преостало за фактурисање',
@@ -948,7 +954,7 @@ const sr = {
   workDiariesBillableAuto: 'Аутоматски обрачун',
   workDiariesBillableOverride: 'Ручни износ за фактурисање, RSD',
   workDiariesBillableOverrideTooltip:
-    'Коначни износ који ће се користити при изради фактуре на основу овог записа. Оставите поље празно за аутоматски обрачун: сати × цена бригаде за клијента + материјал.',
+    'Коначни износ који ће се користити при изради фактуре на основу овог записа. Оставите поље празно за аутоматски обрачун: сати × цена бригаде за клијента + набавна вредност материјала × коефицијент.',
   workDiariesBillableReset: 'Врати аутоматски обрачун',
   workDiariesCalcOvertime: 'од тога прековремени',
   workDiariesCalcSummary: 'Обрачун',
@@ -987,6 +993,10 @@ const sr = {
   workDiariesMaterialExpenseAmountHint: 'Празно — цео износ трошка',
   workDiariesMaterialExpensePick: 'Изаберите трошак пројекта',
   workDiariesMaterialCost: 'Вредност материјала',
+  workDiariesMaterialBillingMultiplier: 'Коефицијент материјала за фактуру',
+  workDiariesMaterialBillingMultiplierTooltip:
+    'Коефицијент којим се набавна вредност материјала множи за клијента. На пример, са коефицијентом 1,2 материјал вредности 1.000 RSD улази у обрачун фактуре као 1.200 RSD.',
+  workDiariesBillableMaterials: 'Материјал за клијента',
   workDiariesMaterialAddAllItems: 'Све ставке',
   workDiariesMaterialAddAllItemsHint: 'Додај све ставке рачуна као посебне редове',
   workDiariesMaterialNoExpenses: 'Пројекат нема одговарајућих трошкова',
@@ -1000,7 +1010,7 @@ const sr = {
   workDiariesTeamBillingRate: 'Цена бригаде за клијента, RSD/сат',
   workDiariesTeamBillingRateHint: 'Збир цена човек-сата изабраних радника',
   workDiariesTeamBillingRateTooltip:
-    'Продајна цена једног сата рада целе бригаде. Аутоматски се сабира из цена човек-сата изабраних радника. За фактурисање = сати рада × ова цена + материјал.',
+    'Продајна цена једног сата рада целе бригаде. Аутоматски се сабира из цена човек-сата изабраних радника. За фактурисање = сати рада × ова цена + набавна вредност материјала × коефицијент.',
   workDiariesMetaButton: 'Подаци о објекту',
   workDiariesMetaTitle: 'Подаци о објекту за штампане обрасце',
   workDiariesNewEntry: 'Нови запис',

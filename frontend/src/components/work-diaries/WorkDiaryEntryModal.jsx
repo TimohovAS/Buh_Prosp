@@ -32,6 +32,7 @@ const emptyForm = {
   end_time: '15:00',
   duration_hours: '',
   team_hourly_rate_snapshot: '',
+  material_billing_multiplier: '1.2',
   billable_amount_override: '',
   per_diem: false,
   per_diem_amount: '',
@@ -83,6 +84,8 @@ function formFromEntry(entry, defaultProjectId) {
     duration_hours: hasTimeRange ? '' : String(entry.duration_hours ?? ''),
     team_hourly_rate_snapshot:
       entry.team_hourly_rate_snapshot == null ? '' : String(entry.team_hourly_rate_snapshot),
+    material_billing_multiplier:
+      entry.material_billing_multiplier == null ? '1.2' : String(entry.material_billing_multiplier),
     billable_amount_override:
       entry.billable_amount_override == null ? '' : String(entry.billable_amount_override),
     per_diem: Boolean(entry.per_diem),
@@ -260,6 +263,7 @@ export default function WorkDiaryEntryModal({
         end_time: form.end_time || null,
         duration_hours: form.duration_hours === '' ? null : num(form.duration_hours),
         team_hourly_rate_snapshot: manualRate === '' ? null : num(manualRate),
+        material_billing_multiplier: num(form.material_billing_multiplier) || 1.2,
         billable_amount_override:
           form.billable_amount_override === '' ? null : num(form.billable_amount_override),
         per_diem_amount: num(form.per_diem_amount),
@@ -297,7 +301,6 @@ export default function WorkDiaryEntryModal({
       onClose={close}
       title={tr(entry ? 'workDiariesEditEntry' : 'workDiariesNewEntry')}
       maxWidth="1120px"
-      resizable={false}
       bodyClassName="work-diaries-entry-modal-body"
     >
       <form className="work-diaries-entry-form" onSubmit={submit}>
@@ -415,10 +418,28 @@ export default function WorkDiaryEntryModal({
               <small className="work-diaries-rate-warning">{tr('workDiariesBillingRateZeroWarning')}</small>
             ) : null}
           </div>
+          <label className="form-group">
+            <span className="form-label field-label-with-tooltip">
+              {tr('workDiariesMaterialBillingMultiplier')}
+              <FieldTooltip text={tr('workDiariesMaterialBillingMultiplierTooltip')} />
+            </span>
+            <input
+              className="form-input"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={form.material_billing_multiplier}
+              required
+              onChange={(event) => setFormField('material_billing_multiplier', event.target.value)}
+            />
+            <small className="work-diaries-rate-hint">
+              {tr('workDiariesBillableMaterials')}: {money(totals.billableMaterials)}
+            </small>
+          </label>
           <div className="form-group work-diaries-billable-override">
             <span className="form-label field-label-with-tooltip">
               {tr('workDiariesBillableOverride')}
-              <FieldTooltip text={tr('workDiariesBillableOverrideTooltip')} />
+              <FieldTooltip text={tr('workDiariesBillableOverrideTooltip')} align="right" />
             </span>
             <div className="work-diaries-billable-override-control">
               <input
@@ -746,6 +767,11 @@ export default function WorkDiaryEntryModal({
           {totals.materials > 0 ? (
             <span>
               {tr('workDiariesMaterials')}: <b>{money(totals.materials)}</b>
+            </span>
+          ) : null}
+          {totals.materials > 0 ? (
+            <span>
+              {tr('workDiariesBillableMaterials')}: <b>{money(totals.billableMaterials)}</b>
             </span>
           ) : null}
           <span>

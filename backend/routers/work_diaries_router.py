@@ -263,7 +263,9 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
             stock_materials += _dec(material.amount)
     materials = stock_materials + linked_materials
     billing_rate = _dec(entry.team_billing_hourly_rate_snapshot)
-    calculated_billable = _dec(entry.duration_hours) * billing_rate + materials
+    material_billing_multiplier = _dec(entry.material_billing_multiplier)
+    billable_materials = materials * material_billing_multiplier
+    calculated_billable = _dec(entry.duration_hours) * billing_rate + billable_materials
     billable = (
         calculated_billable
         if entry.billable_amount_override is None
@@ -274,6 +276,7 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
         "payout_amount": labor + allowances,
         "allowance_amount": allowances,
         "material_amount": materials,
+        "billable_material_amount": billable_materials,
         "stock_material_amount": stock_materials,
         "linked_material_amount": linked_materials,
         "total_cost_amount": labor + allowances + materials,
@@ -363,6 +366,7 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         overtime_person_hours=_float(_dec(entry.overtime_duration_hours) * worker_count),
         team_hourly_rate_snapshot=_float(entry.team_hourly_rate_snapshot),
         team_billing_hourly_rate_snapshot=_float(entry.team_billing_hourly_rate_snapshot),
+        material_billing_multiplier=_float(entry.material_billing_multiplier),
         billable_amount_override=(
             _float(entry.billable_amount_override) if entry.billable_amount_override is not None else None
         ),
@@ -371,6 +375,7 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         payout_amount=_float(amounts["payout_amount"]),
         allowance_amount=_float(amounts["allowance_amount"]),
         material_amount=_float(amounts["material_amount"]),
+        billable_material_amount=_float(amounts["billable_material_amount"]),
         stock_material_amount=_float(amounts["stock_material_amount"]),
         linked_material_amount=_float(amounts["linked_material_amount"]),
         total_cost_amount=_float(amounts["total_cost_amount"]),
@@ -473,6 +478,7 @@ async def create_entry(
         lodging_amount=_dec(data.lodging_amount),
         food_allowance=data.food_allowance,
         food_amount=_dec(data.food_amount),
+        material_billing_multiplier=_dec(data.material_billing_multiplier),
         billable_amount_override=(
             _dec(data.billable_amount_override) if data.billable_amount_override is not None else None
         ),
@@ -539,6 +545,8 @@ async def update_entry(
         entry.per_diem_amount = _dec(dump["per_diem_amount"])
     if "food_amount" in dump:
         entry.food_amount = _dec(dump["food_amount"])
+    if "material_billing_multiplier" in dump and dump["material_billing_multiplier"] is not None:
+        entry.material_billing_multiplier = _dec(dump["material_billing_multiplier"])
     if "billable_amount_override" in dump:
         entry.billable_amount_override = (
             _dec(dump["billable_amount_override"])
@@ -910,6 +918,7 @@ async def get_summary(
         payout_amount=sum(entry.payout_amount for entry in entries),
         allowance_amount=sum(entry.allowance_amount for entry in entries),
         material_amount=sum(entry.material_amount for entry in entries),
+        billable_material_amount=sum(entry.billable_material_amount for entry in entries),
         stock_material_amount=sum(entry.stock_material_amount for entry in entries),
         linked_material_amount=sum(entry.linked_material_amount for entry in entries),
         total_cost_amount=sum(entry.total_cost_amount for entry in entries),

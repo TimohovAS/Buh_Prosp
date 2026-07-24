@@ -102,8 +102,10 @@ async def test_work_diary_worker_filter_and_summary_use_all_assigned_workers(db_
     assert summary.overtime_person_hours == 0
     assert summary.stock_material_amount == 50
     assert summary.linked_material_amount == 0
+    assert summary.billable_material_amount == 60
     assert entry.team_billing_hourly_rate_snapshot == 200
-    assert entry.billable_amount == 850
+    assert entry.material_billing_multiplier == 1.2
+    assert entry.billable_amount == 860
 
 
 @pytest.mark.asyncio
@@ -230,7 +232,18 @@ async def test_work_diary_linked_material_is_not_double_counted(db_session, make
     assert entry.linked_material_amount == 500
     assert entry.stock_material_amount == 250
     assert entry.material_amount == 750
-    assert entry.billable_amount == 4 * 200 + 750
+    assert entry.billable_material_amount == 900
+    assert entry.billable_amount == 4 * 200 + 750 * 1.2
+
+    entry = await update_entry(
+        entry.id,
+        WorkDiaryEntryUpdate(material_billing_multiplier=1.5),
+        db_session,
+        user,
+    )
+    assert entry.material_billing_multiplier == 1.5
+    assert entry.billable_material_amount == 1125
+    assert entry.billable_amount == 4 * 200 + 750 * 1.5
 
     costs = await get_project_costs(project.id, None, None, db_session, user)
     assert costs.expenses_amount == 500
@@ -400,7 +413,7 @@ async def test_work_diary_entry_can_be_edited(db_session, make_project):
     assert updated.person_hours == 6
     assert updated.team_hourly_rate_snapshot == 250
     assert updated.team_billing_hourly_rate_snapshot == 250
-    assert updated.billable_amount == 840
+    assert updated.billable_amount == 858
     assert [(item.description, item.quantity, item.unit, item.amount) for item in updated.materials] == [
         ("Sealant", 2, "kom", 90),
     ]
@@ -428,7 +441,8 @@ async def test_work_diary_billable_amount_can_be_overridden_and_reset(db_session
         user,
     )
 
-    assert created.calculated_billable_amount == 850
+    assert created.calculated_billable_amount == 860
+    assert created.billable_material_amount == 60
     assert created.billable_amount_override == 900
     assert created.billable_amount == 900
     summary = await get_summary(project.id, None, None, None, db_session, user)
@@ -440,7 +454,7 @@ async def test_work_diary_billable_amount_can_be_overridden_and_reset(db_session
         db_session,
         user,
     )
-    assert zeroed.calculated_billable_amount == 850
+    assert zeroed.calculated_billable_amount == 860
     assert zeroed.billable_amount_override == 0
     assert zeroed.billable_amount == 0
 
@@ -451,7 +465,7 @@ async def test_work_diary_billable_amount_can_be_overridden_and_reset(db_session
         user,
     )
     assert reset.billable_amount_override is None
-    assert reset.billable_amount == reset.calculated_billable_amount == 850
+    assert reset.billable_amount == reset.calculated_billable_amount == 860
 
 
 @pytest.mark.asyncio

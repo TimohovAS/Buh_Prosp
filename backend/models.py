@@ -457,6 +457,7 @@ class WorkDiaryEntry(Base):
     overtime_duration_hours = Column(Numeric(8, 2), nullable=False, default=0)
     team_hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
     team_billing_hourly_rate_snapshot = Column(Numeric(14, 2), nullable=False, default=0)
+    material_billing_multiplier = Column(Numeric(8, 4), nullable=False, default=1.2)
     billable_amount_override = Column(Numeric(14, 2), nullable=True)
     overtime_multiplier = Column(Numeric(6, 4), nullable=False, default=1.26)
     per_diem = Column(Boolean, default=False)

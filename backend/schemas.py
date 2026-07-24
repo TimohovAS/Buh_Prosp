@@ -259,6 +259,7 @@ class WorkDiaryEntryBase(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    material_billing_multiplier: float = Field(default=1.2, gt=0)
     billable_amount_override: Optional[float] = Field(default=None, ge=0)
     # None => коэффициент из настроек предприятия
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
@@ -290,6 +291,7 @@ class WorkDiaryEntryBase(BaseModel):
         for key in (
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
             "start_time",
@@ -316,6 +318,7 @@ class WorkDiaryEntryUpdate(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    material_billing_multiplier: Optional[float] = Field(default=None, gt=0)
     billable_amount_override: Optional[float] = Field(default=None, ge=0)
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
     per_diem: Optional[bool] = None
@@ -349,6 +352,7 @@ class WorkDiaryEntryUpdate(BaseModel):
             "project_id",
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
             "start_time",
@@ -385,12 +389,14 @@ class WorkDiaryEntryResponse(BaseModel):
     overtime_person_hours: float
     team_hourly_rate_snapshot: float
     team_billing_hourly_rate_snapshot: float
+    material_billing_multiplier: float
     billable_amount_override: Optional[float] = None
     overtime_multiplier: float
     labor_amount: float
     payout_amount: float
     allowance_amount: float
     material_amount: float
+    billable_material_amount: float
     stock_material_amount: float
     linked_material_amount: float
     total_cost_amount: float
@@ -424,6 +430,7 @@ class WorkDiarySummaryResponse(BaseModel):
     payout_amount: float
     allowance_amount: float
     material_amount: float
+    billable_material_amount: float
     stock_material_amount: float
     linked_material_amount: float
     total_cost_amount: float

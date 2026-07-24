@@ -940,7 +940,13 @@ const ru = {
   workDiariesInvoiceSelected: 'Выбрано записей',
   workDiariesInvoiceSelectedTotal: 'Доступная сумма',
   workDiariesInvoiceThisAmount: 'В эту фактуру',
-  workDiariesInvoiceUnavailable: 'Запись уже полностью фактурирована либо у проекта не указан клиент.',
+  workDiariesInvoiceSelectProjectFirst: 'Чтобы выбрать все записи, сначала выберите проект.',
+  workDiariesInvoiceUnavailableAlreadyInvoiced: 'Нельзя выбрать: запись уже полностью фактурирована.',
+  workDiariesInvoiceUnavailableInternalProject: 'Нельзя выбрать: внутренние проекты не фактурируются.',
+  workDiariesInvoiceUnavailableMissingClient:
+    'Нельзя выбрать: у проекта не указан клиент. Укажите клиента в карточке проекта.',
+  workDiariesInvoiceUnavailableNoAmount: 'Нельзя выбрать: доступная сумма к фактурированию равна нулю.',
+  workDiariesInvoiceUnavailableNoEntries: 'У выбранного проекта нет доступных записей.',
   workDiariesInvoiced: 'Фактурировано',
   workDiariesRemaining: 'Остаток',
   workDiariesRemainingToInvoice: 'Осталось фактурировать',
@@ -950,7 +956,7 @@ const ru = {
   workDiariesBillableAuto: 'Автоматический расчет',
   workDiariesBillableOverride: 'К фактурированию вручную, RSD',
   workDiariesBillableOverrideTooltip:
-    'Итоговая сумма, которая будет использована при создании фактуры на основе этой записи. Оставьте поле пустым для автоматического расчета: часы × цена бригады для клиента + материалы.',
+    'Итоговая сумма, которая будет использована при создании фактуры на основе этой записи. Оставьте поле пустым для автоматического расчета: часы × цена бригады для клиента + себестоимость материалов × коэффициент.',
   workDiariesBillableReset: 'Вернуть автоматический расчет',
   workDiariesCalcOvertime: 'в т.ч. сверхурочные',
   workDiariesCalcSummary: 'Расчет',
@@ -990,6 +996,10 @@ const ru = {
   workDiariesMaterialExpenseAmountHint: 'Пусто — вся сумма расхода',
   workDiariesMaterialExpensePick: 'Выберите расход проекта',
   workDiariesMaterialCost: 'Стоимость материалов',
+  workDiariesMaterialBillingMultiplier: 'Коэффициент материалов для фактуры',
+  workDiariesMaterialBillingMultiplierTooltip:
+    'Во столько раз себестоимость материалов увеличивается для заказчика. Например, при коэффициенте 1,2 материал стоимостью 1.000 RSD попадет в расчет фактуры как 1.200 RSD.',
+  workDiariesBillableMaterials: 'Материалы для заказчика',
   workDiariesMaterialAddAllItems: 'Все позиции',
   workDiariesMaterialAddAllItemsHint: 'Добавить все позиции чека отдельными строками',
   workDiariesMaterialNoExpenses: 'У проекта нет подходящих расходов',
@@ -1003,7 +1013,7 @@ const ru = {
   workDiariesTeamBillingRate: 'Цена бригады для клиента, RSD/ч',
   workDiariesTeamBillingRateHint: 'Сумма цен человеко-часа выбранных работников',
   workDiariesTeamBillingRateTooltip:
-    'Цена продажи одного часа работы всей бригады. Автоматически складывается из цен человеко-часа выбранных работников. К фактурированию = часы работы × эта цена + материалы.',
+    'Цена продажи одного часа работы всей бригады. Автоматически складывается из цен человеко-часа выбранных работников. К фактурированию = часы работы × эта цена + себестоимость материалов × коэффициент.',
   workDiariesMetaButton: 'Реквизиты объекта',
   workDiariesMetaTitle: 'Реквизиты объекта для печатных форм',
   workDiariesNewEntry: 'Новая запись',
