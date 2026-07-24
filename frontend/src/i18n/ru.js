@@ -996,6 +996,7 @@ const ru = {
   workDiariesLodgingTotal: 'Проживание (всего)',
   workDiariesMaterialExpenseAmountHint: 'Пусто — вся доступная сумма расхода',
   workDiariesMaterialExpensePick: 'Выберите расход проекта',
+  workDiariesMaterialItemUsed: 'уже использовано',
   workDiariesMaterialCost: 'Стоимость материалов',
   workDiariesMaterialBillingMultiplier: 'Коэффициент материалов для фактуры',
   workDiariesMaterialBillingMultiplierTooltip:

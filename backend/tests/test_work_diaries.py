@@ -454,6 +454,7 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     option = next(option for option in options if option.id == expense.id)
     assert option.used_amount == 500
     assert option.remaining_amount == 1680
+    assert option.items[0].is_used is True
 
     current_entry_options = await list_expense_options(
         project.id,
@@ -466,6 +467,7 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     current_option = next(option for option in current_entry_options if option.id == expense.id)
     assert current_option.used_amount == 0
     assert current_option.remaining_amount == 2180
+    assert current_option.items[0].is_used is False
 
     entry = await update_entry(
         entry.id,
@@ -490,6 +492,44 @@ async def test_work_diary_material_item_snapshot_and_expense_remaining_amount(
     assert entry.materials[0].quantity == 2
     assert entry.materials[0].amount == 200
     assert entry.materials[0].unit_price_snapshot == 100
+
+    duplicate_material = WorkDiaryMaterialCreate(
+        description=item.name,
+        source="expense",
+        expense_id=expense.id,
+        source_item_type="receipt_item",
+        source_item_id=item.id,
+        amount=100,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        await create_entry(
+            WorkDiaryEntryCreate(
+                date=date(2026, 7, 11),
+                project_id=project.id,
+                worker_ids=[worker.id],
+                description="Duplicate source item in one entry",
+                duration_hours=1,
+                materials=[duplicate_material, duplicate_material],
+            ),
+            db_session,
+            user,
+        )
+    assert exc_info.value.status_code == 409
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_entry(
+            WorkDiaryEntryCreate(
+                date=date(2026, 7, 11),
+                project_id=project.id,
+                worker_ids=[worker.id],
+                description="Duplicate source item",
+                duration_hours=1,
+                materials=[duplicate_material],
+            ),
+            db_session,
+            user,
+        )
+    assert exc_info.value.status_code == 409
 
     with pytest.raises(HTTPException) as exc_info:
         await create_entry(

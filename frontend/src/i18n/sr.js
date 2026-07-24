@@ -993,6 +993,7 @@ const sr = {
   workDiariesLodgingTotal: 'Смештај (укупно)',
   workDiariesMaterialExpenseAmountHint: 'Празно — цео расположиви износ трошка',
   workDiariesMaterialExpensePick: 'Изаберите трошак пројекта',
+  workDiariesMaterialItemUsed: 'већ употребљено',
   workDiariesMaterialCost: 'Вредност материјала',
   workDiariesMaterialBillingMultiplier: 'Коефицијент материјала за фактуру',
   workDiariesMaterialBillingMultiplierTooltip:

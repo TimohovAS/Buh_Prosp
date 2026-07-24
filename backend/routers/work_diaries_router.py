@@ -224,6 +224,26 @@ async def _allocated_material_amounts(
     return {expense_id: _dec(amount) for expense_id, amount in result.all()}
 
 
+async def _allocated_source_item_keys(
+    db: AsyncSession,
+    expense_ids: set[int] | list[int],
+    *,
+    exclude_entry_id: int | None = None,
+) -> set[tuple[str, int]]:
+    if not expense_ids:
+        return set()
+    query = select(WorkDiaryMaterial.source_item_type, WorkDiaryMaterial.source_item_id).where(
+        WorkDiaryMaterial.source == "expense",
+        WorkDiaryMaterial.expense_id.in_(expense_ids),
+        WorkDiaryMaterial.source_item_type.is_not(None),
+        WorkDiaryMaterial.source_item_id.is_not(None),
+    )
+    if exclude_entry_id is not None:
+        query = query.where(WorkDiaryMaterial.entry_id != exclude_entry_id)
+    result = await db.execute(query)
+    return {(item_type, item_id) for item_type, item_id in result.all()}
+
+
 async def _load_material_expenses(
     db: AsyncSession,
     project_id: int,
@@ -251,11 +271,22 @@ async def _load_material_expenses(
         if expense.status == "reversed" or expense.reversal_of_id or expense.reversed_expense_id:
             raise HTTPException(400, "Linked expense is reversed")
 
-    item_keys = {
+    requested_item_keys = [
         (item.source_item_type, item.source_item_id)
         for item in materials
         if item.source == "expense" and item.source_item_type and item.source_item_id
-    }
+    ]
+    item_keys = set(requested_item_keys)
+    if len(item_keys) != len(requested_item_keys):
+        raise HTTPException(409, "A material position cannot be used more than once in a work diary entry.")
+    allocated_item_keys = await _allocated_source_item_keys(
+        db,
+        expense_ids,
+        exclude_entry_id=entry_id,
+    )
+    if item_keys & allocated_item_keys:
+        raise HTTPException(409, "A material position is already used in another work diary entry.")
+
     source_items: dict[tuple[str, int], tuple[int, Decimal | None]] = {}
     expense_item_ids = [item_id for item_type, item_id in item_keys if item_type == "expense_item"]
     if expense_item_ids:
@@ -301,6 +332,8 @@ async def _load_material_expenses(
             continue
         key = (item.source_item_type, item.source_item_id) if item.source_item_type and item.source_item_id else None
         source_item = source_items.get(key) if key else None
+        if key is not None and source_item is None:
+            raise HTTPException(404, "Linked source item not found")
         if source_item is not None and source_item[0] != item.expense_id:
             raise HTTPException(400, "Linked source item belongs to a different expense")
         amount = _dec(item.amount)
@@ -916,7 +949,9 @@ def _unit_from_item_name(name: str) -> str | None:
 
 
 async def _load_expense_item_options(
-    db: AsyncSession, expense_ids: list[int]
+    db: AsyncSession,
+    expense_ids: list[int],
+    used_item_keys: set[tuple[str, int]],
 ) -> dict[int, list[WorkDiaryExpenseItemOption]]:
     """Позиции расходов: свои позиции фактуры, иначе позиции связанного кассового чека."""
     if not expense_ids:
@@ -938,6 +973,7 @@ async def _load_expense_item_options(
                 unit=_unit_from_item_name(item.name),
                 unit_price=_float(item.unit_price) if item.unit_price is not None else None,
                 total_amount=_float(item.total_amount),
+                is_used=("expense_item", item.id) in used_item_keys,
             )
         )
 
@@ -959,6 +995,7 @@ async def _load_expense_item_options(
                     unit=_unit_from_item_name(item.name),
                     unit_price=_float(item.unit_price) if item.unit_price is not None else None,
                     total_amount=_float(item.total_amount),
+                    is_used=("receipt_item", item.id) in used_item_keys,
                 )
             )
     return items_by_expense
@@ -993,7 +1030,12 @@ async def list_expense_options(
     result = await db.execute(query)
     expenses = result.scalars().all()
     expense_ids = [expense.id for expense in expenses]
-    items_by_expense = await _load_expense_item_options(db, expense_ids)
+    used_item_keys = await _allocated_source_item_keys(
+        db,
+        expense_ids,
+        exclude_entry_id=entry_id,
+    )
+    items_by_expense = await _load_expense_item_options(db, expense_ids, used_item_keys)
     allocated_by_expense = await _allocated_material_amounts(
         db,
         expense_ids,

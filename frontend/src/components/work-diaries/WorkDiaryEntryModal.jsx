@@ -250,18 +250,31 @@ export default function WorkDiaryEntryModal({
       return
     }
     const item = (option?.items || []).find((candidate) => materialItemKey(candidate) === itemKey)
-    if (!item) return
+    const alreadySelected = materials.some(
+      (material, materialIndex) => materialIndex !== index && materialItemKey(material) === itemKey
+    )
+    if (!item || item.is_used || alreadySelected) return
     updateMaterial(index, materialRowFromItem(option, item))
   }
 
   const addAllExpenseItems = (index, option) => {
-    const items = option?.items || []
+    const items = (option?.items || []).filter((item) => !item.is_used)
     if (items.length === 0) return
-    setMaterials((prev) => [
-      ...prev.slice(0, index),
-      ...items.map((item) => materialRowFromItem(option, item)),
-      ...prev.slice(index + 1),
-    ])
+    const expenseId = String(option.id)
+    setMaterials((prev) => {
+      const firstExpenseIndex = prev.findIndex(
+        (material) => material.source === 'expense' && String(material.expense_id) === expenseId
+      )
+      const retained = prev.filter(
+        (material) => material.source !== 'expense' || String(material.expense_id) !== expenseId
+      )
+      const insertionIndex = Math.min(firstExpenseIndex >= 0 ? firstExpenseIndex : index, retained.length)
+      return [
+        ...retained.slice(0, insertionIndex),
+        ...items.map((item) => materialRowFromItem(option, item)),
+        ...retained.slice(insertionIndex),
+      ]
+    })
   }
 
   const materialExpenseOptions = useMemo(() => {
@@ -608,6 +621,22 @@ export default function WorkDiaryEntryModal({
                         (o) => String(o.id) === String(material.expense_id)
                       )
                       const expenseItems = selectedOption?.items || []
+                      const availableExpenseItems = expenseItems.filter((item) => !item.is_used)
+                      const selectedExpenseItemKeys = new Set(
+                        materials
+                          .filter(
+                            (item) =>
+                              item.source === 'expense' &&
+                              String(item.expense_id) === String(material.expense_id)
+                          )
+                          .map(materialItemKey)
+                          .filter(Boolean)
+                      )
+                      const allExpenseItemsAdded =
+                        availableExpenseItems.length > 0 &&
+                        availableExpenseItems.every((item) =>
+                          selectedExpenseItemKeys.has(materialItemKey(item))
+                        )
                       return (
                         <>
                           <select
@@ -655,17 +684,25 @@ export default function WorkDiaryEntryModal({
                                 }
                               >
                                 <option value="">{tr('workDiariesMaterialWholeExpense')}</option>
-                                {expenseItems.map((item) => (
-                                  <option key={materialItemKey(item)} value={materialItemKey(item)}>
-                                    {item.name}
-                                    {item.quantity != null
-                                      ? ` — ${item.quantity}${item.unit ? ` ${unitLabel(item.unit)}` : ''}`
-                                      : ''}{' '}
-                                    — {money(item.total_amount)}
-                                  </option>
-                                ))}
+                                {expenseItems.map((item) => {
+                                  const itemKey = materialItemKey(item)
+                                  const selectedElsewhere =
+                                    selectedExpenseItemKeys.has(itemKey) &&
+                                    itemKey !== materialItemKey(material)
+                                  const unavailable = item.is_used || selectedElsewhere
+                                  return (
+                                    <option key={itemKey} value={itemKey} disabled={unavailable}>
+                                      {item.name}
+                                      {item.quantity != null
+                                        ? ` — ${item.quantity}${item.unit ? ` ${unitLabel(item.unit)}` : ''}`
+                                        : ''}{' '}
+                                      — {money(item.total_amount)}
+                                      {unavailable ? ` — ${tr('workDiariesMaterialItemUsed')}` : ''}
+                                    </option>
+                                  )
+                                })}
                               </select>
-                              {expenseItems.length > 1 ? (
+                              {availableExpenseItems.length > 1 && !allExpenseItemsAdded ? (
                                 <button
                                   type="button"
                                   className="btn btn-sm btn-secondary"
