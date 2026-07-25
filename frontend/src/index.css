@@ -1697,6 +1697,25 @@ tr.row-reversal {
   gap: 0.9rem 1rem;
 }
 
+/* Для широких модалок деталей: короткие поля пакуются по четыре в ряд,
+   чтобы карточка не вытягивалась в длинный столбец. */
+.record-field-grid-wide {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Поля с длинным значением (название проекта) занимают две колонки. */
+.record-field-grid-wide .record-field.span-2 {
+  grid-column: span 2;
+}
+
+/* Длинные названия позиций переносятся по словам, а не по буквам. */
+.record-item-name {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 .record-field {
   display: flex;
   flex-direction: column;
@@ -4395,8 +4414,14 @@ tr:hover td {
 
   .record-detail-grid,
   .record-field-grid,
+  .record-field-grid-wide,
   .record-actions-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Иначе span-2 создаёт вторую неявную колонку в одноколоночной сетке. */
+  .record-field-grid-wide .record-field.span-2 {
+    grid-column: auto;
   }
 
   .modal.receipt-import-modal,

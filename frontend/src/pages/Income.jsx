@@ -1015,10 +1015,10 @@ export default function Income() {
             ? `${tr('income')} ${UI_DASH} ${detailModal.invoice_number || `#${detailModal.id}`}`
             : ''
         }
-        maxWidth="860px"
+        maxWidth="1180px"
         details={
           detailModal ? (
-            <div className="record-field-grid">
+            <div className="record-field-grid record-field-grid-wide">
               <div className="record-field">
                 <span className="record-field-label">{tr('date')}</span>
                 <span className="record-field-value">{detailModal.date || UI_DASH}</span>
@@ -1041,27 +1041,30 @@ export default function Income() {
                 <span className="record-field-label">{tr('client')}</span>
                 <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
               </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('contracts')}</span>
-                <span className="record-field-value">{detailModal.contract_number || UI_DASH}</span>
-              </div>
-              <div className="record-field">
+              {/* Договор и тип платежа по нему заполняются не всегда — пустые не показываем */}
+              {detailModal.contract_number ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('contracts')}</span>
+                  <span className="record-field-value">{detailModal.contract_number}</span>
+                </div>
+              ) : null}
+              <div className="record-field span-2">
                 <span className="record-field-label">{tr('project')}</span>
                 <span className="record-field-value">
                   {getProjectName(detailModal.project_id) || UI_DASH}
                 </span>
               </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('incomeType')}</span>
-                <span className="record-field-value">
-                  {detailModal.contract_payment_type
-                    ? tr(
-                        PAYMENT_TYPE_KEYS[detailModal.contract_payment_type] ||
-                          detailModal.contract_payment_type
-                      )
-                    : UI_DASH}
-                </span>
-              </div>
+              {detailModal.contract_payment_type ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('incomeType')}</span>
+                  <span className="record-field-value">
+                    {tr(
+                      PAYMENT_TYPE_KEYS[detailModal.contract_payment_type] ||
+                        detailModal.contract_payment_type
+                    )}
+                  </span>
+                </div>
+              ) : null}
               <div className="record-field full">
                 <span className="record-field-label">{tr('description')}</span>
                 <div className="record-field-text">{detailModal.description || UI_DASH}</div>
@@ -1074,47 +1077,12 @@ export default function Income() {
                   </div>
                 ) : null
               )}
-              {detailModal.items?.length ? (
+              {detailModal.note ? (
                 <div className="record-field full">
-                  <span className="record-field-label">{tr('invoiceItems')}</span>
-                  <div className="table-wrap" style={{ marginTop: '0.4rem' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th style={{ width: 42 }}>#</th>
-                          <th>{tr('name')}</th>
-                          <th style={{ textAlign: 'right' }}>{tr('quantity')}</th>
-                          <th>{tr('unit')}</th>
-                          <th style={{ textAlign: 'right' }}>{tr('unitPrice')}</th>
-                          <th style={{ textAlign: 'right' }}>{tr('total')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailModal.items.map((line, index) => (
-                          <tr key={line.id || line.line_no}>
-                            <td>{line.line_no || index + 1}</td>
-                            <td>{line.name}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              {Number(line.quantity || 0).toLocaleString('sr-RS')}
-                            </td>
-                            <td>{line.unit || 'kom'}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              {Number(line.unit_price || 0).toLocaleString('sr-RS')}
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              {Number(line.total_amount || 0).toLocaleString('sr-RS')} RSD
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <span className="record-field-label">{tr('note')}</span>
+                  <div className="record-field-text">{detailModal.note}</div>
                 </div>
               ) : null}
-              <div className="record-field full">
-                <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-              </div>
             </div>
           ) : null
         }
@@ -1153,7 +1121,47 @@ export default function Income() {
             </div>
           ) : null
         }
-      />
+      >
+        {/* Позиции — во всю ширину модалки: в узкой колонке деталей
+            длинные названия сжимались в нечитаемый столбец. */}
+        {detailModal?.items?.length ? (
+          <div className="record-detail-card">
+            <span className="record-field-label">{tr('invoiceItems')}</span>
+            <div className="table-wrap" style={{ marginTop: '0.5rem' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 42 }}>#</th>
+                    <th>{tr('name')}</th>
+                    <th style={{ textAlign: 'right', width: 110 }}>{tr('quantity')}</th>
+                    <th style={{ width: 90 }}>{tr('unit')}</th>
+                    <th style={{ textAlign: 'right', width: 130 }}>{tr('unitPrice')}</th>
+                    <th style={{ textAlign: 'right', width: 150 }}>{tr('total')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailModal.items.map((line, index) => (
+                    <tr key={line.id || line.line_no}>
+                      <td>{line.line_no || index + 1}</td>
+                      <td className="record-item-name">{line.name}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {Number(line.quantity || 0).toLocaleString('sr-RS')}
+                      </td>
+                      <td>{line.unit || 'kom'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {Number(line.unit_price || 0).toLocaleString('sr-RS')}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {Number(line.total_amount || 0).toLocaleString('sr-RS')} RSD
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </EntityDetailModal>
 
       <Modal
         isOpen={!!paymentModal}
