@@ -341,6 +341,16 @@ export default function WorkDiaryEntryModal({
     return (option?.items || []).find((candidate) => materialItemKey(candidate) === materialItemKey(material))
   }
 
+  const shouldShowExpensePicker = (material) => {
+    if (material.source !== 'expense' || material.legacy_whole_expense) return false
+    if (!material.expense_id) return true
+    if (materialItemKey(material)) return false
+    const option = materialExpenseOptions.find(
+      (candidate) => String(candidate.id) === String(material.expense_id)
+    )
+    return (option?.items || []).length > 0
+  }
+
   const close = () => {
     if (saving) return
     onClose()
@@ -660,7 +670,7 @@ export default function WorkDiaryEntryModal({
                   <Trash2 size={16} />
                 </button>
               </div>
-              {material.source === 'expense' ? (
+              {shouldShowExpensePicker(material) ? (
                 <div className="work-diaries-material-expense-row">
                   {materialExpenseOptions.length === 0 ? (
                     <span className="work-diaries-material-empty">{tr('workDiariesMaterialNoExpenses')}</span>
