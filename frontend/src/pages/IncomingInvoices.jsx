@@ -701,7 +701,6 @@ export default function IncomingInvoices() {
         isOpen={!!modal}
         onClose={() => setModal(null)}
         title={modal === 'add' ? tr('createIncomingInvoice') : tr('edit')}
-        closeOnOverlay
       >
         {modal ? (
           <form onSubmit={handleSubmit}>
@@ -1495,7 +1494,6 @@ function SettleModal({ data, projects, onClose, onDone }) {
       title={`${titles[type]}: ${invoice.invoice_number}`}
       maxWidth={isWideSideLayout ? '1280px' : undefined}
       bodyClassName={isWideSideLayout ? 'incoming-invoice-settle-modal-body' : ''}
-      closeOnOverlay
     >
       <form onSubmit={handleSubmit}>
         {isWideSideLayout ? (
@@ -1665,13 +1663,7 @@ function LinkInvoiceModal({ data, onClose, onDone }) {
   const currentProjectLabel = [invoice.project_code, invoice.project_name].filter(Boolean).join(' / ')
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title={`${title}: ${invoice.invoice_number}`}
-      maxWidth="840px"
-      closeOnOverlay
-    >
+    <Modal isOpen onClose={onClose} title={`${title}: ${invoice.invoice_number}`} maxWidth="840px">
       <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
         <div className="record-field-grid">
           <div className="record-field">

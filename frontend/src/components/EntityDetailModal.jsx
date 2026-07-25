@@ -11,14 +11,7 @@ export default function EntityDetailModal({
   className = '',
 }) {
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={title}
-      maxWidth={maxWidth}
-      closeOnOverlay
-      className={className}
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth={maxWidth} className={className}>
       <div className={`record-detail-grid ${actions ? '' : 'record-detail-grid-single'}`.trim()}>
         <div className="record-detail-card">{details}</div>
         {actions ? <div className="record-detail-card">{actions}</div> : null}

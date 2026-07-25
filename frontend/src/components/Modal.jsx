@@ -6,7 +6,6 @@ export default function Modal({
   className = '',
   bodyClassName = '',
   maxWidth,
-  closeOnOverlay = false,
   style,
   resizable = true,
 }) {
@@ -21,13 +20,11 @@ export default function Modal({
     ...(style || {}),
   }
 
+  // Клик по фону намеренно не закрывает окно: в формах учёта это приводило
+  // к потере введённых данных. Закрыть можно крестиком или кнопкой отмены.
   return (
-    <div className="modal-overlay" onClick={closeOnOverlay ? onClose : undefined}>
-      <div
-        className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()}
-        style={modalStyle}
-        onClick={closeOnOverlay ? (event) => event.stopPropagation() : undefined}
-      >
+    <div className="modal-overlay">
+      <div className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()} style={modalStyle}>
         <div className="modal-header">
           <h3 className="modal-title">{title}</h3>
           <button type="button" className="modal-close" onClick={onClose} aria-label="close">

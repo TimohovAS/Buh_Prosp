@@ -1443,7 +1443,6 @@ export default function Expenses() {
         onClose={() => setModal(null)}
         title={`${modal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('expenses')}`}
         maxWidth="1100px"
-        closeOnOverlay
       >
         {modal ? (
           <form onSubmit={handleSubmit}>
@@ -1552,7 +1551,6 @@ export default function Expenses() {
         }}
         title={tr('assignProject')}
         maxWidth="400px"
-        closeOnOverlay
       >
         {modalAssign ? (
           <>

@@ -447,7 +447,6 @@ export default function Obligations() {
         onClose={() => setSettingsModal(false)}
         title={tr('obligationsSettings')}
         maxWidth="1080px"
-        closeOnOverlay
         style={{ maxHeight: '90vh', overflow: 'auto' }}
       >
         {settingsModal ? (
@@ -549,7 +548,6 @@ export default function Obligations() {
             : tr('markPaid')
         }
         maxWidth="400px"
-        closeOnOverlay
       >
         {paidModal ? (
           <form onSubmit={handleMarkPaidSubmit}>
@@ -592,7 +590,6 @@ export default function Obligations() {
             : tr('payQrTitle')
         }
         maxWidth="420px"
-        closeOnOverlay
       >
         {qrModal?.error ? (
           <div style={{ color: 'var(--color-danger)' }}>{qrModal.error}</div>
@@ -641,7 +638,6 @@ export default function Obligations() {
         onClose={() => setDecisionFormModal(null)}
         title={`${decisionFormModal === 'add' ? tr('add') : tr('edit')} \u2014 ${tr('decisionFormTitle')}`}
         maxWidth="520px"
-        closeOnOverlay
         style={{ maxHeight: '90vh', overflow: 'auto' }}
       >
         {decisionFormModal ? (

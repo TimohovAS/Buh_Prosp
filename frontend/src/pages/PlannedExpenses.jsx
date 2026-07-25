@@ -547,7 +547,6 @@ export default function PlannedExpenses() {
         onClose={() => setPaidModal(null)}
         title={paidModal ? `${tr('markPaid')} \u2014 ${paidModal.name}` : tr('markPaid')}
         maxWidth="400px"
-        closeOnOverlay
       >
         {paidModal ? (
           <>
@@ -592,7 +591,6 @@ export default function PlannedExpenses() {
         onClose={() => setModal(null)}
         title={`${modal === 'add' ? tr('add') : tr('edit')} \u2014 ${tr('plannedExpenses')}`}
         maxWidth="480px"
-        closeOnOverlay
       >
         {modal ? (
           <>

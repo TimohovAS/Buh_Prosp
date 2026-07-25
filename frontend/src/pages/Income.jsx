@@ -1690,7 +1690,6 @@ export default function Income() {
         }}
         title={tr('assignProject')}
         maxWidth="400px"
-        closeOnOverlay
       >
         {modalAssign ? (
           <>

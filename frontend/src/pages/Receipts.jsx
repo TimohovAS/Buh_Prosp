@@ -939,7 +939,6 @@ export default function Receipts() {
         isOpen={importModalOpen}
         onClose={closeImportModal}
         title={tr('receiptImportTitle')}
-        closeOnOverlay
         className="receipt-import-modal"
       >
         {importModalOpen ? (

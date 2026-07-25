@@ -819,7 +819,6 @@ export default function Projects() {
             ? `${tr('projectMovements')} ${UI_DASH} ${movementModal.project_name || `#${movementModal.project_id}`}`
             : ''
         }
-        closeOnOverlay
         style={{
           width: 'min(96vw, 1520px)',
           maxWidth: 'none',
@@ -949,7 +948,6 @@ export default function Projects() {
             ? `${tr('projectPurchases')} ${UI_DASH} ${purchaseModal.project_name || `#${purchaseModal.project_id}`}`
             : ''
         }
-        closeOnOverlay
         style={{
           width: 'min(96vw, 1520px)',
           maxWidth: 'none',
