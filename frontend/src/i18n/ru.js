@@ -981,6 +981,8 @@ const ru = {
   workDiariesDurationMinutesShort: '{value} мин.',
   workDiariesEdit: 'Редактировать запись',
   workDiariesEditEntry: 'Редактирование записи',
+  workDiariesView: 'Посмотреть запись',
+  workDiariesViewEntry: 'Просмотр записи',
   workDiariesEmpty: 'Записей нет',
   workDiariesEnd: 'Конец',
   workDiariesEntries: 'Записи',

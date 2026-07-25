@@ -140,6 +140,7 @@ export default function WorkDiaryEntryModal({
   defaultProjectId,
   overtimeMultiplier,
   materialBillingMultiplier = DEFAULT_MATERIAL_BILLING_MULTIPLIER,
+  readOnly = false,
 }) {
   const [form, setForm] = useState(emptyForm)
   const [materials, setMaterials] = useState([])
@@ -159,7 +160,7 @@ export default function WorkDiaryEntryModal({
   }, [isOpen, entry, defaultProjectId, materialBillingMultiplier])
 
   useEffect(() => {
-    if (!isOpen || !form.project_id) {
+    if (!isOpen || !form.project_id || readOnly) {
       setExpenseOptions([])
       return
     }
@@ -169,7 +170,7 @@ export default function WorkDiaryEntryModal({
         ...(entry?.id ? { entry_id: entry.id } : {}),
       })
       .then(setExpenseOptions)
-  }, [isOpen, form.project_id, entry?.id])
+  }, [isOpen, form.project_id, entry?.id, readOnly])
 
   const workerOptions = useMemo(
     () => workers.map((worker) => ({ value: worker.id, label: worker.name })),
@@ -358,6 +359,10 @@ export default function WorkDiaryEntryModal({
 
   const submit = async (event) => {
     event.preventDefault()
+    if (readOnly) {
+      close()
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -409,11 +414,16 @@ export default function WorkDiaryEntryModal({
     <Modal
       isOpen={isOpen}
       onClose={close}
-      title={tr(entry ? 'workDiariesEditEntry' : 'workDiariesNewEntry')}
+      title={tr(readOnly ? 'workDiariesViewEntry' : entry ? 'workDiariesEditEntry' : 'workDiariesNewEntry')}
       maxWidth="1120px"
       bodyClassName="work-diaries-entry-modal-body"
     >
-      <form className="work-diaries-entry-form" onSubmit={submit}>
+      <form
+        className={`work-diaries-entry-form${readOnly ? ' is-readonly' : ''}`}
+        onSubmit={submit}
+        inert={readOnly ? '' : undefined}
+        aria-readonly={readOnly || undefined}
+      >
         <div className="work-diaries-form-grid">
           <label className="form-group">
             <span className="form-label">{tr('date')}</span>
@@ -503,7 +513,7 @@ export default function WorkDiaryEntryModal({
             />
             <small className="work-diaries-rate-hint">
               {tr('workDiariesAutoRate')}: {money(autoRate)}
-              {manualRate !== '' && num(manualRate) !== autoRate ? (
+              {!readOnly && manualRate !== '' && num(manualRate) !== autoRate ? (
                 <button
                   type="button"
                   className="btn-link"
@@ -561,7 +571,7 @@ export default function WorkDiaryEntryModal({
                 placeholder={String(Math.round(totals.calculatedBillable * 100) / 100)}
                 onChange={(event) => setFormField('billable_amount_override', event.target.value)}
               />
-              {totals.billableAdjusted ? (
+              {!readOnly && totals.billableAdjusted ? (
                 <button
                   type="button"
                   className="btn btn-secondary work-diaries-billable-reset"
@@ -662,13 +672,15 @@ export default function WorkDiaryEntryModal({
                   }
                   onChange={(event) => updateMaterial(index, { amount: event.target.value })}
                 />
-                <button
-                  type="button"
-                  className="btn btn-sm btn-danger"
-                  onClick={() => setMaterials((prev) => prev.filter((_, i) => i !== index))}
-                >
-                  <Trash2 size={16} />
-                </button>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger"
+                    onClick={() => setMaterials((prev) => prev.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                ) : null}
               </div>
               {shouldShowExpensePicker(material) ? (
                 <div className="work-diaries-material-expense-row">
@@ -800,15 +812,17 @@ export default function WorkDiaryEntryModal({
               ) : null}
             </div>
           ))}
-          <div className="work-diaries-material-add-row">
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
-            >
-              <Plus size={16} /> {tr('add')}
-            </button>
-          </div>
+          {!readOnly ? (
+            <div className="work-diaries-material-add-row">
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
+              >
+                <Plus size={16} /> {tr('add')}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="work-diaries-collapse">
@@ -959,16 +973,28 @@ export default function WorkDiaryEntryModal({
           ) : null}
           {totals.billableAdjusted ? <span>{tr('workDiariesBillableAdjusted')}</span> : null}
         </div>
-
+        {!readOnly ? (
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={close}>
+              {tr('cancel')}
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving || form.worker_ids.length === 0}
+            >
+              <Save size={16} /> {saving ? tr('saving') : tr('save')}
+            </button>
+          </div>
+        ) : null}
+      </form>
+      {readOnly ? (
         <div className="modal-actions">
           <button type="button" className="btn btn-secondary" onClick={close}>
-            {tr('cancel')}
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={saving || form.worker_ids.length === 0}>
-            <Save size={16} /> {saving ? tr('saving') : tr('save')}
+            {tr('close')}
           </button>
         </div>
-      </form>
+      ) : null}
     </Modal>
   )
 }

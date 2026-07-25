@@ -978,6 +978,8 @@ const sr = {
   workDiariesDurationMinutesShort: '{value} мин.',
   workDiariesEdit: 'Измени запис',
   workDiariesEditEntry: 'Измена записа',
+  workDiariesView: 'Погледај запис',
+  workDiariesViewEntry: 'Преглед записа',
   workDiariesEmpty: 'Нема записа',
   workDiariesEnd: 'Крај',
   workDiariesEntries: 'Записи',

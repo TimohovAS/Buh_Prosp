@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, FileText, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { Building2, Eye, FileText, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -611,11 +611,10 @@ export default function WorkDiaries() {
                                 type="button"
                                 className="btn btn-sm btn-secondary"
                                 onClick={() => openEditEntry(entry)}
-                                disabled={entryLocked}
-                                title={entryLocked ? tr('workDiariesInvoiceLocked') : tr('workDiariesEdit')}
-                                aria-label={tr('workDiariesEdit')}
+                                title={tr(entryLocked ? 'workDiariesView' : 'workDiariesEdit')}
+                                aria-label={tr(entryLocked ? 'workDiariesView' : 'workDiariesEdit')}
                               >
-                                <Pencil size={16} />
+                                {entryLocked ? <Eye size={16} /> : <Pencil size={16} />}
                               </button>
                               <button
                                 type="button"
@@ -713,6 +712,7 @@ export default function WorkDiaries() {
         defaultProjectId={filters.project_id}
         overtimeMultiplier={overtimeMultiplier}
         materialBillingMultiplier={materialBillingMultiplier}
+        readOnly={Boolean(editingEntry && editingEntry.billing_status !== 'not_invoiced')}
       />
       <WorkDiaryMetaModal
         isOpen={metaModalOpen}
