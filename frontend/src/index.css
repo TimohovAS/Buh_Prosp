@@ -400,6 +400,43 @@ textarea {
   transition: all 0.15s;
 }
 
+/* Блоки сообщений. Разметка .alert используется на десятке страниц, но стилей
+   для неё не существовало — ошибки выводились голым текстом без рамки и фона. */
+.alert {
+  padding: 0.75rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.alert:last-child {
+  margin-bottom: 0;
+}
+
+.alert-danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.alert-warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+.alert-success {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.alert strong {
+  color: inherit;
+}
+
 /* Выбор файла: нативный input прячем под кнопку-label, иначе на странице
    появляется системный контрол, выбивающийся из оформления. */
 .file-input {

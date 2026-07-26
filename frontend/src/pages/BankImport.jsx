@@ -220,14 +220,10 @@ export default function BankImport() {
       <PageTabs group="bank" />
 
       <div className="page-body">
-        {pageError ? (
-          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-            {pageError}
-          </div>
-        ) : null}
+        {pageError ? <div className="alert alert-danger">{pageError}</div> : null}
 
         {skippedFiles.length > 0 && (
-          <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+          <div className="alert alert-warning">
             <strong>
               {tr('bankImportSkippedFiles')} ({skippedFiles.length}):
             </strong>
@@ -324,22 +320,19 @@ export default function BankImport() {
         </div>
 
         {result && (
-          <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-success)' }}>
-            <p style={{ margin: 0 }}>
+          <div className="alert alert-success">
+            <div>
               {tr('bankImportCreated')
                 .replace('{income}', result.created_income)
                 .replace('{expense}', result.created_expense)}
-              {!!result.matched_income_paid && (
-                <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>
-                  {tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}
-                </span>
-              )}
-              {result.errors?.length > 0 && (
-                <span style={{ color: 'var(--color-warning)', marginLeft: '0.5rem' }}>
-                  {tr('bankImportWarnings')}: {result.errors.join('; ')}
-                </span>
-              )}
-            </p>
+              {!!result.matched_income_paid &&
+                ` ${tr('bankImportMatchedPaid').replace('{count}', result.matched_income_paid)}`}
+            </div>
+            {result.errors?.length > 0 && (
+              <div style={{ marginTop: '0.35rem' }}>
+                {tr('bankImportWarnings')}: {result.errors.join('; ')}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
               <Link to="/income" className="dashboard-link">
                 {tr('bankImportToIncome')}
