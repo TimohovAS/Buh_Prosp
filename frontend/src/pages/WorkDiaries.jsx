@@ -223,56 +223,26 @@ export default function WorkDiaries() {
     },
     [projects]
   )
-  const canInvoiceEntry = useCallback(
-    (entry) => !invoiceEntryUnavailableReason(entry),
-    [invoiceEntryUnavailableReason]
-  )
-
   const toggleEntrySelection = (entry) => {
-    if (!canInvoiceEntry(entry)) return
     setSelectedIds((current) => {
       if (current.includes(entry.id)) return current.filter((id) => id !== entry.id)
-      const currentProjectId = entries.find((item) => current.includes(item.id))?.project_id
-      if (currentProjectId && String(currentProjectId) !== String(entry.project_id)) return current
       return [...current, entry.id]
     })
   }
 
-  const selectAllProjectEntries = () => {
-    const projectId = selectedEntryProjectId || filters.project_id
-    if (!projectId) return
-    const ids = displayedEntries
-      .filter((entry) => String(entry.project_id) === String(projectId) && canInvoiceEntry(entry))
-      .map((entry) => entry.id)
+  const selectAllDisplayedEntries = () => {
+    const ids = displayedEntries.map((entry) => entry.id)
     const allSelected = ids.length > 0 && ids.every((id) => selectedIds.includes(id))
     setSelectedIds(allSelected ? [] : ids)
   }
 
-  const selectableProjectEntries = useMemo(() => {
-    const projectId = selectedEntryProjectId || filters.project_id
-    if (!projectId) return []
-    return displayedEntries.filter(
-      (entry) => String(entry.project_id) === String(projectId) && canInvoiceEntry(entry)
-    )
-  }, [canInvoiceEntry, displayedEntries, filters.project_id, selectedEntryProjectId])
-  const allSelectableSelected =
-    selectableProjectEntries.length > 0 &&
-    selectableProjectEntries.every((entry) => selectedIds.includes(entry.id))
-  const selectAllUnavailableReason = useMemo(() => {
-    if (selectableProjectEntries.length) return ''
-    const projectId = selectedEntryProjectId || filters.project_id
-    if (!projectId) return tr('workDiariesInvoiceSelectProjectFirst')
-    const projectEntries = displayedEntries.filter((entry) => String(entry.project_id) === String(projectId))
-    return projectEntries.length
-      ? invoiceEntryUnavailableReason(projectEntries[0])
-      : tr('workDiariesInvoiceUnavailableNoEntries')
-  }, [
-    displayedEntries,
-    filters.project_id,
-    invoiceEntryUnavailableReason,
-    selectableProjectEntries.length,
-    selectedEntryProjectId,
-  ])
+  const allDisplayedSelected =
+    displayedEntries.length > 0 && displayedEntries.every((entry) => selectedIds.includes(entry.id))
+  const invoiceSelectionUnavailableReason = useMemo(() => {
+    const projectIds = new Set(selectedEntries.map((entry) => String(entry.project_id)))
+    if (projectIds.size > 1) return tr('workDiariesInvoiceSameProject')
+    return selectedEntries.map(invoiceEntryUnavailableReason).find(Boolean) || ''
+  }, [invoiceEntryUnavailableReason, selectedEntries])
 
   const billingStatusBadge = (entry) => {
     const status = entry.billing_status || 'not_invoiced'
@@ -487,17 +457,12 @@ export default function WorkDiaries() {
                 <thead>
                   <tr>
                     <th className="no-print work-diaries-select-cell">
-                      <span
-                        className={`work-diaries-checkbox-wrapper${
-                          selectAllUnavailableReason ? ' is-disabled' : ''
-                        }`}
-                        title={selectAllUnavailableReason || undefined}
-                      >
+                      <span className="work-diaries-checkbox-wrapper">
                         <input
                           type="checkbox"
-                          checked={allSelectableSelected}
-                          disabled={!selectableProjectEntries.length}
-                          onChange={selectAllProjectEntries}
+                          checked={allDisplayedSelected}
+                          disabled={!displayedEntries.length}
+                          onChange={selectAllDisplayedEntries}
                           aria-label={tr('workDiariesSelectAll')}
                         />
                       </span>
@@ -529,12 +494,6 @@ export default function WorkDiaries() {
                   ) : (
                     displayedEntries.map((entry) => {
                       const selected = selectedIds.includes(entry.id)
-                      const differentProjectSelected =
-                        selectedEntryProjectId && String(selectedEntryProjectId) !== String(entry.project_id)
-                      const selectionUnavailableReason = differentProjectSelected
-                        ? tr('workDiariesInvoiceSameProject')
-                        : invoiceEntryUnavailableReason(entry)
-                      const entryCanBeSelected = !selectionUnavailableReason
                       const activeLinks = (entry.invoice_links || []).filter(
                         (link) => link.invoice_status !== 'cancelled'
                       )
@@ -545,18 +504,12 @@ export default function WorkDiaries() {
                       return (
                         <tr key={entry.id} className={selected ? 'record-row-selected' : ''}>
                           <td className="no-print work-diaries-select-cell">
-                            <span
-                              className={`work-diaries-checkbox-wrapper${
-                                selectionUnavailableReason ? ' is-disabled' : ''
-                              }`}
-                              title={selectionUnavailableReason || undefined}
-                            >
+                            <span className="work-diaries-checkbox-wrapper">
                               <input
                                 type="checkbox"
                                 checked={selected}
-                                disabled={!entryCanBeSelected}
                                 onChange={() => toggleEntrySelection(entry)}
-                                aria-label={tr('workDiariesInvoiceSelectEntry')}
+                                aria-label={tr('workDiariesSelectEntry')}
                               />
                             </span>
                           </td>
@@ -690,13 +643,18 @@ export default function WorkDiaries() {
             },
           ]}
           actions={
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={() => setInvoiceModalOpen(true)}
-            >
-              <FileText size={16} /> {tr('workDiariesCreateInvoice')}
-            </button>
+            <span title={invoiceSelectionUnavailableReason || undefined}>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={Boolean(invoiceSelectionUnavailableReason)}
+                onClick={() => {
+                  if (!invoiceSelectionUnavailableReason) setInvoiceModalOpen(true)
+                }}
+              >
+                <FileText size={16} /> {tr('workDiariesCreateInvoice')}
+              </button>
+            </span>
           }
           onClear={() => setSelectedIds([])}
         />

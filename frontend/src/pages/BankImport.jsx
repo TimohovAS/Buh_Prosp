@@ -6,7 +6,8 @@ import FileInput from '../components/FileInput'
 import PageHeader from '../components/PageHeader'
 import PageTabs from '../components/PageTabs'
 import SelectionSummary from '../components/SelectionSummary'
-import { formatMoney2 as fmtMoney } from '../utils/formatters'
+import SortIndicator from '../components/SortIndicator'
+import { UI_DASH, formatDateTimeSr, formatMoney2 as fmtMoney } from '../utils/formatters'
 
 export default function BankImport() {
   const location = useLocation()
@@ -22,6 +23,7 @@ export default function BankImport() {
   const [parseMeta, setParseMeta] = useState([])
   const [skippedFiles, setSkippedFiles] = useState([])
   const [recentFiles, setRecentFiles] = useState([])
+  const [recentSort, setRecentSort] = useState({ col: 'imported_at', asc: false })
 
   useEffect(() => {
     if (!isActivePage) return
@@ -163,6 +165,42 @@ export default function BankImport() {
     [selectedTransactions]
   )
 
+  const toggleRecentSort = (column) => {
+    if (recentSort.col === column) {
+      setRecentSort({ col: column, asc: !recentSort.asc })
+    } else {
+      setRecentSort({ col: column, asc: column === 'file_name' })
+    }
+  }
+
+  const sortedRecentFiles = useMemo(() => {
+    const accessor = {
+      file_name: (file) => file.file_name || '',
+      imported_at: (file) => file.imported_at || '',
+      transaction_count: (file) => Number(file.transaction_count ?? 0),
+      created: (file) => Number(file.created_income ?? 0) + Number(file.created_expense ?? 0),
+    }[recentSort.col]
+    if (!accessor) return recentFiles
+    const sorted = [...recentFiles].sort((left, right) => {
+      const leftValue = accessor(left)
+      const rightValue = accessor(right)
+      if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+        return leftValue - rightValue
+      }
+      return String(leftValue).localeCompare(String(rightValue))
+    })
+    return recentSort.asc ? sorted : sorted.reverse()
+  }, [recentFiles, recentSort])
+
+  const recentFileTh = (column, label, alignRight = false) => (
+    <th
+      style={{ cursor: 'pointer', ...(alignRight ? { textAlign: 'right' } : {}) }}
+      onClick={() => toggleRecentSort(column)}
+    >
+      {label} <SortIndicator active={recentSort.col === column} asc={recentSort.asc} />
+    </th>
+  )
+
   return (
     <>
       <PageHeader
@@ -204,18 +242,9 @@ export default function BankImport() {
         )}
 
         {transactions.length > 0 && (
-          <div className="card" style={{ marginBottom: '1rem' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '1rem',
-              }}
-            >
-              <h3 style={{ margin: 0 }}>
-                {tr('bankImportTransactions')} ({transactions.length})
-              </h3>
+          <div className="card">
+            <div className="card-title">
+              {tr('bankImportTransactions')} ({transactions.length})
             </div>
             <div className="table-wrap">
               <table>
@@ -226,7 +255,7 @@ export default function BankImport() {
                     <th>{tr('type')}</th>
                     <th>{tr('description')}</th>
                     <th>{tr('client')}</th>
-                    <th>{tr('amount')}</th>
+                    <th style={{ textAlign: 'right' }}>{tr('amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,7 +282,7 @@ export default function BankImport() {
                       </td>
                       <td style={{ maxWidth: 200 }}>{(tx.description || '').slice(0, 50)}</td>
                       <td style={{ maxWidth: 150 }}>{(tx.payer_beneficiary || '').slice(0, 40)}</td>
-                      <td>{tx.amount?.toLocaleString?.('sr-RS')} RSD</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(tx.amount)} RSD</td>
                     </tr>
                   ))}
                 </tbody>
@@ -262,8 +291,8 @@ export default function BankImport() {
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: '1rem' }}>
-          <h3 style={{ marginTop: 0 }}>{tr('bankImportRecentFiles')}</h3>
+        <div className="card">
+          <div className="card-title">{tr('bankImportRecentFiles')}</div>
           {recentFiles.length === 0 ? (
             <div style={{ color: 'var(--color-text-muted)' }}>{tr('noRecords')}</div>
           ) : (
@@ -271,19 +300,21 @@ export default function BankImport() {
               <table>
                 <thead>
                   <tr>
-                    <th>{tr('bankImportRecentFileName')}</th>
-                    <th>{tr('bankImportRecentAt')}</th>
-                    <th>{tr('bankImportRecentRows')}</th>
-                    <th>{tr('bankImportRecentCreated')}</th>
+                    {recentFileTh('file_name', tr('bankImportRecentFileName'))}
+                    {recentFileTh('imported_at', tr('bankImportRecentAt'))}
+                    {recentFileTh('transaction_count', tr('bankImportRecentRows'), true)}
+                    {recentFileTh('created', tr('bankImportRecentCreated'), true)}
                   </tr>
                 </thead>
                 <tbody>
-                  {recentFiles.map((f) => (
+                  {sortedRecentFiles.map((f) => (
                     <tr key={f.id || f.file_hash}>
-                      <td>{f.file_name || '-'}</td>
-                      <td>{f.imported_at ? new Date(f.imported_at).toLocaleString() : '-'}</td>
-                      <td>{f.transaction_count ?? 0}</td>
-                      <td>{`${f.created_income ?? 0} / ${f.created_expense ?? 0}`}</td>
+                      <td>{f.file_name || UI_DASH}</td>
+                      <td>{formatDateTimeSr(f.imported_at)}</td>
+                      <td style={{ textAlign: 'right' }}>{f.transaction_count ?? 0}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {`${f.created_income ?? 0} / ${f.created_expense ?? 0}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
