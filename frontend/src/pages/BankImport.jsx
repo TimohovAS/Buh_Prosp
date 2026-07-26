@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import FileInput from '../components/FileInput'
+import PageHeader from '../components/PageHeader'
 import PageTabs from '../components/PageTabs'
 import SelectionSummary from '../components/SelectionSummary'
 import { formatMoney2 as fmtMoney } from '../utils/formatters'
@@ -9,11 +11,12 @@ import { formatMoney2 as fmtMoney } from '../utils/formatters'
 export default function BankImport() {
   const location = useLocation()
   const isActivePage = location.pathname === '/bank-import'
-  const [_files, setFiles] = useState([])
+  const [files, setFiles] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
+  const [pageError, setPageError] = useState('')
   const [_clients, setClients] = useState([])
   const [selections, setSelections] = useState({}) // idx -> { selected, type }
   const [parseMeta, setParseMeta] = useState([])
@@ -41,6 +44,7 @@ export default function BankImport() {
     setParseMeta([])
     setSkippedFiles([])
     setResult(null)
+    setPageError('')
     setLoading(true)
     try {
       const parsed = await api.bankImport.parse(selectedFiles)
@@ -63,8 +67,10 @@ export default function BankImport() {
       setParseMeta(parsedFiles)
       setSkippedFiles(parsed.skipped_files || [])
       if (Array.isArray(parsed.recent_files)) setRecentFiles(parsed.recent_files)
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      // Молчаливый console.error оставлял пользователя без единого признака сбоя
+      setPageError(error?.message || tr('loadError'))
+      setFiles([])
     } finally {
       setLoading(false)
     }
@@ -75,11 +81,12 @@ export default function BankImport() {
       .map((tx, i) => ({ tx, i, sel: selections[i] }))
       .filter(({ sel }) => sel?.selected)
     if (items.length === 0) {
-      console.error(tr('selectAtLeastOne'))
+      setPageError(tr('selectAtLeastOne'))
       return
     }
     setApplying(true)
     setResult(null)
+    setPageError('')
     try {
       const body = {
         transactions: items.map(({ tx, i }) => ({
@@ -103,8 +110,8 @@ export default function BankImport() {
         .recentFiles(10)
         .then((r) => setRecentFiles(r.items || []))
         .catch(() => {})
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      setPageError(error?.message || tr('loadError'))
     } finally {
       setApplying(false)
     }
@@ -158,38 +165,43 @@ export default function BankImport() {
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">{tr('bankImport')}</h1>
-      </div>
+      <PageHeader
+        title={tr('bankImport')}
+        actions={
+          <FileInput
+            label={loading ? `${tr('loading')}...` : tr('selectFile')}
+            accept=".xls,.xlsx"
+            multiple
+            disabled={loading}
+            onChange={handleFileChange}
+            selectedName={files.map((file) => file.name).join(', ')}
+          />
+        }
+      />
 
       <PageTabs group="bank" />
 
       <div className="page-body">
-        <div className="card" style={{ marginBottom: '1rem' }}>
-          <div className="form-group">
-            <label className="form-label">{tr('bankImportFile')}</label>
-            <input type="file" multiple accept=".xls,.xlsx" onChange={handleFileChange} disabled={loading} />
-            {loading && (
-              <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>
-                {tr('loading')}...
-              </span>
-            )}
+        {pageError ? (
+          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
+            {pageError}
           </div>
-          {skippedFiles && skippedFiles.length > 0 && (
-            <div style={{ marginTop: '0.75rem', color: 'var(--color-warning)' }}>
-              <strong>
-                {tr('bankImportSkippedFiles')} ({skippedFiles.length}):
-              </strong>
-              <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
-                {skippedFiles.map((sf, idx) => (
-                  <li key={idx}>
-                    {sf.file_name} - {sf.reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        ) : null}
+
+        {skippedFiles.length > 0 && (
+          <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+            <strong>
+              {tr('bankImportSkippedFiles')} ({skippedFiles.length}):
+            </strong>
+            <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
+              {skippedFiles.map((sf, idx) => (
+                <li key={idx}>
+                  {sf.file_name} - {sf.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {transactions.length > 0 && (
           <div className="card" style={{ marginBottom: '1rem' }}>
@@ -297,12 +309,14 @@ export default function BankImport() {
                 </span>
               )}
             </p>
-            <Link to="/income" style={{ marginTop: '0.5rem', display: 'inline-block' }}>
-              {tr('bankImportToIncome')}
-            </Link>
-            <Link to="/expenses" style={{ marginTop: '0.5rem', marginLeft: '1rem', display: 'inline-block' }}>
-              {tr('bankImportToExpenses')}
-            </Link>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+              <Link to="/income" className="dashboard-link">
+                {tr('bankImportToIncome')}
+              </Link>
+              <Link to="/expenses" className="dashboard-link">
+                {tr('bankImportToExpenses')}
+              </Link>
+            </div>
           </div>
         )}
       </div>

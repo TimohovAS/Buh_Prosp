@@ -400,6 +400,39 @@ textarea {
   transition: all 0.15s;
 }
 
+/* Выбор файла: нативный input прячем под кнопку-label, иначе на странице
+   появляется системный контрол, выбивающийся из оформления. */
+.file-input {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.file-input > label {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.file-input input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-input-disabled > label {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.file-input-name {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
 .btn-primary {
   background: var(--color-accent);
   color: white;
