@@ -286,6 +286,7 @@ def build_work_diary_proposal_xlsx(
     sheet.row_dimensions[13].height = 28
     sheet.row_dimensions[14].height = 28
     sheet.row_dimensions[16].height = 34
+    sheet.row_dimensions[10].height = 36
 
     title_font = Font(name="Arial", size=26, bold=True, color=NAVY)
     subtitle_font = Font(name="Arial", size=12, bold=True, color=BLUE)
@@ -455,7 +456,7 @@ def build_work_diary_proposal_xlsx(
                 wrap_text=column == 3,
             )
         sheet.cell(row=row, column=2).number_format = "dd.mm.yyyy"
-        sheet.cell(row=row, column=5).number_format = "0.###"
+        sheet.cell(row=row, column=5).number_format = "General"
         sheet.cell(row=row, column=6).number_format = "#,##0.00;[Red]-#,##0.00"
         sheet.cell(row=row, column=7).number_format = "#,##0.00;[Red]-#,##0.00"
         sheet.cell(row=row, column=7).font = Font(name="Arial", size=10, bold=True, color=TEXT)
@@ -514,7 +515,6 @@ def build_work_diary_proposal_xlsx(
         border=Border(top=THIN_GRAY),
     )
 
-    sheet.auto_filter.ref = f"A16:G{last_line_row}"
     sheet.print_title_rows = "1:16"
     sheet.print_area = f"A1:G{signature_row + 1}"
     sheet.page_setup.paperSize = sheet.PAPERSIZE_A4

@@ -977,6 +977,7 @@ async def test_work_diary_proposal_export_includes_customer_prices_and_adjustmen
 
     work_row = next(row for row in rows if str(row[2]).startswith("Radovi:"))
     material_row = next(row for row in rows if str(row[2]).startswith("Materijal:"))
+    material_sheet_row = next(cell.row for cell in sheet["C"] if str(cell.value).startswith("Materijal:"))
     adjustment_row = next(row for row in rows if row[2] == "Korekcija dogovorene cene")
     total_formula = next(
         value for row in rows for value in row if isinstance(value, str) and value.startswith("=SUM(G")
@@ -986,6 +987,9 @@ async def test_work_diary_proposal_export_includes_customer_prices_and_adjustmen
     assert material_row[4] == 2
     assert material_row[5] == 60
     assert material_row[6] == 120
+    assert sheet.cell(row=material_sheet_row, column=5).number_format == "General"
+    assert sheet.row_dimensions[10].height == 36
+    assert sheet.auto_filter.ref is None
     assert adjustment_row[6] == 280
     assert total_formula.startswith("=SUM(G17:G")
 
