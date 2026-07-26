@@ -117,9 +117,10 @@ async function uploadFiles(endpoint, files, fieldName = 'files') {
   return res.json()
 }
 
-async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Download failed') {
+async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Download failed', options = {}) {
   const res = await fetch(resolveApiUrl(pathOrUrl), {
-    headers: getAuthHeaders(),
+    ...options,
+    headers: getAuthHeaders(options.headers),
   })
 
   if (res.status === 401) {
@@ -135,6 +136,14 @@ async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Down
 
   const blob = await res.blob()
   triggerBrowserDownload(blob, getFilenameFromResponse(res, fallbackFilename))
+}
+
+async function downloadBlobJson(pathOrUrl, data, fallbackFilename, fallbackMessage = 'Download failed') {
+  return downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
 }
 
 async function request(endpoint, options = {}) {
@@ -331,6 +340,13 @@ export const api = {
     deleteEntry: (id) => request(`/work-diaries/entries/${id}`, { method: 'DELETE' }),
     createInvoice: (data) =>
       request('/work-diaries/invoices', { method: 'POST', body: JSON.stringify(data) }),
+    exportProposalXlsx: (entryIds, fallbackFilename = 'predlog_fakturisanja.xlsx') =>
+      downloadBlobJson(
+        '/work-diaries/export-proposal.xlsx',
+        { entry_ids: entryIds },
+        fallbackFilename,
+        'Export failed'
+      ),
     projectMeta: (projectId) => request(`/work-diaries/project-meta/${projectId}`),
     updateProjectMeta: (projectId, data) =>
       request(`/work-diaries/project-meta/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),

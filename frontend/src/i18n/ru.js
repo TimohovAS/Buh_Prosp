@@ -920,6 +920,12 @@ const ru = {
   workDiariesBillableTotal: 'Всего по работам',
   workDiariesClearSelection: 'Очистить выбор',
   workDiariesCreateInvoice: 'Создать фактуру',
+  workDiariesProposalExport: 'Экспорт расчета в Excel',
+  workDiariesProposalExporting: 'Создание Excel…',
+  workDiariesProposalSameProject: 'В один Excel-расчет можно включить записи только одного проекта.',
+  workDiariesProposalUnavailableInternalProject:
+    'Нельзя подготовить расчет для заказчика: выбран внутренний проект.',
+  workDiariesProposalUnavailableMissingClient: 'Нельзя подготовить расчет: у проекта не указан заказчик.',
   workDiariesInvoice: 'Фактура',
   workDiariesInvoiceAvailable: 'Доступно',
   workDiariesInvoiceCancelled: 'Отменена:',

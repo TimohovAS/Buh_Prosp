@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +49,7 @@ from backend.schemas import (
     WorkDiaryInvoiceLinkResponse,
     WorkDiaryMaterialCreate,
     WorkDiaryMaterialResponse,
+    WorkDiaryProposalExportRequest,
     WorkDiaryProjectCostsResponse,
     WorkDiaryProjectMetaBase,
     WorkDiaryProjectMetaResponse,
@@ -55,6 +57,7 @@ from backend.schemas import (
 )
 from backend.income_service import has_invoice_duplicate, invoice_year_from_number, to_number_year_format
 from backend.services import allocate_next_invoice_number
+from backend.work_diary_export import build_work_diary_proposal_xlsx, proposal_filename
 
 router = APIRouter(prefix="/work-diaries", tags=["work-diaries"])
 
@@ -720,6 +723,60 @@ async def list_entries(
     result = await db.execute(query)
     entries = result.scalars().all()
     return [_serialize_entry(entry) for entry in entries]
+
+
+@router.post("/export-proposal.xlsx")
+async def export_proposal_xlsx(
+    data: WorkDiaryProposalExportRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    query = (
+        select(WorkDiaryEntry)
+        .options(
+            selectinload(WorkDiaryEntry.project).selectinload(Project.client),
+            selectinload(WorkDiaryEntry.project).selectinload(Project.work_diary_meta),
+            selectinload(WorkDiaryEntry.workers),
+            selectinload(WorkDiaryEntry.materials),
+        )
+        .where(WorkDiaryEntry.id.in_(data.entry_ids))
+    )
+    result = await db.execute(query)
+    entries = list(result.scalars().unique().all())
+    entries_by_id = {entry.id: entry for entry in entries}
+    missing_ids = [entry_id for entry_id in data.entry_ids if entry_id not in entries_by_id]
+    if missing_ids:
+        raise HTTPException(404, f"Work diary entry not found: {missing_ids[0]}")
+
+    project_ids = {entry.project_id for entry in entries}
+    if len(project_ids) != 1:
+        raise HTTPException(400, "Selected work diary entries must belong to one project")
+
+    entries.sort(key=lambda entry: (entry.date, entry.id))
+    project = entries[0].project
+    if project.is_internal:
+        raise HTTPException(400, "An internal project cannot be exported as a customer proposal")
+    if not project.client:
+        raise HTTPException(400, "The selected project has no customer")
+
+    enterprise_result = await db.execute(select(Enterprise).order_by(Enterprise.id).limit(1))
+    enterprise = enterprise_result.scalar_one_or_none()
+    if enterprise is None:
+        raise HTTPException(400, "Enterprise details are not configured")
+
+    output = build_work_diary_proposal_xlsx(
+        enterprise=enterprise,
+        project=project,
+        entries=entries,
+        prepared_by=current_user.full_name or current_user.username,
+        document_date=date.today(),
+    )
+    filename = proposal_filename(project, entries)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/entries", response_model=WorkDiaryEntryResponse)

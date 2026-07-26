@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Eye, FileText, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
+import { Building2, Eye, FileSpreadsheet, FileText, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -74,6 +74,7 @@ export default function WorkDiaries() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [metaModalOpen, setMetaModalOpen] = useState(false)
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false)
+  const [exportingProposal, setExportingProposal] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [billingFilter, setBillingFilter] = useState('')
   const [sortCol, setSortCol] = useState('date')
@@ -243,6 +244,13 @@ export default function WorkDiaries() {
     if (projectIds.size > 1) return tr('workDiariesInvoiceSameProject')
     return selectedEntries.map(invoiceEntryUnavailableReason).find(Boolean) || ''
   }, [invoiceEntryUnavailableReason, selectedEntries])
+  const proposalExportUnavailableReason = useMemo(() => {
+    const projectIds = new Set(selectedEntries.map((entry) => String(entry.project_id)))
+    if (projectIds.size > 1) return tr('workDiariesProposalSameProject')
+    if (invoiceProject?.is_internal) return tr('workDiariesProposalUnavailableInternalProject')
+    if (!invoiceProject?.client_id) return tr('workDiariesProposalUnavailableMissingClient')
+    return ''
+  }, [invoiceProject, selectedEntries])
 
   const billingStatusBadge = (entry) => {
     const status = entry.billing_status || 'not_invoiced'
@@ -289,6 +297,16 @@ export default function WorkDiaries() {
     setSelectedIds([])
     await loadEntries()
     navigate('/income', { state: { openIncomeId: createdInvoice.income_id } })
+  }
+
+  const exportSelectedProposal = async () => {
+    if (proposalExportUnavailableReason || exportingProposal) return
+    setExportingProposal(true)
+    try {
+      await api.workDiaries.exportProposalXlsx(selectedEntries.map((entry) => entry.id))
+    } finally {
+      setExportingProposal(false)
+    }
   }
 
   const sortedForPrint = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries])
@@ -643,18 +661,31 @@ export default function WorkDiaries() {
             },
           ]}
           actions={
-            <span title={invoiceSelectionUnavailableReason || undefined}>
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                disabled={Boolean(invoiceSelectionUnavailableReason)}
-                onClick={() => {
-                  if (!invoiceSelectionUnavailableReason) setInvoiceModalOpen(true)
-                }}
-              >
-                <FileText size={16} /> {tr('workDiariesCreateInvoice')}
-              </button>
-            </span>
+            <>
+              <span title={proposalExportUnavailableReason || undefined}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  disabled={Boolean(proposalExportUnavailableReason) || exportingProposal}
+                  onClick={exportSelectedProposal}
+                >
+                  <FileSpreadsheet size={16} />
+                  {tr(exportingProposal ? 'workDiariesProposalExporting' : 'workDiariesProposalExport')}
+                </button>
+              </span>
+              <span title={invoiceSelectionUnavailableReason || undefined}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  disabled={Boolean(invoiceSelectionUnavailableReason)}
+                  onClick={() => {
+                    if (!invoiceSelectionUnavailableReason) setInvoiceModalOpen(true)
+                  }}
+                >
+                  <FileText size={16} /> {tr('workDiariesCreateInvoice')}
+                </button>
+              </span>
+            </>
           }
           onClear={() => setSelectedIds([])}
         />

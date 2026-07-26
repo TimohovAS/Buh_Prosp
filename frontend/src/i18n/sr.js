@@ -918,6 +918,13 @@ const sr = {
   workDiariesBillableTotal: 'Укупно по радовима',
   workDiariesClearSelection: 'Очисти избор',
   workDiariesCreateInvoice: 'Направи фактуру',
+  workDiariesProposalExport: 'Извези обрачун у Excel',
+  workDiariesProposalExporting: 'Прављење Excel-а…',
+  workDiariesProposalSameProject: 'У један Excel обрачун можете укључити само записе једног пројекта.',
+  workDiariesProposalUnavailableInternalProject:
+    'Није могуће припремити обрачун за наручиоца: изабран је интерни пројекат.',
+  workDiariesProposalUnavailableMissingClient:
+    'Није могуће припремити обрачун: пројекат нема изабраног наручиоца.',
   workDiariesInvoice: 'Фактура',
   workDiariesInvoiceAvailable: 'Расположиво',
   workDiariesInvoiceCancelled: 'Отказана:',

@@ -459,6 +459,18 @@ class WorkDiarySummaryResponse(BaseModel):
     remaining_billable_amount: float
 
 
+class WorkDiaryProposalExportRequest(BaseModel):
+    entry_ids: list[int] = Field(min_length=1)
+
+    @field_validator("entry_ids")
+    @classmethod
+    def validate_entry_ids(cls, value):
+        normalized = list(dict.fromkeys(value))
+        if any(entry_id <= 0 for entry_id in normalized):
+            raise ValueError("entry_ids must contain positive identifiers")
+        return normalized
+
+
 class WorkDiaryInvoiceLineCreate(BaseModel):
     entry_id: int
     name: str

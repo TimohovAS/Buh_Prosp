@@ -1,8 +1,10 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 from fastapi import HTTPException
+from openpyxl import load_workbook
 from pydantic import ValidationError
 
 from backend.models import Client, Enterprise, ExpenseItem, PurchaseReceipt, PurchaseReceiptItem, User, Worker
@@ -11,6 +13,7 @@ from backend.routers.work_diaries_router import (
     create_invoice_from_entries,
     create_entry,
     delete_entry,
+    export_proposal_xlsx,
     get_project_costs,
     get_summary,
     list_entries,
@@ -23,6 +26,7 @@ from backend.schemas import (
     WorkDiaryInvoiceCreate,
     WorkDiaryInvoiceLineCreate,
     WorkDiaryMaterialCreate,
+    WorkDiaryProposalExportRequest,
     IncomeItemCreate,
     IncomeUpdate,
 )
@@ -909,6 +913,81 @@ async def test_work_diary_patch_duration_overrides_stored_times(db_session, make
     assert updated.duration_hours == 5
     assert updated.start_time is None
     assert updated.end_time is None
+
+
+@pytest.mark.asyncio
+async def test_work_diary_proposal_export_includes_customer_prices_and_adjustment(db_session, make_project):
+    client = Client(
+        name="VS Elektro",
+        address="Nikite Tolstoja 34, Vršac",
+        pib="60578559",
+        maticni_broj="104890065",
+        document_language="sr",
+    )
+    enterprise = Enterprise(
+        name="Andrei Timokhov pr ProspEl",
+        address="Sremska 94, Vršac",
+        pib="115370068",
+        maticni_broj="68313953",
+        bank_account="190-0000000157810-14",
+    )
+    project = await make_project(db_session, code="PR-2026-0042", name="Popravka rasvete")
+    project.client = client
+    user = _make_user(db_session, "diary-export-admin")
+    user.full_name = "Andrei Timokhov"
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("300"))
+    db_session.add_all([client, enterprise, worker])
+    await db_session.flush()
+
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 24),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Montaža i puštanje u rad",
+            duration_hours=2,
+            billable_amount_override=1000,
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description="Kabl 3x2,5",
+                    quantity=2,
+                    unit="m",
+                    amount=100,
+                )
+            ],
+        ),
+        db_session,
+        user,
+    )
+
+    response = await export_proposal_xlsx(
+        WorkDiaryProposalExportRequest(entry_ids=[entry.id]),
+        db_session,
+        user,
+    )
+    content = b"".join([chunk async for chunk in response.body_iterator])
+    workbook = load_workbook(BytesIO(content), data_only=False)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+
+    assert sheet.title == "Predlog"
+    assert "attachment; filename=" in response.headers["content-disposition"]
+    assert any("VS Elektro" in str(value) for row in rows for value in row if value)
+    assert any("PREDLOG ZA FAKTURISANJE" in str(value) for row in rows for value in row if value)
+
+    work_row = next(row for row in rows if str(row[2]).startswith("Radovi:"))
+    material_row = next(row for row in rows if str(row[2]).startswith("Materijal:"))
+    adjustment_row = next(row for row in rows if row[2] == "Korekcija dogovorene cene")
+    total_formula = next(
+        value for row in rows for value in row if isinstance(value, str) and value.startswith("=SUM(G")
+    )
+
+    assert work_row[6] == 600
+    assert material_row[4] == 2
+    assert material_row[5] == 60
+    assert material_row[6] == 120
+    assert adjustment_row[6] == 280
+    assert total_formula.startswith("=SUM(G17:G")
 
 
 def test_work_diary_payload_contract():
