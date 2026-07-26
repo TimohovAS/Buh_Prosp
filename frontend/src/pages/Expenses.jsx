@@ -897,11 +897,7 @@ export default function Expenses() {
       <PageTabs group="expenses" />
 
       <div className="page-body">
-        {pageError && (
-          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-            {pageError}
-          </div>
-        )}
+        {pageError && <div className="alert alert-danger">{pageError}</div>}
 
         {visibleDuplicateGroups.length > 0 && (
           <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--color-warning)' }}>

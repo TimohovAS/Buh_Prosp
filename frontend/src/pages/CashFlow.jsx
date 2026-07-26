@@ -80,11 +80,7 @@ export default function CashFlow() {
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       {loading ? (
         <p>{tr('loading')}</p>

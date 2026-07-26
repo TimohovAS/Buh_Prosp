@@ -563,11 +563,7 @@ export default function Projects() {
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="card">
         <div className="card-title">{tr('projectsTable')}</div>

@@ -853,11 +853,7 @@ export default function Income() {
       />
 
       <div className="page-body">
-        {pageError && (
-          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-            {pageError}
-          </div>
-        )}
+        {pageError && <div className="alert alert-danger">{pageError}</div>}
         <div className="card">
           <div className="table-wrap">
             <table className="income-list-table">
@@ -1180,11 +1176,7 @@ export default function Income() {
                 {paymentModal.amount_rsd.toLocaleString('sr-RS')} RSD
               </div>
             </div>
-            {paymentError && (
-              <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-                {paymentError}
-              </div>
-            )}
+            {paymentError && <div className="alert alert-danger">{paymentError}</div>}
             {paymentLoading ? (
               <p>{tr('loading')}</p>
             ) : (
@@ -1656,11 +1648,7 @@ export default function Income() {
                   onChange={(event) => setForm({ ...form, note: event.target.value })}
                 />
               </div>
-              {submitError && (
-                <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-                  {submitError}
-                </div>
-              )}
+              {submitError && <div className="alert alert-danger">{submitError}</div>}
               <div className="modal-actions">
                 <button
                   type="button"

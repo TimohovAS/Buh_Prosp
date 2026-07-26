@@ -1211,11 +1211,7 @@ export default function CashRegister() {
       </div>
 
       <div className="page-body">
-        {pageError ? (
-          <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-            {pageError}
-          </div>
-        ) : null}
+        {pageError ? <div className="alert alert-danger">{pageError}</div> : null}
 
         {loading ? (
           <div>{tr('loading')}</div>

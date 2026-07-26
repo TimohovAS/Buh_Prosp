@@ -847,11 +847,7 @@ export default function Receipts() {
         }
       />
 
-      {pageError ? (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-          {pageError}
-        </div>
-      ) : null}
+      {pageError ? <div className="alert alert-danger">{pageError}</div> : null}
 
       <div className="card">
         <div className="card-title">{tr('receipts')}</div>
@@ -1081,11 +1077,7 @@ export default function Receipts() {
         actions={
           detailReceipt ? (
             <>
-              {detailError ? (
-                <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-                  {detailError}
-                </div>
-              ) : null}
+              {detailError ? <div className="alert alert-danger">{detailError}</div> : null}
               <div className="receipt-side-card">
                 <div className="record-actions-grid" style={{ marginBottom: '1rem' }}>
                   {!detailReceipt.expense_id ? (

@@ -106,11 +106,7 @@ export default function AccountsReceivable() {
 
       <PageTabs group="finance" />
 
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       {totals && (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
