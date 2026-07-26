@@ -694,10 +694,10 @@ export default function Projects() {
             ? `${tr('project')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}`
             : tr('project')
         }
-        maxWidth="920px"
+        maxWidth="1180px"
         details={
           detailModal ? (
-            <div className="record-field-grid">
+            <div className="record-field-grid record-field-grid-wide">
               <div className="record-field">
                 <span className="record-field-label">{tr('name')}</span>
                 <span className="record-field-value">{detailModal.name || UI_DASH}</span>
@@ -706,10 +706,14 @@ export default function Projects() {
                 <span className="record-field-label">{tr('projectCode')}</span>
                 <span className="record-field-value">{detailModal.code || UI_DASH}</span>
               </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('client')}</span>
-                <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
-              </div>
+              {/* Клиента, сроки и примечание показываем только заполненными:
+                  у внутренних проектов их обычно нет */}
+              {detailModal.client_name ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('client')}</span>
+                  <span className="record-field-value">{detailModal.client_name}</span>
+                </div>
+              ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('status')}</span>
                 <span className="record-field-value">{detailModal.status || UI_DASH}</span>
@@ -726,22 +730,30 @@ export default function Projects() {
                 <span className="record-field-label">{tr('projectPlannedExpenses')}</span>
                 <span className="record-field-value">{fmt(detailModal.planned_expense)} RSD</span>
               </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('projectStartDate')}</span>
-                <span className="record-field-value">{detailModal.start_date || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('validTo')}</span>
-                <span className="record-field-value">{detailModal.end_date || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('projectFirstMovement')}</span>
-                <span className="record-field-value">{detailModal.first_movement_date || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('projectLastMovement')}</span>
-                <span className="record-field-value">{detailModal.last_movement_date || UI_DASH}</span>
-              </div>
+              {detailModal.start_date ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('projectStartDate')}</span>
+                  <span className="record-field-value">{detailModal.start_date}</span>
+                </div>
+              ) : null}
+              {detailModal.end_date ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('validTo')}</span>
+                  <span className="record-field-value">{detailModal.end_date}</span>
+                </div>
+              ) : null}
+              {detailModal.first_movement_date ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('projectFirstMovement')}</span>
+                  <span className="record-field-value">{detailModal.first_movement_date}</span>
+                </div>
+              ) : null}
+              {detailModal.last_movement_date ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('projectLastMovement')}</span>
+                  <span className="record-field-value">{detailModal.last_movement_date}</span>
+                </div>
+              ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('income')}</span>
                 <span className="record-field-value">{fmt(getRowData(detailModal).revenue)} RSD</span>
@@ -765,10 +777,12 @@ export default function Projects() {
                   {fmt(getRowData(detailModal).profit)} RSD
                 </span>
               </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{detailModal.notes || UI_DASH}</div>
-              </div>
+              {detailModal.notes ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('note')}</span>
+                  <div className="record-field-text">{detailModal.notes}</div>
+                </div>
+              ) : null}
             </div>
           ) : null
         }

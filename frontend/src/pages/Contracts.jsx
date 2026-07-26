@@ -431,10 +431,10 @@ export default function Contracts() {
             ? `${tr('contractForm')} ${UI_DASH} ${detailModal.number || `#${detailModal.id}`}`
             : tr('contractForm')
         }
-        maxWidth="960px"
+        maxWidth="1180px"
         details={
           detailModal ? (
-            <div className="record-field-grid">
+            <div className="record-field-grid record-field-grid-wide">
               <div className="record-field">
                 <span className="record-field-label">{tr('contractNumber')}</span>
                 <span className="record-field-value">{detailModal.number || UI_DASH}</span>
@@ -443,11 +443,11 @@ export default function Contracts() {
                 <span className="record-field-label">{tr('date')}</span>
                 <span className="record-field-value">{detailModal.date || UI_DASH}</span>
               </div>
-              <div className="record-field">
+              <div className="record-field span-2">
                 <span className="record-field-label">{tr('client')}</span>
                 <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
               </div>
-              <div className="record-field">
+              <div className="record-field span-2">
                 <span className="record-field-label">{tr('project')}</span>
                 <span className="record-field-value">
                   {getProjectName(detailModal.project_id) || UI_DASH}
@@ -475,10 +475,13 @@ export default function Contracts() {
                   </StatusBadge>
                 </span>
               </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('contractSubject')}</span>
-                <div className="record-field-text">{detailModal.subject || UI_DASH}</div>
-              </div>
+              {/* Необязательные поля показываем только заполненными */}
+              {detailModal.subject ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('contractSubject')}</span>
+                  <div className="record-field-text">{detailModal.subject}</div>
+                </div>
+              ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('amount')}</span>
                 <span className="record-field-value">{formatInteger(detailModal.amount || 0)}</span>
@@ -503,18 +506,24 @@ export default function Contracts() {
                   {formatInteger(detailModal.profit || 0)}
                 </span>
               </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('validFrom')}</span>
-                <span className="record-field-value">{detailModal.validity_start || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('validTo')}</span>
-                <span className="record-field-value">{detailModal.validity_end || UI_DASH}</span>
-              </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('note')}</span>
-                <div className="record-field-text">{detailModal.note || UI_DASH}</div>
-              </div>
+              {detailModal.validity_start ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('validFrom')}</span>
+                  <span className="record-field-value">{detailModal.validity_start}</span>
+                </div>
+              ) : null}
+              {detailModal.validity_end ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('validTo')}</span>
+                  <span className="record-field-value">{detailModal.validity_end}</span>
+                </div>
+              ) : null}
+              {detailModal.note ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('note')}</span>
+                  <div className="record-field-text">{detailModal.note}</div>
+                </div>
+              ) : null}
             </div>
           ) : null
         }

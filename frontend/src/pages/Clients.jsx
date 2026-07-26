@@ -200,34 +200,43 @@ export default function Clients() {
             ? `${tr('client')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}`
             : tr('client')
         }
-        maxWidth="860px"
+        maxWidth="1040px"
         details={
           detailModal ? (
-            <div className="record-field-grid">
+            <div className="record-field-grid record-field-grid-wide">
               <div className="record-field full">
                 <span className="record-field-label">{tr('name')}</span>
                 <span className="record-field-value">{detailModal.name || UI_DASH}</span>
               </div>
-              <div className="record-field full">
-                <span className="record-field-label">{tr('address')}</span>
-                <div className="record-field-text">{detailModal.address || UI_DASH}</div>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('pib')}</span>
-                <span className="record-field-value">{detailModal.pib || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('maticniBroj')}</span>
-                <span className="record-field-value">{detailModal.maticni_broj || UI_DASH}</span>
-              </div>
+              {/* Необязательные реквизиты показываем только заполненными */}
+              {detailModal.address ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('address')}</span>
+                  <div className="record-field-text">{detailModal.address}</div>
+                </div>
+              ) : null}
+              {detailModal.pib ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('pib')}</span>
+                  <span className="record-field-value">{detailModal.pib}</span>
+                </div>
+              ) : null}
+              {detailModal.maticni_broj ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('maticniBroj')}</span>
+                  <span className="record-field-value">{detailModal.maticni_broj}</span>
+                </div>
+              ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('type')}</span>
                 <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
               </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('contact')}</span>
-                <span className="record-field-value">{detailModal.contact || UI_DASH}</span>
-              </div>
+              {detailModal.contact ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('contact')}</span>
+                  <span className="record-field-value">{detailModal.contact}</span>
+                </div>
+              ) : null}
             </div>
           ) : null
         }
