@@ -635,7 +635,7 @@ export default function WorkDiaryEntryModal({
                   type="number"
                   min="0"
                   max={sourceItemForMaterial(material)?.remaining_quantity ?? undefined}
-                  step="0.001"
+                  step={['m', 'm2', 'm3', 'kg', 't', 'l', 'h'].includes(material.unit) ? '0.1' : '1'}
                   value={material.quantity}
                   placeholder={tr('quantity')}
                   onChange={(event) => {
