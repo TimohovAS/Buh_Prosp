@@ -247,10 +247,8 @@ export default function WorkDiaries() {
   const proposalExportUnavailableReason = useMemo(() => {
     const projectIds = new Set(selectedEntries.map((entry) => String(entry.project_id)))
     if (projectIds.size > 1) return tr('workDiariesProposalSameProject')
-    if (invoiceProject?.is_internal) return tr('workDiariesProposalUnavailableInternalProject')
-    if (!invoiceProject?.client_id) return tr('workDiariesProposalUnavailableMissingClient')
     return ''
-  }, [invoiceProject, selectedEntries])
+  }, [selectedEntries])
 
   const billingStatusBadge = (entry) => {
     const status = entry.billing_status || 'not_invoiced'

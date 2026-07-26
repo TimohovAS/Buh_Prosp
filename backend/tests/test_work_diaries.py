@@ -990,6 +990,37 @@ async def test_work_diary_proposal_export_includes_customer_prices_and_adjustmen
     assert total_formula.startswith("=SUM(G17:G")
 
 
+@pytest.mark.asyncio
+async def test_work_diary_proposal_export_allows_missing_customer_and_enterprise_details(db_session, make_project):
+    project = await make_project(db_session, code="PR-2026-0043", name="Unassigned customer")
+    user = _make_user(db_session, "diary-export-empty-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("100"))
+    db_session.add(worker)
+    await db_session.flush()
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 25),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Inspection",
+            duration_hours=1,
+        ),
+        db_session,
+        user,
+    )
+
+    response = await export_proposal_xlsx(
+        WorkDiaryProposalExportRequest(entry_ids=[entry.id]),
+        db_session,
+        user,
+    )
+    content = b"".join([chunk async for chunk in response.body_iterator])
+    workbook = load_workbook(BytesIO(content), data_only=False)
+
+    assert workbook.active["A7"].value == "NARUČILAC"
+    assert workbook.active["A8"].value in (None, "")
+
+
 def test_work_diary_payload_contract():
     fields = WorkDiaryEntryCreate.model_fields
 

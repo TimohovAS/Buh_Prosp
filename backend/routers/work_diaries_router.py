@@ -754,15 +754,9 @@ async def export_proposal_xlsx(
 
     entries.sort(key=lambda entry: (entry.date, entry.id))
     project = entries[0].project
-    if project.is_internal:
-        raise HTTPException(400, "An internal project cannot be exported as a customer proposal")
-    if not project.client:
-        raise HTTPException(400, "The selected project has no customer")
 
     enterprise_result = await db.execute(select(Enterprise).order_by(Enterprise.id).limit(1))
-    enterprise = enterprise_result.scalar_one_or_none()
-    if enterprise is None:
-        raise HTTPException(400, "Enterprise details are not configured")
+    enterprise = enterprise_result.scalar_one_or_none() or Enterprise(name="")
 
     output = build_work_diary_proposal_xlsx(
         enterprise=enterprise,
