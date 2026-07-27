@@ -1509,8 +1509,12 @@ tr.row-reversal {
   width: 280px;
 }
 
-.cash-list-table .col-source {
-  width: 208px;
+.cash-list-table .col-project {
+  width: 220px;
+}
+
+.cash-list-table td.col-project > .record-cell-ellipsis {
+  font-weight: 600;
 }
 
 .cash-list-table .col-amount {

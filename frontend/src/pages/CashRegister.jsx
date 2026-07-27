@@ -533,8 +533,8 @@ export default function CashRegister() {
       const leftValue =
         sortCol === 'entry_type'
           ? getEntryTypeLabel(left)
-          : sortCol === 'source'
-            ? getEntrySourceLabel(left)
+          : sortCol === 'project'
+            ? getProjectName(left.project_id)
             : sortCol === 'inflow'
               ? leftIn
               : sortCol === 'outflow'
@@ -550,8 +550,8 @@ export default function CashRegister() {
       const rightValue =
         sortCol === 'entry_type'
           ? getEntryTypeLabel(right)
-          : sortCol === 'source'
-            ? getEntrySourceLabel(right)
+          : sortCol === 'project'
+            ? getProjectName(right.project_id)
             : sortCol === 'inflow'
               ? rightIn
               : sortCol === 'outflow'
@@ -626,7 +626,6 @@ export default function CashRegister() {
       { label: tr('cashEntryType'), type: 'text', value: getEntryTypeLabel },
       { label: tr('description'), type: 'text', value: (entry) => getDisplayDescription(entry) || '' },
       { label: tr('note'), type: 'text', value: (entry) => entry.note || '' },
-      { label: tr('cashSource'), type: 'text', value: getEntrySourceLabel },
       { label: tr('project'), type: 'text', value: (entry) => getProjectName(entry.project_id) || '' },
       {
         label: tr('cashflowInflow'),
@@ -1283,11 +1282,11 @@ export default function CashRegister() {
                         {tr('description')} <SortIndicator active={sortCol === 'description'} asc={sortAsc} />
                       </th>
                       <th
-                        className="col-source"
+                        className="col-project"
                         style={{ cursor: 'pointer' }}
-                        onClick={() => toggleSort('source')}
+                        onClick={() => toggleSort('project')}
                       >
-                        {tr('cashSource')} <SortIndicator active={sortCol === 'source'} asc={sortAsc} />
+                        {tr('project')} <SortIndicator active={sortCol === 'project'} asc={sortAsc} />
                       </th>
                       <th
                         className="col-amount"
@@ -1323,7 +1322,7 @@ export default function CashRegister() {
                     ) : (
                       filteredEntries.map((entry) => {
                         const typeLabel = getEntryTypeLabel(entry)
-                        const sourceLabel = getEntrySourceLabel(entry)
+                        const projectLabel = getProjectName(entry.project_id) || UI_DASH
                         const descriptionLabel = getDisplayDescription(entry)
                         const payoutMeta = getWorkerPayoutDescriptionMeta(entry)
                         return (
@@ -1368,7 +1367,11 @@ export default function CashRegister() {
                                 </div>
                               ) : null}
                             </td>
-                            <td className="col-source">{sourceLabel}</td>
+                            <td className="col-project">
+                              <div className="record-cell-ellipsis" title={projectLabel}>
+                                {projectLabel}
+                              </div>
+                            </td>
                             <td
                               className="col-amount"
                               style={{ textAlign: 'right', color: 'var(--color-success)' }}
