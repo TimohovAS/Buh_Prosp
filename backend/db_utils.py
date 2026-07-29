@@ -32,15 +32,16 @@ async def get_project_or_404(
     project_id: int,
     *,
     exc_cls: type[Exception] = HTTPException,
-    archived_exc_cls: type[Exception] | None = None,
+    inactive_exc_cls: type[Exception] | None = None,
+    allow_completed: bool = False,
 ) -> Project:
-    """Fetch a project; raise `exc_cls` (HTTPException by default) if missing or archived."""
+    """Fetch a project; reject completed projects unless explicitly allowed for historical use."""
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
         _raise(exc_cls, "Project not found", 404)
-    if project.status == "archived" and project.code != UNASSIGNED_PROJECT_CODE:
-        _raise(archived_exc_cls or exc_cls, "Cannot use archived project", 400)
+    if not allow_completed and project.status == "completed" and project.code != UNASSIGNED_PROJECT_CODE:
+        _raise(inactive_exc_cls or exc_cls, "Cannot use completed project", 400)
     return project
 
 
@@ -65,8 +66,10 @@ async def resolve_project_contract_links(
     *,
     not_found_exc_cls: type[Exception] = HTTPException,
     validation_exc_cls: type[Exception] = HTTPException,
+    allow_completed: bool = False,
 ) -> tuple[int | None, int | None]:
     resolved_project_id = project_id or await get_unassigned_project_id(db)
+    requested_project_id = resolved_project_id
     resolved_contract_id = contract_id
     project_validated = False
 
@@ -79,7 +82,8 @@ async def resolve_project_contract_links(
                 db,
                 resolved_project_id,
                 exc_cls=not_found_exc_cls,
-                archived_exc_cls=validation_exc_cls,
+                inactive_exc_cls=validation_exc_cls,
+                allow_completed=allow_completed,
             )
             project_validated = True
             contract.project_id = resolved_project_id
@@ -91,7 +95,8 @@ async def resolve_project_contract_links(
             db,
             resolved_project_id,
             exc_cls=not_found_exc_cls,
-            archived_exc_cls=validation_exc_cls,
+            inactive_exc_cls=validation_exc_cls,
+            allow_completed=allow_completed and resolved_project_id == requested_project_id,
         )
 
     return resolved_project_id, resolved_contract_id

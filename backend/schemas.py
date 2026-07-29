@@ -111,7 +111,7 @@ class ProjectBase(BaseModel):
     name: str
     client_id: Optional[int] = None
     is_internal: Optional[bool] = False
-    status: str = "active"  # lead | active | completed | archived
+    status: Literal["active", "completed"] = "active"
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
     planned_income: Optional[Decimal] = None
@@ -128,7 +128,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     client_id: Optional[int] = None
     is_internal: Optional[bool] = None
-    status: Optional[str] = None
+    status: Optional[Literal["active", "completed"]] = None
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
     planned_income: Optional[Decimal] = None
@@ -793,6 +793,8 @@ class IncomePaymentTransactionResponse(BaseModel):
 
 class ProjectMovementItemResponse(BaseModel):
     row_key: str
+    source_id: Optional[int] = None
+    receipt_id: Optional[int] = None
     date: DateType
     direction: Literal["in", "out"]
     movement_type: Literal["income", "expense"]

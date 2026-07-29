@@ -176,6 +176,13 @@ export default function WorkDiaryEntryModal({
     () => workers.map((worker) => ({ value: worker.id, label: worker.name })),
     [workers]
   )
+  const selectableProjects = useMemo(
+    () =>
+      projects.filter(
+        (project) => project.status === 'active' || (entry && String(project.id) === String(entry.project_id))
+      ),
+    [entry, projects]
+  )
 
   const autoRate = useMemo(() => teamAutoRate(workers, form.worker_ids), [workers, form.worker_ids])
   const teamBillingRate = useMemo(
@@ -438,7 +445,7 @@ export default function WorkDiaryEntryModal({
               onChange={(event) => setFormField('project_id', event.target.value)}
             >
               <option value="">{tr('select')}</option>
-              {projects.map((project) => (
+              {selectableProjects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>

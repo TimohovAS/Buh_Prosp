@@ -36,10 +36,20 @@ from backend.state_machine import (
 INCOMING_INVOICE_SOURCE = "incoming_invoice"
 
 
-async def _resolve_invoice_project_id(db: AsyncSession, project_id: int | None) -> int | None:
+async def _resolve_invoice_project_id(
+    db: AsyncSession,
+    project_id: int | None,
+    *,
+    allow_completed: bool = False,
+) -> int | None:
     resolved_project_id = project_id or await get_unassigned_project_id(db)
     if resolved_project_id is not None:
-        await get_project_or_404(db, resolved_project_id, exc_cls=ValueError)
+        await get_project_or_404(
+            db,
+            resolved_project_id,
+            exc_cls=ValueError,
+            allow_completed=allow_completed,
+        )
     return resolved_project_id
 
 
@@ -106,7 +116,11 @@ async def update_incoming_invoice(
     if invoice.status in {"paid", "cancelled"}:
         raise InvalidStatusTransition(f"IncomingInvoice: cannot edit invoice in status '{invoice.status}'.")
     if "project_id" in fields and fields["project_id"] is not None:
-        fields["project_id"] = await _resolve_invoice_project_id(db, fields["project_id"])
+        fields["project_id"] = await _resolve_invoice_project_id(
+            db,
+            fields["project_id"],
+            allow_completed=fields["project_id"] == invoice.project_id,
+        )
     for key, value in fields.items():
         if value is not None:
             setattr(invoice, key, value)

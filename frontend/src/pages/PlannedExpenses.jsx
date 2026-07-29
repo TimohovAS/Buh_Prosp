@@ -135,7 +135,7 @@ export default function PlannedExpenses() {
   }, [upcomingDays, items.length, isActivePage])
   useEffect(() => {
     if (!isActivePage) return
-    api.projects.list({ show_archived: true }).then(setProjects)
+    api.projects.list({ show_inactive: true }).then(setProjects)
     api.categories.list({ category_type: 'expense' }).then(setApiCategories)
     api.workers
       .list()

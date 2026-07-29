@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
-from backend.models import Project, TransactionCategory, User
+from backend.db_utils import get_project_or_404
+from backend.models import TransactionCategory, User
 from backend.schemas import (
     TransactionCategoryCreate,
     TransactionCategoryResponse,
@@ -21,12 +22,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 async def _ensure_default_project_exists(db: AsyncSession, project_id: int | None) -> None:
     if project_id is None:
         return
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Проект не найден")
-    if project.status == "archived":
-        raise HTTPException(400, "Нельзя использовать архивный проект")
+    await get_project_or_404(db, project_id)
 
 
 @router.get("", response_model=list[TransactionCategoryResponse])

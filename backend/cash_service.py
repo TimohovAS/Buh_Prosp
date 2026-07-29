@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
 
 from backend.models import BankTransaction, CashEntry, Expense, Project
-from backend.state_machine import initialize_expense_status, initialize_project_status, transition_project_status
+from backend.state_machine import (
+    PROJECT_STATUSES,
+    initialize_expense_status,
+    initialize_project_status,
+    transition_project_status,
+)
 
 CASH_CATEGORY = "cash"
 CASH_TRANSFER_SOURCE = "cash_transfer"
@@ -35,8 +40,10 @@ async def get_or_create_cash_project_id(db: AsyncSession) -> int:
     if project:
         if not project.is_internal:
             project.is_internal = True
-        if project.status == "archived":
-            transition_project_status(project, "active", allow_same=False, allow_system_reactivate=True)
+        if project.status not in PROJECT_STATUSES:
+            initialize_project_status(project, "active")
+        elif project.status == "completed":
+            transition_project_status(project, "active", allow_same=False)
         if not project.name:
             project.name = CASH_PROJECT_NAME
         await db.flush()

@@ -26,6 +26,7 @@ import { UI_DASH, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters
 import { MONTHS } from '../utils/constants'
 import { downloadTextFile } from '../utils/download'
 import { amountSearchHay } from '../utils/searchUtils'
+import { MODAL_CHAIN_CLOSE_EVENT, closeParentModalChain } from '../utils/modalNavigation'
 
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
 
@@ -184,6 +185,8 @@ export default function Expenses() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [detailEditMode, setDetailEditMode] = useState(false)
+  const [detailReturnToPrevious, setDetailReturnToPrevious] = useState(false)
+  const [detailReturnPath, setDetailReturnPath] = useState('')
   const [projects, setProjects] = useState([])
   const [contracts, setContracts] = useState([])
   const [categories, setCategories] = useState([])
@@ -204,6 +207,20 @@ export default function Expenses() {
     contract_id: '',
     note: '',
   })
+
+  useEffect(() => {
+    const closeModalChain = (event) => {
+      if (!detailReturnPath || event.detail?.returnPath !== detailReturnPath) return
+      setDetailModal(null)
+      setDetailEditMode(false)
+      setDetailError('')
+      setDetailLoading(false)
+      setDetailReturnToPrevious(false)
+      setDetailReturnPath('')
+    }
+    window.addEventListener(MODAL_CHAIN_CLOSE_EVENT, closeModalChain)
+    return () => window.removeEventListener(MODAL_CHAIN_CLOSE_EVENT, closeModalChain)
+  }, [detailReturnPath])
 
   const load = () => {
     setLoading(true)
@@ -238,7 +255,7 @@ export default function Expenses() {
   useEffect(() => {
     if (!isActivePage) return
     Promise.all([
-      api.projects.list({ show_archived: true }),
+      api.projects.list({ show_inactive: true }),
       api.categories.list({ category_type: 'expense' }),
       api.contracts.list(),
     ])
@@ -329,8 +346,15 @@ export default function Expenses() {
 
   const openReceiptFromExpense = (receipt) => {
     if (!receipt?.id) return
-    closeDetail()
-    navigate('/receipts', { state: { openReceiptId: receipt.id } })
+    const returnPath = detailReturnPath || '/expenses'
+    setDetailReturnPath(returnPath)
+    navigate('/receipts', {
+      state: {
+        openReceiptId: receipt.id,
+        modalReturn: true,
+        modalReturnPath: returnPath,
+      },
+    })
   }
 
   const updateExpenseLine = (key, field, value) => {
@@ -484,12 +508,46 @@ export default function Expenses() {
     }
   }
 
-  const closeDetail = () => {
+  const resetDetail = () => {
     setDetailModal(null)
     setDetailEditMode(false)
     setDetailError('')
     setDetailLoading(false)
+    setDetailReturnToPrevious(false)
+    setDetailReturnPath('')
   }
+
+  const closeDetail = () => {
+    const shouldCloseParentChain = detailReturnToPrevious
+    const returnPath = detailReturnPath
+    resetDetail()
+    if (shouldCloseParentChain) {
+      closeParentModalChain(returnPath)
+      if (returnPath) navigate(returnPath, { replace: true })
+      else navigate(-1)
+    }
+  }
+
+  const backFromExpenseDetail = () => {
+    if (detailEditMode) {
+      setDetailEditMode(false)
+      setDetailError('')
+      return
+    }
+    if (!detailReturnToPrevious) return
+    resetDetail()
+    navigate(-1)
+  }
+
+  useEffect(() => {
+    const openExpenseId = Number(location.state?.openExpenseId)
+    if (!isActivePage || !Number.isInteger(openExpenseId) || openExpenseId <= 0) return
+    setDetailReturnToPrevious(Boolean(location.state?.modalReturn))
+    setDetailReturnPath(location.state?.modalReturnPath || '')
+    openDetail({ id: openExpenseId })
+    navigate('/expenses', { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActivePage, location.state?.openExpenseId])
 
   const openEditFromDetail = (item) => {
     hydrateExpenseForm(item)
@@ -1164,6 +1222,8 @@ export default function Expenses() {
       <EntityDetailModal
         isOpen={!!detailModal || detailLoading || !!detailError}
         onClose={closeDetail}
+        onBack={detailEditMode || detailReturnToPrevious ? backFromExpenseDetail : undefined}
+        backLabel={tr('back')}
         title={detailModal ? `${tr('expenses')} ${UI_DASH} #${detailModal.id}` : tr('expenses')}
         maxWidth="1560px"
         className="expense-detail-modal"

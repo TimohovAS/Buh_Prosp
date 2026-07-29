@@ -104,6 +104,8 @@ async def resolve_expense_links(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
+    *,
+    allow_completed: bool = False,
 ) -> tuple[int | None, int | None]:
     return await resolve_project_contract_links(
         db,
@@ -111,6 +113,7 @@ async def resolve_expense_links(
         contract_id,
         not_found_exc_cls=NotFoundError,
         validation_exc_cls=ValueError,
+        allow_completed=allow_completed,
     )
 
 

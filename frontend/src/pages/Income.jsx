@@ -157,7 +157,7 @@ export default function Income() {
   }, [isActivePage])
   useEffect(() => {
     if (!isActivePage) return
-    api.projects.list({ show_archived: true }).then(setProjects)
+    api.projects.list({ show_inactive: true }).then(setProjects)
   }, [isActivePage])
   useEffect(() => {
     if (!modal || !form.client_id) return setContracts([])

@@ -10,7 +10,15 @@ from sqlalchemy.orm import selectinload
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.date_utils import coerce_date, days_between
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.models import Income, Expense, Enterprise, Project, BankTransaction, BankTransactionIncomeAllocation
+from backend.models import (
+    Income,
+    Expense,
+    Enterprise,
+    Project,
+    BankTransaction,
+    BankTransactionIncomeAllocation,
+    PurchaseReceipt,
+)
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
 MATCH_TYPE_LOAN_MOVEMENT = "loan_movement"
@@ -566,6 +574,7 @@ async def get_finance_by_project(
     date_from: date,
     date_to: date,
     mode: Literal["accrual", "cash"] = "accrual",
+    include_inactive: bool = False,
 ) -> dict:
     """
     Аналитика по проектам: revenue, expenses, profit, margin_percent.
@@ -615,8 +624,10 @@ async def get_finance_by_project(
             expense_paid_col <= date_to,
         )
 
-    # Все проекты (для соответствия списку на фронте при show_archived)
-    r = await db.execute(select(Project).order_by(Project.name))
+    project_query = select(Project).order_by(Project.name)
+    if not include_inactive:
+        project_query = project_query.where(Project.status == "active")
+    r = await db.execute(project_query)
     projects = list(r.scalars().all())
     project_ids = [p.id for p in projects]
     all_ids = project_ids + [None]  # None = без проекта
@@ -853,6 +864,7 @@ async def get_project_movements(
             items.append(
                 {
                     "row_key": f"income-{income_id}",
+                    "source_id": income_id,
                     "date": issued_date,
                     "direction": "in",
                     "movement_type": "income",
@@ -868,12 +880,15 @@ async def get_project_movements(
         expense_rows = await db.execute(
             select(
                 Expense.id,
+                PurchaseReceipt.id,
                 Expense.date,
                 Expense.bank_reference,
                 Expense.description,
                 Expense.amount,
                 Expense.status,
-            ).where(
+            )
+            .outerjoin(PurchaseReceipt, PurchaseReceipt.expense_id == Expense.id)
+            .where(
                 and_(
                     _visible_expense_condition(),
                     Expense.project_id == project_id,
@@ -883,10 +898,20 @@ async def get_project_movements(
                 )
             )
         )
-        for expense_id, expense_date, bank_reference, description, amount, status in expense_rows.fetchall():
+        for (
+            expense_id,
+            receipt_id,
+            expense_date,
+            bank_reference,
+            description,
+            amount,
+            status,
+        ) in expense_rows.fetchall():
             items.append(
                 {
                     "row_key": f"expense-{expense_id}",
+                    "source_id": expense_id,
+                    "receipt_id": receipt_id,
                     "date": expense_date,
                     "direction": "out",
                     "movement_type": "expense",
@@ -1006,6 +1031,8 @@ async def get_project_movements(
         expense_cash_rows = await db.execute(
             select(
                 BankTransaction.id,
+                Expense.id,
+                PurchaseReceipt.id,
                 BankTransaction.date,
                 Expense.bank_reference,
                 BankTransaction.counterparty_name,
@@ -1016,6 +1043,7 @@ async def get_project_movements(
             )
             .select_from(BankTransaction)
             .join(Expense, BankTransaction.matched_id == Expense.id)
+            .outerjoin(PurchaseReceipt, PurchaseReceipt.expense_id == Expense.id)
             .where(
                 and_(
                     BankTransaction.direction == "out",
@@ -1030,6 +1058,8 @@ async def get_project_movements(
         )
         for (
             tx_id,
+            expense_id,
+            receipt_id,
             tx_date,
             bank_reference,
             counterparty_name,
@@ -1041,6 +1071,8 @@ async def get_project_movements(
             items.append(
                 {
                     "row_key": f"bank-expense-{tx_id}",
+                    "source_id": expense_id,
+                    "receipt_id": receipt_id,
                     "date": tx_date,
                     "direction": "out",
                     "movement_type": "expense",

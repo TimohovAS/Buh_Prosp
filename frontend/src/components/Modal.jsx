@@ -1,6 +1,8 @@
 export default function Modal({
   isOpen,
   onClose,
+  onBack,
+  backLabel = 'back',
   title,
   children,
   className = '',
@@ -27,9 +29,22 @@ export default function Modal({
       <div className={`modal ${resizable ? 'modal-resizable' : ''} ${className}`.trim()} style={modalStyle}>
         <div className="modal-header">
           <h3 className="modal-title">{title}</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="close">
-            &times;
-          </button>
+          <div className="modal-header-actions">
+            {onBack ? (
+              <button
+                type="button"
+                className="modal-back"
+                onClick={onBack}
+                aria-label={backLabel}
+                title={backLabel}
+              >
+                &larr;
+              </button>
+            ) : null}
+            <button type="button" className="modal-close" onClick={onClose} aria-label="close">
+              &times;
+            </button>
+          </div>
         </div>
         <div className={`modal-body ${bodyClassName}`.trim()}>{children}</div>
       </div>

@@ -69,9 +69,16 @@ async def _resolve_expense_links_or_400(
     db: AsyncSession,
     project_id: int | None,
     contract_id: int | None,
+    *,
+    allow_completed: bool = False,
 ) -> tuple[int | None, int | None]:
     try:
-        return await resolve_expense_links(db, project_id, contract_id)
+        return await resolve_expense_links(
+            db,
+            project_id,
+            contract_id,
+            allow_completed=allow_completed,
+        )
     except NotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     except ValueError as exc:
@@ -371,7 +378,10 @@ async def update_expense(
             desired_contract_id = None
 
     desired_project_id, desired_contract_id = await _resolve_expense_links_or_400(
-        db, desired_project_id, desired_contract_id
+        db,
+        desired_project_id,
+        desired_contract_id,
+        allow_completed=desired_project_id == expense.project_id,
     )
     dump["project_id"] = desired_project_id
     dump["contract_id"] = desired_contract_id

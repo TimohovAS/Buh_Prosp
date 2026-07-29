@@ -107,11 +107,12 @@ async def finance_by_project(
     from_: date = Query(..., alias="from", description="Начало периода"),
     to: date = Query(..., alias="to", description="Конец периода"),
     mode: Literal["accrual", "cash"] = Query("accrual"),
+    include_inactive: bool = Query(False, description="Включать завершённые проекты"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     """Аналитика по проектам: revenue, expenses, profit."""
-    return await get_finance_by_project(db, from_, to, mode)
+    return await get_finance_by_project(db, from_, to, mode, include_inactive)
 
 
 @router.get("/project-movements", response_model=ProjectMovementsResponse)

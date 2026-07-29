@@ -18,6 +18,7 @@ from backend.state_machine import (
     reopen_expense_for_unmatch,
     restore_obligation_after_payment_reset,
     transition_income_status,
+    transition_project_status,
 )
 
 TEST_DATE = date(2026, 7, 6)
@@ -296,3 +297,19 @@ def test_cancel_incoming_invoice_allows_unpaid_and_rejects_paid():
 
     with pytest.raises(InvalidStatusTransition):
         cancel_incoming_invoice(entity(status="paid"))
+
+
+def test_transition_project_status_can_switch_between_active_and_completed():
+    project = entity(status="active")
+
+    transition_project_status(project, "completed")
+    assert project.status == "completed"
+
+    transition_project_status(project, "active")
+    assert project.status == "active"
+
+
+@pytest.mark.parametrize("legacy_status", ["lead", "archived"])
+def test_transition_project_status_rejects_legacy_statuses(legacy_status):
+    with pytest.raises(InvalidStatusTransition):
+        transition_project_status(entity(status="active"), legacy_status)

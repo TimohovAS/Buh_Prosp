@@ -110,13 +110,12 @@ export default function WorkDiaries() {
   }, [queryParams])
 
   const loadReferenceData = useCallback(() => {
-    return Promise.all([
-      api.projects.list({ show_archived: false }),
-      api.workers.list({ active: true }),
-    ]).then(([projectData, workerData]) => {
-      setProjects(projectData)
-      setWorkers(workerData)
-    })
+    return Promise.all([api.projects.list({ show_inactive: true }), api.workers.list({ active: true })]).then(
+      ([projectData, workerData]) => {
+        setProjects(projectData)
+        setWorkers(workerData)
+      }
+    )
   }, [])
 
   useEffect(() => {
@@ -696,7 +695,7 @@ export default function WorkDiaries() {
         entry={editingEntry}
         projects={projects}
         workers={workers}
-        defaultProjectId={filters.project_id}
+        defaultProjectId={selectedProject?.status === 'active' ? filters.project_id : ''}
         overtimeMultiplier={overtimeMultiplier}
         materialBillingMultiplier={materialBillingMultiplier}
         readOnly={Boolean(editingEntry && editingEntry.billing_status !== 'not_invoiced')}

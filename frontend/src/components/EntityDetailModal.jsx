@@ -3,6 +3,8 @@ import Modal from './Modal'
 export default function EntityDetailModal({
   isOpen,
   onClose,
+  onBack,
+  backLabel,
   title,
   maxWidth = '920px',
   details,
@@ -11,7 +13,15 @@ export default function EntityDetailModal({
   className = '',
 }) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth={maxWidth} className={className}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onBack={onBack}
+      backLabel={backLabel}
+      title={title}
+      maxWidth={maxWidth}
+      className={className}
+    >
       <div className={`record-detail-grid ${actions ? '' : 'record-detail-grid-single'}`.trim()}>
         <div className="record-detail-card">{details}</div>
         {actions ? <div className="record-detail-card">{actions}</div> : null}

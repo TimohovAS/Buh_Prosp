@@ -560,13 +560,13 @@ def _check_incoming_invoices(
                     "Incoming invoice points to a missing project.",
                     {"project_id": invoice.project_id},
                 )
-            elif project.status == "archived":
+            elif project.status == "completed":
                 report.add(
                     "warning",
-                    "incoming_invoice_archived_project",
+                    "incoming_invoice_completed_project",
                     "incoming_invoice",
                     invoice_id,
-                    "Incoming invoice points to an archived project.",
+                    "Incoming invoice points to a completed project.",
                     {"project_id": invoice.project_id, "project_name": project.name},
                 )
         if invoice.status != "cancelled" and invoice.expense_id is None:
@@ -610,13 +610,13 @@ def _check_incoming_invoices(
                             "Linked incoming-invoice expense points to a missing project.",
                             {"expense_id": invoice.expense_id, "expense_project_id": expense.project_id},
                         )
-                    elif expense_project.status == "archived":
+                    elif expense_project.status == "completed":
                         report.add(
                             "warning",
-                            "incoming_invoice_expense_archived_project",
+                            "incoming_invoice_expense_completed_project",
                             "incoming_invoice",
                             invoice_id,
-                            "Linked incoming-invoice expense points to an archived project.",
+                            "Linked incoming-invoice expense points to a completed project.",
                             {
                                 "expense_id": invoice.expense_id,
                                 "expense_project_id": expense.project_id,

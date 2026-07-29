@@ -70,7 +70,7 @@ export default function Contracts() {
 
   useEffect(() => {
     if (!isActivePage) return
-    Promise.all([api.clients.listBrief(), api.projects.list({ show_archived: true })]).then(
+    Promise.all([api.clients.listBrief(), api.projects.list({ show_inactive: true })]).then(
       ([clientList, projectList]) => {
         setClients(clientList)
         setProjects(projectList)

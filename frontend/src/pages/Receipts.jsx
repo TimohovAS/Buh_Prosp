@@ -12,6 +12,7 @@ import SortIndicator from '../components/SortIndicator'
 import YearFilterSelect from '../components/YearFilterSelect'
 import { buildContractLabel, filterContractsForProject, findUnassignedProject } from '../utils/entityLabels'
 import { UI_DASH, formatDateTimeSr as fmtDateTime, formatMoney2 as fmtMoney } from '../utils/formatters'
+import { closeParentModalChain } from '../utils/modalNavigation'
 
 function getReceiptStatusMeta(status) {
   switch (status) {
@@ -102,6 +103,8 @@ export default function Receipts() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [detailAction, setDetailAction] = useState('')
+  const [detailReturnToPrevious, setDetailReturnToPrevious] = useState(false)
+  const [detailReturnPath, setDetailReturnPath] = useState('')
   const [expenseCandidates, setExpenseCandidates] = useState([])
   const [expenseCandidatesLoading, setExpenseCandidatesLoading] = useState(false)
   const [expenseLinkMode, setExpenseLinkMode] = useState('candidates')
@@ -301,7 +304,7 @@ export default function Receipts() {
   const loadLookups = async () => {
     try {
       const [projectList, categoryList, contractList, expenseYearList] = await Promise.all([
-        api.projects.list({ show_archived: true }),
+        api.projects.list({ show_inactive: true }),
         api.categories.list({ category_type: 'expense' }),
         api.contracts.list({ limit: 500 }),
         api.expenses.years(),
@@ -596,10 +599,41 @@ export default function Receipts() {
     }
   }
 
+  const resetReceiptDetail = () => {
+    setDetailReceipt(null)
+    setDetailError('')
+    setDetailAction('')
+    setDetailReturnToPrevious(false)
+    setDetailReturnPath('')
+  }
+
+  const closeReceiptDetail = () => {
+    const shouldCloseParentChain = detailReturnToPrevious
+    const returnPath = detailReturnPath
+    resetReceiptDetail()
+    if (shouldCloseParentChain) {
+      closeParentModalChain(returnPath)
+      if (returnPath) navigate(returnPath, { replace: true })
+      else navigate(-1)
+    }
+  }
+
+  const backFromReceiptDetail = () => {
+    if (detailAction) {
+      setDetailAction('')
+      return
+    }
+    if (!detailReturnToPrevious) return
+    resetReceiptDetail()
+    navigate(-1)
+  }
+
   useEffect(() => {
     if (!isActivePage) return
     const receiptId = location.state?.openReceiptId
     if (!receiptId) return
+    setDetailReturnToPrevious(Boolean(location.state?.modalReturn))
+    setDetailReturnPath(location.state?.modalReturnPath || '')
     openReceiptDetail(receiptId)
     navigate(location.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1010,11 +1044,9 @@ export default function Receipts() {
 
       <EntityDetailModal
         isOpen={!!(detailReceipt || detailLoading || detailError)}
-        onClose={() => {
-          setDetailReceipt(null)
-          setDetailError('')
-          setDetailAction('')
-        }}
+        onClose={closeReceiptDetail}
+        onBack={detailAction || detailReturnToPrevious ? backFromReceiptDetail : undefined}
+        backLabel={tr('back')}
         title={`${tr('receiptDetailTitle')} ${UI_DASH} ${detailReceipt?.invoice_number || (detailReceipt ? `#${detailReceipt.id}` : UI_DASH)}`}
         maxWidth="1200px"
         className="receipt-detail-modal"

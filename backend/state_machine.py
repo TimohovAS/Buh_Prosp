@@ -17,7 +17,7 @@ INCOME_STATUSES = {"issued", "partial", "paid", "cancelled"}
 EXPENSE_STATUSES = {"planned", "paid", "reversed"}
 OBLIGATION_STATUSES = {"unpaid", "overdue", "paid"}
 INCOMING_INVOICE_STATUSES = {"unpaid", "partial", "paid", "cancelled"}
-PROJECT_STATUSES = {"lead", "active", "completed", "archived"}
+PROJECT_STATUSES = {"active", "completed"}
 
 INCOME_TRANSITIONS = {
     "issued": {"partial", "paid", "cancelled"},
@@ -46,10 +46,8 @@ INCOMING_INVOICE_TRANSITIONS = {
 }
 
 PROJECT_TRANSITIONS = {
-    "lead": {"active", "archived"},
-    "active": {"completed", "archived"},
-    "completed": {"archived"},
-    "archived": set(),
+    "active": {"completed"},
+    "completed": {"active"},
 }
 
 
@@ -320,9 +318,7 @@ def transition_project_status(
     target_status: str,
     *,
     allow_same: bool = True,
-    allow_system_reactivate: bool = False,
 ) -> None:
-    extra_transitions = {"archived": {"active"}} if allow_system_reactivate else None
     _ensure_transition(
         "Project",
         getattr(project, "status", None),
@@ -330,6 +326,5 @@ def transition_project_status(
         known_statuses=PROJECT_STATUSES,
         transitions=PROJECT_TRANSITIONS,
         allow_same=allow_same,
-        extra_transitions=extra_transitions,
     )
     project.status = target_status

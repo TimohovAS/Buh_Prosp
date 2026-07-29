@@ -39,6 +39,60 @@ def _make_user(db_session, name="diary-admin"):
 
 
 @pytest.mark.asyncio
+async def test_work_diary_rejects_new_entry_for_completed_project(db_session, make_project):
+    project = await make_project(db_session, status="completed")
+    user = _make_user(db_session, "diary-completed-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    db_session.add(worker)
+    await db_session.flush()
+
+    with pytest.raises(HTTPException, match="Cannot use completed project"):
+        await create_entry(
+            WorkDiaryEntryCreate(
+                date=date(2026, 7, 10),
+                project_id=project.id,
+                worker_ids=[worker.id],
+                description="Late entry",
+                duration_hours=1,
+            ),
+            db_session,
+            user,
+        )
+
+
+@pytest.mark.asyncio
+async def test_existing_work_diary_keeps_completed_project_when_edited(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-history-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    db_session.add(worker)
+    await db_session.flush()
+    created = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Original",
+            duration_hours=1,
+        ),
+        db_session,
+        user,
+    )
+    project.status = "completed"
+    await db_session.commit()
+
+    updated = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(project_id=project.id, description="Corrected"),
+        db_session,
+        user,
+    )
+
+    assert updated.project_id == project.id
+    assert updated.description == "Corrected"
+
+
+@pytest.mark.asyncio
 async def test_work_diary_entry_supports_multiple_workers(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session)

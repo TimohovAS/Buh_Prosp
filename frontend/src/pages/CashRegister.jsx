@@ -206,7 +206,7 @@ export default function CashRegister() {
     return Promise.all([
       api.cash.summary(params),
       api.cash.years(),
-      api.projects.list({ show_archived: true }),
+      api.projects.list({ show_inactive: true }),
       api.categories.list({ category_type: 'expense' }),
       api.contracts.list(),
       api.workers.list({ active: true }),

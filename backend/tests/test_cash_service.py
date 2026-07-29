@@ -2,12 +2,47 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import text
+
 from backend.cash_service import (
+    CASH_PROJECT_CODE,
     _pending_entry_matches_manual_cash_transfer,
     _pending_entry_matches_matched_cash_expense_transaction,
     _select_unambiguous_pending_withdrawal,
+    get_or_create_cash_project_id,
 )
 from backend.models import BankTransaction, CashEntry
+
+
+async def test_cash_project_reactivates_completed_project(db_session, make_project):
+    project = await make_project(
+        db_session,
+        code=CASH_PROJECT_CODE,
+        name="Cash",
+        status="completed",
+        is_internal=True,
+    )
+
+    project_id = await get_or_create_cash_project_id(db_session)
+
+    assert project_id == project.id
+    assert project.status == "active"
+
+
+async def test_cash_project_normalizes_legacy_status(db_session, make_project):
+    await db_session.execute(text("PRAGMA ignore_check_constraints = ON"))
+    project = await make_project(
+        db_session,
+        code=CASH_PROJECT_CODE,
+        name="Cash",
+        status="archived",
+        is_internal=True,
+    )
+
+    project_id = await get_or_create_cash_project_id(db_session)
+
+    assert project_id == project.id
+    assert project.status == "active"
 
 
 class CashServiceTest(unittest.TestCase):

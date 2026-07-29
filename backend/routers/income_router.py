@@ -686,7 +686,10 @@ async def update_income(
             desired_contract_id = None
 
     desired_project_id, desired_contract_id = await resolve_project_contract_links(
-        db, desired_project_id, desired_contract_id
+        db,
+        desired_project_id,
+        desired_contract_id,
+        allow_completed=desired_project_id == income.project_id,
     )
     dump["project_id"] = desired_project_id
     dump["contract_id"] = desired_contract_id

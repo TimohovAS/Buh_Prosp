@@ -290,10 +290,20 @@ def _download_receipt_payload_sync(verification_url: str) -> ImportedReceiptPayl
     )
 
 
-async def _get_project_or_error(db: AsyncSession, project_id: int | None) -> Project | None:
+async def _get_project_or_error(
+    db: AsyncSession,
+    project_id: int | None,
+    *,
+    allow_completed: bool = False,
+) -> Project | None:
     if project_id is None:
         return None
-    return await get_project_or_404(db, project_id, exc_cls=ReceiptImportError)
+    return await get_project_or_404(
+        db,
+        project_id,
+        exc_cls=ReceiptImportError,
+        allow_completed=allow_completed,
+    )
 
 
 async def _get_contract_or_error(db: AsyncSession, contract_id: int | None) -> Contract | None:
@@ -1103,7 +1113,7 @@ async def get_project_receipt_purchases(
     from_date: date,
     to_date: date,
 ) -> dict:
-    project = await _get_project_or_error(db, project_id)
+    project = await _get_project_or_error(db, project_id, allow_completed=True)
     query = (
         select(PurchaseReceiptItem, PurchaseReceipt, Expense)
         .join(PurchaseReceipt, PurchaseReceipt.id == PurchaseReceiptItem.receipt_id)

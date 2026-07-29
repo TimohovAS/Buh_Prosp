@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    CheckConstraint,
     UniqueConstraint,
     text,
 )
@@ -390,14 +391,17 @@ class Project(Base):
     """Проекты — центральная сущность (ЦФО), к ним привязываются доходы/расходы/договоры."""
 
     __tablename__ = "projects"
-    __table_args__ = (UniqueConstraint("code", name="uq_projects_code"),)
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_projects_code"),
+        CheckConstraint("status IN ('active', 'completed')", name="ck_projects_status"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50))  # PR-2026-0001, unique via __table_args__
     name = Column(String(200), nullable=False)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     is_internal = Column(Boolean, default=False)  # Внутренний (служебный) проект
-    status = Column(String(20), nullable=False, default="active")  # lead | active | completed | archived
+    status = Column(String(20), nullable=False, default="active")  # active | completed
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     planned_income = Column(Numeric(14, 2), nullable=True)

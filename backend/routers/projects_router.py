@@ -17,12 +17,11 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 def _project_status_sort_order():
-    """Приоритет: lead/active(0), completed(1), archived(2)."""
+    """Приоритет: active(0), completed(1)."""
     return case(
-        (Project.status.in_(["lead", "active"]), 0),
+        (Project.status == "active", 0),
         (Project.status == "completed", 1),
-        (Project.status == "archived", 2),
-        else_=3,
+        else_=2,
     )
 
 
@@ -38,14 +37,15 @@ def _project_response_with_meta(project: Project, movement_bounds: dict[int, dic
 
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
-    show_archived: bool = Query(False, description="Показывать архивированные"),
+    show_inactive: bool = Query(False, description="Показывать завершённые проекты"),
+    show_archived: bool | None = Query(None, deprecated=True, description="Устаревший псевдоним show_inactive"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Список проектов. Сортировка: active/lead → completed → archived, затем по name."""
+    """Список проектов. Сортировка: active → completed, затем по name."""
     q = select(Project).options(selectinload(Project.client)).order_by(_project_status_sort_order(), Project.name)
-    if not show_archived:
-        q = q.where(Project.status != "archived")
+    if not (show_inactive or show_archived is True):
+        q = q.where(Project.status == "active")
     result = await db.execute(q)
     projects = result.scalars().all()
     movement_bounds = await get_project_movement_bounds(db, [project.id for project in projects])
@@ -123,13 +123,13 @@ async def delete_project(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Удалить проект (мягкое удаление — деактивировать)."""
+    """Сохранённый для совместимости endpoint: пометить проект завершённым."""
     r = await db.execute(select(Project).where(Project.id == project_id))
     project = r.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Проект не найден")
     try:
-        transition_project_status(project, "archived", allow_same=False)
+        transition_project_status(project, "completed", allow_same=True)
     except InvalidStatusTransition as exc:
         raise HTTPException(400, str(exc)) from exc
     await db.commit()

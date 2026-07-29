@@ -1,9 +1,12 @@
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
+from backend.routers.expenses_router import update_expense
+from backend.schemas import ExpenseUpdate
 from backend.expense_service import (
     NotFoundError,
     build_expense_item_models,
@@ -65,13 +68,32 @@ def test_normalize_expense_items_rejects_payload_without_name():
         normalize_expense_items([{"quantity": Decimal("1"), "unit_price": Decimal("10")}])
 
 
-async def test_resolve_expense_links_rejects_archived_project(db_session):
-    project = Project(code="ARCH-EXP", name="Archived", status="archived", created_at=NOW, updated_at=NOW)
+async def test_resolve_expense_links_rejects_completed_project(db_session):
+    project = Project(code="DONE-EXP", name="Completed", status="completed", created_at=NOW, updated_at=NOW)
     db_session.add(project)
     await db_session.flush()
 
-    with pytest.raises(ValueError, match="Cannot use archived project"):
+    with pytest.raises(ValueError, match="Cannot use completed project"):
         await resolve_expense_links(db_session, project.id, None)
+
+
+async def test_update_expense_keeps_existing_completed_project(
+    db_session,
+    make_expense,
+    make_project,
+):
+    project = await make_project(db_session, code="DONE-EDIT-EXP", status="completed")
+    expense = await make_expense(db_session, project_id=project.id, description="Original")
+
+    updated = await update_expense(
+        expense.id,
+        ExpenseUpdate(description="Corrected", project_id=project.id),
+        db_session,
+        SimpleNamespace(id=1),
+    )
+
+    assert updated.project_id == project.id
+    assert updated.description == "Corrected"
 
 
 async def test_resolve_expense_links_reports_missing_project_as_not_found(db_session):

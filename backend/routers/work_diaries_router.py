@@ -150,6 +150,13 @@ async def _get_project(db: AsyncSession, project_id: int) -> Project:
     return project
 
 
+async def _get_active_project(db: AsyncSession, project_id: int) -> Project:
+    project = await _get_project(db, project_id)
+    if project.status != "active":
+        raise HTTPException(400, "Cannot use completed project")
+    return project
+
+
 async def _get_workers(db: AsyncSession, worker_ids: list[int]) -> list[Worker]:
     normalized_ids = list(dict.fromkeys(worker_ids))
     if not normalized_ids:
@@ -779,7 +786,7 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    await _get_project(db, data.project_id)
+    await _get_active_project(db, data.project_id)
     workers = await _get_workers(db, data.worker_ids)
     material_context = await _load_material_expenses(db, data.project_id, data.materials)
     duration_hours = _calculate_duration_hours(data.start_time, data.end_time, data.duration_hours)
@@ -845,7 +852,10 @@ async def update_entry(
     _ensure_entry_not_invoiced(entry)
     dump = data.model_dump(exclude_unset=True)
     next_project_id = dump.get("project_id", entry.project_id)
-    await _get_project(db, next_project_id)
+    if next_project_id == entry.project_id:
+        await _get_project(db, next_project_id)
+    else:
+        await _get_active_project(db, next_project_id)
     if data.materials is not None:
         material_context = await _load_material_expenses(
             db,

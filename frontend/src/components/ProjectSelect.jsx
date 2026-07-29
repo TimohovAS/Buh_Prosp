@@ -49,7 +49,7 @@ export default function ProjectSelect({
   const filteredOptions = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
     const items = liveProjects
-      .filter((project) => project.status !== 'archived')
+      .filter((project) => project.status === 'active')
       .filter((project) => {
         if (!normalizedSearch) return true
         return (
@@ -141,7 +141,7 @@ export default function ProjectSelect({
       return refreshPromiseRef.current
     }
     const request = api.projects
-      .list({ show_archived: true })
+      .list({ show_inactive: true })
       .then((projectList) => {
         if (Array.isArray(projectList)) {
           setLiveProjects(projectFilter ? projectList.filter(projectFilter) : projectList)

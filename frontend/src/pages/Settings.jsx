@@ -180,7 +180,7 @@ export default function Settings() {
 
   const loadProjects = () => {
     api.projects
-      .list({ show_archived: true })
+      .list({ show_inactive: true })
       .then(setProjects)
       .catch((err) => console.error(err))
   }

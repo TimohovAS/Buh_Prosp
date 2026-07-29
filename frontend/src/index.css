@@ -3569,6 +3569,13 @@ tr:hover td {
   margin: 0;
 }
 
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.modal-back,
 .modal-close {
   background: none;
   border: none;
@@ -3579,6 +3586,7 @@ tr:hover td {
   line-height: 1;
 }
 
+.modal-back:hover,
 .modal-close:hover {
   color: var(--color-text);
 }

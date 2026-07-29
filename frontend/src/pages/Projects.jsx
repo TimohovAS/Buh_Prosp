@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -13,8 +13,16 @@ import useListPageState from '../hooks/useListPageState'
 import { UI_DASH, UI_CLOSE, formatInteger as fmt, formatMoney2, todayIso } from '../utils/formatters'
 import { getPeriodRange } from '../utils/periods'
 import { amountSearchHay } from '../utils/searchUtils'
+import { MODAL_CHAIN_CLOSE_EVENT } from '../utils/modalNavigation'
+
+const PROJECT_STATUS_ACTIONS = {
+  active: [{ status: 'completed', labelKey: 'projectComplete', className: 'btn-primary' }],
+  completed: [{ status: 'active', labelKey: 'projectReactivate', className: 'btn-primary' }],
+}
+
 export default function Projects() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/projects'
   const [projects, setProjects] = useState([])
   const [clients, setClients] = useState([])
@@ -23,6 +31,8 @@ export default function Projects() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [detailModal, setDetailModal] = useState(null)
+  const [statusUpdating, setStatusUpdating] = useState('')
+  const [statusUpdateError, setStatusUpdateError] = useState('')
   const [movementModal, setMovementModal] = useState(null)
   const [movementLoading, setMovementLoading] = useState(false)
   const [movementError, setMovementError] = useState(null)
@@ -36,6 +46,7 @@ export default function Projects() {
   const [purchaseCustomFrom, setPurchaseCustomFrom] = useState('')
   const [purchaseCustomTo, setPurchaseCustomTo] = useState('')
   const [modal, setModal] = useState(null)
+  const [modalChainReturnPath, setModalChainReturnPath] = useState('')
   const [form, setForm] = useState({
     name: '',
     code: '',
@@ -61,6 +72,25 @@ export default function Projects() {
   })
   const rowClickTimeoutRef = useRef(null)
 
+  useEffect(() => {
+    const closeModalChain = (event) => {
+      if (!modalChainReturnPath || event.detail?.returnPath !== modalChainReturnPath) return
+      setDetailModal(null)
+      setStatusUpdating('')
+      setStatusUpdateError('')
+      setMovementModal(null)
+      setMovementLoading(false)
+      setMovementError(null)
+      setPurchaseModal(null)
+      setPurchaseLoading(false)
+      setPurchaseError(null)
+      setModal(null)
+      setModalChainReturnPath('')
+    }
+    window.addEventListener(MODAL_CHAIN_CLOSE_EVENT, closeModalChain)
+    return () => window.removeEventListener(MODAL_CHAIN_CLOSE_EVENT, closeModalChain)
+  }, [modalChainReturnPath])
+
   const currentYear = new Date().getFullYear()
   const { from, to } = getPeriodRange(periodQuick, customFrom, customTo, {
     fallbackFrom: `${currentYear}-01-01`,
@@ -69,9 +99,9 @@ export default function Projects() {
 
   const loadAll = () => {
     setLoading(true)
-    Promise.all([
-      api.projects.list({ show_archived: showInactive }),
-      api.finance.byProject({ from, to, mode }),
+    return Promise.all([
+      api.projects.list({ show_inactive: showInactive }),
+      api.finance.byProject({ from, to, mode, include_inactive: showInactive }),
     ])
       .then(([projectList, finance]) => {
         setProjects(projectList)
@@ -117,7 +147,7 @@ export default function Projects() {
     setModal('add')
   }
 
-  const openEdit = (item) => {
+  const openEdit = (item, { returnToDetail = false } = {}) => {
     setForm({
       name: item.name || '',
       code: item.code || '',
@@ -131,16 +161,25 @@ export default function Projects() {
       notes: item.notes || '',
       is_internal: item.is_internal || false,
     })
-    setModal({ type: 'edit', id: item.id })
+    setModal({ type: 'edit', id: item.id, return_project: returnToDetail ? item : null })
   }
 
   const openDetail = (item) => {
+    setStatusUpdating('')
+    setStatusUpdateError('')
     setDetailModal(item)
   }
 
   const openEditFromDetail = (item) => {
     setDetailModal(null)
-    openEdit(item)
+    openEdit(item, { returnToDetail: true })
+  }
+
+  const backFromProjectEdit = () => {
+    const returnProject = modal?.return_project
+    setModal(null)
+    setModalChainReturnPath('')
+    if (returnProject) openDetail(returnProject)
   }
 
   const getProjectAllTimeRange = (item) => {
@@ -222,7 +261,7 @@ export default function Projects() {
     }
   }
 
-  const openMovements = async (item) => {
+  const openMovements = async (item, { returnToDetail = false } = {}) => {
     const allTime = getProjectAllTimeRange(item)
     setMovementPeriodQuick('all')
     setMovementCustomFrom(allTime.from)
@@ -239,12 +278,43 @@ export default function Projects() {
       from_date: allTime.from,
       to_date: allTime.to,
       items: [],
+      return_project: returnToDetail ? item : null,
     })
   }
 
   const openMovementsFromDetail = (item) => {
     setDetailModal(null)
-    openMovements(item)
+    openMovements(item, { returnToDetail: true })
+  }
+
+  const closeMovements = () => {
+    const returnProject = movementModal?.return_project
+    setMovementModal(null)
+    setMovementError(null)
+    setModalChainReturnPath('')
+    if (returnProject) openDetail(returnProject)
+  }
+
+  const openMovementSource = (item) => {
+    if (item?.movement_type !== 'expense' || !item.source_id) return
+    setModalChainReturnPath('/projects')
+    if (item.receipt_id) {
+      navigate('/receipts', {
+        state: { openReceiptId: item.receipt_id, modalReturn: true, modalReturnPath: '/projects' },
+      })
+      return
+    }
+    navigate('/expenses', {
+      state: { openExpenseId: item.source_id, modalReturn: true, modalReturnPath: '/projects' },
+    })
+  }
+
+  const openPurchaseReceipt = (item) => {
+    if (!item?.receipt_id) return
+    setModalChainReturnPath('/projects')
+    navigate('/receipts', {
+      state: { openReceiptId: item.receipt_id, modalReturn: true, modalReturnPath: '/projects' },
+    })
   }
 
   const getPurchaseRange = (item = purchaseModal) => {
@@ -333,7 +403,7 @@ export default function Projects() {
     }
   }
 
-  const openPurchases = (item) => {
+  const openPurchases = (item, { returnToDetail = false } = {}) => {
     const allTime = getProjectAllTimeRange(item)
     setPurchasePeriodQuick('all')
     setPurchaseCustomFrom(allTime.from)
@@ -349,12 +419,21 @@ export default function Projects() {
       from_date: allTime.from,
       to_date: allTime.to,
       items: [],
+      return_project: returnToDetail ? item : null,
     })
   }
 
   const openPurchasesFromDetail = (item) => {
     setDetailModal(null)
-    openPurchases(item)
+    openPurchases(item, { returnToDetail: true })
+  }
+
+  const backFromPurchases = () => {
+    const returnProject = purchaseModal?.return_project
+    setPurchaseModal(null)
+    setPurchaseError(null)
+    setModalChainReturnPath('')
+    if (returnProject) openDetail(returnProject)
   }
 
   const handleProjectRowClick = (item) => {
@@ -390,7 +469,7 @@ export default function Projects() {
     const payload = {
       name: form.name || undefined,
       code: form.code || undefined,
-      status: form.status || 'active',
+      ...(modal === 'add' ? { status: form.status || 'active' } : {}),
       client_id: form.client_id ? parseInt(form.client_id, 10) : null,
       is_internal: !!form.is_internal,
       start_date: form.start_date || undefined,
@@ -409,14 +488,38 @@ export default function Projects() {
     }
   }
 
-  const handleDeleteFromDetail = async (item) => {
-    if (!confirm(tr('confirmDeleteProject'))) return
+  const getProjectStatusLabel = (status) => {
+    const labels = {
+      active: tr('active'),
+      completed: tr('completed'),
+    }
+    return labels[status] || status || UI_DASH
+  }
+
+  const getProjectStatusTone = (status) => {
+    if (status === 'active') return 'success'
+    return 'info'
+  }
+
+  const handleProjectStatusChange = async (item, nextStatus) => {
+    setStatusUpdating(nextStatus)
+    setStatusUpdateError('')
     try {
-      await api.projects.delete(item.id)
-      setDetailModal(null)
-      loadAll()
+      const updated = await api.projects.update(item.id, { status: nextStatus })
+      setDetailModal((current) => (current?.id === item.id ? { ...current, ...updated } : current))
+      setProjects((current) => {
+        const projectExists = current.some((project) => project.id === item.id)
+        const nextProjects = projectExists
+          ? current.map((project) => (project.id === item.id ? { ...project, ...updated } : project))
+          : [...current, updated]
+        return showInactive ? nextProjects : nextProjects.filter((project) => project.status === 'active')
+      })
+      await loadAll()
     } catch (err) {
       console.error(err)
+      setStatusUpdateError(err.message || tr('projectStatusChangeError'))
+    } finally {
+      setStatusUpdating('')
     }
   }
 
@@ -460,10 +563,29 @@ export default function Projects() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, search, sortCol, sortAsc, byProject, projectFilter])
 
+  const unassignedSearch = (search || '').trim().toLowerCase()
+  const showUnassignedRow =
+    projectFilter === 'all' &&
+    unassigned &&
+    (unassigned.revenue > 0 || unassigned.expenses > 0) &&
+    (!unassignedSearch ||
+      [
+        tr('projectWithoutProject'),
+        tr('projectWithoutProjectHint'),
+        amountSearchHay(unassigned.revenue),
+        amountSearchHay(unassigned.expenses),
+        amountSearchHay(unassigned.profit),
+      ].some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(unassignedSearch)
+      ))
+
   const getMovementTypeLabel = (item) =>
     item.movement_type === 'income' ? tr('projectMovementSourceIncome') : tr('projectMovementSourceExpense')
 
   const getMovementSourceLabel = (item) => {
+    if (item.receipt_id) return tr('projectMovementSourceReceipt')
     if (item.source_kind === 'allocation') return tr('projectMovementSourceAllocation')
     if (item.source_kind === 'bank') return tr('projectMovementSourceBank')
     if (item.source_kind === 'income') return tr('projectMovementSourceIncome')
@@ -596,91 +718,91 @@ export default function Projects() {
                 <tr>
                   <td colSpan={6}>{tr('loading')}</td>
                 </tr>
-              ) : filteredProjects.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
-                    {tr('noProjects')}
-                  </td>
-                </tr>
               ) : (
-                filteredProjects.map((project) => {
-                  const row = getRowData(project)
-                  return (
-                    <tr
-                      key={project.id}
-                      className="record-row"
-                      style={project.status === 'archived' ? { opacity: 0.6 } : {}}
-                      onClick={() => handleProjectRowClick(project)}
-                      onDoubleClick={() => handleProjectRowDoubleClick(project)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          openDetail(project)
-                        }
-                      }}
-                      tabIndex={0}
-                    >
-                      <td>
-                        {project.name}
-                        {project.is_internal ? (
-                          <StatusBadge tone="info" className="badge-pill" style={{ marginLeft: '0.5rem' }}>
-                            {tr('internalProject')}
-                          </StatusBadge>
-                        ) : null}
+                <>
+                  {filteredProjects.length === 0 && !showUnassignedRow ? (
+                    <tr>
+                      <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
+                        {tr('noProjects')}
                       </td>
-                      <td>{project.code || UI_DASH}</td>
-                      <td>{project.client_name || UI_DASH}</td>
-                      <td>{fmt(row.revenue)} RSD</td>
-                      <td>{fmt(row.expenses)} RSD</td>
+                    </tr>
+                  ) : (
+                    filteredProjects.map((project) => {
+                      const row = getRowData(project)
+                      return (
+                        <tr
+                          key={project.id}
+                          className="record-row"
+                          style={project.status === 'completed' ? { opacity: 0.7 } : {}}
+                          onClick={() => handleProjectRowClick(project)}
+                          onDoubleClick={() => handleProjectRowDoubleClick(project)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              openDetail(project)
+                            }
+                          }}
+                          tabIndex={0}
+                        >
+                          <td>
+                            {project.name}
+                            {project.is_internal ? (
+                              <StatusBadge
+                                tone="info"
+                                className="badge-pill"
+                                style={{ marginLeft: '0.5rem' }}
+                              >
+                                {tr('internalProject')}
+                              </StatusBadge>
+                            ) : null}
+                          </td>
+                          <td>{project.code || UI_DASH}</td>
+                          <td>{project.client_name || UI_DASH}</td>
+                          <td>{fmt(row.revenue)} RSD</td>
+                          <td>{fmt(row.expenses)} RSD</td>
+                          <td
+                            style={{
+                              fontWeight: 600,
+                              color: (row.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                            }}
+                          >
+                            {fmt(row.profit)} RSD
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                  {showUnassignedRow ? (
+                    <tr style={{ background: 'var(--color-surface-hover)' }}>
+                      <td style={{ borderLeft: '3px solid var(--color-accent)', fontWeight: 600 }}>
+                        <div>{tr('projectWithoutProject')}</div>
+                        <div
+                          style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontWeight: 400 }}
+                        >
+                          {tr('projectWithoutProjectHint')}
+                        </div>
+                      </td>
+                      <td>{UI_DASH}</td>
+                      <td>{UI_DASH}</td>
+                      <td>{fmt(unassigned.revenue)} RSD</td>
+                      <td>{fmt(unassigned.expenses)} RSD</td>
                       <td
                         style={{
                           fontWeight: 600,
-                          color: (row.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                          color:
+                            (unassigned.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
                         }}
                       >
-                        {fmt(row.profit)} RSD
+                        {fmt(unassigned.profit)} RSD
                       </td>
                     </tr>
-                  )
-                })
+                  ) : null}
+                </>
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {unassigned && (unassigned.revenue > 0 || unassigned.expenses > 0) && (
-        <div className="card">
-          <div className="card-title">{tr('projectWithoutProject')}</div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tr('project')}</th>
-                  <th>{tr('income')}</th>
-                  <th>{tr('expenses')}</th>
-                  <th>{tr('projectProfit')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>{tr('projectWithoutProject')}</td>
-                  <td>{fmt(unassigned.revenue)} RSD</td>
-                  <td>{fmt(unassigned.expenses)} RSD</td>
-                  <td
-                    style={{
-                      fontWeight: 600,
-                      color: (unassigned.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                    }}
-                  >
-                    {fmt(unassigned.profit)} RSD
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <EntityDetailModal
         isOpen={!!detailModal}
@@ -712,7 +834,11 @@ export default function Projects() {
               ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('status')}</span>
-                <span className="record-field-value">{detailModal.status || UI_DASH}</span>
+                <span className="record-field-value">
+                  <StatusBadge tone={getProjectStatusTone(detailModal.status)}>
+                    {getProjectStatusLabel(detailModal.status)}
+                  </StatusBadge>
+                </span>
               </div>
               <div className="record-field">
                 <span className="record-field-label">{tr('isInternal')}</span>
@@ -803,16 +929,32 @@ export default function Projects() {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => openEditFromDetail(detailModal)}
+                disabled={Boolean(statusUpdating)}
               >
                 {tr('edit')}
               </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => handleDeleteFromDetail(detailModal)}
-              >
-                {tr('delete')}
-              </button>
+              {(PROJECT_STATUS_ACTIONS[detailModal.status] || []).map((action) => (
+                <button
+                  key={action.status}
+                  type="button"
+                  className={`btn ${action.className}`}
+                  onClick={() => handleProjectStatusChange(detailModal, action.status)}
+                  disabled={Boolean(statusUpdating)}
+                >
+                  {statusUpdating === action.status ? tr('loading') : tr(action.labelKey)}
+                </button>
+              ))}
+              {statusUpdateError ? (
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    color: 'var(--color-danger)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  {statusUpdateError}
+                </div>
+              ) : null}
             </div>
           ) : null
         }
@@ -823,7 +965,10 @@ export default function Projects() {
         onClose={() => {
           setMovementModal(null)
           setMovementError(null)
+          setModalChainReturnPath('')
         }}
+        onBack={movementModal?.return_project ? closeMovements : undefined}
+        backLabel={tr('projectBackToDetails')}
         title={
           movementModal
             ? `${tr('projectMovements')} ${UI_DASH} ${movementModal.project_name || `#${movementModal.project_id}`}`
@@ -917,26 +1062,49 @@ export default function Projects() {
                     </tr>
                   </thead>
                   <tbody>
-                    {movementModal.items.map((item) => (
-                      <tr key={item.row_key}>
-                        <td>{item.date}</td>
-                        <td>{getMovementTypeLabel(item)}</td>
-                        <td>{getMovementSourceLabel(item)}</td>
-                        <td title={item.document_number || ''}>{item.document_number || UI_DASH}</td>
-                        <td title={item.counterparty_name || ''}>{item.counterparty_name || UI_DASH}</td>
-                        <td title={item.description || ''}>{item.description || UI_DASH}</td>
-                        <td
-                          style={{
-                            textAlign: 'right',
-                            fontWeight: 700,
-                            color: item.direction === 'in' ? 'var(--color-success)' : 'var(--color-danger)',
-                          }}
+                    {movementModal.items.map((item) => {
+                      const canOpenExpense = item.movement_type === 'expense' && Boolean(item.source_id)
+                      return (
+                        <tr
+                          key={item.row_key}
+                          className={canOpenExpense ? 'record-row' : ''}
+                          onClick={canOpenExpense ? () => openMovementSource(item) : undefined}
+                          onKeyDown={
+                            canOpenExpense
+                              ? (event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault()
+                                    openMovementSource(item)
+                                  }
+                                }
+                              : undefined
+                          }
+                          tabIndex={canOpenExpense ? 0 : undefined}
+                          title={
+                            canOpenExpense
+                              ? tr(item.receipt_id ? 'projectOpenReceipt' : 'projectOpenExpense')
+                              : undefined
+                          }
                         >
-                          {item.direction === 'in' ? '+' : '-'}
-                          {formatMoney2(item.amount || 0)} RSD
-                        </td>
-                      </tr>
-                    ))}
+                          <td>{item.date}</td>
+                          <td>{getMovementTypeLabel(item)}</td>
+                          <td>{getMovementSourceLabel(item)}</td>
+                          <td title={item.document_number || ''}>{item.document_number || UI_DASH}</td>
+                          <td title={item.counterparty_name || ''}>{item.counterparty_name || UI_DASH}</td>
+                          <td title={item.description || ''}>{item.description || UI_DASH}</td>
+                          <td
+                            style={{
+                              textAlign: 'right',
+                              fontWeight: 700,
+                              color: item.direction === 'in' ? 'var(--color-success)' : 'var(--color-danger)',
+                            }}
+                          >
+                            {item.direction === 'in' ? '+' : '-'}
+                            {formatMoney2(item.amount || 0)} RSD
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -952,7 +1120,10 @@ export default function Projects() {
         onClose={() => {
           setPurchaseModal(null)
           setPurchaseError(null)
+          setModalChainReturnPath('')
         }}
+        onBack={purchaseModal?.return_project ? backFromPurchases : undefined}
+        backLabel={tr('projectBackToDetails')}
         title={
           purchaseModal
             ? `${tr('projectPurchases')} ${UI_DASH} ${purchaseModal.project_name || `#${purchaseModal.project_id}`}`
@@ -1054,7 +1225,19 @@ export default function Projects() {
                   </thead>
                   <tbody>
                     {purchaseModal.items.map((item) => (
-                      <tr key={item.item_id}>
+                      <tr
+                        key={item.item_id}
+                        className="record-row"
+                        onClick={() => openPurchaseReceipt(item)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openPurchaseReceipt(item)
+                          }
+                        }}
+                        tabIndex={0}
+                        title={tr('projectOpenReceipt')}
+                      >
                         <td>
                           {item.receipt_datetime ? String(item.receipt_datetime).slice(0, 10) : UI_DASH}
                         </td>
@@ -1093,7 +1276,12 @@ export default function Projects() {
 
       <Modal
         isOpen={!!modal}
-        onClose={() => setModal(null)}
+        onClose={() => {
+          setModal(null)
+          setModalChainReturnPath('')
+        }}
+        onBack={modal?.return_project ? backFromProjectEdit : undefined}
+        backLabel={tr('projectBackToDetails')}
         title={modal ? `${modal === 'add' ? tr('add') : tr('edit')} ${UI_DASH} ${tr('project')}` : ''}
         maxWidth="420px"
       >
@@ -1133,19 +1321,19 @@ export default function Projects() {
                 ))}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">{tr('status')}</label>
-              <select
-                className="form-input"
-                value={form.status}
-                onChange={(event) => setForm({ ...form, status: event.target.value })}
-              >
-                <option value="lead">lead</option>
-                <option value="active">active</option>
-                <option value="completed">completed</option>
-                <option value="archived">archived</option>
-              </select>
-            </div>
+            {modal === 'add' ? (
+              <div className="form-group">
+                <label className="form-label">{tr('status')}</label>
+                <select
+                  className="form-input"
+                  value={form.status}
+                  onChange={(event) => setForm({ ...form, status: event.target.value })}
+                >
+                  <option value="active">{tr('active')}</option>
+                  <option value="completed">{tr('completed')}</option>
+                </select>
+              </div>
+            ) : null}
             <div className="form-group">
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                 <input
