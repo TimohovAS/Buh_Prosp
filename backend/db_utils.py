@@ -83,7 +83,7 @@ async def resolve_project_contract_links(
                 resolved_project_id,
                 exc_cls=not_found_exc_cls,
                 inactive_exc_cls=validation_exc_cls,
-                allow_completed=allow_completed,
+                allow_completed=False,
             )
             project_validated = True
             contract.project_id = resolved_project_id
