@@ -1681,13 +1681,6 @@ class BankTransactionCreate(BankTransactionBase):
     pass
 
 
-class BankTransactionUpdate(BaseModel):
-    status: Optional[str] = None
-    matched_type: Optional[str] = None
-    matched_id: Optional[int] = None
-    project_id: Optional[int] = None
-
-
 class BankTransactionResponse(BankTransactionBase):
     id: int
     created_at: datetime

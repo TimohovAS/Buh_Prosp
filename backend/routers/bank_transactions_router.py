@@ -53,7 +53,6 @@ from backend.schemas import (
     BankTransactionIncomeAllocationRequest,
     BankTransactionIncomeAllocationResponse,
     BankTransactionResponse,
-    BankTransactionUpdate,
     MatchCandidate,
     MatchRequest,
 )
@@ -394,51 +393,6 @@ async def get_bank_transaction(
     transaction = result.scalar_one_or_none()
     if not transaction:
         raise HTTPException(404, "Transaction not found")
-    return await _serialize_single_bank_transaction(db, transaction)
-
-
-@router.patch("/{tx_id}", response_model=BankTransactionResponse)
-async def update_bank_transaction(
-    tx_id: int,
-    data: BankTransactionUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_edit_access),
-):
-    result = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
-    transaction = result.scalar_one_or_none()
-    if not transaction:
-        raise HTTPException(404, "Transaction not found")
-
-    payload = data.model_dump(exclude_unset=True)
-    if "project_id" in payload and not payload["project_id"]:
-        payload["project_id"] = await get_unassigned_project_id(db)
-    if payload.get("project_id") is not None:
-        await get_project_or_404(db, payload["project_id"])
-
-    for key, value in payload.items():
-        setattr(transaction, key, value)
-
-    if "project_id" in payload and transaction.matched_id:
-        if transaction.matched_type == "expense":
-            expense_result = await db.execute(select(Expense).where(Expense.id == transaction.matched_id))
-            expense = expense_result.scalar_one_or_none()
-            if expense:
-                if is_cash_transfer_expense(expense):
-                    cash_project_id = await get_or_create_cash_project_id(db)
-                    payload["project_id"] = cash_project_id
-                    transaction.project_id = cash_project_id
-                    expense.contract_id = None
-                    await _sync_expense_project(db, expense, cash_project_id)
-                else:
-                    await _sync_expense_project(db, expense, payload["project_id"])
-        elif transaction.matched_type == "income":
-            income_result = await db.execute(select(Income).where(Income.id == transaction.matched_id))
-            income = income_result.scalar_one_or_none()
-            if income:
-                await _sync_income_project(db, income, payload["project_id"])
-
-    await db.commit()
-    await db.refresh(transaction)
     return await _serialize_single_bank_transaction(db, transaction)
 
 

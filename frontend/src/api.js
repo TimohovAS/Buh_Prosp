@@ -472,8 +472,6 @@ export const api = {
     },
     get: (id) => request(`/bank-transactions/${id}`),
     years: () => request('/bank-transactions/years'),
-    update: (id, payload) =>
-      request(`/bank-transactions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     match: (id, payload) =>
       request(`/bank-transactions/${id}/match`, { method: 'POST', body: JSON.stringify(payload) }),
     classifyOwnerFunds: (id) => request(`/bank-transactions/${id}/owner-funds`, { method: 'POST' }),
