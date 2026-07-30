@@ -4,12 +4,13 @@ from types import SimpleNamespace
 
 from backend.bank_matching_service import (
     _get_income_available_amount,
+    _matches_incoming_invoice_counterparty,
     _matches_counterparty_name,
     _matches_receipt_seller,
     _merge_income_payment_summary,
     _normalize_digits,
 )
-from backend.models import BankTransaction, Income, PurchaseReceipt
+from backend.models import BankTransaction, Income, IncomingInvoice, PurchaseReceipt
 
 
 def test_matches_counterparty_name_accepts_exact_and_substring_matches():
@@ -48,6 +49,35 @@ def test_matches_receipt_seller_ignores_short_words_for_common_word_match():
     receipt = PurchaseReceipt(seller_name="AB XY Longname")
 
     assert _matches_receipt_seller(tx, receipt) is False
+
+
+def test_matches_incoming_invoice_counterparty_uses_transaction_text():
+    invoice = IncomingInvoice(counterparty_name="Alta banka")
+
+    assert (
+        _matches_incoming_invoice_counterparty(
+            BankTransaction(counterparty_name="ALTA BANKA AD-racun provizije"),
+            invoice,
+        )
+        is True
+    )
+    assert (
+        _matches_incoming_invoice_counterparty(
+            BankTransaction(purpose="Naknada za ALTA BANKA uslugu"),
+            invoice,
+        )
+        is True
+    )
+
+
+def test_matches_incoming_invoice_counterparty_rejects_weak_match():
+    assert (
+        _matches_incoming_invoice_counterparty(
+            BankTransaction(counterparty_name="Druga banka"),
+            IncomingInvoice(counterparty_name="Alta banka"),
+        )
+        is False
+    )
 
 
 def test_normalize_digits_removes_non_digits_and_handles_none():

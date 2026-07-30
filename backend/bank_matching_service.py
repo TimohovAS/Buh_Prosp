@@ -75,6 +75,22 @@ def _matches_receipt_seller(tx: BankTransaction, receipt: PurchaseReceipt) -> bo
     return common >= 2 or seller_norm in counterparty_norm or counterparty_norm in seller_norm
 
 
+def _matches_incoming_invoice_counterparty(tx: BankTransaction, invoice: IncomingInvoice) -> bool:
+    transaction_norm = " ".join(
+        filter(None, [tx.counterparty_name, tx.purpose, tx.bank_reference])
+    ).lower().strip()
+    counterparty_norm = (invoice.counterparty_name or "").lower().strip()
+    if not transaction_norm or not counterparty_norm:
+        return False
+
+    counterparty_words = [word for word in counterparty_norm.split()[:5] if len(word) >= 3]
+    common = sum(1 for word in counterparty_words if word in transaction_norm)
+    return (
+        common >= 2
+        or counterparty_norm in transaction_norm
+    )
+
+
 async def _suggest_receipt_expense_matches(
     db: AsyncSession, tx: BankTransaction
 ) -> list[tuple[tuple[int, float, int], dict]]:
@@ -138,6 +154,65 @@ async def _suggest_receipt_expense_matches(
     return suggestions
 
 
+async def _suggest_incoming_invoice_expense_matches(
+    db: AsyncSession, tx: BankTransaction
+) -> list[tuple[tuple[int, float, int], dict]]:
+    result = await db.execute(
+        select(Expense, IncomingInvoice)
+        .join(IncomingInvoice, IncomingInvoice.expense_id == Expense.id)
+        .where(
+            Expense.source == "incoming_invoice",
+            Expense.status == "planned",
+            Expense.reversal_of_id.is_(None),
+            IncomingInvoice.status.in_(["unpaid", "partial"]),
+        )
+        .order_by(IncomingInvoice.date.desc(), IncomingInvoice.id.desc())
+    )
+
+    suggestions: list[tuple[tuple[int, float, int], dict]] = []
+    tx_amount = money_abs(tx.amount or ZERO_DECIMAL)
+    for expense, invoice in result.fetchall():
+        remaining = to_decimal(invoice.amount or ZERO_DECIMAL) - to_decimal(
+            invoice.settled_amount or ZERO_DECIMAL
+        )
+        if remaining <= ZERO_DECIMAL or not money_eq(remaining, tx_amount):
+            continue
+
+        date_diff = days_between(tx.date, invoice.date, absolute=True)
+        counterparty_match = _matches_incoming_invoice_counterparty(tx, invoice)
+        section = "suggested" if counterparty_match or date_diff <= 7 else "all"
+        score_value = None
+        if counterparty_match:
+            score_value = max(75, 100 - min(date_diff, 25))
+        elif date_diff <= 7:
+            score_value = max(70, 92 - date_diff)
+
+        suggestions.append(
+            (
+                (
+                    0 if section == "suggested" else 1,
+                    float(date_diff),
+                    int(expense.id),
+                ),
+                {
+                    "id": expense.id,
+                    "type": "expense",
+                    "invoice_number": invoice.invoice_number,
+                    "client_name": invoice.counterparty_name,
+                    "description": (invoice.description or expense.description or "")[:120],
+                    "amount": remaining,
+                    "amount_full": None,
+                    "amount_paid": None,
+                    "date": str(invoice.date),
+                    "status": invoice.status,
+                    "score": score_value,
+                    "section": section,
+                },
+            )
+        )
+    return suggestions
+
+
 async def _clear_contract_if_project_mismatch(db: AsyncSession, expense: Expense, project_id: int | None) -> None:
     if not expense.contract_id or project_id is None:
         return
@@ -189,6 +264,7 @@ def _obligation_terms(obligation: MonthlyObligation) -> list[str]:
 async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> list[dict]:
     scored: list[tuple[tuple[int, float, int], dict]] = []
     scored.extend(await _suggest_receipt_expense_matches(db, tx))
+    scored.extend(await _suggest_incoming_invoice_expense_matches(db, tx))
 
     query = (
         select(MonthlyObligation)

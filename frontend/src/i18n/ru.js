@@ -425,7 +425,7 @@ const ru = {
   incomeUnlinkPaymentConfirm: 'Отвязать эту оплату от фактуры?',
   incomingInvoice: 'Входящая фактура',
   incomingInvoiceLinkedBank: 'Связанная банковская транзакция',
-  incomingInvoiceLinkedExpense: 'Расход, которым закрыта фактура',
+  incomingInvoiceLinkedExpense: 'Связанный с фактурой расход',
   incomingInvoiceMissingLinkedExpense: 'Связанный расход не найден',
   incomingInvoiceMissingLinkedExpenseHint:
     'В фактуре осталась ссылка на расход #{id}, но такой записи уже нет. Статус оплаты может быть устаревшим.',

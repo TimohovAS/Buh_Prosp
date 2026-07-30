@@ -15,6 +15,7 @@ from backend.bank_matching_service import (
     suggest_matches,
     unmatch_transaction,
 )
+from backend.incoming_invoice_service import create_incoming_invoice
 from backend.models import BankTransactionIncomeAllocation, Contract, Expense, MonthlyObligation, PaymentType
 from backend.tests.conftest import TEST_DATE, TEST_NOW
 
@@ -458,6 +459,137 @@ async def test_suggest_matches_returns_income_candidate_without_fixing_score(
     assert suggestions
     assert suggestions[0]["id"] == income.id
     assert suggestions[0]["type"] == "income"
+    assert suggestions[0]["section"] == "suggested"
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_returns_open_incoming_invoice_expense(
+    db_session,
+    make_bank_tx,
+):
+    invoice = await create_incoming_invoice(
+        db_session,
+        invoice_number="PP-260729-1424654",
+        invoice_date=date(2026, 7, 29),
+        client_id=None,
+        counterparty_name="Alta banka",
+        project_id=None,
+        amount=Decimal("80.00"),
+        description="Naknada za domace platne transakcije",
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("80.00"),
+        direction="out",
+        tx_date=date(2026, 7, 23),
+        counterparty_name="ALTA BANKA AD-racun provizije",
+        purpose="Obracun provizije za dan 2026.07.23",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert suggestions
+    assert suggestions[0] == {
+        "id": invoice.expense_id,
+        "type": "expense",
+        "invoice_number": "PP-260729-1424654",
+        "client_name": "Alta banka",
+        "description": "Naknada za domace platne transakcije",
+        "amount": Decimal("80.00"),
+        "amount_full": None,
+        "amount_paid": None,
+        "date": "2026-07-29",
+        "status": "unpaid",
+        "score": 94,
+        "section": "suggested",
+    }
+
+    matched_tx = await match_transaction(db_session, tx.id, suggestions[0]["type"], suggestions[0]["id"])
+    linked_expense = await db_session.get(Expense, invoice.expense_id)
+
+    assert matched_tx.status == "matched"
+    assert matched_tx.matched_type == "expense"
+    assert matched_tx.matched_id == invoice.expense_id
+    assert invoice.status == "paid"
+    assert invoice.settled_amount == Decimal("80.00")
+    assert linked_expense.status == "paid"
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_excludes_incoming_invoice_with_different_remaining_amount(
+    db_session,
+    make_bank_tx,
+):
+    await create_incoming_invoice(
+        db_session,
+        invoice_number="PP-OTHER-AMOUNT",
+        invoice_date=TEST_DATE,
+        client_id=None,
+        counterparty_name="Alta banka",
+        project_id=None,
+        amount=Decimal("120.00"),
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("80.00"),
+        direction="out",
+        counterparty_name="Alta banka",
+    )
+
+    assert await suggest_matches(db_session, tx) == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_excludes_incoming_invoice_with_negative_remaining_amount(
+    db_session,
+    make_bank_tx,
+):
+    invoice = await create_incoming_invoice(
+        db_session,
+        invoice_number="PP-OVERSETTLED",
+        invoice_date=TEST_DATE,
+        client_id=None,
+        counterparty_name="Alta banka",
+        project_id=None,
+        amount=Decimal("100.00"),
+    )
+    invoice.settled_amount = Decimal("180.00")
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("80.00"),
+        direction="out",
+        counterparty_name="Alta banka",
+    )
+
+    assert await suggest_matches(db_session, tx) == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_matches_keeps_old_open_incoming_invoice_available(
+    db_session,
+    make_bank_tx,
+):
+    invoice = await create_incoming_invoice(
+        db_session,
+        invoice_number="PP-OLD-OPEN",
+        invoice_date=date(2026, 1, 10),
+        client_id=None,
+        counterparty_name="Alta banka",
+        project_id=None,
+        amount=Decimal("80.00"),
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("80.00"),
+        direction="out",
+        tx_date=date(2026, 7, 23),
+        counterparty_name="Alta banka",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert len(suggestions) == 1
+    assert suggestions[0]["id"] == invoice.expense_id
     assert suggestions[0]["section"] == "suggested"
 
 

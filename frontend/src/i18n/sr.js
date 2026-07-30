@@ -425,7 +425,7 @@ const sr = {
   incomeUnlinkPaymentConfirm: 'Отвезати ову уплату од фактуре?',
   incomingInvoice: 'Улазна фактура',
   incomingInvoiceLinkedBank: 'Повезана банковна трансакција',
-  incomingInvoiceLinkedExpense: 'Расход којим је фактура затворена',
+  incomingInvoiceLinkedExpense: 'Расход повезан са фактуром',
   incomingInvoiceMissingLinkedExpense: 'Повезани расход није пронађен',
   incomingInvoiceMissingLinkedExpenseHint:
     'У фактури је остала веза на расход #{id}, али тај запис више не постоји. Статус плаћања може бити застарео.',
