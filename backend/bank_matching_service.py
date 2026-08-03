@@ -76,19 +76,14 @@ def _matches_receipt_seller(tx: BankTransaction, receipt: PurchaseReceipt) -> bo
 
 
 def _matches_incoming_invoice_counterparty(tx: BankTransaction, invoice: IncomingInvoice) -> bool:
-    transaction_norm = " ".join(
-        filter(None, [tx.counterparty_name, tx.purpose, tx.bank_reference])
-    ).lower().strip()
+    transaction_norm = " ".join(filter(None, [tx.counterparty_name, tx.purpose, tx.bank_reference])).lower().strip()
     counterparty_norm = (invoice.counterparty_name or "").lower().strip()
     if not transaction_norm or not counterparty_norm:
         return False
 
     counterparty_words = [word for word in counterparty_norm.split()[:5] if len(word) >= 3]
     common = sum(1 for word in counterparty_words if word in transaction_norm)
-    return (
-        common >= 2
-        or counterparty_norm in transaction_norm
-    )
+    return common >= 2 or counterparty_norm in transaction_norm
 
 
 async def _suggest_receipt_expense_matches(
@@ -172,9 +167,7 @@ async def _suggest_incoming_invoice_expense_matches(
     suggestions: list[tuple[tuple[int, float, int], dict]] = []
     tx_amount = money_abs(tx.amount or ZERO_DECIMAL)
     for expense, invoice in result.fetchall():
-        remaining = to_decimal(invoice.amount or ZERO_DECIMAL) - to_decimal(
-            invoice.settled_amount or ZERO_DECIMAL
-        )
+        remaining = to_decimal(invoice.amount or ZERO_DECIMAL) - to_decimal(invoice.settled_amount or ZERO_DECIMAL)
         if remaining <= ZERO_DECIMAL or not money_eq(remaining, tx_amount):
             continue
 
