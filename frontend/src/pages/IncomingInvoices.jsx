@@ -1460,7 +1460,7 @@ function SettleModal({ data, projects, onClose, onDone }) {
     </div>
   )
   const renderSettlementFields = () => (
-    <>
+    <div className="incoming-invoice-settle-fields">
       <div className="form-group">
         <label className="form-label">{tr('settlementAmount')}</label>
         <input
@@ -1484,7 +1484,26 @@ function SettleModal({ data, projects, onClose, onDone }) {
           onChange={(e) => setForm({ ...form, note: e.target.value })}
         />
       </div>
-    </>
+    </div>
+  )
+
+  const renderActions = () => (
+    <div className="modal-actions">
+      <button type="button" className="btn" onClick={onClose}>
+        {tr('cancel')}
+      </button>
+      <button
+        type="submit"
+        className="btn btn-primary"
+        disabled={
+          submitting ||
+          (type === 'expense' && !form.expense_id) ||
+          (type === 'bank' && !form.bank_transaction_id)
+        }
+      >
+        {tr('save')}
+      </button>
+    </div>
   )
 
   return (
@@ -1493,127 +1512,98 @@ function SettleModal({ data, projects, onClose, onDone }) {
       onClose={onClose}
       title={`${titles[type]}: ${invoice.invoice_number}`}
       maxWidth={isWideSideLayout ? '1280px' : undefined}
-      bodyClassName={isWideSideLayout ? 'incoming-invoice-settle-modal-body' : ''}
+      bodyClassName="incoming-invoice-settle-modal-body"
     >
-      <form onSubmit={handleSubmit}>
-        {isWideSideLayout ? (
-          <div className="incoming-invoice-settle-layout">
-            <div className="incoming-invoice-settle-column">
-              {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
-            </div>
-            <div className="incoming-invoice-settle-column">
-              <div className="form-group">
-                {type === 'expense' ? renderExpenseSelectionPanel() : renderBankSelectionPanel()}
+      <form onSubmit={handleSubmit} className="incoming-invoice-settle-form">
+        <div className="incoming-invoice-settle-scroll">
+          {isWideSideLayout ? (
+            <div className="incoming-invoice-settle-layout">
+              <div className="incoming-invoice-settle-column">
+                {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
               </div>
-              {type === 'bank' ? (
-                <div className="record-detail-card" style={{ marginBottom: '1rem' }}>
-                  {renderSettlementFields()}
+              <div className="incoming-invoice-settle-column">
+                <div className="form-group">
+                  {type === 'expense' ? renderExpenseSelectionPanel() : renderBankSelectionPanel()}
                 </div>
-              ) : null}
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={onClose}>
-                  {tr('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={
-                    submitting ||
-                    (type === 'expense' && !form.expense_id) ||
-                    (type === 'bank' && !form.bank_transaction_id)
-                  }
-                >
-                  {tr('save')}
-                </button>
+                {type === 'bank' ? (
+                  <div className="record-detail-card">{renderSettlementFields()}</div>
+                ) : null}
               </div>
             </div>
-          </div>
-        ) : (
-          <>
-            {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
-            {type === 'bank' && <div className="form-group">{renderBankSelectionPanel()}</div>}
-            {type === 'offset' && (
-              <div className="form-group">
-                <label className="form-label">{tr('selectIncome')}</label>
-                {!invoice.client_id ? (
-                  <p style={{ color: 'var(--color-danger)' }}>{tr('incomingInvoiceOffsetClientRequired')}</p>
-                ) : (
-                  <div>
-                    <select
-                      className="form-input"
-                      required
-                      value={form.income_id}
-                      onChange={(e) => {
-                        const income = openIncomes.find((item) => item.id === Number(e.target.value))
-                        const maxAmount = income
-                          ? Math.min(Number(income.remaining), Number(invoice.remaining_amount))
-                          : form.amount
-                        setForm({ ...form, income_id: e.target.value, amount: maxAmount })
-                      }}
-                    >
-                      <option value="">-</option>
-                      {openIncomes.map((income) => (
-                        <option key={income.id} value={income.id}>
-                          {formatOffsetIncomeLabel(income)}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedIncome && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          padding: '0.75rem',
-                          border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
-                          borderRadius: 8,
-                          display: 'grid',
-                          gap: 4,
+          ) : (
+            <>
+              {showInvoiceSummary && <div className="form-group">{renderInvoiceSummaryCard()}</div>}
+              {type === 'bank' && <div className="form-group">{renderBankSelectionPanel()}</div>}
+              {type === 'offset' && (
+                <div className="form-group">
+                  <label className="form-label">{tr('selectIncome')}</label>
+                  {!invoice.client_id ? (
+                    <p style={{ color: 'var(--color-danger)' }}>
+                      {tr('incomingInvoiceOffsetClientRequired')}
+                    </p>
+                  ) : (
+                    <div>
+                      <select
+                        className="form-input"
+                        required
+                        value={form.income_id}
+                        onChange={(e) => {
+                          const income = openIncomes.find((item) => item.id === Number(e.target.value))
+                          const maxAmount = income
+                            ? Math.min(Number(income.remaining), Number(invoice.remaining_amount))
+                            : form.amount
+                          setForm({ ...form, income_id: e.target.value, amount: maxAmount })
                         }}
                       >
-                        <div>
-                          <strong>{tr('counterpartyName')}:</strong> {selectedIncome.client_name || '-'}
-                        </div>
-                        {(selectedIncome.project_code || selectedIncome.project_name) && (
+                        <option value="">-</option>
+                        {openIncomes.map((income) => (
+                          <option key={income.id} value={income.id}>
+                            {formatOffsetIncomeLabel(income)}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedIncome && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: '0.75rem',
+                            border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
+                            borderRadius: 8,
+                            display: 'grid',
+                            gap: 4,
+                          }}
+                        >
                           <div>
-                            <strong>{tr('project')}:</strong>{' '}
-                            {[selectedIncome.project_code, selectedIncome.project_name]
-                              .filter(Boolean)
-                              .join(' / ')}
+                            <strong>{tr('counterpartyName')}:</strong> {selectedIncome.client_name || '-'}
                           </div>
-                        )}
-                        {selectedIncome.description && (
+                          {(selectedIncome.project_code || selectedIncome.project_name) && (
+                            <div>
+                              <strong>{tr('project')}:</strong>{' '}
+                              {[selectedIncome.project_code, selectedIncome.project_name]
+                                .filter(Boolean)
+                                .join(' / ')}
+                            </div>
+                          )}
+                          {selectedIncome.description && (
+                            <div>
+                              <strong>{tr('description')}:</strong> {selectedIncome.description}
+                            </div>
+                          )}
                           <div>
-                            <strong>{tr('description')}:</strong> {selectedIncome.description}
+                            <strong>{tr('remainingAmount')}:</strong> {fmt(selectedIncome.remaining)}
                           </div>
-                        )}
-                        <div>
-                          <strong>{tr('remainingAmount')}:</strong> {fmt(selectedIncome.remaining)}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            {type === 'expense' && <div className="form-group">{renderExpenseSelectionPanel()}</div>}
-            {type !== 'expense' && renderSettlementFields()}
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={onClose}>
-                {tr('cancel')}
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={
-                  submitting ||
-                  (type === 'expense' && !form.expense_id) ||
-                  (type === 'bank' && !form.bank_transaction_id)
-                }
-              >
-                {tr('save')}
-              </button>
-            </div>
-          </>
-        )}
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {type === 'expense' && <div className="form-group">{renderExpenseSelectionPanel()}</div>}
+              {type !== 'expense' && renderSettlementFields()}
+            </>
+          )}
+        </div>
+        {renderActions()}
       </form>
     </Modal>
   )

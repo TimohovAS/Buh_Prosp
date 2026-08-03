@@ -1638,6 +1638,49 @@ tr.row-reversal {
   min-width: 0;
 }
 
+/* Широкая модалка закрытия фактуры: прокручивается только область с
+   колонками, кнопки «Сохранить/Отмена» закреплены внизу и видны всегда. */
+.modal-body.incoming-invoice-settle-modal-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.incoming-invoice-settle-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.incoming-invoice-settle-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  padding-bottom: 0.75rem;
+}
+
+.incoming-invoice-settle-form > .modal-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Сумма/дата/примечание — одной строкой: сумма и дата узкие, примечание тянется */
+.incoming-invoice-settle-fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.55fr) minmax(140px, 0.7fr) minmax(180px, 1.5fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.incoming-invoice-settle-fields .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 .incoming-invoice-status-inline {
   margin-top: 0.25rem;
 }
@@ -4205,6 +4248,10 @@ tr:hover td {
 
 @media (max-width: 900px) {
   .incoming-invoice-settle-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .incoming-invoice-settle-fields {
     grid-template-columns: 1fr;
   }
 
