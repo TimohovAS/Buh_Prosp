@@ -149,13 +149,16 @@ async def resolve_category_expense_links(
         if not category:
             return project_id, contract_id, False
 
-    resolved_project_id = category.default_project_id or project_id
+    # Дефолтный проект категории — подстановка, а не перебивка: явно выбранный
+    # проект всегда выигрывает, иначе расход нельзя было бы привязать к реальному
+    # проекту (например, транспорт всегда уезжал в INT-TRANSPORT).
+    resolved_project_id = project_id or category.default_project_id
     resolved_contract_id = contract_id
     is_tax_related = category.category_group == "tax"
 
     if category.default_project_id and resolved_contract_id is not None:
         contract = await get_contract_or_404(db, resolved_contract_id, exc_cls=exc_cls)
-        if contract.project_id is not None and contract.project_id != category.default_project_id:
+        if contract.project_id is not None and contract.project_id != resolved_project_id:
             resolved_contract_id = None
 
     return resolved_project_id, resolved_contract_id, is_tax_related

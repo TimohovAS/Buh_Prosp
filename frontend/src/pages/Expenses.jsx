@@ -279,7 +279,6 @@ export default function Expenses() {
   const {
     getCategoryById,
     getCategoryDefaultProjectId,
-    usesCategoryProject,
     getCategoryLabel: getResolvedCategoryLabel,
   } = useCategoryProjectResolver(categories, lang)
 
@@ -479,10 +478,10 @@ export default function Expenses() {
       amount: hasActiveExpenseLines ? expenseLinesTotal : parseFloat(form.amount) || 0,
       category: categoryValue,
       category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-      project_id: categoryDefaultProjectId
-        ? parseInt(categoryDefaultProjectId, 10)
-        : form.project_id
-          ? parseInt(form.project_id, 10)
+      project_id: form.project_id
+        ? parseInt(form.project_id, 10)
+        : categoryDefaultProjectId
+          ? parseInt(categoryDefaultProjectId, 10)
           : unassignedProject
             ? unassignedProject.id
             : null,
@@ -664,16 +663,11 @@ export default function Expenses() {
   )
 
   const filteredContracts = useMemo(() => {
-    const effectiveProjectId = getCategoryDefaultProjectId(form.category_id) || form.project_id || ''
+    const effectiveProjectId = form.project_id || getCategoryDefaultProjectId(form.category_id) || ''
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
     return getContractsForProject(selectedProjectId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contracts, form.project_id, form.category_id, categories])
-  const usesDefaultCategoryProject = useMemo(
-    () => usesCategoryProject(form.category_id),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [categories, form.category_id]
-  )
 
   const filtered = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -1434,17 +1428,15 @@ export default function Expenses() {
                         ))}
                       </select>
                     </div>
-                    {!usesDefaultCategoryProject ? (
-                      <div className="form-group">
-                        <label className="form-label">{tr('project')}</label>
-                        <ProjectSelect
-                          projects={projects}
-                          value={form.project_id}
-                          onChange={updateProject}
-                          required
-                        />
-                      </div>
-                    ) : null}
+                    <div className="form-group">
+                      <label className="form-label">{tr('project')}</label>
+                      <ProjectSelect
+                        projects={projects}
+                        value={form.project_id}
+                        onChange={updateProject}
+                        required
+                      />
+                    </div>
                     {filteredContracts.length > 0 ? (
                       <div className="form-group">
                         <label className="form-label">{tr('contract')}</label>
@@ -1537,17 +1529,10 @@ export default function Expenses() {
                 ))}
               </select>
             </div>
-            {!usesDefaultCategoryProject ? (
-              <div className="form-group">
-                <label className="form-label">{tr('project')}</label>
-                <ProjectSelect
-                  projects={projects}
-                  value={form.project_id}
-                  onChange={updateProject}
-                  required
-                />
-              </div>
-            ) : null}
+            <div className="form-group">
+              <label className="form-label">{tr('project')}</label>
+              <ProjectSelect projects={projects} value={form.project_id} onChange={updateProject} required />
+            </div>
             {filteredContracts.length > 0 ? (
               <div className="form-group">
                 <label className="form-label">{tr('contract')}</label>

@@ -388,14 +388,16 @@ async def update_cash_entry(
 
         desired_project_id = payload.get("project_id", expense.project_id)
         desired_contract_id = payload.get("contract_id", expense.contract_id)
-        if not desired_project_id:
-            desired_project_id = await get_unassigned_project_id(db)
+        # Подстановка "нераспределённого" — после категории, иначе дефолтный
+        # проект категории уже никогда бы не применился.
         desired_project_id, desired_contract_id, is_tax_related = await resolve_category_expense_links(
             db,
             payload.get("category_id", expense.category_id),
             desired_project_id,
             desired_contract_id,
         )
+        if not desired_project_id:
+            desired_project_id = await get_unassigned_project_id(db)
         if desired_contract_id is None and expense.contract_id and "project_id" in payload:
             current_contract = await get_contract_or_404(db, expense.contract_id)
             if current_contract.project_id != desired_project_id:

@@ -203,10 +203,10 @@ export default function PlannedExpenses() {
         currency: form.currency || 'RSD',
         category: form.category || null,
         category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-        project_id: categoryDefaultProjectId
-          ? parseInt(categoryDefaultProjectId, 10)
-          : form.project_id
-            ? parseInt(form.project_id, 10)
+        project_id: form.project_id
+          ? parseInt(form.project_id, 10)
+          : categoryDefaultProjectId
+            ? parseInt(categoryDefaultProjectId, 10)
             : unassignedProject
               ? unassignedProject.id
               : null,
@@ -307,7 +307,6 @@ export default function PlannedExpenses() {
   const {
     getCategoryById,
     getCategoryDefaultProjectId,
-    usesCategoryProject,
     getCategoryLabel: getResolvedCategoryLabel,
   } = useCategoryProjectResolver(apiCategories, lang)
   const getCategoryLabel = (item) => {
@@ -667,17 +666,15 @@ export default function PlannedExpenses() {
                   ))}
                 </select>
               </div>
-              {!usesCategoryProject(form.category_id) ? (
-                <div className="form-group">
-                  <label className="form-label">{tr('project')}</label>
-                  <ProjectSelect
-                    projects={projects}
-                    value={form.project_id}
-                    onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
-                    required
-                  />
-                </div>
-              ) : null}
+              <div className="form-group">
+                <label className="form-label">{tr('project')}</label>
+                <ProjectSelect
+                  projects={projects}
+                  value={form.project_id}
+                  onChange={(nextValue) => setForm({ ...form, project_id: nextValue })}
+                  required
+                />
+              </div>
               {showWorkerField ? (
                 <div className="form-group">
                   <label className="form-label">{tr('worker')}</label>

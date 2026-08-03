@@ -108,7 +108,6 @@ export default function BankTransactions() {
   const cashProject = projects.find((project) => project.code === 'INT-CASH') || null
   const {
     getCategoryDefaultProjectId: getExpenseCategoryDefaultProjectId,
-    usesCategoryProject: expenseUsesDefaultProject,
     getCategoryLabel: getResolvedCategoryLabel,
   } = useCategoryProjectResolver(categories, lang)
 
@@ -874,10 +873,10 @@ export default function BankTransactions() {
           ? cashProject
             ? cashProject.id
             : null
-          : categoryDefaultProjectId
-            ? parseInt(categoryDefaultProjectId, 10)
-            : expenseForm.project_id
-              ? parseInt(expenseForm.project_id, 10)
+          : expenseForm.project_id
+            ? parseInt(expenseForm.project_id, 10)
+            : categoryDefaultProjectId
+              ? parseInt(categoryDefaultProjectId, 10)
               : unassignedProject
                 ? unassignedProject.id
                 : null,
@@ -1514,8 +1513,7 @@ export default function BankTransactions() {
   const renderOutgoingModalContent = () => {
     const isCashCategorySelected = expenseForm.category_id === CASH_CATEGORY_VALUE
     const categoryDefaultProjectId = getExpenseCategoryDefaultProjectId(expenseForm.category_id)
-    const usesDefaultProject = expenseUsesDefaultProject(expenseForm.category_id)
-    const effectiveProjectId = categoryDefaultProjectId || expenseForm.project_id || ''
+    const effectiveProjectId = expenseForm.project_id || categoryDefaultProjectId || ''
     const selectedProjectId = effectiveProjectId ? parseInt(effectiveProjectId, 10) : null
     const filteredContracts = getContractsForProject(selectedProjectId)
     const suggested = suggestions.filter((item) => item.section === 'suggested')
@@ -1598,7 +1596,7 @@ export default function BankTransactions() {
             </select>
           </div>
 
-          {!isCashCategorySelected && !usesDefaultProject ? (
+          {!isCashCategorySelected ? (
             <div className="form-group">
               <label className="form-label">{tr('project')}</label>
               <ProjectSelect
