@@ -933,7 +933,7 @@ const sr = {
   workDiariesInvoiceAvailable: 'Расположиво',
   workDiariesInvoiceCancelled: 'Отказана:',
   workDiariesInvoiceDate: 'Датум фактуре',
-  workDiariesInvoiceDescription: 'Радови по пројекту {project}, период {period}',
+  workDiariesInvoiceDescription: 'Radovi po projektu {project}, period {period}',
   workDiariesInvoiceDueDate: 'Рок плаћања',
   workDiariesInvoiceEntriesCount: 'Записа',
   workDiariesInvoiceInvalidAmount:

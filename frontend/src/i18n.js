@@ -17,13 +17,17 @@ export function getLang() {
   return lang
 }
 
-export function tr(key, replacements = null) {
-  const value = translations[lang]?.[key] ?? translations.sr[key] ?? key
+export function trFor(language, key, replacements = null) {
+  const value = translations[language]?.[key] ?? translations.sr[key] ?? key
   if (!replacements) return value
   return Object.entries(replacements).reduce(
     (text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement ?? '')),
     value
   )
+}
+
+export function tr(key, replacements = null) {
+  return trFor(lang, key, replacements)
 }
 
 const MONTH_NAMES_SR = ['Јан', 'Феб', 'Мар', 'Апр', 'Мај', 'Јун', 'Јул', 'Авг', 'Сеп', 'Окт', 'Нов', 'Дец']

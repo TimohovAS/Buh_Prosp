@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { api } from '../../api'
-import { tr } from '../../i18n'
+import { tr, trFor } from '../../i18n'
 import DatePicker from '../DatePicker'
 import Modal from '../Modal'
 import { dateLabel, money } from './workDiaryUtils'
@@ -78,7 +78,7 @@ export default function WorkDiaryInvoiceModal({ isOpen, onClose, onCreated, entr
       invoice_number: '',
       contract_id: '',
       contract_payment_type: 'intermediate',
-      description: tr('workDiariesInvoiceDescription', {
+      description: trFor('sr', 'workDiariesInvoiceDescription', {
         project: project?.name || '',
         period,
       }),
