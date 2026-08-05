@@ -21,11 +21,15 @@ from backend.models import (
 )
 
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+RECEIPT_SOURCE = "receipt"
 MATCH_TYPE_LOAN_MOVEMENT = "loan_movement"
 
 
 def _visible_expense_condition():
-    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
+    return or_(
+        Expense.status != "planned",
+        Expense.source.in_([EFAKTURA_IMPORT_SOURCE, RECEIPT_SOURCE]),
+    )
 
 
 def _append_period_amount(periods_data: dict[str, dict[str, Decimal]], period: str, key: str, amount) -> None:
@@ -112,8 +116,8 @@ async def get_finance_summary(
         income_base = and_(income_base, Income.project_id == project_id)
 
     # Базовые условия для expenses:
-    # accrual: учитываем фактические проводки, включая сторно (status=reversed, amount<0),
-    # но исключаем planned.
+    # accrual: учитываем фактические проводки, включая сторно (status=reversed, amount<0).
+    # Обычные planned исключаем, но документы из eFaktura и кассовых чеков учитываем сразу.
     expense_accrual_base = and_(
         _visible_expense_condition(),
         Expense.source != CASH_TRANSFER_SOURCE,
@@ -600,7 +604,8 @@ async def get_finance_by_project(
             income_date_col >= date_from,
             income_date_col <= date_to,
         )
-        # Расходы: date в периоде, включая сторно (reversed), но без planned
+        # Расходы: date в периоде, включая сторно (reversed). Обычные planned
+        # исключаем, но документы из eFaktura и кассовых чеков учитываем сразу.
         expense_base = and_(
             _visible_expense_condition(),
             Expense.source != CASH_TRANSFER_SOURCE,

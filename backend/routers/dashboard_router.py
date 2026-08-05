@@ -43,11 +43,15 @@ from backend.worker_payout_service import get_open_trip_settlement_summary
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 settings = get_settings()
 EFAKTURA_IMPORT_SOURCE = "efaktura_import"
+RECEIPT_SOURCE = "receipt"
 MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
 
 
 def _visible_expense_condition():
-    return or_(Expense.status != "planned", Expense.source == EFAKTURA_IMPORT_SOURCE)
+    return or_(
+        Expense.status != "planned",
+        Expense.source.in_([EFAKTURA_IMPORT_SOURCE, RECEIPT_SOURCE]),
+    )
 
 
 @router.get("/pending-links", response_model=PendingLinkCountsResponse)
