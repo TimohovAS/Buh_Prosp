@@ -1044,6 +1044,7 @@ const ru = {
   workDiariesOvertimeMultiplier: 'Коэффициент сверхурочных (дневники работ)',
   workDiariesOvertimeMultiplierHint:
     'Сверхурочные (свыше 8 ч смены) оплачиваются с этим коэффициентом. Закон о раде РС: надбавка минимум +26%, т.е. коэффициент не ниже 1.26.',
+  workDiariesSettingsTitle: 'Расчёты дневников работ',
   workDiariesPayout: 'К выплате',
   workDiariesPerDiem: 'Дневница',
   workDiariesPerDiemPerWorker: 'Дневница (на человека)',

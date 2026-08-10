@@ -1042,6 +1042,7 @@ const sr = {
   workDiariesOvertimeMultiplier: 'Коефицијент прековремених (дневници радова)',
   workDiariesOvertimeMultiplierHint:
     'Прековремени рад (преко 8 сати смене) плаћа се са овим коефицијентом. Закон о раду РС: увећање најмање +26%, тј. коефицијент најмање 1.26.',
+  workDiariesSettingsTitle: 'Обрачуни дневника радова',
   workDiariesPayout: 'За исплату',
   workDiariesPerDiem: 'Дневница',
   workDiariesPerDiemPerWorker: 'Дневница (по раднику)',

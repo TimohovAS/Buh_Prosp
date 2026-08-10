@@ -879,6 +879,117 @@ textarea {
   gap: 0.75rem;
 }
 
+.modal.enterprise-modal {
+  width: min(94vw, 920px);
+  max-width: none;
+}
+
+.modal-body.enterprise-modal-body {
+  padding: 0.9rem 1rem 1rem;
+}
+
+.enterprise-modal-form {
+  min-width: 0;
+}
+
+.enterprise-form-section + .enterprise-form-section,
+.enterprise-form-bottom {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.enterprise-form-section-title {
+  margin: 0 0 0.7rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.enterprise-form-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem 0.75rem;
+}
+
+.enterprise-form-fields--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.enterprise-form-fields .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.enterprise-form-field--span-2 {
+  grid-column: span 2;
+}
+
+.enterprise-form-field--span-3 {
+  grid-column: span 3;
+}
+
+.enterprise-form-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.enterprise-form-subsection {
+  min-width: 0;
+}
+
+.enterprise-emblem-control {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 4rem;
+}
+
+.enterprise-emblem-preview {
+  width: 4rem;
+  height: 4rem;
+  flex: 0 0 4rem;
+}
+
+.enterprise-emblem-copy {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.enterprise-emblem-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.enterprise-emblem-upload {
+  position: relative;
+  overflow: hidden;
+}
+
+.enterprise-emblem-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.enterprise-form-hint {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.enterprise-modal-form > .modal-actions {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+}
+
 .settings-info-item--wide {
   grid-column: 1 / -1;
 }
@@ -4548,6 +4659,18 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
+  .enterprise-form-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .enterprise-form-field--span-3 {
+    grid-column: span 2;
+  }
+
+  .enterprise-form-bottom {
+    grid-template-columns: 1fr;
+  }
+
   /* Иначе span-2 создаёт вторую неявную колонку в одноколоночной сетке. */
   .record-field-grid-wide .record-field.span-2 {
     grid-column: auto;
@@ -4751,6 +4874,22 @@ tr:hover td {
   .work-diary-grid > div,
   .work-diary-report-header > div {
     border-right: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .enterprise-form-fields,
+  .enterprise-form-fields--two {
+    grid-template-columns: 1fr;
+  }
+
+  .enterprise-form-field--span-2,
+  .enterprise-form-field--span-3 {
+    grid-column: auto;
+  }
+
+  .enterprise-emblem-control {
+    align-items: flex-start;
   }
 }
 

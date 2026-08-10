@@ -88,6 +88,7 @@ export default function Settings() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
+  const [workDiaryModal, setWorkDiaryModal] = useState(false)
   const currentYear = new Date().getFullYear()
   const [form, setForm] = useState({
     name: '',
@@ -406,11 +407,43 @@ export default function Settings() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     try {
-      const updated = await api.enterprise.update(form)
+      const updated = await api.enterprise.update({
+        name: form.name,
+        address: form.address,
+        pib: form.pib,
+        maticni_broj: form.maticni_broj,
+        emblem_data_url: form.emblem_data_url,
+        bank_name: form.bank_name,
+        bank_account: form.bank_account,
+        bank_swift: form.bank_swift,
+        main_activity_code: form.main_activity_code,
+        opening_cash_balance: form.opening_cash_balance,
+        opening_cash_date: form.opening_cash_date,
+      })
       setData(updated)
       setForm((current) => ({ ...current, emblem_data_url: updated?.emblem_data_url || '' }))
       broadcastEnterpriseBrand(updated)
       setModal(false)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleWorkDiarySettingsSubmit = async (event) => {
+    event.preventDefault()
+    try {
+      const updated = await api.enterprise.update({
+        work_diary_overtime_multiplier: form.work_diary_overtime_multiplier,
+        work_diary_material_billing_multiplier: form.work_diary_material_billing_multiplier,
+      })
+      setData(updated)
+      setForm((current) => ({
+        ...current,
+        work_diary_overtime_multiplier: updated.work_diary_overtime_multiplier ?? 1.26,
+        work_diary_material_billing_multiplier:
+          updated.work_diary_material_billing_multiplier ?? DEFAULT_MATERIAL_BILLING_MULTIPLIER,
+      }))
+      setWorkDiaryModal(false)
     } catch (err) {
       console.error(err)
     }
@@ -613,6 +646,11 @@ export default function Settings() {
       title: tr('enterpriseData'),
       summary: [tr('name'), tr('address'), tr('bankName'), tr('cashflowOpening')].join(' • '),
     },
+    {
+      key: 'work-diaries',
+      title: tr('workDiariesSettingsTitle'),
+      summary: [tr('workDiariesOvertimeMultiplier'), tr('workDiariesMaterialBillingMultiplier')].join(' • '),
+    },
     ...(isAdmin
       ? [
           {
@@ -723,6 +761,37 @@ export default function Settings() {
               ) : (
                 <p className="settings-empty-text">{tr('fillEnterpriseData')}</p>
               )}
+            </SettingsSection>
+
+            <SettingsSection
+              title={tr('workDiariesSettingsTitle')}
+              summary={[tr('workDiariesOvertimeMultiplier'), tr('workDiariesMaterialBillingMultiplier')].join(
+                ' • '
+              )}
+              open={activeSection === 'work-diaries'}
+              onToggle={() => setActiveSection('work-diaries')}
+              actions={
+                <button className="btn btn-primary btn-sm" onClick={() => setWorkDiaryModal(true)}>
+                  {tr('edit')}
+                </button>
+              }
+            >
+              <div className="settings-info-grid">
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('workDiariesOvertimeMultiplier')}</div>
+                  <div className="settings-field-value">{data?.work_diary_overtime_multiplier ?? 1.26}</div>
+                  <div className="settings-section-summary">{tr('workDiariesOvertimeMultiplierHint')}</div>
+                </div>
+                <div className="settings-info-item">
+                  <div className="settings-field-label">{tr('workDiariesMaterialBillingMultiplier')}</div>
+                  <div className="settings-field-value">
+                    {data?.work_diary_material_billing_multiplier ?? DEFAULT_MATERIAL_BILLING_MULTIPLIER}
+                  </div>
+                  <div className="settings-section-summary">
+                    {tr('workDiariesMaterialBillingMultiplierSettingHint')}
+                  </div>
+                </div>
+              </div>
             </SettingsSection>
 
             {isAdmin && (
@@ -1436,133 +1505,183 @@ export default function Settings() {
         </div>
       </div>
 
-      <Modal isOpen={!!modal} onClose={() => setModal(false)} title={tr('enterprise')} maxWidth="500px">
+      <Modal
+        isOpen={!!modal}
+        onClose={() => setModal(false)}
+        title={tr('enterprise')}
+        className="enterprise-modal"
+        bodyClassName="enterprise-modal-body"
+        maxWidth="920px"
+        resizable={false}
+      >
         {modal ? (
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">{tr('name')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('address')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.address}
-                onChange={(event) => setForm({ ...form, address: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('pib')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.pib}
-                onChange={(event) => setForm({ ...form, pib: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('maticniBroj')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.maticni_broj}
-                onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('enterpriseEmblem')}</label>
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="brand-mark" style={{ width: '4rem', height: '4rem' }} aria-hidden="true">
-                  {form.emblem_data_url ? <img src={form.emblem_data_url} alt="" /> : <span>P</span>}
+          <form className="enterprise-modal-form" onSubmit={handleSubmit}>
+            <section className="enterprise-form-section">
+              <h4 className="enterprise-form-section-title">{tr('enterpriseData')}</h4>
+              <div className="enterprise-form-fields">
+                <div className="form-group enterprise-form-field--span-2">
+                  <label className="form-label">{tr('name')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    required
+                  />
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <label className="btn btn-secondary" style={{ position: 'relative', overflow: 'hidden' }}>
-                    {tr('chooseImage')}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      onChange={handleEmblemSelected}
-                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-                    />
-                  </label>
-                  {form.emblem_data_url ? (
-                    <button type="button" className="btn btn-secondary" onClick={handleEmblemRemove}>
-                      {tr('removeImage')}
-                    </button>
-                  ) : null}
+                <div className="form-group">
+                  <label className="form-label">{tr('pib')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.pib}
+                    onChange={(event) => setForm({ ...form, pib: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('maticniBroj')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.maticni_broj}
+                    onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
+                  />
+                </div>
+                <div className="form-group enterprise-form-field--span-3">
+                  <label className="form-label">{tr('address')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.address}
+                    onChange={(event) => setForm({ ...form, address: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('mainActivityCode')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.main_activity_code}
+                    onChange={(event) => setForm({ ...form, main_activity_code: event.target.value })}
+                    placeholder={tr('bankCodePlaceholder')}
+                  />
                 </div>
               </div>
-              <small style={{ color: 'var(--color-text-muted)' }}>{tr('enterpriseEmblemHint')}</small>
+            </section>
+
+            <section className="enterprise-form-section">
+              <h4 className="enterprise-form-section-title">{tr('bank')}</h4>
+              <div className="enterprise-form-fields">
+                <div className="form-group enterprise-form-field--span-2">
+                  <label className="form-label">{tr('bankName')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.bank_name}
+                    onChange={(event) => setForm({ ...form, bank_name: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('bankAccount')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.bank_account}
+                    onChange={(event) => setForm({ ...form, bank_account: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">SWIFT</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.bank_swift}
+                    onChange={(event) => setForm({ ...form, bank_swift: event.target.value })}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <div className="enterprise-form-bottom">
+              <section className="enterprise-form-subsection">
+                <h4 className="enterprise-form-section-title">{tr('cashflowOpening')}</h4>
+                <div className="enterprise-form-fields enterprise-form-fields--two">
+                  <div className="form-group">
+                    <label className="form-label">{tr('cashflowOpening')}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-input"
+                      value={form.opening_cash_balance}
+                      onChange={(event) =>
+                        setForm({ ...form, opening_cash_balance: parseFloat(event.target.value) || 0 })
+                      }
+                      placeholder="0"
+                    />
+                    <small className="enterprise-form-hint">{tr('cashflowOpeningHint')}</small>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{tr('cashflowOpeningDate')}</label>
+                    <DatePicker
+                      value={form.opening_cash_date}
+                      onChange={(value) =>
+                        setForm({ ...form, opening_cash_date: value || `${new Date().getFullYear()}-01-01` })
+                      }
+                      className="form-input"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="enterprise-form-subsection">
+                <h4 className="enterprise-form-section-title">{tr('enterpriseEmblem')}</h4>
+                <div className="enterprise-emblem-control">
+                  <div className="brand-mark enterprise-emblem-preview" aria-hidden="true">
+                    {form.emblem_data_url ? <img src={form.emblem_data_url} alt="" /> : <span>P</span>}
+                  </div>
+                  <div className="enterprise-emblem-copy">
+                    <div className="enterprise-emblem-actions">
+                      <label className="btn btn-secondary enterprise-emblem-upload">
+                        {tr('chooseImage')}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          onChange={handleEmblemSelected}
+                        />
+                      </label>
+                      {form.emblem_data_url ? (
+                        <button type="button" className="btn btn-secondary" onClick={handleEmblemRemove}>
+                          {tr('removeImage')}
+                        </button>
+                      ) : null}
+                    </div>
+                    <small className="enterprise-form-hint">{tr('enterpriseEmblemHint')}</small>
+                  </div>
+                </div>
+              </section>
             </div>
-            <div className="form-group">
-              <label className="form-label">{tr('bankName')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.bank_name}
-                onChange={(event) => setForm({ ...form, bank_name: event.target.value })}
-              />
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
             </div>
-            <div className="form-group">
-              <label className="form-label">{tr('bankAccount')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.bank_account}
-                onChange={(event) => setForm({ ...form, bank_account: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">SWIFT</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.bank_swift}
-                onChange={(event) => setForm({ ...form, bank_swift: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('mainActivityCode')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.main_activity_code}
-                onChange={(event) => setForm({ ...form, main_activity_code: event.target.value })}
-                placeholder={tr('bankCodePlaceholder')}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('cashflowOpening')}</label>
-              <input
-                type="number"
-                step="0.01"
-                className="form-input"
-                value={form.opening_cash_balance}
-                onChange={(event) =>
-                  setForm({ ...form, opening_cash_balance: parseFloat(event.target.value) || 0 })
-                }
-                placeholder="0"
-              />
-              <small style={{ color: 'var(--color-text-muted)' }}>{tr('cashflowOpeningHint')}</small>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('cashflowOpeningDate')}</label>
-              <DatePicker
-                value={form.opening_cash_date}
-                onChange={(value) =>
-                  setForm({ ...form, opening_cash_date: value || `${new Date().getFullYear()}-01-01` })
-                }
-                className="form-input"
-                style={{ width: '100%' }}
-              />
-            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={workDiaryModal}
+        onClose={() => setWorkDiaryModal(false)}
+        title={tr('workDiariesSettingsTitle')}
+        maxWidth="500px"
+      >
+        {workDiaryModal ? (
+          <form onSubmit={handleWorkDiarySettingsSubmit}>
             <div className="form-group">
               <label className="form-label">{tr('workDiariesOvertimeMultiplier')}</label>
               <input
@@ -1599,7 +1718,7 @@ export default function Settings() {
               </small>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>
+              <button type="button" className="btn btn-secondary" onClick={() => setWorkDiaryModal(false)}>
                 {tr('cancel')}
               </button>
               <button type="submit" className="btn btn-primary">
