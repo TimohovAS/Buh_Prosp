@@ -1,10 +1,12 @@
 from datetime import date, timedelta
 import re
+import unicodedata
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.bank_account_utils import extract_serbian_bank_accounts
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.counterparty_loan_service import MATCH_TYPE_LOAN_MOVEMENT, unmatch_loan_movement
 from backend.date_utils import coerce_date, days_between
@@ -20,6 +22,7 @@ from backend.models import (
     BankTransaction,
     BankTransactionIncomeAllocation,
     CashEntry,
+    ClientBankAccount,
     Contract,
     Expense,
     Income,
@@ -40,29 +43,101 @@ from backend.state_machine import (
 MATCH_TYPE_INCOME_ALLOCATION = "income_allocation"
 MATCH_TYPE_OWNER_FUNDS = "owner_funds"
 
+_PARTY_NAME_STOP_WORDS = {
+    "ad",
+    "doo",
+    "group",
+    "kompanija",
+    "company",
+    "limited",
+    "ltd",
+    "od",
+    "pr",
+    "trade",
+    "ur",
+    "szr",
+    "sztr",
+}
+
 
 def _safe_paid_amount(income: Income):
     return to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL)
 
 
+def _normalize_party_tokens(value: str | None) -> list[str]:
+    text = str(value or "").casefold()
+    text = text.replace("đ", "dj")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    text = re.sub(r"(?<=\w)[.\-](?=\w)", "", text)
+    tokens = re.findall(r"[a-z0-9]+", text)
+    return [token for token in tokens if token not in _PARTY_NAME_STOP_WORDS]
+
+
 def _matches_counterparty_name(tx: BankTransaction, income: Income) -> bool:
-    counterparty_norm = (tx.counterparty_name or "").lower().strip()
-    if not counterparty_norm:
-        return False
-
     raw_name = income.client_name or (income.client.name if income.client else "")
-    client_norm = raw_name.lower().strip()
-    if not client_norm:
+    transaction_tokens = set(_normalize_party_tokens(tx.counterparty_name))
+    client_tokens = set(_normalize_party_tokens(raw_name))
+    if not transaction_tokens or not client_tokens:
         return False
 
-    cp_words = counterparty_norm.split()[:4]
-    cl_words = client_norm.split()[:4]
-    common = sum(
-        1
-        for word in cp_words
-        if any(word == client_word or word in client_word or client_word in word for client_word in cl_words)
+    common = transaction_tokens & client_tokens
+    if not common:
+        return False
+    if client_tokens.issubset(transaction_tokens) and sum(map(len, client_tokens)) >= 4:
+        return True
+    if transaction_tokens.issubset(client_tokens) and sum(map(len, transaction_tokens)) >= 4:
+        return True
+    return len(common) >= 2 and sum(map(len, common)) >= 8
+
+
+def _matches_client_identifier(tx: BankTransaction, income: Income) -> bool:
+    client = income.client
+    if not client:
+        return False
+    transaction_text = " ".join(filter(None, [tx.counterparty_name, tx.purpose, tx.bank_reference]))
+    transaction_identifiers = {
+        _normalize_digits(candidate) for candidate in re.findall(r"(?<!\d)\d[\d\s./-]{6,}\d(?!\d)", transaction_text)
+    }
+    for raw_identifier in (client.pib, client.maticni_broj):
+        identifier = _normalize_digits(raw_identifier)
+        if len(identifier) >= 8 and identifier in transaction_identifiers:
+            return True
+    return False
+
+
+def _transaction_bank_accounts(tx: BankTransaction) -> set[str]:
+    return extract_serbian_bank_accounts(tx.counterparty_name, tx.raw_json)
+
+
+async def _get_transaction_account_client_ids(db: AsyncSession, tx: BankTransaction) -> set[int]:
+    account_numbers = _transaction_bank_accounts(tx)
+    if not account_numbers:
+        return set()
+    result = await db.execute(
+        select(ClientBankAccount.client_id).where(ClientBankAccount.account_number.in_(account_numbers))
     )
-    return common >= 2 or client_norm in counterparty_norm or counterparty_norm in client_norm
+    return {int(client_id) for client_id in result.scalars().all()}
+
+
+async def _remember_transaction_account_for_client(
+    db: AsyncSession,
+    tx: BankTransaction,
+    client_id: int | None,
+) -> None:
+    if tx.direction != "in" or client_id is None:
+        return
+    for account_number in _transaction_bank_accounts(tx):
+        result = await db.execute(select(ClientBankAccount).where(ClientBankAccount.account_number == account_number))
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            db.add(
+                ClientBankAccount(
+                    client_id=int(client_id),
+                    account_number=account_number,
+                    source="confirmed_match",
+                )
+            )
 
 
 def _matches_receipt_seller(tx: BankTransaction, receipt: PurchaseReceipt) -> bool:
@@ -627,6 +702,7 @@ async def _suggest_income_matches(
         [income.id for income in incomes],
         exclude_tx_id=exclude_tx_id,
     )
+    account_client_ids = await _get_transaction_account_client_ids(db, tx)
 
     extracted_invoices: list[str] = []
     if tx.purpose:
@@ -646,7 +722,13 @@ async def _suggest_income_matches(
         date_diff = days_between(tx.date, income.issued_date, absolute=True)
         return (invoice_score, amount_diff, date_diff)
 
-    def make_income_item(income: Income, remaining, score_value: int | None, section: str) -> dict:
+    def make_income_item(
+        income: Income,
+        remaining,
+        score_value: int | None,
+        section: str,
+        match_reason: str | None = None,
+    ) -> dict:
         total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
         paid = total - remaining
         client_label = income.client_name or (income.client.name if income.client else "")
@@ -663,6 +745,7 @@ async def _suggest_income_matches(
             "status": income.status,
             "score": score_value,
             "section": section,
+            "match_reason": match_reason,
         }
 
     candidate_items: list[tuple[Income, float]] = []
@@ -673,30 +756,53 @@ async def _suggest_income_matches(
         candidate_items.append((income, remaining))
 
     result: list[dict] = []
-    scored: list[tuple[tuple[int, float, int], Income, float]] = []
-    counterparty_matches: list[tuple[tuple[int, float, int], Income, float]] = []
+    scored: list[tuple[tuple[int, float, int], Income, float, str]] = []
+    counterparty_matches: list[tuple[tuple[int, float, int], Income, float, str]] = []
 
     for income, remaining in candidate_items:
         score = score_income(income, remaining)
-        if score[0] == 0 or score[1] <= 0.5:
-            if not (score[0] == 1 and score[2] > 60):
-                scored.append((score, income, remaining))
-        if _matches_counterparty_name(tx, income):
-            counterparty_matches.append((score, income, remaining))
+        invoice_match = score[0] == 0
+        amount_match = score[1] <= 0.5
+        account_match = income.client_id is not None and int(income.client_id) in account_client_ids
+        identifier_match = _matches_client_identifier(tx, income)
+        name_match = _matches_counterparty_name(tx, income)
+        party_match_reason = (
+            "bank_account"
+            if account_match
+            else "tax_id"
+            if identifier_match
+            else "counterparty"
+            if name_match
+            else None
+        )
+
+        if invoice_match:
+            scored.append((score, income, remaining, "invoice_number"))
+        elif amount_match and party_match_reason:
+            scored.append((score, income, remaining, party_match_reason))
+        if party_match_reason:
+            counterparty_matches.append((score, income, remaining, party_match_reason))
 
     scored.sort(key=lambda item: item[0])
     picked_ids: set[int] = set()
 
-    for score, income, remaining in scored[:5]:
-        score_value = 100 if score[0] == 0 else max(10, 90 - score[2])
-        result.append(make_income_item(income, remaining, score_value, "suggested"))
+    for score, income, remaining, match_reason in scored[:5]:
+        if match_reason == "invoice_number":
+            score_value = 100
+        elif match_reason == "bank_account":
+            score_value = 98
+        elif match_reason == "tax_id":
+            score_value = 97
+        else:
+            score_value = max(75, 95 - min(score[2], 20))
+        result.append(make_income_item(income, remaining, score_value, "suggested", match_reason))
         picked_ids.add(income.id)
 
     counterparty_matches.sort(key=lambda item: item[0][2])
-    for _score, income, remaining in counterparty_matches:
+    for _score, income, remaining, match_reason in counterparty_matches:
         if income.id in picked_ids:
             continue
-        result.append(make_income_item(income, remaining, None, "counterparty"))
+        result.append(make_income_item(income, remaining, None, "counterparty", match_reason))
         picked_ids.add(income.id)
 
     remaining_items = [
@@ -943,6 +1049,9 @@ async def save_income_allocation(
 
     project_values = {income_map[income_id].project_id for income_id, _ in normalized_allocations}
     tx.project_id = next(iter(project_values)) if len(project_values) == 1 else None
+    client_values = {income_map[income_id].client_id for income_id, _ in normalized_allocations}
+    if len(client_values) == 1 and None not in client_values:
+        await _remember_transaction_account_for_client(db, tx, next(iter(client_values)))
 
     await db.flush()
     await reconcile_income_payment_links(db, affected_income_ids | requested_income_ids)
@@ -1172,6 +1281,7 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         tx.status = "matched"
         tx.matched_type = match_type
         tx.matched_id = match_id
+        await _remember_transaction_account_for_client(db, tx, income.client_id)
         await db.flush()
         await reconcile_income_payment_links(db, {income.id})
 

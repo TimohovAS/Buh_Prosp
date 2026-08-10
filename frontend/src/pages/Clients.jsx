@@ -26,6 +26,7 @@ export default function Clients() {
     address: '',
     pib: '',
     maticni_broj: '',
+    bank_accounts: '',
     contact: '',
     client_type: 'legal',
   })
@@ -45,7 +46,15 @@ export default function Clients() {
   }, [search, isActivePage])
 
   const openAdd = () => {
-    setForm({ name: '', address: '', pib: '', maticni_broj: '', contact: '', client_type: 'legal' })
+    setForm({
+      name: '',
+      address: '',
+      pib: '',
+      maticni_broj: '',
+      bank_accounts: '',
+      contact: '',
+      client_type: 'legal',
+    })
     setModal('add')
   }
 
@@ -55,6 +64,7 @@ export default function Clients() {
       address: item.address || '',
       pib: item.pib || '',
       maticni_broj: item.maticni_broj || '',
+      bank_accounts: (item.bank_accounts || []).join('\n'),
       contact: item.contact || '',
       client_type: item.client_type || 'legal',
     })
@@ -73,10 +83,17 @@ export default function Clients() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     try {
+      const payload = {
+        ...form,
+        bank_accounts: form.bank_accounts
+          .split(/[\n,;]+/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+      }
       if (modal === 'add') {
-        await api.clients.create(form)
+        await api.clients.create(payload)
       } else {
-        await api.clients.update(modal.id, form)
+        await api.clients.update(modal.id, payload)
       }
       setModal(null)
       load()
@@ -227,6 +244,12 @@ export default function Clients() {
                   <span className="record-field-value">{detailModal.maticni_broj}</span>
                 </div>
               ) : null}
+              {detailModal.bank_accounts?.length ? (
+                <div className="record-field full">
+                  <span className="record-field-label">{tr('bankAccounts')}</span>
+                  <div className="record-field-text">{detailModal.bank_accounts.join(', ')}</div>
+                </div>
+              ) : null}
               <div className="record-field">
                 <span className="record-field-label">{tr('type')}</span>
                 <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
@@ -304,6 +327,16 @@ export default function Clients() {
                 className="form-input"
                 value={form.maticni_broj}
                 onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('bankAccounts')}</label>
+              <textarea
+                className="form-input"
+                value={form.bank_accounts}
+                onChange={(event) => setForm({ ...form, bank_accounts: event.target.value })}
+                placeholder={tr('bankAccountsHint')}
+                rows={3}
               />
             </div>
             <div className="form-group">

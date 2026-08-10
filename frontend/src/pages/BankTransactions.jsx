@@ -901,6 +901,7 @@ export default function BankTransactions() {
     const fullAmount = item.amount_full != null ? Number(item.amount_full) : amount
     const isPartial = item.type === 'income' && fullAmount > amount
     const label = item.invoice_number || item.description || `#${item.id}`
+    const matchReason = item.match_reason ? tr(`bankTxMatchReason_${item.match_reason}`) : ''
 
     return (
       <div key={`${item.type}-${item.id}`} className="bank-match-item">
@@ -909,6 +910,7 @@ export default function BankTransactions() {
             <span>{label}</span>
             {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
             {item.score != null ? <span className="bank-match-item-subtle">{item.score}%</span> : null}
+            {matchReason ? <span className="bank-match-item-subtle">{matchReason}</span> : null}
           </div>
           {item.client_name ? (
             <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '0.2rem' }}>

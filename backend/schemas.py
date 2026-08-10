@@ -70,6 +70,7 @@ class ClientBase(BaseModel):
     address: Optional[str] = None
     pib: Optional[str] = None
     maticni_broj: Optional[str] = None
+    bank_accounts: list[str] = Field(default_factory=list)
     contact: Optional[str] = None
     client_type: str = "legal"
     document_language: str = "sr"
@@ -84,6 +85,7 @@ class ClientUpdate(BaseModel):
     address: Optional[str] = None
     pib: Optional[str] = None
     maticni_broj: Optional[str] = None
+    bank_accounts: Optional[list[str]] = None
     contact: Optional[str] = None
     client_type: Optional[str] = None
     document_language: Optional[str] = None
@@ -2011,6 +2013,7 @@ class MatchCandidate(BaseModel):
     status: Optional[str] = None
     score: Optional[int] = None
     section: Optional[str] = None
+    match_reason: Optional[str] = None
 
 
 class MatchRequest(BaseModel):

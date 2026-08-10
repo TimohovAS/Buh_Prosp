@@ -16,7 +16,15 @@ from backend.bank_matching_service import (
     unmatch_transaction,
 )
 from backend.incoming_invoice_service import create_incoming_invoice
-from backend.models import BankTransactionIncomeAllocation, Contract, Expense, MonthlyObligation, PaymentType
+from backend.models import (
+    BankTransactionIncomeAllocation,
+    Client,
+    ClientBankAccount,
+    Contract,
+    Expense,
+    MonthlyObligation,
+    PaymentType,
+)
 from backend.tests.conftest import TEST_DATE, TEST_NOW
 
 pytestmark = pytest.mark.filterwarnings("ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning")
@@ -460,6 +468,189 @@ async def test_suggest_matches_returns_income_candidate_without_fixing_score(
     assert suggestions[0]["id"] == income.id
     assert suggestions[0]["type"] == "income"
     assert suggestions[0]["section"] == "suggested"
+    assert suggestions[0]["match_reason"] == "counterparty"
+
+
+@pytest.mark.asyncio
+async def test_invoice_number_in_payment_purpose_is_strongest_match(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    income = await make_income(
+        db_session,
+        amount=Decimal("12900.00"),
+        invoice_number="0029-2026",
+        client_name="JELA TRADE DOO",
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("12900.00"),
+        direction="in",
+        counterparty_name="Unrecognized payer",
+        purpose="Uplata po racunu 0029-2026",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert suggestions[0]["id"] == income.id
+    assert suggestions[0]["match_reason"] == "invoice_number"
+    assert suggestions[0]["score"] == 100
+
+
+@pytest.mark.asyncio
+async def test_exact_amount_alone_does_not_auto_suggest_unrelated_invoice(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    income = await make_income(
+        db_session,
+        amount=Decimal("100.00"),
+        invoice_number="INV-UNRELATED",
+        client_name="JELA TRADE DOO",
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("100.00"),
+        direction="in",
+        counterparty_name="S.B.H.-SO TRADE DOO INDUSTRIJSKA ZONA",
+        purpose="Payment",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert len(suggestions) == 1
+    assert suggestions[0]["id"] == income.id
+    assert suggestions[0]["section"] == "all"
+    assert suggestions[0]["match_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_confirmed_income_match_learns_account_for_future_suggestions(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    client = Client(name="S.B.H.-SO TRADE DOO", pib="109876543")
+    db_session.add(client)
+    await db_session.flush()
+    first_income = await make_income(
+        db_session,
+        amount=Decimal("50.00"),
+        invoice_number="INV-FIRST",
+        client_name=client.name,
+        client_id=client.id,
+    )
+    first_tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("50.00"),
+        direction="in",
+        counterparty_name="S.B.H.-SO TRADE DOO 205000000021600921",
+        bank_reference="ACCOUNT-LEARN-1",
+    )
+
+    await match_transaction(db_session, first_tx.id, "income", first_income.id)
+
+    account = await db_session.scalar(select(ClientBankAccount))
+    assert account.client_id == client.id
+    assert account.account_number == "205000000021600921"
+    assert account.source == "confirmed_match"
+
+    second_income = await make_income(
+        db_session,
+        amount=Decimal("80.00"),
+        invoice_number="INV-SECOND",
+        client_name=client.name,
+        client_id=client.id,
+    )
+    second_tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("80.00"),
+        direction="in",
+        counterparty_name="UNKNOWN PAYER 205000000021600921",
+        bank_reference="ACCOUNT-LEARN-2",
+    )
+
+    suggestions = await suggest_matches(db_session, second_tx)
+
+    assert suggestions[0]["id"] == second_income.id
+    assert suggestions[0]["section"] == "suggested"
+    assert suggestions[0]["match_reason"] == "bank_account"
+    assert suggestions[0]["score"] == 98
+
+
+@pytest.mark.asyncio
+async def test_mixed_client_allocation_does_not_learn_account(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    client = Client(name="Known client")
+    db_session.add(client)
+    await db_session.flush()
+    known_income = await make_income(
+        db_session,
+        amount=Decimal("50.00"),
+        invoice_number="INV-KNOWN",
+        client_name=client.name,
+        client_id=client.id,
+    )
+    unknown_income = await make_income(
+        db_session,
+        amount=Decimal("50.00"),
+        invoice_number="INV-UNKNOWN",
+        client_name="Unregistered client",
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("100.00"),
+        direction="in",
+        counterparty_name="PAYER 205000000021600921",
+        bank_reference="MIXED-CLIENTS",
+    )
+
+    await save_income_allocation(
+        db_session,
+        tx.id,
+        [
+            {"income_id": known_income.id, "amount": Decimal("50.00")},
+            {"income_id": unknown_income.id, "amount": Decimal("50.00")},
+        ],
+    )
+
+    assert await db_session.scalar(select(ClientBankAccount)) is None
+
+
+@pytest.mark.asyncio
+async def test_pib_in_transaction_identifies_client(
+    db_session,
+    make_bank_tx,
+    make_income,
+):
+    client = Client(name="JELA TRADE DOO", pib="123456789")
+    db_session.add(client)
+    await db_session.flush()
+    income = await make_income(
+        db_session,
+        amount=Decimal("12900.00"),
+        invoice_number="0029-2026",
+        client_name=client.name,
+        client_id=client.id,
+    )
+    tx = await make_bank_tx(
+        db_session,
+        amount=Decimal("12900.00"),
+        direction="in",
+        counterparty_name="Unknown company PIB 123456789",
+        bank_reference="PIB-MATCH",
+    )
+
+    suggestions = await suggest_matches(db_session, tx)
+
+    assert suggestions[0]["id"] == income.id
+    assert suggestions[0]["section"] == "suggested"
+    assert suggestions[0]["match_reason"] == "tax_id"
 
 
 @pytest.mark.asyncio
