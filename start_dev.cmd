@@ -17,6 +17,9 @@ if /I "%~1"=="--check" (
     exit /b 0
 )
 
+call :migrate
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 call :is_port_listening 8000
 if errorlevel 1 (
     echo Starting ProspEl backend...
@@ -56,6 +59,12 @@ if not exist "%ROOT%run.py" (
     exit /b 1
 )
 
+if not exist "%ROOT%alembic.ini" (
+    echo ERROR: alembic.ini was not found in:
+    echo   %ROOT%
+    exit /b 1
+)
+
 if not exist "%FRONTEND_DIR%\package.json" (
     echo ERROR: frontend package.json was not found in:
     echo   %FRONTEND_DIR%
@@ -69,6 +78,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+exit /b 0
+
+:migrate
+echo Applying database migrations...
+pushd "%ROOT%" >nul
+cmd /d /c "set DEBUG=false&& ""%BACKEND_PY%"" -m alembic upgrade head"
+if errorlevel 1 (
+    popd
+    echo ERROR: database migration failed. Servers were not started.
+    exit /b 1
+)
+popd
+echo Database is up to date.
 exit /b 0
 
 :port_warning
