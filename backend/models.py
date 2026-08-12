@@ -67,6 +67,31 @@ class Client(Base):
     incomes = relationship("Income", back_populates="client")
     contracts = relationship("Contract", back_populates="client")
     projects = relationship("Project", back_populates="client")
+    bank_account_records = relationship(
+        "ClientBankAccount",
+        back_populates="client",
+        cascade="all, delete-orphan",
+        order_by="ClientBankAccount.account_number.asc()",
+    )
+
+    @property
+    def bank_accounts(self) -> list[str]:
+        return [record.account_number for record in self.bank_account_records]
+
+
+class ClientBankAccount(Base):
+    """A confirmed domestic bank account belonging to a client."""
+
+    __tablename__ = "client_bank_accounts"
+    __table_args__ = (UniqueConstraint("account_number", name="uq_client_bank_accounts_account_number"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_number = Column(String(18), nullable=False)
+    source = Column(String(30), nullable=False, default="manual")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client", back_populates="bank_account_records")
 
 
 class Worker(Base):

@@ -4,13 +4,14 @@ from types import SimpleNamespace
 
 from backend.bank_matching_service import (
     _get_income_available_amount,
+    _matches_client_identifier,
     _matches_incoming_invoice_counterparty,
     _matches_counterparty_name,
     _matches_receipt_seller,
     _merge_income_payment_summary,
     _normalize_digits,
 )
-from backend.models import BankTransaction, Income, IncomingInvoice, PurchaseReceipt
+from backend.models import BankTransaction, Client, Income, IncomingInvoice, PurchaseReceipt
 
 
 def test_matches_counterparty_name_accepts_exact_and_substring_matches():
@@ -34,6 +35,20 @@ def test_matches_counterparty_name_rejects_empty_or_weak_names():
         _matches_counterparty_name(BankTransaction(counterparty_name="Only One"), Income(client_name="Only Other"))
         is False
     )
+
+
+def test_matches_counterparty_name_ignores_generic_legal_and_trade_words():
+    tx = BankTransaction(counterparty_name="S.B.H.-SO TRADE DOO INDUSTRIJSKA ZONA")
+    income = Income(client_name="JELA TRADE DOO")
+
+    assert _matches_counterparty_name(tx, income) is False
+
+
+def test_client_identifier_must_be_a_separate_number_not_part_of_bank_account():
+    income = Income(client=Client(name="Client", pib="205000000"))
+    tx = BankTransaction(counterparty_name="Client 205000000021600921")
+
+    assert _matches_client_identifier(tx, income) is False
 
 
 def test_matches_receipt_seller_uses_counterparty_purpose_and_reference():

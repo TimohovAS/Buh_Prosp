@@ -61,6 +61,7 @@ def make_income():
         issued_date=TEST_DATE,
         invoice_number="INV-001",
         client_name="Client",
+        client_id=None,
         project_id=None,
     ):
         income = Income(
@@ -68,6 +69,7 @@ def make_income():
             invoice_number=invoice_number,
             invoice_year=issued_date.year,
             client_name=client_name,
+            client_id=client_id,
             amount_rsd=Decimal(str(amount)),
             currency="RSD",
             exchange_rate=1.0,
