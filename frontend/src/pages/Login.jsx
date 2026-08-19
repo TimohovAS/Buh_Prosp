@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Building2 } from 'lucide-react'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -10,7 +9,6 @@ export default function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
   const brand = useEnterpriseBrand()
   const enterpriseName = brand.name && brand.name !== 'ProspEl' ? brand.name : ''
 
@@ -21,7 +19,9 @@ export default function Login({ onLoginSuccess }) {
     try {
       const data = await api.auth.login(username, password)
       onLoginSuccess?.(data)
-      navigate('/')
+      // Загружаем актуальную сборку целиком. Это важно, если экран входа был
+      // открыт во время обновления и его старые lazy chunks уже удалены.
+      window.location.replace('/')
     } catch (err) {
       setError(err.message || tr('loginError'))
     } finally {
