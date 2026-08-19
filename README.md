@@ -532,6 +532,10 @@ python -m alembic upgrade head
 | `DATABASE_URL` | Подключение к БД | `sqlite+aiosqlite:///./prospel.db` |
 | `SECRET_KEY` | Ключ для JWT (в prod: мин. 32 символа) | `dev-secret-key-change-me` |
 | `CORS_ALLOWED_ORIGINS` | Разрешённые домены (JSON-массив) | localhost в dev |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Срок короткого access-токена (минуты) | `15` |
+| `REFRESH_TOKEN_IDLE_EXPIRE_MINUTES` | Выход после бездействия (минуты) | `240` |
+| `REFRESH_TOKEN_ABSOLUTE_EXPIRE_MINUTES` | Максимальная длительность сессии (минуты) | `720` |
+| `REFRESH_COOKIE_SECURE` | Передавать refresh-cookie только по HTTPS | `false` |
 | `INCOME_LIMIT_PAUSAL` | Лимит 6 млн RSD | `6000000` |
 | `INCOME_LIMIT_VAT` | Лимит 8 млн RSD | `8000000` |
 | `LIMIT_WARNING_PERCENT` | Порог предупреждения | `80` |

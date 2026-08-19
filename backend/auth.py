@@ -1,6 +1,6 @@
 """Аутентификация и авторизация."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
@@ -30,9 +30,52 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
-    to_encode.update({"exp": expire})
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
+    to_encode.update({"exp": expire, "type": "access"})
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+
+
+def create_refresh_token(
+    data: dict,
+    *,
+    absolute_expires_at: Optional[datetime] = None,
+    now: Optional[datetime] = None,
+) -> str:
+    """Создать refresh-токен с лимитом простоя и абсолютным сроком сессии."""
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+
+    absolute_expiry = absolute_expires_at or (
+        current_time + timedelta(minutes=settings.refresh_token_absolute_expire_minutes)
+    )
+    if absolute_expiry.tzinfo is None:
+        absolute_expiry = absolute_expiry.replace(tzinfo=timezone.utc)
+
+    idle_expiry = current_time + timedelta(minutes=settings.refresh_token_idle_expire_minutes)
+    expiry = min(idle_expiry, absolute_expiry)
+    if expiry <= current_time:
+        raise JWTError("Refresh session has expired")
+
+    to_encode = data.copy()
+    to_encode.update(
+        {
+            "exp": expiry,
+            "type": "refresh",
+            "session_expires_at": int(absolute_expiry.timestamp()),
+        }
+    )
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+
+
+def decode_refresh_token(token: str) -> dict:
+    """Проверить подпись, сроки и назначение refresh-токена."""
+    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+    if payload.get("type") != "refresh":
+        raise JWTError("Invalid token type")
+    if not payload.get("sub") or not payload.get("session_expires_at"):
+        raise JWTError("Invalid refresh token claims")
+    return payload
 
 
 async def get_current_user(
@@ -48,6 +91,8 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        if payload.get("type") == "refresh":
+            raise credentials_exception
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception

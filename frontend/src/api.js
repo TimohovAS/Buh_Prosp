@@ -5,6 +5,7 @@ const API_BASE = '/api'
 export const PENDING_LINKS_UPDATE_EVENT = 'pending-links-updated'
 
 let token = null
+let refreshPromise = null
 
 function shouldBroadcastPendingLinksUpdate(endpoint, options = {}) {
   const method = String(options.method || 'GET').toUpperCase()
@@ -24,8 +25,9 @@ export function broadcastPendingLinksUpdate() {
 
 export function setToken(t) {
   token = t
-  if (t) localStorage.setItem('prospel_token', t)
-  else localStorage.removeItem('prospel_token')
+  // Access-токен короткоживущий и остаётся только в памяти вкладки.
+  // Удаляем старое значение, сохранённое предыдущей версией приложения.
+  localStorage.removeItem('prospel_token')
 }
 
 export function setUser(u) {
@@ -43,7 +45,6 @@ export function getUser() {
 }
 
 export function getToken() {
-  if (!token) token = localStorage.getItem('prospel_token')
   return token
 }
 
@@ -55,7 +56,61 @@ function handleUnauthorized() {
 
 function getAuthHeaders(extraHeaders = {}) {
   const t = getToken()
-  return t ? { Authorization: `Bearer ${t}`, ...extraHeaders } : extraHeaders
+  return t ? { ...extraHeaders, Authorization: `Bearer ${t}` } : extraHeaders
+}
+
+async function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = fetch(API_BASE + '/auth/refresh', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  })
+    .then(async (res) => {
+      if (res.status === 401) return 'expired'
+      if (!res.ok) return 'unavailable'
+      const data = await res.json()
+      setToken(data.access_token)
+      setUser(data.user)
+      return 'refreshed'
+    })
+    .catch(() => 'unavailable')
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
+async function fetchWithAuth(pathOrUrl, options = {}) {
+  const execute = () =>
+    fetch(resolveApiUrl(pathOrUrl), {
+      ...options,
+      credentials: 'same-origin',
+      headers: getAuthHeaders(options.headers),
+    })
+
+  let res = await execute()
+  if (res.status !== 401) return res
+
+  const refreshResult = await refreshAccessToken()
+  if (refreshResult === 'expired') {
+    handleUnauthorized()
+    throw new Error('Unauthorized')
+  }
+  if (refreshResult !== 'refreshed') {
+    const message = tr('sessionRefreshUnavailable')
+    window.dispatchEvent(new CustomEvent('api-error', { detail: message }))
+    throw new Error(message)
+  }
+
+  res = await execute()
+  if (res.status === 401) {
+    handleUnauthorized()
+    throw new Error('Unauthorized')
+  }
+  return res
 }
 
 async function getErrorMessage(res, fallbackMessage = null) {
@@ -93,16 +148,10 @@ function getFilenameFromResponse(res, fallbackFilename) {
 async function uploadFiles(endpoint, files, fieldName = 'files') {
   const formData = new FormData()
   Array.from(files || []).forEach((file) => formData.append(fieldName, file))
-  const res = await fetch(resolveApiUrl(endpoint), {
+  const res = await fetchWithAuth(endpoint, {
     method: 'POST',
     body: formData,
-    headers: getAuthHeaders(),
   })
-
-  if (res.status === 401) {
-    handleUnauthorized()
-    throw new Error('Unauthorized')
-  }
 
   if (!res.ok) {
     const msg = await getErrorMessage(res)
@@ -118,15 +167,9 @@ async function uploadFiles(endpoint, files, fieldName = 'files') {
 }
 
 async function downloadBlob(pathOrUrl, fallbackFilename, fallbackMessage = 'Download failed', options = {}) {
-  const res = await fetch(resolveApiUrl(pathOrUrl), {
+  const res = await fetchWithAuth(pathOrUrl, {
     ...options,
-    headers: getAuthHeaders(options.headers),
   })
-
-  if (res.status === 401) {
-    handleUnauthorized()
-    throw new Error('Unauthorized')
-  }
 
   if (!res.ok) {
     const msg = await getErrorMessage(res, fallbackMessage)
@@ -151,18 +194,11 @@ async function request(endpoint, options = {}) {
     'Content-Type': 'application/json',
     ...options.headers,
   }
-  const t = getToken()
-  if (t) headers['Authorization'] = `Bearer ${t}`
 
-  const res = await fetch(API_BASE + endpoint, {
+  const res = await fetchWithAuth(endpoint, {
     ...options,
     headers,
   })
-
-  if (res.status === 401) {
-    handleUnauthorized()
-    throw new Error('Unauthorized')
-  }
 
   if (!res.ok) {
     const msg = await getErrorMessage(res)
@@ -195,6 +231,7 @@ export const api = {
       return fetch(API_BASE + '/auth/login', {
         method: 'POST',
         body: params,
+        credentials: 'same-origin',
         headers: { Accept: 'application/json' },
       }).then(async (r) => {
         if (!r.ok) {
@@ -209,9 +246,24 @@ export const api = {
         return data
       })
     },
-    logout: () => {
-      setToken(null)
-      setUser(null)
+    restoreSession: async () => {
+      const refreshResult = await refreshAccessToken()
+      if (refreshResult === 'expired') {
+        setToken(null)
+        setUser(null)
+      }
+      return refreshResult
+    },
+    logout: async () => {
+      try {
+        await fetch(API_BASE + '/auth/logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+        })
+      } finally {
+        setToken(null)
+        setUser(null)
+      }
     },
     updateMe: (data) => request('/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   },

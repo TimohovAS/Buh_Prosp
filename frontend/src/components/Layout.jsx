@@ -288,8 +288,8 @@ export default function Layout({ lang, toggleLang, children }) {
               gap: '0.5rem',
               alignItems: 'center',
             }}
-            onClick={() => {
-              api.auth.logout()
+            onClick={async () => {
+              await api.auth.logout()
               window.location.href = '/login'
             }}
           >

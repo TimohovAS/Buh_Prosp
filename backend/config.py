@@ -35,7 +35,13 @@ class Settings(BaseSettings):
     # В dev допустим предсказуемый ключ, но в prod обязателен внешний безопасный SECRET_KEY.
     secret_key: str = DEFAULT_DEV_SECRET_KEY
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24  # 24 часа
+    access_token_expire_minutes: int = 15
+    refresh_token_idle_expire_minutes: int = 60 * 4  # 4 часа без обновления сессии
+    refresh_token_absolute_expire_minutes: int = 60 * 12  # максимум 12 часов от входа
+    refresh_cookie_name: str = "prospel_refresh_token"
+    # Для текущего HTTP-доступа по локальной сети Secure должен быть выключен.
+    # После перевода приложения на HTTPS задайте REFRESH_COOKIE_SECURE=true.
+    refresh_cookie_secure: bool = False
 
     # Лимиты по законодательству Сербии (RSD)
     income_limit_pausal: int = 6_000_000  # Порог выхода из паушального режима

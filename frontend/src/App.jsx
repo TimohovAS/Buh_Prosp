@@ -52,16 +52,55 @@ const APP_PAGE_ROUTES = [
 ]
 
 function ProtectedRoute({ children }) {
-  const [checking, setChecking] = useState(true)
-  const [authenticated, setAuthenticated] = useState(false)
+  const [authStatus, setAuthStatus] = useState('checking')
+  const [retryAttempt, setRetryAttempt] = useState(0)
 
   useEffect(() => {
-    setAuthenticated(!!getToken())
-    setChecking(false)
-  }, [])
+    let active = true
 
-  if (checking) return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
-  if (!authenticated) return <Navigate to="/login" replace />
+    async function checkAuthentication() {
+      if (getToken()) {
+        setAuthStatus('authenticated')
+        return
+      }
+
+      const restoreStatus = await api.auth.restoreSession()
+      if (active) {
+        setAuthStatus(
+          restoreStatus === 'refreshed'
+            ? 'authenticated'
+            : restoreStatus === 'expired'
+              ? 'unauthorized'
+              : 'unavailable'
+        )
+      }
+    }
+
+    setAuthStatus('checking')
+    checkAuthentication()
+    return () => {
+      active = false
+    }
+  }, [retryAttempt])
+
+  if (authStatus === 'checking') {
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
+  }
+  if (authStatus === 'unavailable') {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <p>{tr('sessionCheckUnavailable')}</p>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={() => setRetryAttempt((value) => value + 1)}
+        >
+          {tr('retry')}
+        </button>
+      </div>
+    )
+  }
+  if (authStatus === 'unauthorized') return <Navigate to="/login" replace />
   return children
 }
 
@@ -100,7 +139,7 @@ function App() {
 
   useEffect(() => {
     const user = getUser()
-    if (getToken() && user?.default_language && user.default_language !== getLang()) {
+    if (user?.default_language && user.default_language !== getLang()) {
       setLang(user.default_language)
       setLangState(user.default_language)
     }
