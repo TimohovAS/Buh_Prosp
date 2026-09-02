@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FileText, Plus, Save, Trash2 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
+import ClientSelect from '../components/ClientSelect'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
@@ -12,7 +14,7 @@ import SortIndicator from '../components/SortIndicator'
 import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_DASH, formatInteger, todayIso } from '../utils/formatters'
+import { UI_DASH, formatInteger, formatMoney2, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
@@ -48,6 +50,17 @@ export default function Contracts() {
     note: '',
   })
   const [itemsForm, setItemsForm] = useState([])
+  const [formError, setFormError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const hasContractItems = useMemo(() => itemsForm.some((item) => item.description?.trim()), [itemsForm])
+  const contractItemsTotal = useMemo(
+    () =>
+      itemsForm
+        .filter((item) => item.description?.trim())
+        .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0), 0),
+    [itemsForm]
+  )
 
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
 
@@ -79,6 +92,7 @@ export default function Contracts() {
   }, [isActivePage])
 
   const openAdd = () => {
+    setFormError('')
     const currentYear = new Date().getFullYear()
     const fallbackNumber = `${currentYear}-0001`
     api.contracts
@@ -120,6 +134,7 @@ export default function Contracts() {
   }
 
   const openEdit = (contract) => {
+    setFormError('')
     setForm({
       number: contract.number,
       date: contract.date,
@@ -176,15 +191,17 @@ export default function Contracts() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    setFormError('')
     if (!form.number?.trim()) {
-      alert(tr('contractNumberRequired'))
+      setFormError(tr('contractNumberRequired'))
       return
     }
     if (!form.client_id) {
-      alert(tr('selectClient'))
+      setFormError(tr('selectClient'))
       return
     }
 
+    setSaving(true)
     try {
       const payload = {
         ...form,
@@ -225,7 +242,16 @@ export default function Contracts() {
       load()
     } catch (error) {
       console.error(error)
+      setFormError(error?.message || tr('contractSaveError'))
+    } finally {
+      setSaving(false)
     }
+  }
+
+  const closeContractModal = () => {
+    if (saving) return
+    setModal(null)
+    setFormError('')
   }
 
   const filteredItems = useMemo(() => {
@@ -571,140 +597,175 @@ export default function Contracts() {
 
       <Modal
         isOpen={!!modal}
-        onClose={() => setModal(null)}
-        title={`${modal === 'add' ? tr('add') : tr('edit')} ${tr('contractForm')}`}
-        maxWidth="600px"
+        onClose={closeContractModal}
+        title={modal === 'add' ? tr('contractAddTitle') : tr('contractEditTitle')}
+        maxWidth="1120px"
+        className="contract-editor-modal"
+        bodyClassName="contract-editor-modal-body"
       >
         {modal ? (
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">{tr('contractNumber')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.number}
-                onChange={(event) => setForm({ ...form, number: event.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('date')}</label>
-              <DatePicker
-                value={form.date}
-                onChange={(value) => setForm({ ...form, date: value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('client')}</label>
-              <select
-                className="form-input"
-                value={form.client_id}
-                onChange={(event) => setForm({ ...form, client_id: event.target.value })}
-                required
-              >
-                <option value="">
-                  {UI_DASH} {tr('selectClient')} {UI_DASH}
-                </option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('project')}</label>
-              <ProjectSelect
-                projects={projects}
-                value={form.project_id}
-                onChange={(value) => setForm({ ...form, project_id: value })}
-                allowEmpty
-                emptyLabel={UI_DASH}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('contractType')}</label>
-              <select
-                className="form-input"
-                value={form.contract_type}
-                onChange={(event) => setForm({ ...form, contract_type: event.target.value })}
-              >
-                {Object.entries(CONTRACT_TYPE_KEYS).map(([value, key]) => (
-                  <option key={value} value={value}>
-                    {tr(key)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('contractSubject')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.subject}
-                onChange={(event) => setForm({ ...form, subject: event.target.value })}
-                placeholder={tr('contractSubjectPlaceholder')}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">
-                {tr('amount')} {tr('amountIfNoItems')}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                className="form-input"
-                value={form.amount}
-                onChange={(event) => setForm({ ...form, amount: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('validFrom')}</label>
-              <DatePicker
-                value={form.validity_start}
-                onChange={(value) => setForm({ ...form, validity_start: value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('validTo')}</label>
-              <DatePicker
-                value={form.validity_end}
-                onChange={(value) => setForm({ ...form, validity_end: value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('status')}</label>
-              <select
-                className="form-input"
-                value={form.status}
-                onChange={(event) => setForm({ ...form, status: event.target.value })}
-              >
-                <option value="active">{tr('active')}</option>
-                <option value="completed">{tr('completed')}</option>
-                <option value="cancelled">{tr('cancelled')}</option>
-              </select>
-            </div>
-            <div className="card-title" style={{ marginTop: '1rem' }}>
-              {tr('contractItems')}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-              {itemsForm.map((item, index) => (
-                <div key={index} className="card" style={{ padding: '0.75rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">{tr('description')}</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={item.description}
-                      onChange={(event) => updateItem(index, 'description', event.target.value)}
-                    />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+          <form onSubmit={handleSubmit} className="contract-editor-form">
+            <section className="contract-editor-section">
+              <div className="contract-editor-section-head">
+                <span className="contract-editor-section-icon">
+                  <FileText size={18} />
+                </span>
+                <div>
+                  <h4>{tr('contractGeneralDetails')}</h4>
+                  <p>{tr('contractGeneralHint')}</p>
+                </div>
+              </div>
+              <div className="contract-editor-fields">
+                <div className="form-group">
+                  <label className="form-label">{tr('contractNumber')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.number}
+                    onChange={(event) => setForm({ ...form, number: event.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('date')}</label>
+                  <DatePicker
+                    value={form.date}
+                    onChange={(value) => setForm({ ...form, date: value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('client')}</label>
+                  <ClientSelect
+                    clients={clients}
+                    value={form.client_id}
+                    onChange={(value) => setForm({ ...form, client_id: value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('project')}</label>
+                  <ProjectSelect
+                    projects={projects}
+                    value={form.project_id}
+                    onChange={(value) => setForm({ ...form, project_id: value })}
+                    allowEmpty
+                    emptyLabel={UI_DASH}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('contractType')}</label>
+                  <select
+                    className="form-input"
+                    value={form.contract_type}
+                    onChange={(event) => setForm({ ...form, contract_type: event.target.value })}
+                  >
+                    {Object.entries(CONTRACT_TYPE_KEYS).map(([value, key]) => (
+                      <option key={value} value={value}>
+                        {tr(key)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('contractSubject')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.subject}
+                    onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                    placeholder={tr('contractSubjectPlaceholder')}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    {tr('amount')} {tr('amountIfNoItems')}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="form-input"
+                    value={form.amount}
+                    onChange={(event) => setForm({ ...form, amount: event.target.value })}
+                    disabled={hasContractItems}
+                  />
+                  {hasContractItems ? (
+                    <span className="contract-editor-field-hint">{tr('contractAmountCalculated')}</span>
+                  ) : null}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('validFrom')}</label>
+                  <DatePicker
+                    value={form.validity_start}
+                    onChange={(value) => setForm({ ...form, validity_start: value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('validTo')}</label>
+                  <DatePicker
+                    value={form.validity_end}
+                    onChange={(value) => setForm({ ...form, validity_end: value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{tr('status')}</label>
+                  <select
+                    className="form-input"
+                    value={form.status}
+                    onChange={(event) => setForm({ ...form, status: event.target.value })}
+                  >
+                    <option value="active">{tr('active')}</option>
+                    <option value="completed">{tr('completed')}</option>
+                    <option value="cancelled">{tr('cancelled')}</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="contract-editor-section contract-editor-items-section">
+              <div className="contract-editor-section-head">
+                <span className="contract-editor-section-icon">
+                  <FileText size={18} />
+                </span>
+                <div>
+                  <h4>{tr('contractItems')}</h4>
+                  <p>{tr('contractItemsHint')}</p>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>
+                  <Plus size={16} /> {tr('addItem')}
+                </button>
+              </div>
+              <div className="contract-editor-item-columns" aria-hidden="true">
+                <span>{tr('description')}</span>
+                <span>{tr('quantity')}</span>
+                <span>{tr('unit')}</span>
+                <span>{tr('price')}</span>
+                <span>{tr('amount')}</span>
+                <span></span>
+              </div>
+              <div className="contract-editor-items-list">
+                {itemsForm.length === 0 ? (
+                  <div className="contract-editor-items-empty">{tr('contractItemsEmpty')}</div>
+                ) : null}
+                {itemsForm.map((item, index) => (
+                  <div key={index} className="contract-editor-item-row">
+                    <span className="contract-editor-item-index">{index + 1}</span>
+                    <div className="form-group contract-editor-item-description">
+                      <label className="form-label">{tr('description')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={item.description}
+                        onChange={(event) => updateItem(index, 'description', event.target.value)}
+                        placeholder={tr('contractItemDescriptionPlaceholder')}
+                      />
+                    </div>
                     <div className="form-group">
                       <label className="form-label">{tr('quantity')}</label>
                       <input
                         type="number"
+                        min="0"
                         step="0.01"
                         className="form-input"
                         value={item.quantity}
@@ -724,30 +785,32 @@ export default function Contracts() {
                       <label className="form-label">{tr('price')}</label>
                       <input
                         type="number"
+                        min="0"
                         step="0.01"
                         className="form-input"
                         value={item.price}
                         onChange={(event) => updateItem(index, 'price', event.target.value)}
                       />
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ color: 'var(--color-text-muted)' }}>
-                      {tr('amount')}: {formatInteger((item.quantity || 0) * (item.price || 0))}
+                    <div className="contract-editor-item-amount">
+                      <span>{tr('amount')}</span>
+                      <strong>{formatMoney2((item.quantity || 0) * (item.price || 0))} RSD</strong>
                     </div>
-                    <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(index)}>
-                      {tr('delete')}
+                    <button
+                      type="button"
+                      className="contract-editor-remove-item"
+                      onClick={() => removeItem(index)}
+                      aria-label={`${tr('delete')} ${index + 1}`}
+                      title={tr('delete')}
+                    >
+                      <Trash2 size={17} />
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={addItem}>
-                {tr('addItem')}
-              </button>
-            </div>
-            <div className="form-group" style={{ marginTop: '1rem' }}>
+                ))}
+              </div>
+            </section>
+
+            <div className="form-group contract-editor-note">
               <label className="form-label">{tr('note')}</label>
               <textarea
                 className="form-input"
@@ -756,12 +819,24 @@ export default function Contracts() {
                 rows={3}
               />
             </div>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
+
+            {formError ? <div className="alert alert-danger contract-editor-error">{formError}</div> : null}
+
+            <div className="modal-actions contract-editor-actions">
+              <div className="contract-editor-total">
+                <span>{hasContractItems ? tr('contractItemsTotal') : tr('amount')}</span>
+                <strong>{formatMoney2(hasContractItems ? contractItemsTotal : form.amount || 0)} RSD</strong>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeContractModal}
+                disabled={saving}
+              >
                 {tr('cancel')}
               </button>
-              <button type="submit" className="btn btn-primary">
-                {tr('save')}
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                <Save size={17} /> {saving ? tr('saving') : tr('save')}
               </button>
             </div>
           </form>

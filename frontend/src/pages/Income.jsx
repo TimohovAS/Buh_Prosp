@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
@@ -1406,22 +1407,15 @@ export default function Income() {
               <div className="income-form-grid">
                 <div className="form-group">
                   <label className="form-label">{tr('client')}</label>
-                  <select
-                    className="form-input"
+                  <ClientSelect
+                    clients={clients}
                     value={form.client_id}
-                    onChange={(event) => {
-                      const id = event.target.value ? parseInt(event.target.value, 10) : ''
+                    onChange={(value) => {
+                      const id = value ? parseInt(value, 10) : ''
                       setForm({ ...form, client_id: id, contract_id: '', contract_payment_type: '' })
                     }}
                     required
-                  >
-                    <option value="">{`${UI_DASH} ${tr('selectClient')} ${UI_DASH}`}</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
               <div className="income-form-grid">

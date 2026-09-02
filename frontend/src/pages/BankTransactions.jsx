@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
+import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
@@ -2071,25 +2072,25 @@ export default function BankTransactions() {
                     </div>
                     <div className="form-group">
                       <label className="form-label">{tr('client')}</label>
-                      <select
-                        className="form-input"
+                      <ClientSelect
+                        clients={loanClients}
                         value={loanForm.client_id}
-                        onChange={(event) => {
-                          const client = loanClients.find((item) => String(item.id) === event.target.value)
+                        onChange={(value) => {
                           setLoanForm({
                             ...loanForm,
-                            client_id: event.target.value,
-                            counterparty_name: client?.name || loanForm.counterparty_name,
+                            client_id: value,
                           })
                         }}
-                      >
-                        <option value="">{UI_DASH}</option>
-                        {loanClients.map((client) => (
-                          <option key={client.id} value={client.id}>
-                            {client.name}
-                          </option>
-                        ))}
-                      </select>
+                        onSelect={(client) => {
+                          if (client?.name) {
+                            setLoanForm((current) => ({
+                              ...current,
+                              client_id: String(client.id),
+                              counterparty_name: client.name,
+                            }))
+                          }
+                        }}
+                      />
                     </div>
                     <div className="form-group">
                       <label className="form-label">{tr('loanAgreementNumber')}</label>

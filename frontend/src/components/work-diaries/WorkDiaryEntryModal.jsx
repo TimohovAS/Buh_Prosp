@@ -6,6 +6,7 @@ import DatePicker from '../DatePicker'
 import FieldTooltip from '../FieldTooltip'
 import Modal from '../Modal'
 import MultiSelect from '../MultiSelect'
+import ProjectSelect from '../ProjectSelect'
 import {
   DEFAULT_MATERIAL_BILLING_MULTIPLIER,
   MATERIAL_UNITS,
@@ -438,19 +439,12 @@ export default function WorkDiaryEntryModal({
           </label>
           <label className="form-group">
             <span className="form-label">{tr('project')}</span>
-            <select
-              className="form-input"
+            <ProjectSelect
+              projects={selectableProjects}
               value={form.project_id}
               required
-              onChange={(event) => setFormField('project_id', event.target.value)}
-            >
-              <option value="">{tr('select')}</option>
-              {selectableProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setFormField('project_id', value)}
+            />
           </label>
           <div className="form-group">
             <span className="form-label">{tr('workDiariesWorkersLabel')} *</span>

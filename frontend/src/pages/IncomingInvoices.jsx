@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
+import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import SharedStatusBadge from '../components/StatusBadge'
@@ -728,33 +730,21 @@ export default function IncomingInvoices() {
             </div>
             <div className="form-group">
               <label className="form-label">{tr('client')}</label>
-              <select
-                className="form-input"
+              <ClientSelect
+                clients={clients}
                 value={form.client_id}
-                onChange={(e) => setForm({ ...form, client_id: e.target.value })}
-              >
-                <option value="">-</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm({ ...form, client_id: value })}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">{tr('project')}</label>
-              <select
-                className="form-input"
+              <ProjectSelect
+                projects={projects}
                 value={form.project_id}
-                onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-              >
-                <option value="">-</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.code} - {project.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm({ ...form, project_id: value })}
+                allowEmpty
+                emptyLabel={UI_DASH}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">{tr('amount')}</label>

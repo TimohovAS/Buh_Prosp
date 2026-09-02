@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr, getLang } from '../i18n'
+import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
@@ -1308,18 +1309,11 @@ export default function Projects() {
             </div>
             <div className="form-group">
               <label className="form-label">{tr('client')}</label>
-              <select
-                className="form-input"
+              <ClientSelect
+                clients={clients}
                 value={form.client_id}
-                onChange={(event) => setForm({ ...form, client_id: event.target.value })}
-              >
-                <option value="">{UI_DASH}</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm({ ...form, client_id: value })}
+              />
             </div>
             {modal === 'add' ? (
               <div className="form-group">
