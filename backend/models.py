@@ -58,7 +58,10 @@ class Client(Base):
     address = Column(String(500))
     pib = Column(String(20))  # PIB/ИНН
     maticni_broj = Column(String(20))  # MB / maticni broj
-    contact = Column(String(200))
+    contact = Column(String(200))  # контактное лицо
+    phone = Column(String(100))
+    email = Column(String(120))
+    website = Column(String(200))
     client_type = Column(String(20), default="legal")  # legal, individual
     document_language = Column(String(5), default="sr")
     is_archived = Column(Boolean, default=False)

@@ -72,6 +72,9 @@ class ClientBase(BaseModel):
     maticni_broj: Optional[str] = None
     bank_accounts: list[str] = Field(default_factory=list)
     contact: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
     client_type: str = "legal"
     document_language: str = "sr"
 
@@ -87,6 +90,9 @@ class ClientUpdate(BaseModel):
     maticni_broj: Optional[str] = None
     bank_accounts: Optional[list[str]] = None
     contact: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
     client_type: Optional[str] = None
     document_language: Optional[str] = None
     is_archived: Optional[bool] = None

@@ -1,4 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
+import {
+  Building2,
+  ContactRound,
+  Globe2,
+  Landmark,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  Trash2,
+  UserRound,
+} from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -9,6 +21,90 @@ import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import useListPageState from '../hooks/useListPageState'
 import { UI_DASH } from '../utils/formatters'
+
+const EMPTY_CLIENT_FORM = {
+  name: '',
+  address: '',
+  pib: '',
+  maticni_broj: '',
+  bank_accounts: '',
+  contact: '',
+  phone: '',
+  email: '',
+  website: '',
+  client_type: 'legal',
+}
+
+function splitContactValues(value) {
+  return String(value || '')
+    .split(/[,;\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function ClientContactRow({ icon: Icon, label, children }) {
+  // Тип контакта показывает иконка, поэтому подпись живёт только в подсказке
+  return (
+    <div className="client-profile-contact-row" title={label} aria-label={label} role="group">
+      <Icon aria-hidden="true" size={16} />
+      <div className="client-profile-contact-value">{children}</div>
+    </div>
+  )
+}
+
+function ClientContacts({ client }) {
+  const phones = splitContactValues(client.phone)
+  const emails = splitContactValues(client.email)
+  const websites = splitContactValues(client.website)
+  const person = String(client.contact || '').trim()
+
+  if (!person && !phones.length && !emails.length && !websites.length) {
+    return <div className="client-profile-empty">{UI_DASH}</div>
+  }
+
+  return (
+    <div className="client-profile-contact-list">
+      {person ? (
+        <ClientContactRow icon={UserRound} label={tr('contactPerson')}>
+          <span>{person}</span>
+        </ClientContactRow>
+      ) : null}
+      {phones.length ? (
+        <ClientContactRow icon={Phone} label={tr('phone')}>
+          {phones.map((phone) => (
+            // tel: не принимает пробелы и слэши сербской записи номера
+            <a key={phone} href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+              {phone}
+            </a>
+          ))}
+        </ClientContactRow>
+      ) : null}
+      {emails.length ? (
+        <ClientContactRow icon={Mail} label={tr('email')}>
+          {emails.map((email) => (
+            <a key={email} href={`mailto:${email}`}>
+              {email}
+            </a>
+          ))}
+        </ClientContactRow>
+      ) : null}
+      {websites.length ? (
+        <ClientContactRow icon={Globe2} label={tr('website')}>
+          {websites.map((website) => (
+            <a
+              key={website}
+              href={website.startsWith('http') ? website : `https://${website}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {website}
+            </a>
+          ))}
+        </ClientContactRow>
+      ) : null}
+    </div>
+  )
+}
 
 export default function Clients() {
   const location = useLocation()
@@ -21,15 +117,7 @@ export default function Clients() {
     initialSortCol: 'name',
     initialSortAsc: true,
   })
-  const [form, setForm] = useState({
-    name: '',
-    address: '',
-    pib: '',
-    maticni_broj: '',
-    bank_accounts: '',
-    contact: '',
-    client_type: 'legal',
-  })
+  const [form, setForm] = useState(EMPTY_CLIENT_FORM)
 
   const load = () => {
     setLoading(true)
@@ -46,15 +134,7 @@ export default function Clients() {
   }, [search, isActivePage])
 
   const openAdd = () => {
-    setForm({
-      name: '',
-      address: '',
-      pib: '',
-      maticni_broj: '',
-      bank_accounts: '',
-      contact: '',
-      client_type: 'legal',
-    })
+    setForm(EMPTY_CLIENT_FORM)
     setModal('add')
   }
 
@@ -66,6 +146,9 @@ export default function Clients() {
       maticni_broj: item.maticni_broj || '',
       bank_accounts: (item.bank_accounts || []).join('\n'),
       contact: item.contact || '',
+      phone: item.phone || '',
+      email: item.email || '',
+      website: item.website || '',
       client_type: item.client_type || 'legal',
     })
     setModal({ type: 'edit', id: item.id })
@@ -212,74 +295,90 @@ export default function Clients() {
       <EntityDetailModal
         isOpen={!!detailModal}
         onClose={() => setDetailModal(null)}
-        title={
-          detailModal
-            ? `${tr('client')} ${UI_DASH} ${detailModal.name || `#${detailModal.id}`}`
-            : tr('client')
-        }
-        maxWidth="1040px"
+        title={tr('clientDetails')}
+        maxWidth="920px"
+        className="client-detail-modal"
         details={
           detailModal ? (
-            <div className="record-field-grid record-field-grid-wide">
-              <div className="record-field full">
-                <span className="record-field-label">{tr('name')}</span>
-                <span className="record-field-value">{detailModal.name || UI_DASH}</span>
+            <div className="client-profile">
+              <div className="client-profile-hero">
+                <div className="client-profile-identity">
+                  <span className="client-profile-avatar">
+                    <Building2 aria-hidden="true" size={24} />
+                  </span>
+                  <div>
+                    <span className="client-profile-type">{getClientTypeLabel(detailModal)}</span>
+                    <h4>{detailModal.name || `#${detailModal.id}`}</h4>
+                    <div className="client-profile-address">
+                      <MapPin aria-hidden="true" size={15} />
+                      <span>{detailModal.address || tr('addressNotSpecified')}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="client-profile-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => openEditFromDetail(detailModal)}
+                  >
+                    <Pencil aria-hidden="true" size={16} /> {tr('edit')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => handleDeleteFromDetail(detailModal)}
+                  >
+                    <Trash2 aria-hidden="true" size={16} /> {tr('delete')}
+                  </button>
+                </div>
               </div>
-              {/* Необязательные реквизиты показываем только заполненными */}
-              {detailModal.address ? (
-                <div className="record-field full">
-                  <span className="record-field-label">{tr('address')}</span>
-                  <div className="record-field-text">{detailModal.address}</div>
-                </div>
-              ) : null}
-              {detailModal.pib ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('pib')}</span>
-                  <span className="record-field-value">{detailModal.pib}</span>
-                </div>
-              ) : null}
-              {detailModal.maticni_broj ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('maticniBroj')}</span>
-                  <span className="record-field-value">{detailModal.maticni_broj}</span>
-                </div>
-              ) : null}
-              {detailModal.bank_accounts?.length ? (
-                <div className="record-field full">
-                  <span className="record-field-label">{tr('bankAccounts')}</span>
-                  <div className="record-field-text">{detailModal.bank_accounts.join(', ')}</div>
-                </div>
-              ) : null}
-              <div className="record-field">
-                <span className="record-field-label">{tr('type')}</span>
-                <span className="record-field-value">{getClientTypeLabel(detailModal)}</span>
+
+              <div className="client-profile-content">
+                <section className="client-profile-panel client-profile-requisites">
+                  <div className="client-profile-panel-title">
+                    <Building2 aria-hidden="true" size={17} />
+                    <h4>{tr('clientRequisites')}</h4>
+                  </div>
+                  <div className="client-profile-facts">
+                    <div className="client-profile-fact">
+                      <span>{tr('pib')}</span>
+                      <strong>{detailModal.pib || UI_DASH}</strong>
+                    </div>
+                    <div className="client-profile-fact">
+                      <span>{tr('maticniBroj')}</span>
+                      <strong>{detailModal.maticni_broj || UI_DASH}</strong>
+                    </div>
+                    <div className="client-profile-fact">
+                      <span>{tr('type')}</span>
+                      <strong>{getClientTypeLabel(detailModal)}</strong>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="client-profile-panel">
+                  <div className="client-profile-panel-title">
+                    <ContactRound aria-hidden="true" size={17} />
+                    <h4>{tr('clientContacts')}</h4>
+                  </div>
+                  <ClientContacts client={detailModal} />
+                </section>
+
+                <section className="client-profile-panel">
+                  <div className="client-profile-panel-title">
+                    <Landmark aria-hidden="true" size={17} />
+                    <h4>{tr('bankAccounts')}</h4>
+                  </div>
+                  {detailModal.bank_accounts?.length ? (
+                    <div className="client-profile-bank-list">
+                      {detailModal.bank_accounts.map((account) => (
+                        <code key={account}>{account}</code>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="client-profile-empty">{UI_DASH}</div>
+                  )}
+                </section>
               </div>
-              {detailModal.contact ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('contact')}</span>
-                  <span className="record-field-value">{detailModal.contact}</span>
-                </div>
-              ) : null}
-            </div>
-          ) : null
-        }
-        actions={
-          detailModal ? (
-            <div className="record-actions-grid">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => openEditFromDetail(detailModal)}
-              >
-                {tr('edit')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => handleDeleteFromDetail(detailModal)}
-              >
-                {tr('delete')}
-              </button>
             </div>
           ) : null
         }
@@ -289,76 +388,171 @@ export default function Clients() {
         isOpen={!!modal}
         onClose={() => setModal(null)}
         title={`${modal === 'add' ? tr('add') : tr('edit')} ${tr('clientForm')}`}
+        className="client-form-modal"
+        bodyClassName="client-form-modal-body"
+        maxWidth="860px"
+        resizable={false}
       >
         {modal ? (
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">{tr('name')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('address')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.address}
-                onChange={(event) => setForm({ ...form, address: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('pib')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.pib}
-                onChange={(event) => setForm({ ...form, pib: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('maticniBroj')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.maticni_broj}
-                onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('bankAccounts')}</label>
+          <form className="client-form" onSubmit={handleSubmit}>
+            <section className="client-form-section">
+              <div className="client-form-section-title">
+                <Building2 aria-hidden="true" size={17} />
+                <h4>{tr('clientRequisites')}</h4>
+              </div>
+              <div className="client-form-fields">
+                <div className="form-group client-form-field--span-2">
+                  <label className="form-label" htmlFor="client-form-name">
+                    {tr('name')}
+                  </label>
+                  <input
+                    id="client-form-name"
+                    type="text"
+                    className="form-input"
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    maxLength={200}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="client-form-pib">
+                    {tr('pib')}
+                  </label>
+                  <input
+                    id="client-form-pib"
+                    type="text"
+                    className="form-input"
+                    value={form.pib}
+                    onChange={(event) => setForm({ ...form, pib: event.target.value })}
+                    inputMode="numeric"
+                    maxLength={20}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="client-form-maticni">
+                    {tr('maticniBroj')}
+                  </label>
+                  <input
+                    id="client-form-maticni"
+                    type="text"
+                    className="form-input"
+                    value={form.maticni_broj}
+                    onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
+                    inputMode="numeric"
+                    maxLength={20}
+                  />
+                </div>
+                <div className="form-group client-form-field--span-3">
+                  <label className="form-label" htmlFor="client-form-address">
+                    {tr('address')}
+                  </label>
+                  <input
+                    id="client-form-address"
+                    type="text"
+                    className="form-input"
+                    value={form.address}
+                    onChange={(event) => setForm({ ...form, address: event.target.value })}
+                    maxLength={500}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="client-form-type">
+                    {tr('type')}
+                  </label>
+                  <select
+                    id="client-form-type"
+                    className="form-input"
+                    value={form.client_type}
+                    onChange={(event) => setForm({ ...form, client_type: event.target.value })}
+                  >
+                    <option value="legal">{tr('legalEntity')}</option>
+                    <option value="individual">{tr('individualEntity')}</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="client-form-section">
+              <div className="client-form-section-title">
+                <ContactRound aria-hidden="true" size={17} />
+                <h4>{tr('clientContacts')}</h4>
+              </div>
+              <div className="client-form-fields client-form-fields--pairs">
+                <div className="form-group client-form-field--span-2">
+                  <label className="form-label" htmlFor="client-form-contact">
+                    {tr('contactPerson')}
+                  </label>
+                  <input
+                    id="client-form-contact"
+                    type="text"
+                    className="form-input"
+                    value={form.contact}
+                    onChange={(event) => setForm({ ...form, contact: event.target.value })}
+                    maxLength={200}
+                  />
+                </div>
+                <div className="form-group client-form-field--span-2">
+                  <label className="form-label" htmlFor="client-form-phone">
+                    {tr('phone')}
+                  </label>
+                  <input
+                    id="client-form-phone"
+                    type="tel"
+                    className="form-input"
+                    value={form.phone}
+                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    maxLength={100}
+                  />
+                  <small className="client-form-hint">{tr('clientPhoneHint')}</small>
+                </div>
+                <div className="form-group client-form-field--span-2">
+                  <label className="form-label" htmlFor="client-form-email">
+                    {tr('email')}
+                  </label>
+                  <input
+                    id="client-form-email"
+                    type="text"
+                    className="form-input"
+                    inputMode="email"
+                    value={form.email}
+                    onChange={(event) => setForm({ ...form, email: event.target.value })}
+                    maxLength={120}
+                  />
+                </div>
+                <div className="form-group client-form-field--span-2">
+                  <label className="form-label" htmlFor="client-form-website">
+                    {tr('website')}
+                  </label>
+                  <input
+                    id="client-form-website"
+                    type="text"
+                    className="form-input"
+                    inputMode="url"
+                    value={form.website}
+                    onChange={(event) => setForm({ ...form, website: event.target.value })}
+                    maxLength={200}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="client-form-section">
+              <div className="client-form-section-title">
+                <Landmark aria-hidden="true" size={17} />
+                <h4>{tr('bankAccounts')}</h4>
+              </div>
               <textarea
                 className="form-input"
+                aria-label={tr('bankAccounts')}
                 value={form.bank_accounts}
                 onChange={(event) => setForm({ ...form, bank_accounts: event.target.value })}
-                placeholder={tr('bankAccountsHint')}
                 rows={3}
               />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('contact')}</label>
-              <input
-                type="text"
-                className="form-input"
-                value={form.contact}
-                onChange={(event) => setForm({ ...form, contact: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('type')}</label>
-              <select
-                className="form-input"
-                value={form.client_type}
-                onChange={(event) => setForm({ ...form, client_type: event.target.value })}
-              >
-                <option value="legal">{tr('legalEntity')}</option>
-                <option value="individual">{tr('individualEntity')}</option>
-              </select>
-            </div>
+              <small className="client-form-hint">{tr('bankAccountsHint')}</small>
+            </section>
+
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>
                 {tr('cancel')}

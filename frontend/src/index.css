@@ -1990,6 +1990,328 @@ tr.row-reversal {
   gap: 1rem;
 }
 
+.modal.client-detail-modal {
+  width: min(920px, 94vw);
+  max-width: none;
+}
+
+.client-detail-modal .record-detail-card {
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}
+
+.client-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.client-profile-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.11), rgba(59, 130, 246, 0.025));
+}
+
+.client-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.client-profile-identity > div {
+  min-width: 0;
+}
+
+.client-profile-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.14);
+  color: #7db2ff;
+}
+
+.client-profile-type {
+  display: inline-block;
+  margin-bottom: 0.22rem;
+  color: #7db2ff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.client-profile-identity h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.12rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.client-profile-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.client-profile-address svg {
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+}
+
+.client-profile-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.client-profile-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.client-profile-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.client-profile-panel,
+.client-form-section {
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.client-profile-requisites {
+  grid-column: 1 / -1;
+}
+
+.client-profile-panel-title,
+.client-form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  color: #7db2ff;
+}
+
+.client-profile-panel-title h4,
+.client-form-section-title h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.86rem;
+}
+
+.client-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.client-profile-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(15, 20, 25, 0.36);
+}
+
+.client-profile-fact span {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.client-profile-fact strong {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.client-profile-contact-list,
+.client-profile-bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.client-profile-contact-row {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.client-profile-contact-row svg {
+  margin-top: 0.1rem;
+  color: var(--color-text-muted);
+}
+
+.client-profile-contact-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.75rem;
+}
+
+.client-profile-contact-row span,
+.client-profile-contact-row a {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.client-profile-contact-row a:hover {
+  color: #7db2ff;
+}
+
+.client-profile-bank-list code {
+  display: block;
+  padding: 0.52rem 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 7px;
+  background: rgba(15, 20, 25, 0.36);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.client-profile-empty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 700px) {
+  .client-profile-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .client-profile-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .client-profile-content,
+  .client-profile-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .client-profile-requisites {
+    grid-column: auto;
+  }
+}
+
+.modal.client-form-modal {
+  width: min(860px, 94vw);
+  max-width: none;
+}
+
+.modal-body.client-form-modal-body {
+  padding: 0.9rem 1rem 1rem;
+}
+
+.client-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.client-form-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem 0.75rem;
+}
+
+.client-form-section .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.client-form-field--span-2 {
+  grid-column: span 2;
+}
+
+.client-form-field--span-3 {
+  grid-column: span 3;
+}
+
+.client-form-section textarea.form-input {
+  display: block;
+  min-height: 6rem;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.client-form-hint {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.client-form > .modal-actions {
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 940px) {
+  .client-form-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-form-field--span-3 {
+    grid-column: span 2;
+  }
+
+  /* Контактные поля остаются парами, а не растягиваются на всю строку */
+  .client-form-fields--pairs .client-form-field--span-2 {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .client-form-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .client-form-field--span-2,
+  .client-form-field--span-3 {
+    grid-column: auto;
+  }
+}
+
 .modal.receipt-import-modal {
   width: min(96vw, 1080px);
   max-width: none;
