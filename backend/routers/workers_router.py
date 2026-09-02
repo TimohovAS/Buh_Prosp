@@ -17,7 +17,7 @@ from backend.db_utils import (
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
-from backend.planned_expenses_service import sync_worker_payout_planned_payment
+from backend.planned_expenses_service import sync_worker_payout_planned_payment, sync_worker_salary_plan
 from backend.schemas import (
     CashEntryResponse,
     WorkerCreate,
@@ -59,6 +59,12 @@ async def _get_salary_category_id(db: AsyncSession) -> int | None:
     )
     category = result.scalar_one_or_none()
     return int(category.id) if category else None
+
+
+async def _sync_salary_plan(db: AsyncSession, worker: Worker) -> None:
+    project_id = worker.default_project_id or await get_unassigned_project_id(db)
+    category_id = worker.default_category_id or await _get_salary_category_id(db)
+    await sync_worker_salary_plan(db, worker, category_id=category_id, project_id=project_id)
 
 
 async def _resolve_payout_links(
@@ -274,6 +280,8 @@ async def create_worker(
     if not worker.name:
         raise HTTPException(400, "Name is required")
     db.add(worker)
+    await db.flush()
+    await _sync_salary_plan(db, worker)
     await db.commit()
     await db.refresh(worker)
     return WorkerResponse.model_validate(worker)
@@ -292,6 +300,7 @@ async def update_worker(
     worker.name = (worker.name or "").strip()
     if not worker.name:
         raise HTTPException(400, "Name is required")
+    await _sync_salary_plan(db, worker)
     await db.commit()
     await db.refresh(worker)
     return WorkerResponse.model_validate(worker)
@@ -305,6 +314,7 @@ async def archive_worker(
 ):
     worker = await _get_worker_or_404(db, worker_id)
     worker.is_active = False
+    await _sync_salary_plan(db, worker)
     await db.commit()
     return {"ok": True}
 

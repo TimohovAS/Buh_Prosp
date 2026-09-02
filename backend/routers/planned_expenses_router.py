@@ -1,4 +1,4 @@
-"""Роутер планируемых (периодических) расходов."""
+"""Роутер разовых и периодических планируемых расходов."""
 
 from datetime import date, timedelta
 from typing import Optional
@@ -48,7 +48,7 @@ async def list_planned_expenses(
     current_user: User = Depends(get_current_user_required),
 ):
     """Список планируемых расходов."""
-    q = select(PlannedExpense).order_by(PlannedExpense.name)
+    q = select(PlannedExpense).where(PlannedExpense.worker_id.is_(None)).order_by(PlannedExpense.name)
     if is_active is not None:
         q = q.where(PlannedExpense.is_active == is_active)
     if category:
@@ -114,7 +114,7 @@ async def mark_planned_expense_paid(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Отметить платёж планируемого расхода как оплаченный и создать запись в расходах."""
+    """Отметить платёж планируемого расхода как оплаченный в планировщике."""
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.id == data.planned_expense_id))
     pe = r.scalar_one_or_none()
     if not pe:
@@ -146,7 +146,7 @@ async def mark_planned_expense_unpaid(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Отменить отметку об оплате: сторно расхода, удаление PlannedExpensePayment."""
+    """Отменить отметку об оплате в планировщике."""
     due_d = data.due_date if hasattr(data.due_date, "year") else date.fromisoformat(str(data.due_date))
     r = await db.execute(
         select(PlannedExpensePayment).where(
@@ -187,10 +187,10 @@ async def create_planned_expense(
         project_id=project_id,
         worker_id=worker_id,
         period=data.period,
-        payment_day=data.payment_day,
-        payment_day_of_week=data.payment_day_of_week,
+        payment_day=None if data.period in {"once", "weekly"} else data.payment_day,
+        payment_day_of_week=data.payment_day_of_week if data.period == "weekly" else None,
         start_date=data.start_date,
-        end_date=data.end_date,
+        end_date=None if data.period == "once" else data.end_date,
         reminder_days=data.reminder_days,
         is_active=data.is_active,
         note=data.note,
@@ -240,6 +240,15 @@ async def update_planned_expense(
         dump["project_id"] = await get_unassigned_project_id(db)
     if "worker_id" in dump:
         dump["worker_id"] = await _validate_worker_id(db, dump.get("worker_id"))
+    effective_period = dump.get("period", pe.period)
+    if effective_period == "once":
+        dump["payment_day"] = None
+        dump["payment_day_of_week"] = None
+        dump["end_date"] = None
+    elif effective_period == "weekly":
+        dump["payment_day"] = None
+    else:
+        dump["payment_day_of_week"] = None
     for k, v in dump.items():
         setattr(pe, k, v)
     await db.commit()

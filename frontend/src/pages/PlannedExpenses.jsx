@@ -20,6 +20,7 @@ import {
 import { amountSearchHay } from '../utils/searchUtils'
 
 const PERIODS = [
+  { value: 'once', label: 'once' },
   { value: 'weekly', label: 'weekly' },
   { value: 'monthly', label: 'monthly' },
   { value: 'quarterly', label: 'quarterly' },
@@ -47,25 +48,12 @@ const CATEGORIES = [
   { value: 'other', label: 'plannedCatOther' },
 ] // legacy, kept for table display fallback
 
-const WORKER_CATEGORY_MARKERS = ['зарп', 'zarad', 'salary', 'услуг', 'uslug', 'service']
-
-const isWorkerLinkedCategory = (category) => {
-  if (!category) return false
-  const text =
-    typeof category === 'string'
-      ? category
-      : [category.name_ru, category.name_sr, category.name, category.label, category.value, category.category]
-          .filter(Boolean)
-          .join(' ')
-  const normalized = text.toLowerCase()
-  return WORKER_CATEGORY_MARKERS.some((marker) => normalized.includes(marker))
-}
-
 export default function PlannedExpenses() {
   const location = useLocation()
   const isActivePage = location.pathname === '/planned-expenses'
   const [items, setItems] = useState([])
   const [upcoming, setUpcoming] = useState([])
+  const [showPaidUpcoming, setShowPaidUpcoming] = useState(false)
   const [loading, setLoading] = useState(true)
   const [upcomingDays, setUpcomingDaysState] = useState(() => {
     const saved = localStorage.getItem('prospel_upcoming_days')
@@ -93,8 +81,7 @@ export default function PlannedExpenses() {
     category: '',
     category_id: '',
     project_id: '',
-    worker_id: '',
-    period: 'monthly',
+    period: 'once',
     payment_day: 5,
     payment_day_of_week: 0,
     start_date: todayIso(),
@@ -153,8 +140,7 @@ export default function PlannedExpenses() {
       category: '',
       category_id: '',
       project_id: unassigned ? String(unassigned.id) : '',
-      worker_id: '',
-      period: 'monthly',
+      period: 'once',
       payment_day: 5,
       payment_day_of_week: 0,
       start_date: todayIso(),
@@ -175,7 +161,6 @@ export default function PlannedExpenses() {
       category: item.category || '\u2014',
       category_id: item.category_id ?? '',
       project_id: item.project_id ?? (unassignedProject ? String(unassignedProject.id) : ''),
-      worker_id: item.worker_id ?? '',
       period: item.period || 'monthly',
       payment_day: item.payment_day ?? 5,
       payment_day_of_week: item.payment_day_of_week ?? 0,
@@ -192,10 +177,6 @@ export default function PlannedExpenses() {
     e.preventDefault()
     try {
       const categoryDefaultProjectId = getCategoryDefaultProjectId(form.category_id)
-      const selectedPayloadCategory = form.category_id
-        ? apiCategories.find((c) => String(c.id) === String(form.category_id))
-        : form.category
-      const shouldLinkWorker = isWorkerLinkedCategory(selectedPayloadCategory)
       const payload = {
         name: form.name.trim(),
         description: form.description?.trim() || null,
@@ -210,12 +191,13 @@ export default function PlannedExpenses() {
             : unassignedProject
               ? unassignedProject.id
               : null,
-        worker_id: shouldLinkWorker && form.worker_id ? parseInt(form.worker_id, 10) : null,
-        period: form.period || 'monthly',
-        payment_day: form.period === 'weekly' ? null : parseInt(form.payment_day) || 1,
+        worker_id: null,
+        period: form.period || 'once',
+        payment_day:
+          form.period === 'once' || form.period === 'weekly' ? null : parseInt(form.payment_day) || 1,
         payment_day_of_week: form.period === 'weekly' ? (parseInt(form.payment_day_of_week) ?? 0) : null,
         start_date: form.start_date,
-        end_date: form.end_date || null,
+        end_date: form.period === 'once' ? null : form.end_date || null,
         reminder_days: parseInt(form.reminder_days) || 0,
         is_active: form.is_active,
         note: form.note?.trim() || null,
@@ -292,33 +274,41 @@ export default function PlannedExpenses() {
     )
   })
 
-  const totalMonthly = items
+  const plannedExpensesMonthly = items
     .filter((i) => i.is_active)
     .reduce((sum, i) => {
-      if (i.period === 'weekly') return sum + i.amount * 4.33
-      if (i.period === 'monthly') return sum + i.amount
-      if (i.period === 'quarterly') return sum + i.amount / 3
-      if (i.period === 'yearly') return sum + i.amount / 12
+      const amount = Number(i.amount) || 0
+      if (i.period === 'weekly') return sum + amount * 4.33
+      if (i.period === 'monthly') return sum + amount
+      if (i.period === 'quarterly') return sum + amount / 3
+      if (i.period === 'yearly') return sum + amount / 12
       return sum
     }, 0)
 
+  const workerSalariesMonthly = workers
+    .filter((worker) => worker.is_active !== false)
+    .reduce((sum, worker) => {
+      if (worker.pay_scheme === 'monthly') return sum + (Number(worker.monthly_rate) || 0)
+      if (worker.pay_scheme === 'weekly') return sum + (Number(worker.weekly_rate) || 0) * 4.33
+      return sum
+    }, 0)
+
+  const totalMonthly = plannedExpensesMonthly + workerSalariesMonthly
+
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
-  const {
-    getCategoryById,
-    getCategoryDefaultProjectId,
-    getCategoryLabel: getResolvedCategoryLabel,
-  } = useCategoryProjectResolver(apiCategories, lang)
+  const { getCategoryDefaultProjectId, getCategoryLabel: getResolvedCategoryLabel } =
+    useCategoryProjectResolver(apiCategories, lang)
   const getCategoryLabel = (item) => {
     const resolved = getResolvedCategoryLabel(item, '')
     if (resolved) return resolved
     const legacy = CATEGORIES.find((c) => c.value === item.category)
     return legacy ? tr(legacy.label) : item.category || UI_DASH
   }
-  const selectedFormCategory = form.category_id ? getCategoryById(form.category_id) : form.category
-  const showWorkerField = isWorkerLinkedCategory(selectedFormCategory)
   const getWorkerName = (workerId) =>
     workers.find((worker) => Number(worker.id) === Number(workerId))?.name || ''
+  const paidUpcomingCount = upcoming.filter((item) => item.is_paid).length
+  const visibleUpcoming = showPaidUpcoming ? upcoming : upcoming.filter((item) => !item.is_paid)
 
   return (
     <>
@@ -365,6 +355,93 @@ export default function PlannedExpenses() {
       <PageTabs group="expenses" />
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* Planned expenses list */}
+        <div className="card">
+          <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>{tr('plannedList')}</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{tr('plannedName')}</th>
+                  <th>{tr('category')}</th>
+                  <th>{tr('amount')}</th>
+                  <th>{tr('plannedPeriod')}</th>
+                  <th>{tr('plannedSchedule')}</th>
+                  <th>{tr('status')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7}>{tr('loading')}</td>
+                  </tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>
+                      {tr('plannedNoItems')}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((i) => (
+                    <tr key={i.id}>
+                      <td>
+                        <strong>{i.name}</strong>
+                        {i.description && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            {i.description.slice(0, 40)}
+                            {i.description.length > 40 ? '\u2026' : ''}
+                          </div>
+                        )}
+                      </td>
+                      <td>{getCategoryLabel(i)}</td>
+                      <td>
+                        {fmtAmount(i.amount)} {i.currency}
+                      </td>
+                      <td>{tr(PERIODS.find((p) => p.value === i.period)?.label || i.period)}</td>
+                      <td>
+                        {i.period === 'once'
+                          ? formatDate(i.start_date)
+                          : i.period === 'weekly'
+                            ? tr(
+                                DAYS_OF_WEEK.find((d) => d.value === i.payment_day_of_week)?.label || 'dayMon'
+                              )
+                            : (i.payment_day ?? '\u2014')}
+                      </td>
+                      <td>
+                        <SharedStatusBadge
+                          tone={i.is_active ? 'success' : 'muted'}
+                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
+                        >
+                          {i.is_active ? tr('active') : tr('inactive')}
+                        </SharedStatusBadge>
+                      </td>
+                      <td>
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>
+                          {tr('edit')}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          style={{ marginLeft: '0.5rem' }}
+                          onClick={() => handleDelete(i.id)}
+                        >
+                          {tr('delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {(items.some((i) => i.is_active) || workerSalariesMonthly > 0) && (
+            <div style={{ marginTop: '1rem', fontWeight: 600, color: 'var(--color-accent)' }}>
+              {tr('plannedMonthlyTotal')}: {fmtAmount(plannedExpensesMonthly)} RSD (
+              {tr('plannedWithSalaries')}: {fmtAmount(totalMonthly)} RSD)
+            </div>
+          )}
+        </div>
+
         {/* Upcoming payments */}
         <div className="card">
           <div
@@ -375,17 +452,40 @@ export default function PlannedExpenses() {
               marginBottom: '1rem',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>{tr('plannedUpcoming')}</h3>
-            <select
-              className="form-input"
-              style={{ width: 'auto' }}
-              value={upcomingDays}
-              onChange={(e) => setUpcomingDays(parseInt(e.target.value))}
-            >
-              <option value={30}>30 {tr('days')}</option>
-              <option value={60}>60 {tr('days')}</option>
-              <option value={90}>90 {tr('days')}</option>
-            </select>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>{tr('plannedUpcoming')}</h3>
+              <div className="dashboard-summary-note" style={{ marginTop: '0.25rem' }}>
+                {tr('plannedWorkerSalaryHint')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showPaidUpcoming}
+                  onChange={(event) => setShowPaidUpcoming(event.target.checked)}
+                />
+                {tr('plannedShowPaid')} ({paidUpcomingCount})
+              </label>
+              <select
+                className="form-input"
+                style={{ width: 'auto' }}
+                value={upcomingDays}
+                onChange={(e) => setUpcomingDays(parseInt(e.target.value))}
+              >
+                <option value={30}>30 {tr('days')}</option>
+                <option value={60}>60 {tr('days')}</option>
+                <option value={90}>90 {tr('days')}</option>
+              </select>
+            </div>
           </div>
           <div className="table-wrap">
             <table>
@@ -400,14 +500,16 @@ export default function PlannedExpenses() {
                 </tr>
               </thead>
               <tbody>
-                {upcoming.length === 0 ? (
+                {visibleUpcoming.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
-                      {tr('plannedNoUpcoming')}
+                      {paidUpcomingCount > 0 && !showPaidUpcoming
+                        ? tr('plannedNoUnpaidUpcoming')
+                        : tr('plannedNoUpcoming')}
                     </td>
                   </tr>
                 ) : (
-                  upcoming.map((u, idx) => (
+                  visibleUpcoming.map((u, idx) => (
                     <tr
                       key={`${u.planned_expense_id}-${u.due_date}-${idx}`}
                       style={u.is_paid ? { opacity: 0.85 } : {}}
@@ -453,90 +555,6 @@ export default function PlannedExpenses() {
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Planned expenses list */}
-        <div className="card">
-          <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>{tr('plannedList')}</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tr('plannedName')}</th>
-                  <th>{tr('category')}</th>
-                  <th>{tr('amount')}</th>
-                  <th>{tr('worker')}</th>
-                  <th>{tr('plannedPeriod')}</th>
-                  <th>{tr('plannedPaymentDay')}</th>
-                  <th>{tr('status')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={8}>{tr('loading')}</td>
-                  </tr>
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ color: 'var(--color-text-muted)' }}>
-                      {tr('plannedNoItems')}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((i) => (
-                    <tr key={i.id}>
-                      <td>
-                        <strong>{i.name}</strong>
-                        {i.description && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                            {i.description.slice(0, 40)}
-                            {i.description.length > 40 ? '\u2026' : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td>{getCategoryLabel(i)}</td>
-                      <td>
-                        {fmtAmount(i.amount)} {i.currency}
-                      </td>
-                      <td>{getWorkerName(i.worker_id) || UI_DASH}</td>
-                      <td>{tr(PERIODS.find((p) => p.value === i.period)?.label || i.period)}</td>
-                      <td>
-                        {i.period === 'weekly'
-                          ? tr(DAYS_OF_WEEK.find((d) => d.value === i.payment_day_of_week)?.label || 'dayMon')
-                          : (i.payment_day ?? '\u2014')}
-                      </td>
-                      <td>
-                        <SharedStatusBadge
-                          tone={i.is_active ? 'success' : 'muted'}
-                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
-                        >
-                          {i.is_active ? tr('active') : tr('inactive')}
-                        </SharedStatusBadge>
-                      </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(i)}>
-                          {tr('edit')}
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          style={{ marginLeft: '0.5rem' }}
-                          onClick={() => handleDelete(i.id)}
-                        >
-                          {tr('delete')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          {items.filter((i) => i.is_active).length > 0 && (
-            <div style={{ marginTop: '1rem', fontWeight: 600, color: 'var(--color-accent)' }}>
-              {tr('plannedMonthlyTotal')}: {fmtAmount(totalMonthly)} RSD
-            </div>
-          )}
         </div>
       </div>
 
@@ -654,7 +672,6 @@ export default function PlannedExpenses() {
                       category_id: cid,
                       category: cat ? cat.name_ru : '',
                       project_id: defaultProjectId || form.project_id,
-                      worker_id: isWorkerLinkedCategory(cat) ? form.worker_id : '',
                     })
                   }}
                 >
@@ -675,23 +692,6 @@ export default function PlannedExpenses() {
                   required
                 />
               </div>
-              {showWorkerField ? (
-                <div className="form-group">
-                  <label className="form-label">{tr('worker')}</label>
-                  <select
-                    className="form-input"
-                    value={form.worker_id}
-                    onChange={(e) => setForm({ ...form, worker_id: e.target.value })}
-                  >
-                    <option value="">{UI_DASH}</option>
-                    {workers.map((worker) => (
-                      <option key={worker.id} value={worker.id}>
-                        {worker.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
               <div className="form-group">
                 <label className="form-label">{tr('plannedPeriod')}</label>
                 <select
@@ -706,7 +706,7 @@ export default function PlannedExpenses() {
                   ))}
                 </select>
               </div>
-              {form.period === 'weekly' ? (
+              {form.period === 'once' ? null : form.period === 'weekly' ? (
                 <div className="form-group">
                   <label className="form-label">{tr('plannedPaymentDayOfWeek')}</label>
                   <select
@@ -735,19 +735,29 @@ export default function PlannedExpenses() {
                   />
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: form.period === 'once' ? '1fr' : '1fr 1fr',
+                  gap: '1rem',
+                }}
+              >
                 <div className="form-group">
-                  <label className="form-label">{tr('plannedStartDate')} *</label>
+                  <label className="form-label">
+                    {form.period === 'once' ? tr('plannedDueDate') : tr('plannedStartDate')} *
+                  </label>
                   <DatePicker
                     value={form.start_date}
                     onChange={(v) => setForm({ ...form, start_date: v })}
                     required
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('plannedEndDate')}</label>
-                  <DatePicker value={form.end_date} onChange={(v) => setForm({ ...form, end_date: v })} />
-                </div>
+                {form.period === 'once' ? null : (
+                  <div className="form-group">
+                    <label className="form-label">{tr('plannedEndDate')}</label>
+                    <DatePicker value={form.end_date} onChange={(v) => setForm({ ...form, end_date: v })} />
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">{tr('plannedReminderDays')}</label>

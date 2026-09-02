@@ -292,6 +292,9 @@ export default function Dashboard() {
             <div className="dashboard-summary-value" style={{ color: 'var(--color-warning)' }}>
               {fmtCurrency(data.planned_expenses_until_month_end)}
             </div>
+            <div className="dashboard-summary-note">
+              {tr('plannedExpensesReference')}: {fmtCurrency(data.planned_expenses_only_until_month_end ?? 0)}
+            </div>
             <div className="dashboard-summary-links">
               <Link to="/planned-expenses" className="dashboard-link">
                 {tr('plannedExpenses')} {UI_ARROW}

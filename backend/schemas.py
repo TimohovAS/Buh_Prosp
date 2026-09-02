@@ -1381,7 +1381,7 @@ class UpcomingObligationItem(BaseModel):
 
 
 class UpcomingPlannedItem(BaseModel):
-    """Просроченный или приближающийся периодический расход."""
+    """Просроченный или приближающийся планируемый расход."""
 
     planned_expense_id: int
     name: str
@@ -1425,6 +1425,7 @@ class DashboardStats(BaseModel):
     financial_result_all_time: Decimal
     cash_register_balance: Decimal  # текущий остаток наличных в кассе
     planned_expenses_until_month_end: Decimal  # планируемые расходы + обязательные платежи до конца месяца
+    planned_expenses_only_until_month_end: Decimal = Decimal("0")
     trip_settlement_remaining_total: Decimal = Decimal("0")
     trip_settlement_open_count: int = 0
     trip_settlement_until_month_end: Decimal = Decimal("0")
@@ -1577,7 +1578,7 @@ class PlannedExpenseBase(BaseModel):
     category_id: Optional[int] = None
     project_id: Optional[int] = None
     worker_id: Optional[int] = None
-    period: str = "monthly"  # weekly, monthly, quarterly, yearly
+    period: Literal["once", "weekly", "monthly", "quarterly", "yearly"] = "once"
     payment_day: Optional[int] = None  # 1-31 для monthly/quarterly/yearly
     payment_day_of_week: Optional[int] = None  # 0-6 для weekly (0=пн)
     start_date: DateType
@@ -1607,7 +1608,7 @@ class PlannedExpenseUpdate(BaseModel):
     category_id: Optional[int] = None
     project_id: Optional[int] = None
     worker_id: Optional[int] = None
-    period: Optional[str] = None
+    period: Optional[Literal["once", "weekly", "monthly", "quarterly", "yearly"]] = None
     payment_day: Optional[int] = None
     payment_day_of_week: Optional[int] = None
     start_date: Optional[DateType] = None

@@ -1045,7 +1045,7 @@ class PeriodClosure(Base):
 
 
 class PlannedExpense(Base):
-    """Планируемые (периодические) расходы — аренда, интернет, телефон и т.д."""
+    """Разовые и периодические планируемые расходы."""
 
     __tablename__ = "planned_expenses"
 
@@ -1058,7 +1058,7 @@ class PlannedExpense(Base):
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     worker_id = Column(Integer, ForeignKey("workers.id"), nullable=True)
-    period = Column(String(20), default="monthly")  # weekly, monthly, quarterly, yearly
+    period = Column(String(20), default="once")  # once, weekly, monthly, quarterly, yearly
     payment_day = Column(Integer)  # День месяца (1-31) для monthly/quarterly/yearly
     payment_day_of_week = Column(Integer)  # День недели (0=пн, 6=вс) для weekly
     start_date = Column(Date, nullable=False)

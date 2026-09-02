@@ -8,20 +8,111 @@ from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import PlannedExpense, PlannedExpensePayment, WorkerPayout
+from backend.models import PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
+
+
+AUTO_WORKER_SALARY_NOTE = "auto:worker_salary_plan"
+DEFAULT_MONTHLY_SALARY_DAY = 5
+DEFAULT_WEEKLY_SALARY_WEEKDAY = 0
+
+
+def worker_salary_plan_settings(worker: "Worker") -> tuple[Decimal, str] | None:
+    """Return the configured worker rate and matching planning period."""
+    if worker.pay_scheme == "monthly":
+        amount = to_decimal(worker.monthly_rate or ZERO_DECIMAL)
+        return (amount, "monthly") if amount > ZERO_DECIMAL else None
+    if worker.pay_scheme == "weekly":
+        amount = to_decimal(worker.weekly_rate or ZERO_DECIMAL)
+        return (amount, "weekly") if amount > ZERO_DECIMAL else None
+    return None
+
+
+async def sync_worker_salary_plan(
+    db: AsyncSession,
+    worker: "Worker",
+    *,
+    category_id: int | None = None,
+    project_id: int | None = None,
+    today: date | None = None,
+) -> PlannedExpense | None:
+    """Keep one hidden salary plan in sync with the worker's configured pay rate."""
+    current_date = today or date.today()
+    result = await db.execute(
+        select(PlannedExpense).where(PlannedExpense.worker_id == worker.id).order_by(PlannedExpense.id.asc())
+    )
+    existing_plans = result.scalars().all()
+    generated_plan = next((item for item in existing_plans if item.note == AUTO_WORKER_SALARY_NOTE), None)
+    target = generated_plan or (existing_plans[0] if existing_plans else None)
+    settings = worker_salary_plan_settings(worker)
+    created_target = False
+
+    if not worker.is_active:
+        for plan in existing_plans:
+            plan.is_active = False
+        return None
+    if settings is None:
+        if generated_plan is not None:
+            generated_plan.is_active = False
+        return None
+
+    amount, period = settings
+    if target is None:
+        created_target = True
+        target = PlannedExpense(
+            name=f"Зарплата — {worker.name}",
+            amount=amount,
+            currency="RSD",
+            category_id=category_id,
+            project_id=project_id,
+            worker_id=worker.id,
+            period=period,
+            start_date=current_date,
+            reminder_days=3,
+            is_active=True,
+            note=AUTO_WORKER_SALARY_NOTE,
+        )
+        db.add(target)
+
+    target.amount = amount
+    target.is_active = True
+    if target.note == AUTO_WORKER_SALARY_NOTE:
+        period_changed = target.period != period
+        target.name = f"Зарплата — {worker.name}"
+        target.currency = "RSD"
+        target.category_id = category_id
+        target.project_id = project_id
+        target.period = period
+        target.end_date = None
+        if period == "monthly":
+            if created_target or period_changed:
+                target.start_date = date(current_date.year, current_date.month, 1)
+            target.payment_day = DEFAULT_MONTHLY_SALARY_DAY
+            target.payment_day_of_week = None
+        else:
+            if created_target or period_changed:
+                target.start_date = current_date - timedelta(days=current_date.weekday())
+            target.payment_day = None
+            target.payment_day_of_week = DEFAULT_WEEKLY_SALARY_WEEKDAY
+
+    await db.flush()
+    return target
 
 
 def next_payment_dates(pe: "PlannedExpense", from_date: date, limit: int = 12) -> list[date]:
     """Генерирует список дат следующих платежей для планируемого расхода."""
     result = []
-    if not pe.is_active or pe.start_date > from_date:
+    if not pe.is_active:
         return result
 
     effective_end = pe.end_date if pe.end_date else date(from_date.year + 2, 12, 31)
 
-    if pe.period == "weekly":
+    if pe.period == "once":
+        if pe.start_date >= from_date and pe.start_date <= effective_end:
+            result.append(pe.start_date)
+
+    elif pe.period == "weekly":
         d = pe.start_date
-        while d <= from_date:
+        while d < from_date:
             d += timedelta(days=7)
         while len(result) < limit and d <= effective_end:
             if d >= from_date:
@@ -111,7 +202,11 @@ def payment_dates_in_range(pe: "PlannedExpense", range_start: date, range_end: d
     if effective_end < range_start:
         return result
 
-    if pe.period == "weekly":
+    if pe.period == "once":
+        if range_start <= pe.start_date <= min(range_end, effective_end):
+            result.append(pe.start_date)
+
+    elif pe.period == "weekly":
         d = pe.start_date
         while d < range_start:
             d += timedelta(days=7)

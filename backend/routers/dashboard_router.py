@@ -169,12 +169,13 @@ async def get_dashboard(
         )
         paid_pairs = {(row[0], row[1]) for row in paid_result.fetchall()}
 
-    planned_expenses_until_month_end = planned_expenses_sum_until_including_overdue(
+    planned_expenses_only_until_month_end = planned_expenses_sum_until_including_overdue(
         planned_items,
         range_start,
         month_end,
         paid_pairs,
     )
+    planned_expenses_until_month_end = planned_expenses_only_until_month_end
 
     await get_or_create_obligations(db, selected_year)
     obligations_result = await db.execute(
@@ -323,6 +324,7 @@ async def get_dashboard(
         available_money_now=available_money_now,
         financial_result_all_time=financial_result_all_time,
         planned_expenses_until_month_end=planned_expenses_until_month_end,
+        planned_expenses_only_until_month_end=planned_expenses_only_until_month_end,
         trip_settlement_remaining_total=trip_settlement_summary.total,
         trip_settlement_open_count=trip_settlement_summary.count,
         trip_settlement_until_month_end=trip_settlement_summary.due_total,
