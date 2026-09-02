@@ -29,17 +29,21 @@ def upgrade() -> None:
     planned_expenses = sa.Table("planned_expenses", metadata, autoload_with=bind)
     current_date = date.today()
 
-    rows = bind.execute(
-        sa.select(
-            workers.c.id,
-            workers.c.name,
-            workers.c.pay_scheme,
-            workers.c.weekly_rate,
-            workers.c.monthly_rate,
-            workers.c.default_project_id,
-            workers.c.default_category_id,
-        ).where(workers.c.is_active.is_(True))
-    ).mappings().all()
+    rows = (
+        bind.execute(
+            sa.select(
+                workers.c.id,
+                workers.c.name,
+                workers.c.pay_scheme,
+                workers.c.weekly_rate,
+                workers.c.monthly_rate,
+                workers.c.default_project_id,
+                workers.c.default_category_id,
+            ).where(workers.c.is_active.is_(True))
+        )
+        .mappings()
+        .all()
+    )
 
     for worker in rows:
         if worker["pay_scheme"] == "monthly":
