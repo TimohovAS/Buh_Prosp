@@ -661,6 +661,8 @@ class BankImportFile(Base):
     transaction_count = Column(Integer, default=0)
     created_income = Column(Integer, default=0)
     created_expense = Column(Integer, default=0)
+    income_amount = Column(Numeric(14, 2), nullable=True)
+    expense_amount = Column(Numeric(14, 2), nullable=True)
     errors_count = Column(Integer, default=0)
     imported_by = Column(Integer, ForeignKey("users.id"))
     imported_at = Column(DateTime, default=datetime.utcnow, index=True)

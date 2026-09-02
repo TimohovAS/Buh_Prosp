@@ -1,7 +1,8 @@
 """Импорт банковских изводов в BankTransaction."""
 
 from datetime import date
-from typing import Optional, Any
+from decimal import Decimal
+from typing import Optional, Any, Literal
 import hashlib
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/bank-import", tags=["bank-import"])
 
 
 class ApplyItem(BaseModel):
-    type: str  # income | expense
+    type: Literal["income", "expense"]
     tx: dict[str, Any]
     file_hash: Optional[str] = None
 
@@ -29,6 +30,8 @@ class ImportFileMeta(BaseModel):
     file_name: str
     file_size: int
     transaction_count: int
+    income_amount: Optional[Decimal] = None
+    expense_amount: Optional[Decimal] = None
 
 
 class ApplyRequest(BaseModel):
@@ -53,6 +56,8 @@ async def _recent_files(db: AsyncSession, limit: int = 10) -> list[dict[str, Any
             "transaction_count": x.transaction_count,
             "created_income": x.created_income,
             "created_expense": x.created_expense,
+            "income_amount": str(x.income_amount) if x.income_amount is not None else None,
+            "expense_amount": str(x.expense_amount) if x.expense_amount is not None else None,
             "errors_count": x.errors_count,
             "imported_by": user_map.get(x.imported_by) if x.imported_by else None,
             "imported_at": x.imported_at.isoformat() if x.imported_at else None,
@@ -94,6 +99,8 @@ async def list_all_import_files(
                 "transaction_count": f.transaction_count,
                 "created_income": f.created_income,
                 "created_expense": f.created_expense,
+                "income_amount": str(f.income_amount) if f.income_amount is not None else None,
+                "expense_amount": str(f.expense_amount) if f.expense_amount is not None else None,
                 "imported_at": f.imported_at.isoformat() if f.imported_at else None,
                 "is_ghost": is_ghost,
             }
@@ -153,12 +160,22 @@ async def parse_izvod(
             for t in transactions:
                 t["file_hash"] = file_hash
             all_transactions.extend(transactions)
+            income_amount = sum(
+                (to_decimal(t.get("amount")) for t in transactions if t.get("type") == "income"),
+                ZERO_DECIMAL,
+            )
+            expense_amount = sum(
+                (to_decimal(t.get("amount")) for t in transactions if t.get("type") == "expense"),
+                ZERO_DECIMAL,
+            )
             parsed_files.append(
                 {
                     "file_hash": file_hash,
                     "file_name": file.filename,
                     "file_size": len(content),
                     "transaction_count": len(transactions),
+                    "income_amount": income_amount,
+                    "expense_amount": expense_amount,
                     "previously_imported": previously_imported,
                 }
             )
@@ -206,7 +223,9 @@ async def apply_import(
         ref = tx.get("reference") or ""
         date_str = tx.get("date")
         amount = to_decimal(tx.get("amount") or ZERO_DECIMAL)
-        direction = "in" if tx.get("type") == "income" else "out"
+        # Пользователь может исправить тип операции на экране проверки.
+        # Берём подтверждённый тип из ApplyItem, а не исходное значение парсера.
+        direction = "in" if item.type == "income" else "out"
         description = (tx.get("description") or "")[:500]
         payer = (tx.get("payer_beneficiary") or "")[:200]
         raw_json = tx.get("raw_json")
@@ -277,6 +296,10 @@ async def apply_import(
             existing_entry.created_income = (existing_entry.created_income or 0) + stats["created_income"]
             existing_entry.created_expense = (existing_entry.created_expense or 0) + stats["created_expense"]
             existing_entry.errors_count = (existing_entry.errors_count or 0) + stats["errors_count"]
+            if f.income_amount is not None:
+                existing_entry.income_amount = f.income_amount
+            if f.expense_amount is not None:
+                existing_entry.expense_amount = f.expense_amount
         else:
             file_entry = BankImportFile(
                 file_name=f.file_name,
@@ -285,6 +308,8 @@ async def apply_import(
                 transaction_count=f.transaction_count,
                 created_income=stats["created_income"],
                 created_expense=stats["created_expense"],
+                income_amount=f.income_amount,
+                expense_amount=f.expense_amount,
                 errors_count=stats["errors_count"],
                 imported_by=current_user.id,
             )
