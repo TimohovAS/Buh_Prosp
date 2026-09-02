@@ -13,7 +13,6 @@ from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.page import PageMargins
 
-from backend.client_contact_utils import format_contact_line
 from backend.models import Enterprise, Project, WorkDiaryEntry
 
 MONEY_STEP = Decimal("0.01")
@@ -56,6 +55,13 @@ def _money(value: Decimal) -> Decimal:
 
 def _clean(value: str | None) -> str:
     return str(value or "").strip()
+
+
+def _contact_line(client) -> str:
+    """Контакт клиента одной строкой: в выгрузке под него отведена одна ячейка."""
+    phone = _clean(client.phone)
+    parts = [_clean(client.contact), f"tel. {phone}" if phone else "", _clean(client.email), _clean(client.website)]
+    return "; ".join(part for part in parts if part)
 
 
 def _client_language(project: Project) -> str:
@@ -362,7 +368,7 @@ def build_work_diary_proposal_xlsx(
             pib=client.pib if client else None,
             mb=client.maticni_broj if client else None,
         ),
-        _clean(format_contact_line(client) if client else ""),
+        _contact_line(client) if client else "",
     ]
     for offset, value in enumerate(customer_rows, start=8):
         _set_merged_value(
