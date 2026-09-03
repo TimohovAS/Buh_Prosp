@@ -21,20 +21,32 @@ export function formatDateOnly(value, emptyLabel = UI_DASH) {
   return String(value).slice(0, 10)
 }
 
+// Принятый формат даты — ДД.ММ.ГГГГ, как в поле выбора даты (dd.MM.yyyy).
+// Локаль sr-RS даёт «2. 9. 2026.», поэтому собираем строку сами.
 export function formatDateSr(value, emptyLabel = UI_DASH) {
   if (!value) return emptyLabel
-  const normalizedValue =
-    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value
-  const parsed = new Date(normalizedValue)
+  const isoDate = typeof value === 'string' ? value.slice(0, 10) : ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    const [year, month, day] = isoDate.split('-')
+    return `${day}.${month}.${year}`
+  }
+  const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return emptyLabel
-  return parsed.toLocaleDateString('sr-RS')
+  return formatDateParts(parsed)
 }
 
 export function formatDateTimeSr(value, emptyLabel = UI_DASH) {
   if (!value) return emptyLabel
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return String(value)
-  return parsed.toLocaleString('sr-RS')
+  const time = `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`
+  return `${formatDateParts(parsed)} ${time}`
+}
+
+function formatDateParts(date) {
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${day}.${month}.${date.getFullYear()}`
 }
 
 export function formatMoney2(value) {

@@ -45,9 +45,9 @@ function splitContactValues(value) {
 function ClientContactRow({ icon: Icon, label, children }) {
   // Тип контакта показывает иконка, поэтому подпись живёт только в подсказке
   return (
-    <div className="client-profile-contact-row" title={label} aria-label={label} role="group">
+    <div className="record-profile-contact-row" title={label} aria-label={label} role="group">
       <Icon aria-hidden="true" size={16} />
-      <div className="client-profile-contact-value">{children}</div>
+      <div className="record-profile-contact-value">{children}</div>
     </div>
   )
 }
@@ -59,11 +59,11 @@ function ClientContacts({ client }) {
   const person = String(client.contact || '').trim()
 
   if (!person && !phones.length && !emails.length && !websites.length) {
-    return <div className="client-profile-empty">{UI_DASH}</div>
+    return <div className="record-profile-empty">{UI_DASH}</div>
   }
 
   return (
-    <div className="client-profile-contact-list">
+    <div className="record-profile-contact-list">
       {person ? (
         <ClientContactRow icon={UserRound} label={tr('contactPerson')}>
           <span>{person}</span>
@@ -300,22 +300,22 @@ export default function Clients() {
         className="client-detail-modal"
         details={
           detailModal ? (
-            <div className="client-profile">
-              <div className="client-profile-hero">
-                <div className="client-profile-identity">
-                  <span className="client-profile-avatar">
+            <div className="record-profile">
+              <div className="record-profile-hero">
+                <div className="record-profile-identity">
+                  <span className="record-profile-avatar">
                     <Building2 aria-hidden="true" size={24} />
                   </span>
                   <div>
-                    <span className="client-profile-type">{getClientTypeLabel(detailModal)}</span>
+                    <span className="record-profile-eyebrow">{getClientTypeLabel(detailModal)}</span>
                     <h4>{detailModal.name || `#${detailModal.id}`}</h4>
-                    <div className="client-profile-address">
+                    <div className="record-profile-subtitle">
                       <MapPin aria-hidden="true" size={15} />
                       <span>{detailModal.address || tr('addressNotSpecified')}</span>
                     </div>
                   </div>
                 </div>
-                <div className="client-profile-actions">
+                <div className="record-profile-actions">
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -333,49 +333,49 @@ export default function Clients() {
                 </div>
               </div>
 
-              <div className="client-profile-content">
-                <section className="client-profile-panel client-profile-requisites">
-                  <div className="client-profile-panel-title">
+              <div className="record-profile-content">
+                <section className="record-profile-panel record-profile-panel--wide">
+                  <div className="record-profile-panel-title">
                     <Building2 aria-hidden="true" size={17} />
                     <h4>{tr('clientRequisites')}</h4>
                   </div>
-                  <div className="client-profile-facts">
-                    <div className="client-profile-fact">
+                  <div className="record-profile-facts">
+                    <div className="record-profile-fact">
                       <span>{tr('pib')}</span>
                       <strong>{detailModal.pib || UI_DASH}</strong>
                     </div>
-                    <div className="client-profile-fact">
+                    <div className="record-profile-fact">
                       <span>{tr('maticniBroj')}</span>
                       <strong>{detailModal.maticni_broj || UI_DASH}</strong>
                     </div>
-                    <div className="client-profile-fact">
+                    <div className="record-profile-fact">
                       <span>{tr('type')}</span>
                       <strong>{getClientTypeLabel(detailModal)}</strong>
                     </div>
                   </div>
                 </section>
 
-                <section className="client-profile-panel">
-                  <div className="client-profile-panel-title">
+                <section className="record-profile-panel">
+                  <div className="record-profile-panel-title">
                     <ContactRound aria-hidden="true" size={17} />
                     <h4>{tr('clientContacts')}</h4>
                   </div>
                   <ClientContacts client={detailModal} />
                 </section>
 
-                <section className="client-profile-panel">
-                  <div className="client-profile-panel-title">
+                <section className="record-profile-panel">
+                  <div className="record-profile-panel-title">
                     <Landmark aria-hidden="true" size={17} />
                     <h4>{tr('bankAccounts')}</h4>
                   </div>
                   {detailModal.bank_accounts?.length ? (
-                    <div className="client-profile-bank-list">
+                    <div className="record-profile-code-list">
                       {detailModal.bank_accounts.map((account) => (
                         <code key={account}>{account}</code>
                       ))}
                     </div>
                   ) : (
-                    <div className="client-profile-empty">{UI_DASH}</div>
+                    <div className="record-profile-empty">{UI_DASH}</div>
                   )}
                 </section>
               </div>

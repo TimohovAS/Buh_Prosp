@@ -6,6 +6,7 @@ export default function EntityDetailModal({
   onBack,
   backLabel,
   title,
+  headerExtra = null,
   maxWidth = '920px',
   details,
   actions = null,
@@ -19,6 +20,7 @@ export default function EntityDetailModal({
       onBack={onBack}
       backLabel={backLabel}
       title={title}
+      headerExtra={headerExtra}
       maxWidth={maxWidth}
       className={className}
     >

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Plus, Save, Trash2 } from 'lucide-react'
+import { FileText, ListChecks, Pencil, Plus, Save, StickyNote, Trash2 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -14,7 +14,7 @@ import SortIndicator from '../components/SortIndicator'
 import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { getProjectName as resolveProjectName } from '../utils/entityLabels'
-import { UI_DASH, formatInteger, formatMoney2, todayIso } from '../utils/formatters'
+import { UI_DASH, formatDateSr, formatInteger, formatMoney2, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
@@ -61,6 +61,37 @@ export default function Contracts() {
         .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0), 0),
     [itemsForm]
   )
+
+  const detailItemsTotal = useMemo(
+    () =>
+      (detailModal?.items || []).reduce(
+        (sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0),
+        0
+      ),
+    [detailModal]
+  )
+
+  const detailSubject = useMemo(() => {
+    const subject = (detailModal?.subject || '').trim()
+    if (!subject) return ''
+    // Предмет не повторяем, если он дословно совпал с описанием позиции
+    const descriptions = (detailModal?.items || []).map((item) => (item.description || '').trim())
+    return descriptions.includes(subject) ? '' : subject
+  }, [detailModal])
+
+  const detailValidity = useMemo(() => {
+    const start = detailModal?.validity_start || ''
+    const end = detailModal?.validity_end || ''
+    if (start && end) {
+      return {
+        label: tr('contractValidity'),
+        value: `${formatDateSr(start)} ${UI_DASH} ${formatDateSr(end)}`,
+      }
+    }
+    if (start) return { label: tr('validFrom'), value: formatDateSr(start) }
+    if (end) return { label: tr('validTo'), value: formatDateSr(end) }
+    return { label: tr('contractValidity'), value: UI_DASH }
+  }, [detailModal])
 
   const getProjectName = (projectId) => resolveProjectName(projects, projectId, '')
 
@@ -399,7 +430,7 @@ export default function Contracts() {
                       tabIndex={0}
                     >
                       <td>{contract.number}</td>
-                      <td>{contract.date}</td>
+                      <td>{formatDateSr(contract.date)}</td>
                       <td>{contract.client_name || UI_DASH}</td>
                       <td>{getProjectName(contract.project_id) || UI_DASH}</td>
                       <td>{tr(CONTRACT_TYPE_KEYS[contract.contract_type] || 'service')}</td>
@@ -453,41 +484,14 @@ export default function Contracts() {
         isOpen={!!detailModal}
         onClose={() => setDetailModal(null)}
         title={
-          detailModal
-            ? `${tr('contractForm')} ${UI_DASH} ${detailModal.number || `#${detailModal.id}`}`
-            : tr('contractForm')
-        }
-        maxWidth="1180px"
-        details={
           detailModal ? (
-            <div className="record-field-grid record-field-grid-wide">
-              <div className="record-field">
-                <span className="record-field-label">{tr('contractNumber')}</span>
-                <span className="record-field-value">{detailModal.number || UI_DASH}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('date')}</span>
-                <span className="record-field-value">{detailModal.date || UI_DASH}</span>
-              </div>
-              <div className="record-field span-2">
-                <span className="record-field-label">{tr('client')}</span>
-                <span className="record-field-value">{detailModal.client_name || UI_DASH}</span>
-              </div>
-              <div className="record-field span-2">
-                <span className="record-field-label">{tr('project')}</span>
-                <span className="record-field-value">
-                  {getProjectName(detailModal.project_id) || UI_DASH}
-                </span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('contractType')}</span>
-                <span className="record-field-value">
-                  {tr(CONTRACT_TYPE_KEYS[detailModal.contract_type] || 'service')}
-                </span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('status')}</span>
-                <span className="record-field-value">
+            <span className="record-title">
+              <span className="record-title-icon">
+                <FileText aria-hidden="true" size={20} />
+              </span>
+              <span className="record-title-main">
+                <span className="record-title-name">
+                  {tr('contract')} {detailModal.number || `#${detailModal.id}`}
                   <StatusBadge
                     tone={
                       detailModal.status === 'active'
@@ -500,100 +504,141 @@ export default function Contracts() {
                     {tr(STATUS_KEYS[detailModal.status] || 'active')}
                   </StatusBadge>
                 </span>
-              </div>
-              {/* Необязательные поля показываем только заполненными */}
-              {detailModal.subject ? (
-                <div className="record-field full">
-                  <span className="record-field-label">{tr('contractSubject')}</span>
-                  <div className="record-field-text">{detailModal.subject}</div>
-                </div>
-              ) : null}
-              <div className="record-field">
-                <span className="record-field-label">{tr('amount')}</span>
-                <span className="record-field-value">{formatInteger(detailModal.amount || 0)}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('contractReceived')}</span>
-                <span className="record-field-value">{formatInteger(detailModal.total_received || 0)}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('contractExpenses')}</span>
-                <span className="record-field-value">{formatInteger(detailModal.total_expenses || 0)}</span>
-              </div>
-              <div className="record-field">
-                <span className="record-field-label">{tr('contractProfit')}</span>
-                <span
-                  className="record-field-value"
-                  style={{
-                    color: (detailModal.profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                    fontWeight: 700,
-                  }}
-                >
-                  {formatInteger(detailModal.profit || 0)}
+                <span className="record-title-meta">
+                  <span>{tr(CONTRACT_TYPE_KEYS[detailModal.contract_type] || 'service')}</span>
+                  <span>{detailModal.client_name || UI_DASH}</span>
+                  <span>{formatDateSr(detailModal.date)}</span>
                 </span>
-              </div>
-              {detailModal.validity_start ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('validFrom')}</span>
-                  <span className="record-field-value">{detailModal.validity_start}</span>
-                </div>
-              ) : null}
-              {detailModal.validity_end ? (
-                <div className="record-field">
-                  <span className="record-field-label">{tr('validTo')}</span>
-                  <span className="record-field-value">{detailModal.validity_end}</span>
-                </div>
-              ) : null}
-              {detailModal.note ? (
-                <div className="record-field full">
-                  <span className="record-field-label">{tr('note')}</span>
-                  <div className="record-field-text">{detailModal.note}</div>
-                </div>
-              ) : null}
-            </div>
-          ) : null
+              </span>
+            </span>
+          ) : (
+            tr('contract')
+          )
         }
-        actions={
+        headerExtra={
           detailModal ? (
-            <div className="record-actions-grid">
+            <div className="record-title-actions">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-sm"
                 onClick={() => openEditFromDetail(detailModal)}
               >
-                {tr('edit')}
+                <Pencil aria-hidden="true" size={15} /> {tr('edit')}
               </button>
               <button
                 type="button"
-                className="btn btn-danger"
+                className="btn btn-danger btn-sm"
                 onClick={() => handleDeleteFromDetail(detailModal)}
               >
-                {tr('delete')}
+                <Trash2 aria-hidden="true" size={15} /> {tr('delete')}
               </button>
             </div>
           ) : null
         }
-      >
-        {detailModal?.items?.length ? (
-          <div className="record-detail-card">
-            <div className="card-title">{tr('contractItems')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-              {detailModal.items.map((item, index) => (
-                <div key={`${detailModal.id}-${index}`} className="card" style={{ padding: '0.85rem' }}>
-                  <div style={{ fontWeight: 700 }}>{item.description || UI_DASH}</div>
-                  <div style={{ marginTop: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                    {tr('quantity')}: {formatInteger(item.quantity || 0)} | {tr('unit')}:{' '}
-                    {item.unit || UI_DASH} | {tr('price')}: {formatInteger(item.price || 0)}
+        maxWidth="1100px"
+        className="contract-detail-modal"
+        details={
+          detailModal ? (
+            <div className="record-profile">
+              <div className="record-profile-content record-profile-content--stack">
+                {/* Плитки подписаны сами — отдельный заголовок блока не нужен */}
+                <div className="record-profile-facts">
+                  <div className="record-profile-fact record-profile-fact--money">
+                    <span>{tr('amount')}</span>
+                    <strong>{formatInteger(detailModal.amount || 0)}</strong>
                   </div>
-                  <div style={{ marginTop: '0.35rem' }}>
-                    {tr('amount')}: {formatInteger((item.quantity || 0) * (item.price || 0))}
+                  <div className="record-profile-fact record-profile-fact--money">
+                    <span>{tr('contractReceived')}</span>
+                    <strong>{formatInteger(detailModal.total_received || 0)}</strong>
+                  </div>
+                  <div className="record-profile-fact record-profile-fact--money">
+                    <span>{tr('contractExpenses')}</span>
+                    <strong>{formatInteger(detailModal.total_expenses || 0)}</strong>
+                  </div>
+                  <div className="record-profile-fact record-profile-fact--money">
+                    <span>{tr('contractProfit')}</span>
+                    <strong className={(detailModal.profit || 0) >= 0 ? 'is-positive' : 'is-negative'}>
+                      {formatInteger(detailModal.profit || 0)}
+                    </strong>
+                  </div>
+                  <div className="record-profile-fact">
+                    <span>{detailValidity.label}</span>
+                    <strong>{detailValidity.value}</strong>
+                  </div>
+                  <div className="record-profile-fact">
+                    <span>{tr('project')}</span>
+                    <strong>{getProjectName(detailModal.project_id) || UI_DASH}</strong>
                   </div>
                 </div>
-              ))}
+
+                {detailSubject ? (
+                  <section className="record-profile-panel">
+                    <div className="record-profile-panel-title">
+                      <FileText aria-hidden="true" size={17} />
+                      <h4>{tr('contractSubject')}</h4>
+                    </div>
+                    <div className="record-profile-text">{detailSubject}</div>
+                  </section>
+                ) : null}
+
+                {detailModal.items?.length ? (
+                  <section className="record-profile-panel">
+                    <div className="record-profile-panel-title">
+                      <ListChecks aria-hidden="true" size={17} />
+                      <h4>{tr('contractItems')}</h4>
+                    </div>
+                    <div className="record-profile-table-wrap">
+                      <table className="record-profile-items">
+                        <thead>
+                          <tr>
+                            <th>{tr('description')}</th>
+                            <th className="num">{tr('quantity')}</th>
+                            <th>{tr('unit')}</th>
+                            <th className="num">{tr('price')}</th>
+                            <th className="num">{tr('amount')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detailModal.items.map((item, index) => (
+                            <tr key={`${detailModal.id}-${index}`}>
+                              <td>{item.description || UI_DASH}</td>
+                              <td className="num">{formatInteger(item.quantity || 0)}</td>
+                              <td>{item.unit || UI_DASH}</td>
+                              <td className="num">{formatInteger(item.price || 0)}</td>
+                              <td className="num">
+                                {formatMoney2((item.quantity || 0) * (item.price || 0))}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {/* Итог дублирует единственную строку — показываем от двух позиций */}
+                        {detailModal.items.length > 1 ? (
+                          <tfoot>
+                            <tr>
+                              <td colSpan={4}>{tr('contractItemsTotal')}</td>
+                              <td className="num">{formatMoney2(detailItemsTotal)}</td>
+                            </tr>
+                          </tfoot>
+                        ) : null}
+                      </table>
+                    </div>
+                  </section>
+                ) : null}
+
+                {detailModal.note ? (
+                  <section className="record-profile-panel record-profile-note">
+                    <div className="record-profile-panel-title">
+                      <StickyNote aria-hidden="true" size={17} />
+                      <h4>{tr('note')}</h4>
+                    </div>
+                    <div className="record-profile-text">{detailModal.note}</div>
+                  </section>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </EntityDetailModal>
+          ) : null
+        }
+      />
 
       <Modal
         isOpen={!!modal}
@@ -810,15 +855,26 @@ export default function Contracts() {
               </div>
             </section>
 
-            <div className="form-group contract-editor-note">
-              <label className="form-label">{tr('note')}</label>
-              <textarea
-                className="form-input"
-                value={form.note}
-                onChange={(event) => setForm({ ...form, note: event.target.value })}
-                rows={3}
-              />
-            </div>
+            <section className="contract-editor-section">
+              <div className="contract-editor-section-head">
+                <span className="contract-editor-section-icon">
+                  <StickyNote size={18} />
+                </span>
+                <div>
+                  <h4>{tr('note')}</h4>
+                  <p>{tr('contractNoteHint')}</p>
+                </div>
+              </div>
+              <div className="contract-editor-note">
+                <textarea
+                  className="form-input"
+                  aria-label={tr('note')}
+                  value={form.note}
+                  onChange={(event) => setForm({ ...form, note: event.target.value })}
+                  rows={6}
+                />
+              </div>
+            </section>
 
             {formError ? <div className="alert alert-danger contract-editor-error">{formError}</div> : null}
 

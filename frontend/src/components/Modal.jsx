@@ -4,6 +4,7 @@ export default function Modal({
   onBack,
   backLabel = 'back',
   title,
+  headerExtra = null,
   children,
   className = '',
   bodyClassName = '',
@@ -30,6 +31,7 @@ export default function Modal({
         <div className="modal-header">
           <h3 className="modal-title">{title}</h3>
           <div className="modal-header-actions">
+            {headerExtra}
             {onBack ? (
               <button
                 type="button"
