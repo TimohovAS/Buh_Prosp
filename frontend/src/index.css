@@ -7024,6 +7024,7 @@ tr:hover td {
 }
 
 .efaktura-api-card,
+.efaktura-sync-progress-card,
 .efaktura-result-card,
 .efaktura-history-card {
   padding: 0;
@@ -7062,6 +7063,12 @@ tr:hover td {
 
 .efaktura-section-icon.is-warning {
   color: var(--color-warning);
+}
+
+.efaktura-section-icon.is-active {
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.11);
+  border-color: rgba(14, 165, 233, 0.22);
 }
 
 .efaktura-api-copy {
@@ -7233,6 +7240,104 @@ tr:hover td {
   padding-left: 1.15rem;
 }
 
+.efaktura-sync-elapsed {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.09);
+  color: #7dd3fc;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.efaktura-sync-progress-body {
+  padding: 1rem 1.25rem 0.9rem;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.035), transparent 55%);
+}
+
+.efaktura-sync-progress-track {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.efaktura-sync-progress-track > span {
+  position: absolute;
+  inset-block: 0;
+  left: -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #38bdf8 45%, #60a5fa 70%, transparent);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.38);
+  animation: efaktura-progress-slide 1.45s ease-in-out infinite;
+}
+
+.efaktura-sync-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.efaktura-sync-step {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 9px;
+  background: rgba(15, 20, 25, 0.22);
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.efaktura-sync-step-icon {
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.efaktura-sync-step.is-complete {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.045);
+}
+
+.efaktura-sync-step.is-complete .efaktura-sync-step-icon {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.efaktura-sync-step.is-active {
+  color: var(--color-text);
+  border-color: rgba(14, 165, 233, 0.35);
+  background: rgba(14, 165, 233, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.06);
+}
+
+.efaktura-sync-step.is-active .efaktura-sync-step-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #7dd3fc;
+}
+
+.efaktura-sync-wait-hint {
+  margin: 0.7rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
 .efaktura-history-card {
   margin-bottom: 0 !important;
 }
@@ -7402,6 +7507,16 @@ tr:hover td {
   }
 }
 
+@keyframes efaktura-progress-slide {
+  0% {
+    left: -35%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
 .efaktura-button-spinner {
   animation: efaktura-spin 0.8s linear infinite;
 }
@@ -7474,6 +7589,10 @@ tr:hover td {
   .efaktura-history-toolbar > select,
   .efaktura-refresh-button {
     width: 100%;
+  }
+
+  .efaktura-sync-steps {
+    grid-template-columns: 1fr;
   }
 }
 

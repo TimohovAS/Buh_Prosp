@@ -4,7 +4,10 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   CheckCircle2,
+  CloudDownload,
+  Database,
   FileUp,
+  History,
   RefreshCw,
   Server,
   X,
@@ -158,6 +161,90 @@ function ResultSummary({ result, onDismiss }) {
   )
 }
 
+function SyncProgress({ stage, startedAt }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  useEffect(() => {
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+    }
+    updateElapsed()
+    const timer = window.setInterval(updateElapsed, 250)
+    return () => window.clearInterval(timer)
+  }, [startedAt])
+
+  const processingComplete = stage === 'refreshing'
+  const steps = [
+    {
+      key: 'request',
+      label: tr('efakturaSyncStepRequest'),
+      status: 'complete',
+      icon: CloudDownload,
+    },
+    {
+      key: 'processing',
+      label: tr('efakturaSyncStepProcessing'),
+      status: processingComplete ? 'complete' : 'active',
+      icon: Database,
+    },
+    {
+      key: 'history',
+      label: tr('efakturaSyncStepHistory'),
+      status: processingComplete ? 'active' : 'pending',
+      icon: History,
+    },
+  ]
+
+  return (
+    <section className="card efaktura-sync-progress-card" role="status" aria-live="polite">
+      <div className="efaktura-section-head">
+        <div className="efaktura-section-title">
+          <span className="efaktura-section-icon is-active">
+            <RefreshCw className="efaktura-button-spinner" size={19} />
+          </span>
+          <div>
+            <h2>{tr('efakturaSyncProgressTitle')}</h2>
+            <p>
+              {processingComplete
+                ? tr('efakturaSyncProgressRefreshing')
+                : tr('efakturaSyncProgressProcessing')}
+            </p>
+          </div>
+        </div>
+        <span className="efaktura-sync-elapsed">
+          {tr('efakturaSyncElapsed', { seconds: elapsedSeconds })}
+        </span>
+      </div>
+
+      <div className="efaktura-sync-progress-body">
+        <div className="efaktura-sync-progress-track" aria-hidden="true">
+          <span />
+        </div>
+        <div className="efaktura-sync-steps">
+          {steps.map((step) => {
+            const StepIcon = step.icon
+            return (
+              <div key={step.key} className={`efaktura-sync-step is-${step.status}`}>
+                <span className="efaktura-sync-step-icon">
+                  {step.status === 'complete' ? (
+                    <CheckCircle2 size={18} />
+                  ) : step.status === 'active' ? (
+                    <RefreshCw className="efaktura-button-spinner" size={17} />
+                  ) : (
+                    <StepIcon size={17} />
+                  )}
+                </span>
+                <span>{step.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        <p className="efaktura-sync-wait-hint">{tr('efakturaSyncWaitHint')}</p>
+      </div>
+    </section>
+  )
+}
+
 function SortableHeader({ column, activeColumn, ascending, onSort, children, align = 'left' }) {
   return (
     <th style={{ textAlign: align }}>
@@ -184,6 +271,8 @@ export default function Efaktura() {
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [syncStage, setSyncStage] = useState('')
+  const [syncStartedAt, setSyncStartedAt] = useState(null)
   const [importing, setImporting] = useState(false)
   const [lastResult, setLastResult] = useState(null)
   const [settingsInfo, setSettingsInfo] = useState(null)
@@ -255,15 +344,21 @@ export default function Efaktura() {
   const handleSync = async () => {
     if (syncing || importing) return
     setSyncing(true)
+    setSyncStage('processing')
+    setSyncStartedAt(Date.now())
+    setLastResult(null)
     setPageError('')
     try {
       const result = await api.efaktura.sync()
-      setLastResult(result)
+      setSyncStage('refreshing')
       downloadPdfFiles(result?.pdf_downloads || [])
       await loadHistory()
+      setLastResult(result)
     } catch (err) {
       setPageError(err.message || tr('efakturaSyncError'))
     } finally {
+      setSyncStage('')
+      setSyncStartedAt(null)
       setSyncing(false)
     }
   }
@@ -409,6 +504,8 @@ export default function Efaktura() {
             </div>
           </section>
         ) : null}
+
+        {syncing && syncStartedAt ? <SyncProgress stage={syncStage} startedAt={syncStartedAt} /> : null}
 
         <ResultSummary result={lastResult} onDismiss={() => setLastResult(null)} />
 
