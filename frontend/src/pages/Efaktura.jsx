@@ -1,81 +1,136 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  CheckCircle2,
+  FileUp,
+  RefreshCw,
+  Server,
+  X,
+} from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api, getUser } from '../api'
-import { tr } from '../i18n'
+import PageHeader from '../components/PageHeader'
+import SearchInput from '../components/SearchInput'
+import SortIndicator from '../components/SortIndicator'
+import StatusBadge from '../components/StatusBadge'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
   isEfakturaApiConfigured,
   usesEfakturaDefaultRoutes,
 } from '../efakturaDefaults'
+import useListPageState from '../hooks/useListPageState'
+import { tr } from '../i18n'
 import { downloadBlobFile } from '../utils/download'
+import { formatDateSr, formatDateTimeSr, UI_DASH } from '../utils/formatters'
 
 function formatAmount(value) {
-  if (typeof value === 'number') return `${value.toLocaleString('sr-RS')} RSD`
-  if (value === null || value === undefined || value === '') return '—'
-  return `${value} RSD`
+  if (value === null || value === undefined || value === '') return UI_DASH
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return `${value} RSD`
+  return `${amount.toLocaleString('sr-RS', { maximumFractionDigits: 2 })} RSD`
 }
 
-function ResultSummary({ result }) {
+function counterpartyName(item) {
+  return item.direction === 'incoming' ? item.supplier_name : item.customer_name
+}
+
+function counterpartyPib(item) {
+  return item.direction === 'incoming' ? item.supplier_pib : item.customer_pib
+}
+
+function getSortValue(item, column) {
+  if (column === 'created_at') return new Date(item.created_at || 0).getTime()
+  if (column === 'amount_rsd') return Number(item.amount_rsd || 0)
+  if (column === 'counterparty') return counterpartyName(item) || ''
+  return item[column] || ''
+}
+
+function ResultSummary({ result, onDismiss }) {
   if (!result) return null
 
+  const issueCount = Number(result.error_count || 0) + Number(result.download_error_count || 0)
+  const metrics = [
+    {
+      key: 'created',
+      label: tr('efakturaCreatedDocuments'),
+      value: result.created_count || 0,
+      tone: 'success',
+    },
+    { key: 'income', label: tr('efakturaCreatedIncome'), value: result.created_income_count || 0 },
+    {
+      key: 'expenses',
+      label: tr('efakturaCreatedExpenses'),
+      value: result.created_expense_count || 0,
+    },
+    { key: 'skipped', label: tr('efakturaSkipped'), value: result.skipped_count || 0, tone: 'muted' },
+    { key: 'errors', label: tr('efakturaErrors'), value: result.error_count || 0, tone: 'danger' },
+    'fetched_count' in result
+      ? {
+          key: 'fetched',
+          label: tr('efakturaFetchedFromApi'),
+          value: result.fetched_count || 0,
+          tone: 'info',
+        }
+      : null,
+    'pdf_download_count' in result
+      ? {
+          key: 'pdf',
+          label: tr('efakturaPdfDownloads'),
+          value: result.pdf_download_count || 0,
+          tone: 'info',
+        }
+      : null,
+    'download_error_count' in result
+      ? {
+          key: 'download-errors',
+          label: tr('efakturaDownloadErrors'),
+          value: result.download_error_count || 0,
+          tone: 'danger',
+        }
+      : null,
+  ].filter(Boolean)
+
   return (
-    <div className="card" style={{ marginBottom: '1rem' }}>
-      <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>{tr('efakturaResultTitle')}</h3>
-      <div className="stats-grid" style={{ marginBottom: '1rem' }}>
-        <div className="stat-card">
-          <div className="stat-label">{tr('efakturaCreatedDocuments')}</div>
-          <div className="stat-value">{result.created_count || 0}</div>
+    <section className="card efaktura-result-card" aria-live="polite">
+      <div className="efaktura-section-head">
+        <div className="efaktura-section-title">
+          <span className={`efaktura-section-icon ${issueCount ? 'is-warning' : 'is-success'}`}>
+            {issueCount ? <AlertTriangle size={19} /> : <CheckCircle2 size={19} />}
+          </span>
+          <div>
+            <h2>{tr('efakturaResultTitle')}</h2>
+            <p>{issueCount ? tr('efakturaResultWithIssues') : tr('efakturaResultCompleted')}</p>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">{tr('efakturaCreatedIncome')}</div>
-          <div className="stat-value">{result.created_income_count || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{tr('efakturaCreatedExpenses')}</div>
-          <div className="stat-value">{result.created_expense_count || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{tr('efakturaSkipped')}</div>
-          <div className="stat-value">{result.skipped_count || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{tr('efakturaErrors')}</div>
+        <button
+          type="button"
+          className="efaktura-icon-button"
+          onClick={onDismiss}
+          aria-label={tr('efakturaCloseResult')}
+          title={tr('efakturaCloseResult')}
+        >
+          <X size={17} />
+        </button>
+      </div>
+
+      <div className="efaktura-result-metrics">
+        {metrics.map((metric) => (
           <div
-            className="stat-value"
-            style={{ color: result.error_count ? 'var(--color-danger)' : undefined }}
+            key={metric.key}
+            className={`efaktura-result-metric${metric.tone ? ` is-${metric.tone}` : ''}`}
           >
-            {result.error_count || 0}
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
           </div>
-        </div>
-        {'fetched_count' in result ? (
-          <div className="stat-card">
-            <div className="stat-label">{tr('efakturaFetchedFromApi')}</div>
-            <div className="stat-value">{result.fetched_count || 0}</div>
-          </div>
-        ) : null}
-        {'pdf_download_count' in result ? (
-          <div className="stat-card">
-            <div className="stat-label">{tr('efakturaPdfDownloads')}</div>
-            <div className="stat-value">{result.pdf_download_count || 0}</div>
-          </div>
-        ) : null}
-        {'download_error_count' in result ? (
-          <div className="stat-card">
-            <div className="stat-label">{tr('efakturaDownloadErrors')}</div>
-            <div
-              className="stat-value"
-              style={{ color: result.download_error_count ? 'var(--color-danger)' : undefined }}
-            >
-              {result.download_error_count || 0}
-            </div>
-          </div>
-        ) : null}
+        ))}
       </div>
 
       {(result.errors || []).length > 0 ? (
-        <div className="settings-callout" style={{ borderColor: 'rgba(239, 68, 68, 0.35)' }}>
+        <div className="efaktura-result-issues is-danger">
           <strong>{tr('efakturaImportErrorsTitle')}</strong>
-          <ul style={{ margin: '0.5rem 0 0 1rem' }}>
+          <ul>
             {result.errors.slice(0, 10).map((item, index) => (
               <li key={`${item.file_name || item.invoice_number || 'error'}-${index}`}>
                 {item.file_name || item.invoice_number || tr('efakturaDocument')}:{' '}
@@ -87,9 +142,9 @@ function ResultSummary({ result }) {
       ) : null}
 
       {(result.download_errors || []).length > 0 ? (
-        <div className="settings-callout" style={{ borderColor: 'rgba(245, 158, 11, 0.45)' }}>
+        <div className="efaktura-result-issues is-warning">
           <strong>{tr('efakturaDownloadErrorsTitle')}</strong>
-          <ul style={{ margin: '0.5rem 0 0 1rem' }}>
+          <ul>
             {result.download_errors.slice(0, 10).map((item, index) => (
               <li key={`${item.file_name || item.invoice_number || 'download'}-${index}`}>
                 {item.file_name || item.invoice_number || tr('efakturaDocument')}:{' '}
@@ -99,7 +154,23 @@ function ResultSummary({ result }) {
           </ul>
         </div>
       ) : null}
-    </div>
+    </section>
+  )
+}
+
+function SortableHeader({ column, activeColumn, ascending, onSort, children, align = 'left' }) {
+  return (
+    <th style={{ textAlign: align }}>
+      <button
+        type="button"
+        className="efaktura-sort-button"
+        onClick={() => onSort(column)}
+        style={{ justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}
+      >
+        {children}
+        <SortIndicator active={activeColumn === column} asc={ascending} />
+      </button>
+    </th>
   )
 }
 
@@ -117,6 +188,12 @@ export default function Efaktura() {
   const [lastResult, setLastResult] = useState(null)
   const [settingsInfo, setSettingsInfo] = useState(null)
   const [pageError, setPageError] = useState('')
+  const [directionFilter, setDirectionFilter] = useState('')
+  const [recordTypeFilter, setRecordTypeFilter] = useState('')
+  const { search, setSearch, sortCol, sortAsc, toggleSort } = useListPageState({
+    initialSortCol: 'created_at',
+    initialSortAsc: false,
+  })
 
   const downloadPdfFiles = (downloads = []) => {
     downloads.forEach((item) => {
@@ -154,7 +231,7 @@ export default function Efaktura() {
   }, [isActivePage])
 
   const handleImportClick = () => {
-    if (importing) return
+    if (importing || syncing) return
     fileInputRef.current?.click()
   }
 
@@ -163,6 +240,7 @@ export default function Efaktura() {
     event.target.value = ''
     if (files.length === 0) return
     setImporting(true)
+    setPageError('')
     try {
       const result = await api.efaktura.importXml(files)
       setLastResult(result)
@@ -175,7 +253,9 @@ export default function Efaktura() {
   }
 
   const handleSync = async () => {
+    if (syncing || importing) return
     setSyncing(true)
+    setPageError('')
     try {
       const result = await api.efaktura.sync()
       setLastResult(result)
@@ -188,163 +268,313 @@ export default function Efaktura() {
     }
   }
 
+  const filteredHistory = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase()
+    const rows = history.filter((item) => {
+      if (directionFilter && item.direction !== directionFilter) return false
+      if (recordTypeFilter && item.imported_as !== recordTypeFilter) return false
+      if (!query) return true
+
+      return [
+        item.invoice_number,
+        item.external_id,
+        item.file_name,
+        counterpartyName(item),
+        counterpartyPib(item),
+        item.imported_record_id,
+        item.amount_rsd,
+      ].some((value) =>
+        String(value ?? '')
+          .toLocaleLowerCase()
+          .includes(query)
+      )
+    })
+
+    return [...rows].sort((left, right) => {
+      const leftValue = getSortValue(left, sortCol)
+      const rightValue = getSortValue(right, sortCol)
+      if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+        return sortAsc ? leftValue - rightValue : rightValue - leftValue
+      }
+      const comparison = String(leftValue).localeCompare(String(rightValue), 'sr', {
+        numeric: true,
+        sensitivity: 'base',
+      })
+      return sortAsc ? comparison : -comparison
+    })
+  }, [directionFilter, history, recordTypeFilter, search, sortAsc, sortCol])
+
   const apiConfigured = isEfakturaApiConfigured(settingsInfo)
   const usingDefaultRoutes = usesEfakturaDefaultRoutes(settingsInfo)
   const effectiveBaseUrl = settingsInfo?.efaktura_api_base_url || DEFAULT_EFAKTURA_API_BASE_URL
+  const busy = syncing || importing
+  const hasActiveFilters = Boolean(search || directionFilter || recordTypeFilter)
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('efakturaTitle')}</h1>
-          <div className="page-subtitle">{tr('efakturaSubtitle')}</div>
-        </div>
-        <div className="page-header-actions">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xml,text/xml,application/xml"
-            multiple
-            style={{ display: 'none' }}
-            onChange={handleImportFiles}
-          />
-          <button className="btn btn-secondary" onClick={handleImportClick} disabled={importing}>
-            {importing ? tr('efakturaImporting') : tr('efakturaImportXml')}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSync}
-            disabled={syncing || (isAdmin && !apiConfigured)}
-            title={isAdmin && !apiConfigured ? tr('efakturaSyncSettingsHint') : ''}
-          >
-            {syncing ? tr('efakturaSyncing') : tr('efakturaSyncApi')}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={tr('efakturaTitle')}
+        subtitle={tr('efakturaSubtitle')}
+        actions={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              multiple
+              hidden
+              onChange={handleImportFiles}
+            />
+            <button
+              className="btn btn-secondary efaktura-action-button"
+              onClick={handleImportClick}
+              disabled={busy}
+            >
+              {importing ? <RefreshCw className="efaktura-button-spinner" size={17} /> : <FileUp size={17} />}
+              {importing ? tr('efakturaImporting') : tr('efakturaImportXml')}
+            </button>
+            <button
+              className="btn btn-primary efaktura-action-button"
+              onClick={handleSync}
+              disabled={busy || (isAdmin && !apiConfigured)}
+              title={isAdmin && !apiConfigured ? tr('efakturaSyncSettingsHint') : ''}
+            >
+              <RefreshCw className={syncing ? 'efaktura-button-spinner' : ''} size={17} />
+              {syncing ? tr('efakturaSyncing') : tr('efakturaSyncApi')}
+            </button>
+          </>
+        }
+      />
 
-      <div className="page-body">
+      <div className="page-body efaktura-page-body">
         {pageError ? (
-          <div
-            className="settings-callout"
-            style={{ marginBottom: '1rem', borderColor: 'rgba(239, 68, 68, 0.35)' }}
-          >
-            <strong>{tr('loadError')}</strong>
-            <div>{pageError}</div>
+          <div className="alert alert-danger efaktura-page-alert" role="alert">
+            <AlertTriangle size={18} />
+            <div>
+              <strong>{tr('loadError')}</strong>
+              <span>{pageError}</span>
+            </div>
           </div>
         ) : null}
 
         {isAdmin ? (
-          <div className="card" style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-              <div>
-                <div className="settings-field-label">{tr('efakturaApiSettingsTitle')}</div>
-                <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
+          <section className="card efaktura-api-card">
+            <div className="efaktura-api-main">
+              <span className={`efaktura-api-icon${apiConfigured ? ' is-connected' : ''}`}>
+                <Server size={21} />
+              </span>
+              <div className="efaktura-api-copy">
+                <span>{tr('efakturaApiSettingsTitle')}</span>
+                <strong>
                   {apiConfigured ? tr('efakturaApiConfigured') : tr('efakturaApiNotConfigured')}
-                </div>
-                {apiConfigured && usingDefaultRoutes ? (
-                  <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginTop: '0.35rem' }}>
-                    {tr('efakturaUsingDefaultRoutes')}
-                  </div>
-                ) : null}
+                </strong>
               </div>
-              {settingsInfo ? (
-                <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>
-                  <div>
-                    {tr('efakturaBaseUrl')}: {effectiveBaseUrl}
-                  </div>
-                  <div>
-                    {tr('efakturaIncomingLabel')}:{' '}
-                    {settingsInfo.efaktura_sync_incoming ? tr('yes') : tr('no')}
-                  </div>
-                  <div>
-                    {tr('efakturaOutgoingLabel')}:{' '}
-                    {settingsInfo.efaktura_sync_outgoing ? tr('yes') : tr('no')}
-                  </div>
-                  <div>
-                    {tr('efakturaLookbackLabel')}: {settingsInfo.efaktura_sync_lookback_days || 0}{' '}
-                    {tr('efakturaDaysShort')}
-                  </div>
-                  <div>
-                    {tr('efakturaSavePdf')}: {settingsInfo.efaktura_save_pdf ? tr('yes') : tr('no')}
-                  </div>
-                </div>
-              ) : null}
+              <StatusBadge tone={apiConfigured ? 'success' : 'warning'} className="badge-pill">
+                {apiConfigured ? tr('efakturaConnected') : tr('efakturaNotConnected')}
+              </StatusBadge>
             </div>
-          </div>
+
+            <div className="efaktura-api-details">
+              <div className="efaktura-api-detail efaktura-api-detail--endpoint">
+                <span>{tr('efakturaApiEndpoint')}</span>
+                <strong title={effectiveBaseUrl}>{effectiveBaseUrl}</strong>
+              </div>
+              <div className="efaktura-api-detail">
+                <span>{tr('efakturaSyncScope')}</span>
+                <strong>
+                  {[
+                    settingsInfo?.efaktura_sync_incoming ? tr('efakturaIncomingLabel') : '',
+                    settingsInfo?.efaktura_sync_outgoing ? tr('efakturaOutgoingLabel') : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' + ') || UI_DASH}
+                </strong>
+              </div>
+              <div className="efaktura-api-detail">
+                <span>{tr('efakturaLookbackLabel')}</span>
+                <strong>
+                  {settingsInfo?.efaktura_sync_lookback_days || 0} {tr('efakturaDaysShort')}
+                </strong>
+              </div>
+              <div className="efaktura-api-detail">
+                <span>{tr('efakturaSavePdf')}</span>
+                <strong>{settingsInfo?.efaktura_save_pdf ? tr('yes') : tr('no')}</strong>
+              </div>
+              <div className="efaktura-api-detail">
+                <span>{tr('efakturaRoutes')}</span>
+                <strong>
+                  {usingDefaultRoutes ? tr('efakturaStandardRoutes') : tr('efakturaCustomRoutes')}
+                </strong>
+              </div>
+            </div>
+          </section>
         ) : null}
 
-        <ResultSummary result={lastResult} />
+        <ResultSummary result={lastResult} onDismiss={() => setLastResult(null)} />
 
-        <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '1rem',
-              marginBottom: '1rem',
-            }}
-          >
-            <h3 style={{ margin: 0 }}>{tr('efakturaHistoryTitle')}</h3>
-            <button className="btn btn-secondary btn-sm" onClick={loadHistory} disabled={historyLoading}>
+        <section className="card efaktura-history-card">
+          <div className="efaktura-section-head efaktura-history-head">
+            <div>
+              <h2>{tr('efakturaHistoryTitle')}</h2>
+              <p>{tr('efakturaHistoryDescription')}</p>
+            </div>
+            <div className="efaktura-history-count">
+              {tr('efakturaHistoryCount', {
+                shown: filteredHistory.length,
+                total: history.length,
+              })}
+            </div>
+          </div>
+
+          <div className="efaktura-history-toolbar">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={tr('efakturaSearchPlaceholder')}
+              aria-label={tr('efakturaSearchPlaceholder')}
+            />
+            <select
+              className="form-input"
+              value={directionFilter}
+              onChange={(event) => setDirectionFilter(event.target.value)}
+              aria-label={tr('efakturaDirection')}
+            >
+              <option value="">{tr('efakturaAllDirections')}</option>
+              <option value="incoming">{tr('efakturaIncoming')}</option>
+              <option value="outgoing">{tr('efakturaOutgoing')}</option>
+            </select>
+            <select
+              className="form-input"
+              value={recordTypeFilter}
+              onChange={(event) => setRecordTypeFilter(event.target.value)}
+              aria-label={tr('efakturaImportedAs')}
+            >
+              <option value="">{tr('efakturaAllRecordTypes')}</option>
+              <option value="expense">{tr('efakturaImportedAsExpense')}</option>
+              <option value="income">{tr('efakturaImportedAsIncome')}</option>
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm efaktura-refresh-button"
+              onClick={loadHistory}
+              disabled={historyLoading}
+            >
+              <RefreshCw className={historyLoading ? 'efaktura-button-spinner' : ''} size={15} />
               {tr('serviceBackupsRefresh')}
             </button>
           </div>
 
-          {historyLoading ? (
-            <div>{tr('loading')}</div>
-          ) : history.length === 0 ? (
-            <div className="settings-empty-text">{tr('efakturaNoImportedDocuments')}</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
+          <div className="table-wrap">
+            <table className="efaktura-history-table">
+              <thead>
+                <tr>
+                  <SortableHeader
+                    column="created_at"
+                    activeColumn={sortCol}
+                    ascending={sortAsc}
+                    onSort={toggleSort}
+                  >
+                    {tr('efakturaImportedAt')}
+                  </SortableHeader>
+                  <SortableHeader
+                    column="direction"
+                    activeColumn={sortCol}
+                    ascending={sortAsc}
+                    onSort={toggleSort}
+                  >
+                    {tr('efakturaDirection')}
+                  </SortableHeader>
+                  <SortableHeader
+                    column="invoice_number"
+                    activeColumn={sortCol}
+                    ascending={sortAsc}
+                    onSort={toggleSort}
+                  >
+                    {tr('efakturaDocument')}
+                  </SortableHeader>
+                  <SortableHeader
+                    column="counterparty"
+                    activeColumn={sortCol}
+                    ascending={sortAsc}
+                    onSort={toggleSort}
+                  >
+                    {tr('efakturaCounterparty')}
+                  </SortableHeader>
+                  <SortableHeader
+                    column="amount_rsd"
+                    activeColumn={sortCol}
+                    ascending={sortAsc}
+                    onSort={toggleSort}
+                    align="right"
+                  >
+                    {tr('amount')}
+                  </SortableHeader>
+                  <th>{tr('efakturaImportedAs')}</th>
+                  <th>{tr('efakturaSource')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLoading ? (
                   <tr>
-                    <th>{tr('efakturaImportedAt')}</th>
-                    <th>{tr('efakturaDirection')}</th>
-                    <th>{tr('efakturaDocument')}</th>
-                    <th>{tr('efakturaCounterparty')}</th>
-                    <th>{tr('amount')}</th>
-                    <th>{tr('efakturaPdfDownloads')}</th>
-                    <th>{tr('efakturaImportedAs')}</th>
-                    <th>{tr('efakturaRecord')}</th>
-                    <th>{tr('efakturaSource')}</th>
+                    <td colSpan={7} className="efaktura-table-message">
+                      <RefreshCw className="efaktura-button-spinner" size={18} />
+                      {tr('loading')}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {history.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</td>
-                      <td>
-                        {item.direction === 'incoming' ? tr('efakturaIncoming') : tr('efakturaOutgoing')}
-                      </td>
-                      <td>
-                        <div>{item.invoice_number || '—'}</div>
-                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                          {item.issued_date || '—'}
-                        </div>
-                      </td>
-                      <td>
-                        {item.direction === 'incoming'
-                          ? item.supplier_name || '—'
-                          : item.customer_name || '—'}
-                      </td>
-                      <td>{formatAmount(item.amount_rsd)}</td>
-                      <td>-</td>
-                      <td>
-                        {item.imported_as === 'expense'
-                          ? tr('efakturaImportedAsExpense')
-                          : tr('efakturaImportedAsIncome')}
-                      </td>
-                      <td>{item.imported_record_id || '—'}</td>
-                      <td>{item.source || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ) : filteredHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="efaktura-table-message">
+                      {hasActiveFilters ? tr('efakturaNoSearchResults') : tr('efakturaNoImportedDocuments')}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredHistory.map((item) => {
+                    const partyName = counterpartyName(item)
+                    const partyPib = counterpartyPib(item)
+                    const incoming = item.direction === 'incoming'
+                    const expense = item.imported_as === 'expense'
+
+                    return (
+                      <tr key={item.id}>
+                        <td className="efaktura-date-cell">
+                          <strong>{formatDateTimeSr(item.created_at)}</strong>
+                        </td>
+                        <td>
+                          <StatusBadge tone={incoming ? 'info' : 'success'} className="badge-pill">
+                            {incoming ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}
+                            {incoming ? tr('efakturaIncoming') : tr('efakturaOutgoing')}
+                          </StatusBadge>
+                        </td>
+                        <td className="efaktura-document-cell">
+                          <strong title={item.invoice_number}>{item.invoice_number || UI_DASH}</strong>
+                          <span>{formatDateSr(item.issued_date)}</span>
+                        </td>
+                        <td className="efaktura-counterparty-cell">
+                          <strong title={partyName || ''}>{partyName || UI_DASH}</strong>
+                          {partyPib ? <span>PIB {partyPib}</span> : null}
+                        </td>
+                        <td className="efaktura-amount-cell">{formatAmount(item.amount_rsd)}</td>
+                        <td>
+                          <div className="efaktura-record-cell">
+                            <StatusBadge tone={expense ? 'warning' : 'success'} className="badge-pill">
+                              {expense ? tr('efakturaImportedAsExpense') : tr('efakturaImportedAsIncome')}
+                            </StatusBadge>
+                            <span>#{item.imported_record_id || UI_DASH}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <StatusBadge tone={item.source === 'api' ? 'info' : 'muted'} className="badge-pill">
+                            {item.source === 'api' ? tr('efakturaSourceApi') : tr('efakturaSourceXml')}
+                          </StatusBadge>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </>
   )

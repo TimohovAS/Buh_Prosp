@@ -6993,6 +6993,490 @@ tr:hover td {
   }
 }
 
+/* eFaktura: compact operational overview and searchable import history. */
+.efaktura-page-body > .card {
+  margin-bottom: 1rem;
+}
+
+.efaktura-action-button,
+.efaktura-refresh-button {
+  gap: 0.45rem;
+}
+
+.efaktura-page-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.efaktura-page-alert > svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.efaktura-page-alert strong,
+.efaktura-page-alert span {
+  display: block;
+}
+
+.efaktura-page-alert span {
+  margin-top: 0.15rem;
+}
+
+.efaktura-api-card,
+.efaktura-result-card,
+.efaktura-history-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.efaktura-api-main {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.06), transparent 42%);
+}
+
+.efaktura-api-icon,
+.efaktura-section-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.efaktura-api-icon.is-connected,
+.efaktura-section-icon.is-success {
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.11);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.efaktura-section-icon.is-warning {
+  color: var(--color-warning);
+}
+
+.efaktura-api-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.efaktura-api-copy > span,
+.efaktura-api-detail > span {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.efaktura-api-copy > strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.efaktura-api-main > .badge {
+  flex: 0 0 auto;
+}
+
+.efaktura-api-details {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) repeat(4, minmax(120px, 0.7fr));
+  background: rgba(15, 20, 25, 0.16);
+}
+
+.efaktura-api-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 1.25rem;
+  border-right: 1px solid var(--color-border);
+}
+
+.efaktura-api-detail:last-child {
+  border-right: 0;
+}
+
+.efaktura-api-detail > strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.efaktura-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.efaktura-section-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.efaktura-section-head h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.efaktura-section-head p {
+  margin: 0.1rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.efaktura-icon-button {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.efaktura-icon-button:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.efaktura-result-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.efaktura-result-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.75rem 1.1rem;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.efaktura-result-metric > span {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.efaktura-result-metric > strong {
+  font-size: 1.1rem;
+}
+
+.efaktura-result-metric.is-success > strong {
+  color: var(--color-success);
+}
+
+.efaktura-result-metric.is-info > strong {
+  color: #7dd3fc;
+}
+
+.efaktura-result-metric.is-muted > strong {
+  color: var(--color-text-muted);
+}
+
+.efaktura-result-metric.is-danger > strong {
+  color: var(--color-danger);
+}
+
+.efaktura-result-issues {
+  margin: 0.9rem 1.25rem 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid;
+  border-radius: 9px;
+  font-size: 0.8rem;
+}
+
+.efaktura-result-issues.is-danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+}
+
+.efaktura-result-issues.is-warning {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+  color: #fcd34d;
+}
+
+.efaktura-result-issues ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1.15rem;
+}
+
+.efaktura-history-card {
+  margin-bottom: 0 !important;
+}
+
+.efaktura-history-head {
+  min-height: 64px;
+}
+
+.efaktura-history-count {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.efaktura-history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(15, 20, 25, 0.18);
+}
+
+.efaktura-history-toolbar .search-input-wrap {
+  width: min(360px, 100%);
+  flex: 1 1 300px;
+}
+
+.efaktura-history-toolbar > select {
+  width: auto;
+  min-width: 155px;
+  font-size: 0.86rem;
+}
+
+.efaktura-refresh-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.efaktura-history-table {
+  min-width: 1020px;
+  table-layout: fixed;
+}
+
+.efaktura-history-table th:nth-child(1) {
+  width: 155px;
+}
+
+.efaktura-history-table th:nth-child(2) {
+  width: 130px;
+}
+
+.efaktura-history-table th:nth-child(3) {
+  width: 230px;
+}
+
+.efaktura-history-table th:nth-child(4) {
+  width: auto;
+}
+
+.efaktura-history-table th:nth-child(5) {
+  width: 135px;
+}
+
+.efaktura-history-table th:nth-child(6) {
+  width: 145px;
+}
+
+.efaktura-history-table th:nth-child(7) {
+  width: 80px;
+}
+
+.efaktura-history-table th,
+.efaktura-history-table td {
+  padding: 0.7rem 0.85rem;
+  vertical-align: middle;
+}
+
+.efaktura-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.efaktura-history-table .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.efaktura-sort-button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+}
+
+.efaktura-sort-button:hover,
+.efaktura-sort-button:focus-visible {
+  color: var(--color-text);
+}
+
+.efaktura-date-cell,
+.efaktura-amount-cell {
+  white-space: nowrap;
+}
+
+.efaktura-date-cell strong,
+.efaktura-document-cell strong,
+.efaktura-counterparty-cell strong {
+  display: block;
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.efaktura-document-cell span,
+.efaktura-counterparty-cell span,
+.efaktura-record-cell > span {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.efaktura-amount-cell {
+  font-weight: 600;
+  text-align: right;
+}
+
+.efaktura-record-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.efaktura-record-cell > span {
+  margin-top: 0;
+}
+
+.efaktura-table-message {
+  height: 110px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.efaktura-table-message > svg {
+  margin-right: 0.45rem;
+  vertical-align: -0.25rem;
+}
+
+@keyframes efaktura-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.efaktura-button-spinner {
+  animation: efaktura-spin 0.8s linear infinite;
+}
+
+@media (max-width: 1200px) {
+  .efaktura-api-details {
+    grid-template-columns: minmax(260px, 1.5fr) repeat(2, minmax(130px, 0.7fr));
+  }
+
+  .efaktura-api-detail {
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 800px) {
+  .efaktura-api-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .efaktura-api-detail--endpoint {
+    grid-column: 1 / -1;
+  }
+
+  .efaktura-history-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .efaktura-history-toolbar .search-input-wrap {
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .efaktura-history-toolbar > select {
+    flex: 1 1 180px;
+  }
+
+  .efaktura-refresh-button {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .efaktura-api-main,
+  .efaktura-section-head {
+    align-items: flex-start;
+  }
+
+  .efaktura-api-copy > strong {
+    white-space: normal;
+  }
+
+  .efaktura-api-details {
+    grid-template-columns: 1fr;
+  }
+
+  .efaktura-api-detail--endpoint {
+    grid-column: auto;
+  }
+
+  .efaktura-api-detail {
+    border-right: 0;
+  }
+
+  .efaktura-history-head {
+    flex-direction: column;
+  }
+
+  .efaktura-history-toolbar > select,
+  .efaktura-refresh-button {
+    width: 100%;
+  }
+}
+
 @media print {
   body {
     background: #fff;
