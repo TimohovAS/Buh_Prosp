@@ -542,7 +542,7 @@ export default function Contracts() {
             <div className="record-profile">
               <div className="record-profile-content record-profile-content--stack">
                 {/* Плитки подписаны сами — отдельный заголовок блока не нужен */}
-                <div className="record-profile-facts">
+                <div className="record-profile-facts record-profile-facts--contract">
                   <div className="record-profile-fact record-profile-fact--money">
                     <span>{tr('amount')}</span>
                     <strong>{formatInteger(detailModal.amount || 0)}</strong>
@@ -565,7 +565,7 @@ export default function Contracts() {
                     <span>{detailValidity.label}</span>
                     <strong>{detailValidity.value}</strong>
                   </div>
-                  <div className="record-profile-fact">
+                  <div className="record-profile-fact record-profile-fact--wide">
                     <span>{tr('project')}</span>
                     <strong>{getProjectName(detailModal.project_id) || UI_DASH}</strong>
                   </div>

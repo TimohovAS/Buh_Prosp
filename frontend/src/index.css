@@ -2129,6 +2129,10 @@ tr.row-reversal {
 }
 
 @media (max-width: 940px) {
+  .record-profile-facts--contract {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .record-profile-note .record-profile-text {
     max-height: 16rem;
   }
@@ -2237,6 +2241,14 @@ tr.row-reversal {
   font-size: 1.02rem;
 }
 
+.record-profile-facts--contract {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.record-profile-facts--contract > .record-profile-fact--wide {
+  grid-column: span 2;
+}
+
 .record-profile-fact strong.is-positive {
   color: var(--color-success);
 }
@@ -2312,8 +2324,13 @@ tr.row-reversal {
   }
 
   .record-profile-content,
-  .record-profile-facts {
+  .record-profile-facts,
+  .record-profile-facts--contract {
     grid-template-columns: 1fr;
+  }
+
+  .record-profile-facts--contract > .record-profile-fact--wide {
+    grid-column: auto;
   }
 
   .record-profile-panel--wide {
