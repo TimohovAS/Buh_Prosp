@@ -8,10 +8,12 @@ export default function YearFilterSelect({
   className = 'form-input',
   style = { width: 'auto' },
   title,
+  id,
   disabled = false,
 }) {
   return (
     <select
+      id={id}
       className={className}
       style={style}
       value={value === '' ? '' : String(value)}

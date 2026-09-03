@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  MoreHorizontal,
+  Settings2,
+  WalletCards,
+} from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import DatePicker from '../components/DatePicker'
 import { api } from '../api'
-import { getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
+import { getLang, getMonthNamesFull, getMonthNamesShort, tr } from '../i18n'
 import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import SearchInput from '../components/SearchInput'
@@ -12,22 +20,61 @@ import useAvailableYears from '../hooks/useAvailableYears'
 import { formatDateSr as formatDate, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 
-function emptyValue() {
-  const translated = tr('notSet')
-  return translated && translated !== 'notSet' ? translated : '\u2014'
-}
-
 function defaultRecipientName() {
   const translated = tr('taxAuthority')
   return translated && translated !== 'taxAuthority' ? translated : ''
 }
 
-const STATUS_FILTERS = [
-  { value: 'all', label: 'statusFilterAll' },
-  { value: 'unpaid', label: 'unpaid' },
-  { value: 'paid', label: 'paid' },
-  { value: 'overdue', label: 'obligationsOverdue' },
-]
+const DUE_SOON_DAYS = 7
+
+function formatRsd(value) {
+  return `${Number(value || 0).toLocaleString('sr-RS', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} RSD`
+}
+
+function daysUntil(value) {
+  if (!value) return null
+  const deadline = new Date(`${value}T00:00:00`)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((deadline.getTime() - today.getTime()) / 86400000)
+}
+
+function groupByMonth(obligations, descending = false) {
+  const groups = new Map()
+  obligations.forEach((obligation) => {
+    const key = `${obligation.year}-${String(obligation.month).padStart(2, '0')}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(obligation)
+  })
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => (descending ? right.localeCompare(left) : left.localeCompare(right)))
+    .map(([key, monthItems]) => ({
+      key,
+      year: monthItems[0]?.year,
+      month: monthItems[0]?.month,
+      items: monthItems,
+      total: monthItems.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    }))
+}
+
+function SummaryCard({ icon: Icon, tone, label, value, note }) {
+  return (
+    <div className={`obligations-summary-card obligations-summary-card--${tone}`}>
+      <span className="obligations-summary-icon" aria-hidden="true">
+        <Icon size={19} />
+      </span>
+      <div className="obligations-summary-content">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{note}</small>
+      </div>
+    </div>
+  )
+}
 
 export default function Obligations() {
   const location = useLocation()
@@ -37,7 +84,6 @@ export default function Obligations() {
       initialYear: new Date().getFullYear(),
       includeAllTime: false,
     })
-  const [statusFilter, setStatusFilter] = useState('all')
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('')
   const [search, setSearch] = useState('')
   const [items, setItems] = useState([])
@@ -51,6 +97,9 @@ export default function Obligations() {
     payment_reference: '',
   })
   const [qrModal, setQrModal] = useState(null)
+  const [qrPaymentReference, setQrPaymentReference] = useState('')
+  const [confirmingQrPayment, setConfirmingQrPayment] = useState(false)
+  const [qrPaymentError, setQrPaymentError] = useState('')
   const [settingsModal, setSettingsModal] = useState(false)
   const [decisionFormModal, setDecisionFormModal] = useState(null)
   const [decisionForm, setDecisionForm] = useState({
@@ -106,12 +155,10 @@ export default function Obligations() {
       if (
         year !== resolvedYear ||
         search !== resolvedSearch ||
-        statusFilter !== 'all' ||
         paymentTypeFilter !== ''
       ) {
         setYear(resolvedYear)
         setSearch(resolvedSearch)
-        setStatusFilter('all')
         setPaymentTypeFilter('')
         return
       }
@@ -119,12 +166,14 @@ export default function Obligations() {
 
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, paymentTypeFilter, search, statusFilter, isActivePage, location.search])
+  }, [year, paymentTypeFilter, search, isActivePage, location.search])
 
-  const getTypeName = (code) => types.find((item) => item.code === code)?.name_sr || code
+  const getTypeName = (code) => {
+    const type = types.find((item) => item.code === code)
+    return (getLang() === 'ru' ? type?.name_ru || type?.name_sr : type?.name_sr) || code
+  }
 
-  const filteredItems = items.filter((obligation) => {
-    if (statusFilter !== 'all' && obligation.status !== statusFilter) return false
+  const matchingItems = items.filter((obligation) => {
     const normalizedSearch = search.trim().toLowerCase()
     if (!normalizedSearch) return true
 
@@ -144,6 +193,35 @@ export default function Obligations() {
       .toLowerCase()
     return haystack.includes(normalizedSearch)
   })
+
+  const activeItems = matchingItems.filter((obligation) => obligation.status !== 'paid')
+  const paidItems = matchingItems.filter((obligation) => obligation.status === 'paid')
+  const activeGroups = groupByMonth(activeItems)
+  const paidGroups = groupByMonth(paidItems, true)
+  const firstUpcomingGroup = activeGroups.find((group) =>
+    group.items.every((obligation) => obligation.status !== 'overdue')
+  )
+  const expandedActiveGroupKeys = new Set([
+    ...activeGroups
+      .filter((group) => group.items.some((obligation) => obligation.status === 'overdue'))
+      .map((group) => group.key),
+    ...(firstUpcomingGroup ? [firstUpcomingGroup.key] : []),
+  ])
+  const visibleActiveGroups = search.trim()
+    ? activeGroups
+    : activeGroups.filter((group) => expandedActiveGroupKeys.has(group.key))
+  const futureActiveGroups = search.trim()
+    ? []
+    : activeGroups.filter((group) => !expandedActiveGroupKeys.has(group.key))
+  const futureActiveItems = futureActiveGroups.flatMap((group) => group.items)
+  const allActiveItems = items.filter((obligation) => obligation.status !== 'paid')
+  const overdueItems = allActiveItems.filter((obligation) => obligation.status === 'overdue')
+  const dueSoonItems = allActiveItems.filter((obligation) => {
+    const days = daysUntil(obligation.deadline)
+    return days !== null && days >= 0 && days <= DUE_SOON_DAYS
+  })
+  const allPaidItems = items.filter((obligation) => obligation.status === 'paid')
+  const sumAmounts = (list) => list.reduce((sum, item) => sum + Number(item.amount || 0), 0)
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -166,12 +244,35 @@ export default function Obligations() {
   }
 
   const openQrModal = async (obligation) => {
+    setQrPaymentReference('')
+    setQrPaymentError('')
     setQrModal({ obligation })
     try {
       const data = await api.obligations.ipsQr(obligation.id)
       setQrModal({ obligation, data })
     } catch (error) {
       setQrModal({ obligation, error: error.message || tr('loadError') })
+    }
+  }
+
+  const handleQrPaymentSubmit = async (event) => {
+    event.preventDefault()
+    if (!qrModal?.obligation || !qrPaymentReference.trim()) return
+
+    setConfirmingQrPayment(true)
+    setQrPaymentError('')
+    try {
+      await api.obligations.markPaid(qrModal.obligation.id, {
+        paid_date: todayIso(),
+        payment_reference: qrPaymentReference.trim(),
+      })
+      setQrModal(null)
+      setQrPaymentReference('')
+      load()
+    } catch (error) {
+      setQrPaymentError(error.message || tr('paymentConfirmError'))
+    } finally {
+      setConfirmingQrPayment(false)
     }
   }
 
@@ -289,157 +390,273 @@ export default function Obligations() {
 
   const monthNamesFull = getMonthNamesFull()
   const monthNamesShort = getMonthNamesShort()
-  const empty = emptyValue()
+
+  const renderObligation = (obligation) => {
+    const isPaid = obligation.status === 'paid'
+    const remainingDays = daysUntil(obligation.deadline)
+    const isDueSoon = !isPaid && remainingDays !== null && remainingDays >= 0 && remainingDays <= DUE_SOON_DAYS
+    const statusTone = isPaid ? 'success' : obligation.status === 'overdue' ? 'danger' : 'warning'
+    const statusLabel = isPaid
+      ? tr('paid')
+      : obligation.status === 'overdue'
+        ? tr('obligationsOverdue')
+        : isDueSoon
+          ? tr('obligationsDueSoon')
+          : tr('unpaid')
+
+    return (
+      <div
+        className={`obligation-row ${isPaid ? 'obligation-row--paid' : 'obligation-row--active'}`}
+        key={obligation.id}
+      >
+        <div className="obligation-row-main">
+          <div className="obligation-row-title">
+            <strong>{getTypeName(obligation.payment_type_code) || obligation.payment_type_code}</strong>
+            <SharedStatusBadge tone={statusTone} className="badge-pill">
+              {statusLabel}
+            </SharedStatusBadge>
+          </div>
+          <div className="obligation-row-meta">
+            {isPaid ? (
+              <>
+                <span>
+                  {tr('dateOfPayment')}: <strong>{formatDate(obligation.paid_date)}</strong>
+                </span>
+                {obligation.payment_reference ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span title={obligation.payment_reference}>
+                      {tr('paymentRef')}: <strong>{obligation.payment_reference}</strong>
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <span>
+                  {tr('deadline')}: <strong>{formatDate(obligation.deadline)}</strong>
+                </span>
+                {isDueSoon ? (
+                  <span className="obligation-due-hint">
+                    {remainingDays === 0 ? tr('obligationToday') : tr('obligationDaysLeft')(remainingDays)}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+
+        <strong className="obligation-row-amount">{formatRsd(obligation.amount)}</strong>
+
+        <div className="obligation-row-actions">
+          {!isPaid ? (
+            <button className="btn btn-sm btn-primary" onClick={() => openQrModal(obligation)}>
+              {tr('payQr')}
+            </button>
+          ) : null}
+          <details className="obligation-actions-menu">
+            <summary
+              className="obligation-icon-button"
+              title={tr('obligationsMoreActions')}
+              aria-label={tr('obligationsMoreActions')}
+            >
+              <MoreHorizontal size={18} />
+            </summary>
+            <div className="obligation-actions-popover">
+              <button
+                type="button"
+                onClick={() => (isPaid ? markUnpaid(obligation) : openPaidModal(obligation))}
+              >
+                {isPaid ? tr('markUnpaid') : tr('markPaid')}
+              </button>
+            </div>
+          </details>
+        </div>
+      </div>
+    )
+  }
+
+  const renderMonthGroup = (group, isPaid = false) => (
+    <section className={`obligation-month-card ${isPaid ? 'obligation-month-card--paid' : ''}`} key={group.key}>
+      <header className="obligation-month-header">
+        <div>
+          <h3>
+            {monthNamesFull[group.month - 1] || group.month} {group.year}
+          </h3>
+          <span>
+            {group.items.length} · {tr('deadline')} {formatDate(group.items[0]?.deadline)}
+          </span>
+        </div>
+        <strong>{formatRsd(group.total)}</strong>
+      </header>
+      <div className="obligation-month-rows">{group.items.map(renderObligation)}</div>
+    </section>
+  )
 
   return (
-    <div className="page">
+    <div className="page obligations-page">
       <PageHeader
         title={tr('payments')}
+        subtitle={tr('obligationsPageSubtitle')}
         actions={
-          <>
+          <button className="btn btn-secondary obligations-settings-button" onClick={() => setSettingsModal(true)}>
+            <Settings2 size={17} />
+            {tr('obligationsSettings')}
+          </button>
+        }
+      />
+
+      <div className="page-body">
+        <div className="obligations-summary-grid">
+          <SummaryCard
+            icon={AlertTriangle}
+            tone="danger"
+            label={tr('obligationsOverdue')}
+            value={loading ? '—' : overdueItems.length}
+            note={loading ? tr('loading') : formatRsd(sumAmounts(overdueItems))}
+          />
+          <SummaryCard
+            icon={CalendarClock}
+            tone="warning"
+            label={tr('obligationsDueNext7Days')}
+            value={loading ? '—' : dueSoonItems.length}
+            note={loading ? tr('loading') : formatRsd(sumAmounts(dueSoonItems))}
+          />
+          <SummaryCard
+            icon={WalletCards}
+            tone="accent"
+            label={tr('obligationsOpenTotal')}
+            value={loading ? '—' : formatRsd(sumAmounts(allActiveItems))}
+            note={
+              loading
+                ? tr('loading')
+                : tr('obligationsPaymentsCount', { count: allActiveItems.length })
+            }
+          />
+          <SummaryCard
+            icon={CheckCircle2}
+            tone="success"
+            label={tr('obligationsPaidForYear', { year })}
+            value={loading ? '—' : formatRsd(sumAmounts(allPaidItems))}
+            note={
+              loading ? tr('loading') : tr('obligationsPaymentsCount', { count: allPaidItems.length })
+            }
+          />
+        </div>
+
+        <div className="card obligations-toolbar">
+          <div className="obligations-filter-field obligations-filter-field--year">
+            <label htmlFor="obligations-year">{tr('filterYear')}</label>
             <YearFilterSelect
+              id="obligations-year"
               value={year}
               availableYears={availableYears}
               onChange={setYear}
               includeAllTime={false}
               title={tr('filterYear')}
+              style={{ width: '100%' }}
             />
+          </div>
+          <div className="obligations-filter-field">
+            <label htmlFor="obligations-payment-type">{tr('filterPaymentType')}</label>
             <select
+              id="obligations-payment-type"
               className="form-input"
-              style={{ width: 'auto' }}
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              title={tr('filterStatus')}
-            >
-              {STATUS_FILTERS.map((filter) => (
-                <option key={filter.value} value={filter.value}>
-                  {tr(filter.label)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              style={{ width: 'auto' }}
               value={paymentTypeFilter}
               onChange={(event) => setPaymentTypeFilter(event.target.value)}
-              title={tr('filterPaymentType')}
             >
-              <option value="">{tr('statusFilterAll')}</option>
+              <option value="">{tr('obligationsAllPaymentTypes')}</option>
               {types.map((type) => (
                 <option key={type.id} value={type.code}>
-                  {type.name_sr}
+                  {(getLang() === 'ru' ? type.name_ru || type.name_sr : type.name_sr) || type.code}
                 </option>
               ))}
             </select>
+          </div>
+          <div className="obligations-filter-field obligations-filter-field--search">
+            <label htmlFor="obligations-search">{tr('search')}</label>
             <SearchInput
-              placeholder={tr('search')}
+              id="obligations-search"
+              placeholder={tr('obligationsSearchPlaceholder')}
               value={search}
               onChange={setSearch}
-              style={{ width: 220 }}
             />
-            <button className="btn btn-secondary" onClick={() => setSettingsModal(true)}>
-              {tr('obligationsSettings')}
-            </button>
-          </>
-        }
-      />
-
-      <div className="page-body">
-        <div className="card">
-          <h3 style={{ margin: 0, marginBottom: '1rem', fontSize: '1rem' }}>{tr('obligationsCalendar')}</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{tr('year')}</th>
-                  <th>{tr('month')}</th>
-                  <th>{tr('paymentTypeLabel')}</th>
-                  <th>{tr('amount')}</th>
-                  <th>{tr('deadline')}</th>
-                  <th>{tr('status')}</th>
-                  <th>{tr('dateOfPayment')}</th>
-                  <th>{tr('paymentRef')}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={9}>{tr('loading')}</td>
-                  </tr>
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} style={{ color: 'var(--color-text-muted)' }}>
-                      {tr('noDataAddDecisions')}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((obligation) => (
-                    <tr key={obligation.id} style={obligation.status === 'paid' ? { opacity: 0.85 } : {}}>
-                      <td>{obligation.year}</td>
-                      <td>{monthNamesFull[obligation.month - 1] || obligation.month}</td>
-                      <td>{getTypeName(obligation.payment_type_code) || obligation.payment_type_code}</td>
-                      <td>{obligation.amount?.toLocaleString('sr-RS')} RSD</td>
-                      <td>{formatDate(obligation.deadline)}</td>
-                      <td>
-                        <SharedStatusBadge
-                          tone={
-                            obligation.status === 'paid'
-                              ? 'success'
-                              : obligation.status === 'overdue'
-                                ? 'danger'
-                                : 'warning'
-                          }
-                          style={{ color: '#fff', padding: '0.2rem 0.5rem', borderRadius: 4 }}
-                        >
-                          {obligation.status === 'paid'
-                            ? tr('paid')
-                            : obligation.status === 'overdue'
-                              ? tr('obligationsOverdue')
-                              : tr('unpaid')}
-                        </SharedStatusBadge>
-                      </td>
-                      <td>{obligation.paid_date ? formatDate(obligation.paid_date) : empty}</td>
-                      <td
-                        style={{
-                          fontSize: '0.85rem',
-                          maxWidth: 140,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={obligation.payment_reference || empty}
-                      >
-                        {obligation.payment_reference || empty}
-                      </td>
-                      <td>
-                        {obligation.status === 'paid' ? (
-                          <button className="btn btn-sm btn-secondary" onClick={() => markUnpaid(obligation)}>
-                            {tr('markUnpaid')}
-                          </button>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              onClick={() => openQrModal(obligation)}
-                            >
-                              {tr('payQr')}
-                            </button>
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => openPaidModal(obligation)}
-                            >
-                              {tr('markPaid')}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
+
+        <section className="obligations-active-section">
+          <div className="obligations-section-heading">
+            <div>
+              <h2>{tr('obligationsNearestPayments')}</h2>
+              <p>{tr('obligationsNearestPaymentsHint')}</p>
+            </div>
+            {!loading ? <span className="obligations-section-count">{activeItems.length}</span> : null}
+          </div>
+
+          {loading ? (
+            <div className="card obligations-empty-state">{tr('loading')}</div>
+          ) : activeGroups.length ? (
+            <>
+              <div className="obligation-groups">
+                {visibleActiveGroups.map((group) => renderMonthGroup(group))}
+              </div>
+              {futureActiveGroups.length ? (
+                <details className="obligations-history obligations-future">
+                  <summary>
+                    <span className="obligations-history-icon">
+                      <CalendarClock size={18} />
+                    </span>
+                    <span>
+                      <strong>{tr('obligationsFutureMonths')}</strong>
+                      <small>
+                        {tr('obligationsMonthsCount', { count: futureActiveGroups.length })} ·{' '}
+                        {tr('obligationsPaymentsCount', { count: futureActiveItems.length })}
+                      </small>
+                    </span>
+                    <span className="obligations-history-total">{formatRsd(sumAmounts(futureActiveItems))}</span>
+                    <span className="obligations-history-chevron" aria-hidden="true">⌄</span>
+                  </summary>
+                  <div className="obligations-history-content">
+                    <div className="obligation-groups">
+                      {futureActiveGroups.map((group) => renderMonthGroup(group))}
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+            </>
+          ) : (
+            <div className="card obligations-empty-state">
+              <CheckCircle2 size={24} />
+              <strong>{tr('obligationsNoActive')}</strong>
+              <span>{search ? tr('obligationsTryAnotherSearch') : tr('obligationsNoActiveHint')}</span>
+            </div>
+          )}
+        </section>
+
+        {!loading ? (
+          <details className="obligations-history">
+            <summary>
+              <span className="obligations-history-icon">
+                <CheckCircle2 size={18} />
+              </span>
+              <span>
+                <strong>{tr('obligationsPaidHistory')}</strong>
+                <small>{tr('obligationsPaymentsCount', { count: paidItems.length })}</small>
+              </span>
+              <span className="obligations-history-total">{formatRsd(sumAmounts(paidItems))}</span>
+              <span className="obligations-history-chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div className="obligations-history-content">
+              {paidGroups.length ? (
+                <div className="obligation-groups">{paidGroups.map((group) => renderMonthGroup(group, true))}</div>
+              ) : (
+                <div className="obligations-empty-state obligations-empty-state--compact">
+                  {tr('obligationsNoPaid')}
+                </div>
+              )}
+            </div>
+          </details>
+        ) : null}
       </div>
 
       <Modal
@@ -629,6 +846,35 @@ export default function Obligations() {
               <span style={{ color: 'var(--color-text-muted)' }}>{tr('paymentPurpose')}</span>
               <span>{qrModal.data.purpose}</span>
             </div>
+            <form className="obligation-qr-confirmation" onSubmit={handleQrPaymentSubmit}>
+              <div className="obligation-qr-confirmation-heading">
+                <strong>{tr('paymentConfirmation')}</strong>
+                <span>{tr('transactionNumberHint')}</span>
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="obligation-transaction-number">
+                  {tr('transactionNumber')} *
+                </label>
+                <input
+                  id="obligation-transaction-number"
+                  type="text"
+                  className="form-input"
+                  value={qrPaymentReference}
+                  onChange={(event) => setQrPaymentReference(event.target.value)}
+                  placeholder={tr('transactionNumberPlaceholder')}
+                  autoComplete="off"
+                  required
+                />
+              </div>
+              {qrPaymentError ? <div className="alert alert-danger">{qrPaymentError}</div> : null}
+              <button
+                type="submit"
+                className="btn btn-primary obligation-qr-confirm-button"
+                disabled={confirmingQrPayment || !qrPaymentReference.trim()}
+              >
+                {confirmingQrPayment ? tr('loading') : tr('confirmPayment')}
+              </button>
+            </form>
           </div>
         )}
       </Modal>
