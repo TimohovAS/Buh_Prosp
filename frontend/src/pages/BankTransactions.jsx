@@ -677,9 +677,7 @@ export default function BankTransactions() {
           referenceDataPromise,
         ])
         setSuggestions(response)
-        const hasLinkOptions = response.some(
-          (item) => item.type === 'obligation' && item.section === 'suggested'
-        )
+        const hasLinkOptions = response.length > 0
         setMatchTab(requestedTab || (hasLinkOptions ? 'link' : 'create'))
       } else {
         const [response] = await Promise.all([
@@ -901,6 +899,7 @@ export default function BankTransactions() {
     const amount = Number(item.amount || 0)
     const fullAmount = item.amount_full != null ? Number(item.amount_full) : amount
     const isPartial = item.type === 'income' && fullAmount > amount
+    const isPaidObligation = item.type === 'obligation' && item.status === 'paid'
     const label = item.invoice_number || item.description || `#${item.id}`
     const matchReason = item.match_reason ? tr(`bankTxMatchReason_${item.match_reason}`) : ''
 
@@ -909,7 +908,15 @@ export default function BankTransactions() {
         <div style={{ minWidth: 0 }}>
           <div className="bank-match-item-title">
             <span>{label}</span>
-            {item.date ? <span className="bank-match-item-subtle">{item.date}</span> : null}
+            {isPaidObligation ? (
+              <span className="badge badge-success">{tr('bankTxAlreadyPaidTax')}</span>
+            ) : null}
+            {item.date ? (
+              <span className="bank-match-item-subtle">
+                {isPaidObligation ? `${tr('dateOfPayment')}: ` : ''}
+                {item.date}
+              </span>
+            ) : null}
             {item.score != null ? <span className="bank-match-item-subtle">{item.score}%</span> : null}
             {matchReason ? <span className="bank-match-item-subtle">{matchReason}</span> : null}
           </div>
@@ -919,6 +926,11 @@ export default function BankTransactions() {
             </div>
           ) : null}
           {item.description ? <div className="bank-match-item-body">{item.description}</div> : null}
+          {item.payment_reference ? (
+            <div className="bank-match-item-body">
+              {tr('transactionNumber')}: {item.payment_reference}
+            </div>
+          ) : null}
           <div className="bank-match-item-amount">
             {isPartial ? (
               <>
@@ -1537,21 +1549,28 @@ export default function BankTransactions() {
         String(item.date || '')
           .toLowerCase()
           .includes(query) ||
+        String(item.payment_reference || '')
+          .toLowerCase()
+          .includes(query) ||
         String(item.amount || '').includes(query)
     )
 
     const renderLinkPanel = () => (
       <div className="bank-match-columns bank-match-link-panel">
-        {suggested.length > 0 ? (
-          <div className="bank-match-panel">
-            <div className="bank-match-panel-title">{tr('bankTxAutoFound')}</div>
-            <div className="bank-match-list">{suggested.map(renderSuggestionCard)}</div>
+        <div className="bank-match-panel">
+          <div className="bank-match-panel-title">{tr('bankTxAutoFound')}</div>
+          <div className="bank-match-list">
+            {suggested.length ? (
+              suggested.map(renderSuggestionCard)
+            ) : (
+              <p className="bank-match-form-note">{tr('bankTxNoConfidentMatches')}</p>
+            )}
           </div>
-        ) : null}
+        </div>
 
         <div className="bank-match-panel">
           <div className="bank-match-panel-title">
-            {tr('bankTxExistingExpenses')} / {tr('bankTxOpenObligations')}
+            {tr('bankTxExistingExpenses')} / {tr('bankTxObligations')}
           </div>
           <SearchInput
             placeholder={tr('bankTxSearchInvoices')}

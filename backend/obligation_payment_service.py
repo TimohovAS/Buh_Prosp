@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.decimal_utils import ZERO_DECIMAL, to_decimal
+from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
 
 from backend.models import BankTransaction, Expense, MonthlyObligation, PaymentType
 from backend.services import create_expense_reversal
@@ -91,6 +92,83 @@ async def mark_obligation_paid(
 
     await db.flush()
     return expense
+
+
+def normalize_payment_reference(value: str | None) -> str:
+    return re.sub(r"[^\w]+", "", value or "").casefold()
+
+
+def obligation_has_bank_link():
+    """Correlated predicate also covering legacy links directly to the expense."""
+    return (
+        select(BankTransaction.id)
+        .where(
+            BankTransaction.status == "matched",
+            or_(
+                and_(
+                    BankTransaction.matched_type == "obligation",
+                    BankTransaction.matched_id == MonthlyObligation.id,
+                ),
+                and_(
+                    BankTransaction.matched_type == "expense",
+                    BankTransaction.matched_id == MonthlyObligation.expense_id,
+                ),
+            ),
+        )
+        .correlate(MonthlyObligation)
+        .exists()
+    )
+
+
+async def link_obligation_bank_transaction(
+    db: AsyncSession, obligation: MonthlyObligation, tx: BankTransaction
+) -> None:
+    """Attach a statement to an existing manual payment, or record a new bank payment."""
+    if tx.direction != "out" or tx.currency != "RSD":
+        raise ValueError("Tax payments require an outgoing RSD transaction")
+    if obligation.amount <= ZERO_DECIMAL or not money_eq(money_abs(tx.amount), obligation.amount):
+        raise ValueError("Transaction amount does not match the tax obligation")
+    linked = await db.scalar(
+        select(MonthlyObligation.id).where(MonthlyObligation.id == obligation.id, obligation_has_bank_link())
+    )
+    if linked is not None:
+        raise ValueError("Tax obligation is already linked to a bank transaction")
+
+    if obligation.status != "paid":
+        await mark_obligation_paid(
+            db,
+            obligation,
+            tx.date,
+            payment_reference=tx.bank_reference,
+            payment_method="bank_import",
+            bank_transaction=tx,
+        )
+        return
+
+    if obligation.payment_method not in {None, "manual"}:
+        raise ValueError("Only manually paid tax obligations can be reconciled with a bank transaction")
+    reference = normalize_payment_reference(obligation.payment_reference)
+    bank_reference = normalize_payment_reference(tx.bank_reference)
+    if reference and bank_reference and reference != bank_reference:
+        raise ValueError("Transaction number does not match the recorded tax payment")
+    expense = await db.get(Expense, obligation.expense_id) if obligation.expense_id else None
+    if (
+        expense is None
+        or expense.status != "paid"
+        or expense.source != "obligation"
+        or expense.reversal_of_id
+        or expense.reversed_expense_id
+        or expense.currency != "RSD"
+        or not money_eq(expense.amount, obligation.amount)
+    ):
+        raise ValueError("The manually paid tax obligation has no valid paid expense to link")
+
+    # Keep the manual payment (including its date, reference and expense) intact.
+    # payment_method remains manual so unlinking the statement will not reverse it.
+    tx.status = "matched"
+    tx.matched_type = "obligation"
+    tx.matched_id = obligation.id
+    await db.flush()
 
 
 async def reset_obligation_payment(

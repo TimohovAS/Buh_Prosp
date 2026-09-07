@@ -2021,6 +2021,7 @@ class MatchCandidate(BaseModel):
     score: Optional[int] = None
     section: Optional[str] = None
     match_reason: Optional[str] = None
+    payment_reference: Optional[str] = None
 
 
 class MatchRequest(BaseModel):

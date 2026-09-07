@@ -6,7 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.bank_account_utils import extract_serbian_bank_accounts
+from backend.bank_account_utils import extract_serbian_bank_accounts, normalize_serbian_bank_account
 from backend.cash_service import is_cash_transfer_expense, revert_cash_transfer
 from backend.counterparty_loan_service import MATCH_TYPE_LOAN_MOVEMENT, unmatch_loan_movement
 from backend.date_utils import coerce_date, days_between
@@ -17,7 +17,12 @@ from backend.db_utils import (
 )
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, money_eq, to_decimal
 from backend.incoming_invoice_service import settle_via_bank
-from backend.obligation_payment_service import mark_obligation_paid, reset_obligation_payment
+from backend.obligation_payment_service import (
+    link_obligation_bank_transaction,
+    normalize_payment_reference,
+    obligation_has_bank_link,
+    reset_obligation_payment,
+)
 from backend.models import (
     BankTransaction,
     BankTransactionIncomeAllocation,
@@ -324,7 +329,7 @@ def _obligation_terms(obligation: MonthlyObligation) -> list[str]:
         getattr(payment_type, "name_sr", None),
         getattr(payment_type, "name_ru", None),
         getattr(payment_type, "code", None),
-        getattr(decision, "payment_purpose", None),
+        (getattr(decision, "payment_purpose", None) or "").replace("YYYY", str(obligation.year)),
     ]
     return [str(value).lower() for value in values if value]
 
@@ -340,7 +345,23 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
             selectinload(MonthlyObligation.payment_type),
             selectinload(MonthlyObligation.decision),
         )
-        .where(MonthlyObligation.status.in_(["unpaid", "overdue"]))
+        .outerjoin(Expense, Expense.id == MonthlyObligation.expense_id)
+        .where(
+            ~obligation_has_bank_link(),
+            or_(
+                MonthlyObligation.status.in_(["unpaid", "overdue"]),
+                (
+                    (MonthlyObligation.status == "paid")
+                    & or_(MonthlyObligation.payment_method == "manual", MonthlyObligation.payment_method.is_(None))
+                    & (Expense.status == "paid")
+                    & (Expense.source == "obligation")
+                    & (Expense.currency == "RSD")
+                    & (Expense.amount == MonthlyObligation.amount)
+                    & Expense.reversal_of_id.is_(None)
+                    & Expense.reversed_expense_id.is_(None)
+                ),
+            ),
+        )
         .order_by(MonthlyObligation.deadline.asc(), MonthlyObligation.id.asc())
     )
     response = await db.execute(query)
@@ -348,10 +369,17 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
 
     tx_text = " ".join(filter(None, [tx.counterparty_name, tx.purpose, tx.bank_reference])).lower()
     tx_digits = _normalize_digits(tx_text)
+    tx_accounts = _transaction_bank_accounts(tx)
+    tx_reference = normalize_payment_reference(tx.bank_reference)
+    has_recorded_payment_match = False
+    obligation_candidates = []
 
     for obligation in obligations:
+        if tx.currency != "RSD" or obligation.amount <= ZERO_DECIMAL:
+            continue
+        if not money_eq(obligation.amount, money_abs(tx.amount)):
+            continue
         decision = getattr(obligation, "decision", None)
-        amount_diff = money_abs(money_abs(obligation.amount or ZERO_DECIMAL) - money_abs(tx.amount or ZERO_DECIMAL))
         deadline_diff = days_between(tx.date, obligation.deadline, absolute=True)
         reference_match = False
         for candidate in (
@@ -362,30 +390,39 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
             if digits and digits in tx_digits:
                 reference_match = True
                 break
-        account_digits = _normalize_digits(getattr(decision, "recipient_account", None))
-        account_match = bool(account_digits and account_digits in tx_digits)
+        account = normalize_serbian_bank_account(getattr(decision, "recipient_account", None))
+        account_match = bool(account and account in tx_accounts)
         term_match = any(term and term in tx_text for term in _obligation_terms(obligation))
-        exact_amount_match = amount_diff <= 0.5
 
         section = "all"
         score_value = None
-        if exact_amount_match and reference_match:
-            section = "suggested"
-            score_value = 100
-        elif exact_amount_match and account_match:
-            section = "suggested"
-            score_value = 96
-        elif exact_amount_match and term_match:
-            section = "suggested"
-            score_value = max(70, 88 - min(deadline_diff, 18))
-        elif reference_match or account_match:
-            score_value = 60
+        match_reason = None
+        priority = 1
+        date_diff = deadline_diff
+        is_paid = obligation.status == "paid"
+        if is_paid:
+            recorded_reference = normalize_payment_reference(obligation.payment_reference)
+            if recorded_reference and tx_reference and recorded_reference != tx_reference:
+                continue
+            date_diff = days_between(tx.date, obligation.paid_date, absolute=True) if obligation.paid_date else 9999
+            if recorded_reference and recorded_reference == tx_reference:
+                section, score_value, priority = "suggested", 100, -2
+                match_reason = "obligation_payment_reference"
+            elif date_diff <= 7 and (account_match or reference_match or term_match):
+                section, score_value, priority = "suggested", 95 - date_diff, -1
+                match_reason = "obligation_payment_date"
+            if section == "suggested":
+                has_recorded_payment_match = True
+        # Repeated monthly amounts/references do not identify a distant payment period.
+        elif deadline_diff <= 31 and (reference_match or account_match or term_match):
+            section, score_value, priority = "suggested", max(70, 90 - deadline_diff), 0
+            match_reason = "obligation_deadline"
 
-        scored.append(
+        obligation_candidates.append(
             (
                 (
-                    0 if section == "suggested" else 1,
-                    float(amount_diff),
+                    priority,
+                    float(date_diff),
                     int(obligation.id),
                 ),
                 {
@@ -397,14 +434,21 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
                     "amount": to_decimal(obligation.amount or ZERO_DECIMAL),
                     "amount_full": None,
                     "amount_paid": None,
-                    "date": str(obligation.deadline),
+                    "date": str(obligation.paid_date if is_paid and obligation.paid_date else obligation.deadline),
                     "status": obligation.status,
                     "score": score_value,
                     "section": section,
+                    "match_reason": match_reason,
+                    "payment_reference": obligation.payment_reference if is_paid else None,
                 },
             )
         )
 
+    for sort_key, candidate in obligation_candidates:
+        if has_recorded_payment_match and candidate["status"] != "paid":
+            candidate.update(section="all", score=None, match_reason=None)
+            sort_key = (1, sort_key[1], sort_key[2])
+        scored.append((sort_key, candidate))
     scored.sort(key=lambda item: item[0])
     return [item for _, item in scored]
 
@@ -1309,14 +1353,7 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
         obligation = obligation_response.scalar_one_or_none()
         if not obligation:
             raise ValueError("MonthlyObligation not found")
-        await mark_obligation_paid(
-            db,
-            obligation,
-            tx.date,
-            payment_reference=tx.bank_reference,
-            payment_method="bank_import",
-            bank_transaction=tx,
-        )
+        await link_obligation_bank_transaction(db, obligation, tx)
 
     else:
         raise ValueError("Unknown match type")
@@ -1377,7 +1414,7 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
     elif tx.matched_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == tx.matched_id))
         obligation = obligation_response.scalar_one_or_none()
-        if obligation:
+        if obligation and obligation.payment_method == "bank_import":
             await reset_obligation_payment(db, obligation, created_by=current_user_id)
     elif tx.matched_type == "cash":
         cash_entry_response = await db.execute(select(CashEntry).where(CashEntry.id == tx.matched_id))

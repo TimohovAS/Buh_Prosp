@@ -12,7 +12,12 @@ _FORMATTED_ACCOUNT_RE = re.compile(r"(?<!\d)\d{3}-\d{1,13}-\d{2}(?!\d)")
 def normalize_serbian_bank_account(value: str | None) -> str | None:
     """Return an 18-digit domestic account only when its MOD-97 checksum is valid."""
 
-    digits = re.sub(r"\D+", "", value or "")
+    formatted = re.fullmatch(r"(\d{3})-(\d{1,13})-(\d{2})", (value or "").strip())
+    if formatted:
+        bank, account, checksum = formatted.groups()
+        digits = bank + account.zfill(13) + checksum
+    else:
+        digits = re.sub(r"\D+", "", value or "")
     if len(digits) != 18:
         return None
     if int(digits) % 97 != 1:

@@ -10,6 +10,13 @@ def test_normalize_serbian_bank_account_accepts_compact_and_formatted_values():
     assert normalize_serbian_bank_account("205-0000000216009-21") == "205000000021600921"
 
 
+def test_normalize_and_extract_short_tax_accounts():
+    assert normalize_serbian_bank_account("840-711122843-32") == "840000071112284332"
+    assert normalize_serbian_bank_account("840-721419843-40") == "840000072141984340"
+    assert extract_serbian_bank_accounts("Porez 840-711122843-32") == {"840000071112284332"}
+    assert normalize_serbian_bank_account("840-711122843-33") is None
+
+
 def test_normalize_serbian_bank_account_rejects_bad_length_and_checksum():
     assert normalize_serbian_bank_account("20500000002160092") is None
     assert normalize_serbian_bank_account("205000000021600922") is None
