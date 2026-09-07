@@ -99,7 +99,10 @@ async def finance_cashflow(
     current_user: User = Depends(get_current_user_required),
 ):
     """Cash flow with operating and financing movements shown separately."""
-    return await get_cashflow(db, from_, to, group_by)
+    try:
+        return await get_cashflow(db, from_, to, group_by)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/by-project")

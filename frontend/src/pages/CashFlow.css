@@ -1,0 +1,340 @@
+.cashflow-page .cashflow-content {
+  display: grid;
+  gap: 1.25rem;
+  padding-bottom: 1rem;
+}
+.cashflow-heading,
+.cashflow-filter-row,
+.cashflow-period-nav,
+.cashflow-section-heading,
+.cashflow-metric-label,
+.cashflow-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.cashflow-heading {
+  flex-wrap: wrap;
+}
+.cashflow-heading p,
+.cashflow-range-note,
+.cashflow-chart-note,
+.cashflow-empty p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+.cashflow-badge {
+  display: inline-flex;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+.cashflow-content .card {
+  margin: 0;
+  min-width: 0;
+}
+.cashflow-filters {
+  display: grid;
+  gap: 1rem;
+}
+.cashflow-filter-row {
+  flex-wrap: wrap;
+}
+.cashflow-segmented,
+.cashflow-date-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.cashflow-period-nav {
+  gap: 0.5rem;
+}
+.cashflow-period-nav strong {
+  min-width: 10rem;
+  text-align: center;
+  text-transform: capitalize;
+}
+.cashflow-icon-button {
+  padding: 0.5rem;
+}
+.cashflow-date-row {
+  justify-content: flex-start;
+  align-items: flex-end;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+.cashflow-filters label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.cashflow-date-fields .form-input {
+  width: 155px;
+}
+.cashflow-group-field .form-input {
+  width: 190px;
+}
+.cashflow-range-note {
+  padding-bottom: 0.6rem;
+  margin-left: auto;
+}
+.cashflow-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+.cashflow-metric {
+  padding: 1.15rem;
+  border-top: 2px solid currentColor;
+}
+.cashflow-metric-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+.cashflow-metric-value {
+  font-size: clamp(1.15rem, 1.6vw, 1.75rem);
+  font-weight: 650;
+  margin: 0.85rem 0 0.65rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+.cashflow-metric-value small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+.cashflow-muted {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+.cashflow-page .positive {
+  color: #34d399;
+}
+.cashflow-page .negative {
+  color: #fb7185;
+}
+.cashflow-warning {
+  color: var(--color-warning);
+}
+.cashflow-context {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.cashflow-context svg {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+.cashflow-context a,
+.cashflow-method a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cashflow-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.cashflow-section-heading {
+  margin-bottom: 1rem;
+  align-items: flex-start;
+}
+.cashflow-section-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.cashflow-section-heading p {
+  margin: 0.5rem 0 0;
+}
+.cashflow-chart {
+  height: 265px;
+  width: 100%;
+}
+.cashflow-chart-note,
+.cashflow-legend {
+  min-height: 2rem;
+  font-size: 0.75rem;
+}
+.cashflow-legend {
+  display: flex;
+  gap: 1rem;
+  color: var(--color-text-muted);
+}
+.cashflow-legend span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.cashflow-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.cashflow-tooltip {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  font-size: 0.8rem;
+  box-shadow: 0 6px 24px #0005;
+}
+.cashflow-tooltip > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 0.6rem;
+}
+.cashflow-table-wrap {
+  max-height: 560px;
+}
+.cashflow-table-wrap table {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.cashflow-table-wrap th,
+.cashflow-table-wrap td {
+  padding: 0.75rem;
+}
+.cashflow-table-wrap th:not(:first-child),
+.cashflow-table-wrap td {
+  text-align: right;
+}
+.cashflow-table-wrap td {
+  white-space: nowrap;
+}
+.cashflow-table-wrap th[scope='row'] {
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--color-text);
+  text-transform: capitalize;
+  font-size: 0.8rem;
+}
+.cashflow-table-wrap thead th {
+  font-size: 0.75rem;
+}
+.cashflow-table-wrap tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+.cashflow-table-wrap tfoot th,
+.cashflow-table-wrap tfoot td {
+  font-weight: 650;
+  background: var(--color-surface-hover);
+  border-top: 1px solid var(--color-border);
+}
+.cashflow-closing {
+  font-weight: 650;
+}
+.cashflow-partial {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-transform: none;
+}
+.cashflow-table-wrap .cashflow-formula td {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 400;
+  white-space: normal;
+  color: var(--color-text-muted);
+  border: 0;
+  padding-top: 1rem;
+  background: transparent;
+}
+.cashflow-method {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+.cashflow-method summary {
+  cursor: pointer;
+  color: var(--color-text);
+  width: fit-content;
+}
+.cashflow-method p {
+  max-width: 1000px;
+}
+.cashflow-empty {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.cashflow-empty p {
+  margin-top: 0.4rem;
+}
+.cashflow-loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--color-text-muted);
+}
+@media (min-width: 1600px) {
+  .cashflow-metric-value {
+    font-size: 1.85rem;
+  }
+}
+@media (max-width: 1200px) {
+  .cashflow-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cashflow-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cashflow-range-note {
+    margin-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .cashflow-period-nav {
+    flex-wrap: wrap;
+  }
+  .cashflow-period-nav strong {
+    min-width: 8rem;
+  }
+  .cashflow-filters {
+    padding: 1rem;
+  }
+  .cashflow-metrics {
+    gap: 0.6rem;
+  }
+  .cashflow-metric {
+    padding: 0.8rem;
+  }
+  .cashflow-metric-value {
+    font-size: 1rem;
+    white-space: normal;
+  }
+  .cashflow-date-fields {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .cashflow-date-fields > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .cashflow-date-fields .form-input,
+  .cashflow-date-fields .react-datepicker-wrapper {
+    width: 100%;
+  }
+  .cashflow-table-card,
+  .cashflow-chart-card {
+    padding: 1rem;
+  }
+  .cashflow-section-heading {
+    flex-wrap: wrap;
+  }
+}

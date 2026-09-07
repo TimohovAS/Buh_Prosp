@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings=0",
+    "test:cashflow": "node --test scripts/test-cashflow.mjs",
     "i18n:check": "node scripts/check-i18n-keys.mjs",
     "format": "prettier --write src scripts",
     "format:check": "prettier --check src scripts"

@@ -462,50 +462,17 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
     }
 
 
-async def get_cashflow(
+async def _cashflow_movements(
     db: AsyncSession,
     date_from: date,
     date_to: date,
     group_by: Literal["day", "month", "year"],
-) -> dict:
-    """
-    Cash flow: opening + operating inflow - operating outflow
-    + financing inflow - financing outflow = closing (cumulative).
-    Loan principal is shown as financing and never as revenue or expense.
-    opening for the first point is the balance at the selected range start.
-    """
-    r = await db.execute(select(Enterprise).limit(1))
-    ent = r.scalar_one_or_none()
-    opening_cash_balance = (
-        to_decimal(ent.opening_cash_balance) if ent and ent.opening_cash_balance is not None else ZERO_DECIMAL
-    )
-    opening_cash_date = ent.opening_cash_date if ent and ent.opening_cash_date is not None else None
-
+) -> list[dict]:
+    """One set of recognition rules for both historical and selected movements."""
     bt_date = BankTransaction.date
     bt_amount = BankTransaction.amount
     bt_direction = BankTransaction.direction
     bt_status = BankTransaction.status
-
-    async def _sum_bank(direction: str, start: Optional[date] = None, end: Optional[date] = None) -> float:
-        conditions = [bt_direction == direction, bt_status != "ignored"]
-        if start is not None:
-            conditions.append(bt_date >= start)
-        if end is not None:
-            conditions.append(bt_date < end)
-        amount_expr = func.abs(bt_amount) if direction == "out" else bt_amount
-        q = select(func.coalesce(func.sum(amount_expr), 0)).where(*conditions)
-        value = await db.scalar(q)
-        return to_decimal(value or ZERO_DECIMAL)
-
-    opening_balance_at_range_start = opening_cash_balance
-    if opening_cash_date is None or opening_cash_date < date_from:
-        inflow_before = await _sum_bank("in", opening_cash_date, date_from)
-        outflow_before = await _sum_bank("out", opening_cash_date, date_from)
-        opening_balance_at_range_start += inflow_before - outflow_before
-    elif opening_cash_date > date_from:
-        inflow_after = await _sum_bank("in", date_from, opening_cash_date)
-        outflow_after = await _sum_bank("out", date_from, opening_cash_date)
-        opening_balance_at_range_start -= inflow_after - outflow_after
 
     summary = await get_finance_summary(db, date_from, date_to, group_by, "cash", None)
     series = summary.get("series", [])
@@ -543,33 +510,107 @@ async def get_cashflow(
                 period_values[key] = to_decimal(row.amount or ZERO_DECIMAL)
 
     result_series = []
-    prev_closing = opening_balance_at_range_start
     for s in series:
         inflow = to_decimal(s.get("revenue_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
         outflow = to_decimal(s.get("expense_cash", ZERO_DECIMAL) or ZERO_DECIMAL)
         financing = financing_by_period.get(str(s["period"]), {})
         financing_inflow = to_decimal(financing.get("financing_inflow", ZERO_DECIMAL))
         financing_outflow = to_decimal(financing.get("financing_outflow", ZERO_DECIMAL))
-        opening = prev_closing
-        closing = opening + inflow - outflow + financing_inflow - financing_outflow
-        prev_closing = closing
         result_series.append(
             {
                 "period": s["period"],
-                "opening": opening,
                 "inflow": inflow,
                 "outflow": outflow,
                 "financing_inflow": financing_inflow,
                 "financing_outflow": financing_outflow,
-                "closing": closing,
+                "operating_net": inflow - outflow,
+                "financing_net": financing_inflow - financing_outflow,
+                "net": inflow - outflow + financing_inflow - financing_outflow,
             }
         )
 
+    return result_series
+
+
+async def get_cashflow(
+    db: AsyncSession,
+    date_from: date,
+    date_to: date,
+    group_by: Literal["day", "month", "year"],
+) -> dict:
+    """Calculated balance from recognized payments, cash expenses and loan principal.
+
+    The configured balance is at the START of its date. Internal bank-to-cash
+    transfers and unrecognized bank movements are excluded throughout the timeline.
+    This is not a reconciliation of actual bank and cash register balances.
+    """
+    today = date.today()
+    if date_from > date_to:
+        raise ValueError("Start date must not be after end date")
+    if date_from > today:
+        raise ValueError("Cash flow is available only for dates up to today")
+    requested_to = date_to
+    date_to = min(date_to, today)
+    if group_by == "day" and (date_to - date_from).days >= 366:
+        raise ValueError("Daily detail is limited to 366 days; use month or year")
+
+    ent = await db.scalar(select(Enterprise).limit(1))
+    reference_balance = to_decimal(ent.opening_cash_balance) if ent else ZERO_DECIMAL
+    reference_date = ent.opening_cash_date if ent else None
+    if reference_date is None:
+        first_bank = await db.scalar(select(func.min(BankTransaction.date)))
+        first_cash = await db.scalar(select(func.min(Expense.paid_date)).where(Expense.source == "cash"))
+        reference_date = min(d for d in (first_bank, first_cash, date_from) if d is not None)
+
+    opening = reference_balance
+    if reference_date != date_from:
+        history = await _cashflow_movements(
+            db, min(reference_date, date_from), max(reference_date, date_from) - timedelta(days=1), "year"
+        )
+        history_net = sum((item["net"] for item in history), ZERO_DECIMAL)
+        opening += history_net if reference_date < date_from else -history_net
+
+    series = await _cashflow_movements(db, date_from, date_to, group_by)
+    closing = opening
+    for item in series:
+        item["opening"] = closing
+        closing += item["net"]
+        item["closing"] = closing
+
+    totals = {
+        key: sum((item[key] for item in series), ZERO_DECIMAL)
+        for key in (
+            "inflow",
+            "outflow",
+            "financing_inflow",
+            "financing_outflow",
+            "operating_net",
+            "financing_net",
+            "net",
+        )
+    }
+    unmatched_count = await db.scalar(
+        select(func.count(BankTransaction.id)).where(
+            BankTransaction.status == "unmatched",
+            BankTransaction.date >= min(reference_date, date_from),
+            BankTransaction.date <= max(date_to, reference_date - timedelta(days=1)),
+        )
+    )
     return {
         "range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+        "requested_range": {"from": date_from.isoformat(), "to": requested_to.isoformat()},
+        "as_of": today.isoformat(),
         "group_by": group_by,
-        "opening_cash_balance": opening_balance_at_range_start,
-        "series": result_series,
+        "opening_cash_balance": opening,
+        "closing_cash_balance": closing,
+        "totals": totals,
+        "balance_basis": "recognized_movements",
+        "opening_reference": {
+            "date": ent.opening_cash_date.isoformat() if ent and ent.opening_cash_date else None,
+            "amount": reference_balance,
+        },
+        "unmatched_bank_count": unmatched_count or 0,
+        "series": series,
     }
 
 
