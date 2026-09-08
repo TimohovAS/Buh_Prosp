@@ -152,11 +152,7 @@ export default function Obligations() {
       const nextYear = params.get('year')
       const resolvedYear = nextYear ? parseInt(nextYear, 10) : currentYear
       const resolvedSearch = params.get('search') || ''
-      if (
-        year !== resolvedYear ||
-        search !== resolvedSearch ||
-        paymentTypeFilter !== ''
-      ) {
+      if (year !== resolvedYear || search !== resolvedSearch || paymentTypeFilter !== '') {
         setYear(resolvedYear)
         setSearch(resolvedSearch)
         setPaymentTypeFilter('')
@@ -394,7 +390,8 @@ export default function Obligations() {
   const renderObligation = (obligation) => {
     const isPaid = obligation.status === 'paid'
     const remainingDays = daysUntil(obligation.deadline)
-    const isDueSoon = !isPaid && remainingDays !== null && remainingDays >= 0 && remainingDays <= DUE_SOON_DAYS
+    const isDueSoon =
+      !isPaid && remainingDays !== null && remainingDays >= 0 && remainingDays <= DUE_SOON_DAYS
     const statusTone = isPaid ? 'success' : obligation.status === 'overdue' ? 'danger' : 'warning'
     const statusLabel = isPaid
       ? tr('paid')
@@ -477,7 +474,10 @@ export default function Obligations() {
   }
 
   const renderMonthGroup = (group, isPaid = false) => (
-    <section className={`obligation-month-card ${isPaid ? 'obligation-month-card--paid' : ''}`} key={group.key}>
+    <section
+      className={`obligation-month-card ${isPaid ? 'obligation-month-card--paid' : ''}`}
+      key={group.key}
+    >
       <header className="obligation-month-header">
         <div>
           <h3>
@@ -499,7 +499,10 @@ export default function Obligations() {
         title={tr('payments')}
         subtitle={tr('obligationsPageSubtitle')}
         actions={
-          <button className="btn btn-secondary obligations-settings-button" onClick={() => setSettingsModal(true)}>
+          <button
+            className="btn btn-secondary obligations-settings-button"
+            onClick={() => setSettingsModal(true)}
+          >
             <Settings2 size={17} />
             {tr('obligationsSettings')}
           </button>
@@ -527,20 +530,14 @@ export default function Obligations() {
             tone="accent"
             label={tr('obligationsOpenTotal')}
             value={loading ? '—' : formatRsd(sumAmounts(allActiveItems))}
-            note={
-              loading
-                ? tr('loading')
-                : tr('obligationsPaymentsCount', { count: allActiveItems.length })
-            }
+            note={loading ? tr('loading') : tr('obligationsPaymentsCount', { count: allActiveItems.length })}
           />
           <SummaryCard
             icon={CheckCircle2}
             tone="success"
             label={tr('obligationsPaidForYear', { year })}
             value={loading ? '—' : formatRsd(sumAmounts(allPaidItems))}
-            note={
-              loading ? tr('loading') : tr('obligationsPaymentsCount', { count: allPaidItems.length })
-            }
+            note={loading ? tr('loading') : tr('obligationsPaymentsCount', { count: allPaidItems.length })}
           />
         </div>
 
@@ -613,8 +610,12 @@ export default function Obligations() {
                         {tr('obligationsPaymentsCount', { count: futureActiveItems.length })}
                       </small>
                     </span>
-                    <span className="obligations-history-total">{formatRsd(sumAmounts(futureActiveItems))}</span>
-                    <span className="obligations-history-chevron" aria-hidden="true">⌄</span>
+                    <span className="obligations-history-total">
+                      {formatRsd(sumAmounts(futureActiveItems))}
+                    </span>
+                    <span className="obligations-history-chevron" aria-hidden="true">
+                      ⌄
+                    </span>
                   </summary>
                   <div className="obligations-history-content">
                     <div className="obligation-groups">
@@ -644,11 +645,15 @@ export default function Obligations() {
                 <small>{tr('obligationsPaymentsCount', { count: paidItems.length })}</small>
               </span>
               <span className="obligations-history-total">{formatRsd(sumAmounts(paidItems))}</span>
-              <span className="obligations-history-chevron" aria-hidden="true">⌄</span>
+              <span className="obligations-history-chevron" aria-hidden="true">
+                ⌄
+              </span>
             </summary>
             <div className="obligations-history-content">
               {paidGroups.length ? (
-                <div className="obligation-groups">{paidGroups.map((group) => renderMonthGroup(group, true))}</div>
+                <div className="obligation-groups">
+                  {paidGroups.map((group) => renderMonthGroup(group, true))}
+                </div>
               ) : (
                 <div className="obligations-empty-state obligations-empty-state--compact">
                   {tr('obligationsNoPaid')}

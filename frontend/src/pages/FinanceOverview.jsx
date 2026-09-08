@@ -1,485 +1,270 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '../api'
-import { tr } from '../i18n'
-import DatePicker from '../components/DatePicker'
-import PageTabs from '../components/PageTabs'
-import { formatInteger as fmt, localDateIso } from '../utils/formatters'
-import { getPeriodRange } from '../utils/periods'
-
-function getAnnualLimitRisk(current, limit, percent, forecast) {
-  if (current >= limit || forecast >= limit || percent >= 90) return 'high'
-  if (forecast >= limit * 0.9 || percent >= 70) return 'medium'
-  return 'low'
-}
-
-function getRollingLimitRisk(current, limit, percent) {
-  if (current >= limit || percent >= 90) return 'high'
-  if (percent >= 75) return 'medium'
-  return 'low'
-}
-
-function getRiskColor(risk) {
-  if (risk === 'high') return 'var(--color-danger)'
-  if (risk === 'medium') return 'var(--color-warning)'
-  return 'var(--color-success)'
-}
-
-function getOverallRisk(...risks) {
-  if (risks.includes('high')) return 'high'
-  if (risks.includes('medium')) return 'medium'
-  return 'low'
-}
+import { tr, getMonthNamesShort } from '../i18n'
+import { formatDateSr, formatMoney2 } from '../utils/formatters'
+import useFinanceData from '../hooks/useFinanceData'
+import useFinancePeriod from '../hooks/useFinancePeriod'
+import {
+  FinanceFrame,
+  FinancePeriodControls,
+  FinanceStatus,
+  FinanceSection,
+  FinanceNote,
+  FinanceChart,
+  InvoiceLink,
+} from '../components/finance/FinanceUI'
 
 export default function FinanceOverview() {
-  const location = useLocation()
-  const isActivePage = location.pathname === '/finance'
-  const [periodQuick, setPeriodQuick] = useState('year')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
+  const { pathname } = useLocation()
+  const period = useFinancePeriod()
+  const { from, to, groupBy } = period
   const [mode, setMode] = useState('both')
-  const [summary, setSummary] = useState(null)
-  const [ar, setAr] = useState(null)
-  const [limits, setLimits] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const { from, to } = getPeriodRange(periodQuick, customFrom, customTo)
-  const todayIso = localDateIso()
-  const overviewAsOf = to > todayIso ? todayIso : to
-
-  useEffect(() => {
-    if (!isActivePage) return
-    setLoading(true)
-    const modeVal = mode === 'both' ? 'both' : mode
-    Promise.all([
-      api.finance.summary({ from, to, group_by: 'month', mode: modeVal }),
-      api.finance.ar({ as_of: overviewAsOf }),
-      api.finance.limits({ as_of: overviewAsOf }),
+  const load = useCallback(async () => {
+    const [summary, ar, limits] = await Promise.all([
+      api.finance.summary({ from, to, group_by: groupBy, mode }),
+      api.finance.ar({ as_of: to }),
+      api.finance.limits({ as_of: to }),
     ])
-      .then(([s, a, l]) => {
-        setSummary(s)
-        setAr(a)
-        setLimits(l)
-        setError(null)
-      })
-      .catch((e) => {
-        setError(e.message)
-      })
-      .finally(() => setLoading(false))
-  }, [from, to, mode, overviewAsOf, isActivePage])
-
-  const totals = summary?.totals || {}
-  const series = summary?.series || []
-  const arItems = ar?.items || []
-  const arTotals = ar?.totals || {}
-  const limitsData = limits
-  const annualRisk = limitsData
-    ? getAnnualLimitRisk(
-        limitsData.annual_total,
-        limitsData.annual_limit,
-        limitsData.annual_percent,
-        limitsData.forecast_year_end ?? limitsData.annual_total
-      )
-    : 'low'
-  const rollingRisk = limitsData
-    ? getRollingLimitRisk(limitsData.rolling_12_total, limitsData.vat_limit, limitsData.vat_percent)
-    : 'low'
-  const limitsRisk = getOverallRisk(annualRisk, rollingRisk)
-
-  const overdueItems = arItems
-    .filter((i) => (i.days_overdue ?? 0) > 0)
-    .sort((a, b) => (b.days_overdue ?? 0) - (a.days_overdue ?? 0))
-    .slice(0, 5)
-
-  const getModeLabel = (value) => tr(`financeMode${value.charAt(0).toUpperCase() + value.slice(1)}`)
-  const getInlineModeLabel = (value) => {
-    const label = getModeLabel(value)
-    return label ? label.charAt(0).toLowerCase() + label.slice(1) : value
-  }
-  const accrualModeLabel = getInlineModeLabel('accrual')
-  const cashModeLabel = getInlineModeLabel('cash')
-  const chartSeriesNames = {
-    revenue_accrual: `${tr('income')} (${accrualModeLabel})`,
-    expense_accrual: `${tr('expenses')} (${accrualModeLabel})`,
-    revenue_cash: `${tr('income')} (${cashModeLabel})`,
-    expense_cash: `${tr('expenses')} (${cashModeLabel})`,
-  }
-
-  const taxLoadPercent =
-    totals.revenue_cash > 0 && totals.taxes_cash != null
-      ? ((totals.taxes_cash / totals.revenue_cash) * 100).toFixed(1)
-      : null
-
-  const chartData =
-    mode === 'both'
-      ? series.map((s) => ({
-          period: s.period,
-          revenue_accrual: s.revenue_accrual,
-          expense_accrual: s.expense_accrual,
-          revenue_cash: s.revenue_cash,
-          expense_cash: s.expense_cash,
-        }))
-      : series.map((s) => ({
-          period: s.period,
-          revenue: s[mode === 'cash' ? 'revenue_cash' : 'revenue_accrual'],
-          expense: s[mode === 'cash' ? 'expense_cash' : 'expense_accrual'],
-        }))
-
-  if (loading && !summary) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>{tr('loading')}</div>
-  }
-
+    return { summary, ar, limits }
+  }, [from, to, groupBy, mode])
+  const report = useFinanceData(
+    pathname === '/finance' && !period.validation,
+    `${from}/${to}/${groupBy}/${mode}`,
+    load
+  )
+  const data = report.data
+  const methods = mode === 'both' ? ['accrual', 'cash'] : [mode]
+  const methodLabels = { accrual: 'reportByDocuments', cash: 'reportByPayments', both: 'reportCompare' }
+  const overdue =
+    data?.ar.items
+      .filter((item) => Number(item.days_overdue) > 0)
+      .sort((a, b) => b.days_overdue - a.days_overdue || Number(b.amount) - Number(a.amount))
+      .slice(0, 5) || []
+  const periodLabel = (key) =>
+    key.length === 7
+      ? `${getMonthNamesShort()[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`
+      : key.length === 10
+        ? formatDateSr(key)
+        : key
   return (
-    <>
-      <div className="page-header">
-        <h1 className="page-title">{tr('financeOverview')}</h1>
-      </div>
-
-      <PageTabs group="finance" />
-
-      {error && (
-        <div style={{ padding: '1rem', color: 'var(--color-danger)' }}>
-          {tr('loadError')}: {error}
-        </div>
-      )}
-
-      <div className="page-body">
-        {/* Фильтры */}
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-            <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                {tr('financePeriod')}
-              </label>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                {['month', 'quarter', 'year', 'custom'].map((q) => (
-                  <button
-                    key={q}
-                    className={`btn btn-sm ${periodQuick === q ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setPeriodQuick(q)}
-                  >
-                    {tr(`financePeriod${q.charAt(0).toUpperCase() + q.slice(1)}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {periodQuick === 'custom' && (
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <DatePicker
-                  value={customFrom || from}
-                  onChange={(v) => setCustomFrom(v)}
-                  placeholder={tr('periodFrom')}
-                />
-                <span>—</span>
-                <DatePicker
-                  value={customTo || to}
-                  onChange={(v) => setCustomTo(v)}
-                  placeholder={tr('periodTo')}
-                />
-              </div>
-            )}
-            <div style={{ marginLeft: 'auto' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                {tr('financeMode')}
-              </label>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                {['accrual', 'cash', 'both'].map((m) => (
-                  <button
-                    key={m}
-                    className={`btn btn-sm ${mode === m ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setMode(m)}
-                  >
-                    {tr(`financeMode${m.charAt(0).toUpperCase() + m.slice(1)}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
+    <FinanceFrame
+      title={tr('financeOverview')}
+      subtitle={tr('reportOverviewSubtitle')}
+      badge={tr('cashflowActualOnly')}
+    >
+      <FinancePeriodControls value={period}>
+        <div className="finance-control-row finance-mode-control">
+          <div className="finance-buttons">
+            {Object.entries(methodLabels).map(([key, label]) => (
+              <button
+                key={key}
+                className={`btn btn-sm ${mode === key ? 'btn-primary' : 'btn-secondary'}`}
+                aria-pressed={mode === key}
+                onClick={() => setMode(key)}
+              >
+                {tr(label)}
+              </button>
+            ))}
           </div>
+          <span className="finance-muted">{tr('reportModeHint')}</span>
         </div>
-
-        {/* KPI карточки */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-            gap: '1rem',
-            marginBottom: '2rem',
-          }}
-        >
-          {limitsData && (
-            <>
-              <div className="card" style={{ borderLeft: `4px solid ${getRiskColor(annualRisk)}` }}>
-                <div className="card-title">{tr('limit6m')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-                  {fmt(limitsData.annual_total)} / {fmt(limitsData.annual_limit)} RSD
-                </div>
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                  {limitsData.annual_percent.toFixed(1)}% | {tr('forecastYearEnd')}:{' '}
-                  {fmt(limitsData.forecast_year_end)} RSD
-                </div>
-              </div>
-              <div className="card" style={{ borderLeft: `4px solid ${getRiskColor(rollingRisk)}` }}>
-                <div className="card-title">{tr('limit8m')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-                  {fmt(limitsData.rolling_12_total)} / {fmt(limitsData.vat_limit)} RSD
-                </div>
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                  {limitsData.vat_percent.toFixed(1)}% |{' '}
-                  {tr(`risk${rollingRisk.charAt(0).toUpperCase() + rollingRisk.slice(1)}`)}
-                </div>
-              </div>
-            </>
-          )}
-          {(mode === 'accrual' || mode === 'both') && (
-            <>
-              <div className="card" style={{ borderLeft: '4px solid var(--color-success)' }}>
-                <div className="card-title">
-                  {tr('income')} ({accrualModeLabel})
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue_accrual)} RSD</div>
-              </div>
-              <div className="card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
-                <div className="card-title">
-                  {tr('expenses')} ({accrualModeLabel})
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.expense_accrual)} RSD</div>
-              </div>
-              <div className="card">
-                <div className="card-title">
-                  {tr('financeNetProfit')} ({accrualModeLabel})
-                </div>
-                <div
-                  style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color:
-                      (totals.net_profit_accrual ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                  }}
+      </FinancePeriodControls>
+      <FinanceStatus {...report} validation={period.validation} />
+      {!period.validation && !report.pending && data && (
+        <>
+          <div className={methods.length === 2 ? 'finance-two-columns' : ''}>
+            {methods.map((method) => {
+              const totals = data.summary.totals
+              const revenue = Number(totals[`revenue_${method}`])
+              const expenses = Number(totals[`expense_${method}`])
+              const net = Number(totals[`net_profit_${method}`])
+              const rows = data.summary.series.map((row) => ({
+                label: periodLabel(row.period),
+                revenue: Number(row[`revenue_${method}`]),
+                expenses: Number(row[`expense_${method}`]),
+              }))
+              return (
+                <FinanceSection
+                  key={method}
+                  title={tr(methodLabels[method])}
+                  note={tr(method === 'cash' ? 'reportCashBasis' : 'reportAccrualBasis')}
                 >
-                  {fmt(totals.net_profit_accrual)} RSD
-                </div>
-              </div>
-            </>
-          )}
-          {(mode === 'cash' || mode === 'both') && (
-            <>
-              <div className="card" style={{ borderLeft: '4px solid var(--color-success)' }}>
-                <div className="card-title">
-                  {tr('income')} ({cashModeLabel})
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue_cash)} RSD</div>
-              </div>
-              <div className="card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
-                <div className="card-title">
-                  {tr('expenses')} ({cashModeLabel})
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.expense_cash)} RSD</div>
-              </div>
-              <div className="card">
-                <div className="card-title">
-                  {tr('financeNetProfit')} ({cashModeLabel})
-                </div>
-                <div
-                  style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color:
-                      (totals.net_profit_cash ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                  }}
-                >
-                  {fmt(totals.net_profit_cash)} RSD
-                </div>
-              </div>
-            </>
-          )}
-          <div className="card" style={{ borderLeft: '4px solid var(--color-accent)' }}>
-            <div className="card-title">{tr('financeAR')}</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(arTotals.ar_total)} RSD</div>
+                  <dl className="finance-summary-values">
+                    <div>
+                      <dt>{tr(method === 'cash' ? 'reportReceived' : 'reportRevenue')}</dt>
+                      <dd className="positive">
+                        {formatMoney2(revenue)} <small>RSD</small>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{tr(method === 'cash' ? 'reportPaid' : 'reportAllExpenses')}</dt>
+                      <dd className="negative">
+                        {formatMoney2(expenses)} <small>RSD</small>
+                      </dd>
+                    </div>
+                    <div className="finance-summary-result">
+                      <dt>{tr(method === 'cash' ? 'reportOperatingCash' : 'reportNetProfit')}</dt>
+                      <dd className={net < 0 ? 'negative' : 'positive'}>
+                        {formatMoney2(net)} <small>RSD</small>
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="finance-muted">
+                    {tr('reportTaxesIncluded', { amount: `${formatMoney2(totals[`taxes_${method}`])} RSD` })}
+                  </p>
+                  {rows.some((row) => row.revenue || row.expenses) ? (
+                    <FinanceChart
+                      data={rows}
+                      series={[
+                        {
+                          key: 'revenue',
+                          name: tr(method === 'cash' ? 'reportReceived' : 'reportRevenue'),
+                          color: '#34d399',
+                        },
+                        {
+                          key: 'expenses',
+                          name: tr(method === 'cash' ? 'reportPaid' : 'reportAllExpenses'),
+                          color: '#fb7185',
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <div className="finance-empty">{tr('reportNoActivity')}</div>
+                  )}
+                  <div className="finance-equation">
+                    {tr(method === 'cash' ? 'reportCashEquation' : 'reportProfitEquation')}
+                  </div>
+                </FinanceSection>
+              )
+            })}
           </div>
-          {mode !== 'accrual' && totals.revenue_cash > 0 && (
-            <div className="card">
-              <div className="card-title">{tr('financeTaxLoad')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{taxLoadPercent ?? 0}%</div>
-            </div>
-          )}
-        </div>
-
-        {limitsData && (
-          <div
-            className="card"
-            style={{
-              marginBottom: '2rem',
-              borderColor:
-                limitsRisk === 'high'
-                  ? 'var(--color-danger)'
-                  : limitsRisk === 'medium'
-                    ? 'var(--color-warning)'
-                    : 'var(--color-border)',
-            }}
+          <FinanceNote>
+            {tr('reportCompareNote')} <Link to="/finance/cashflow">{tr('cashflowTitle')}</Link>
+          </FinanceNote>
+          <FinanceSection
+            title={tr('reportDebtSnapshot', { date: formatDateSr(to) })}
+            note={tr('reportDebtSnapshotHint')}
+            action={
+              <Link className="btn btn-secondary btn-sm" to="/finance/ar" state={{ asOf: to }}>
+                {tr('reportAllDebts')}
+              </Link>
+            }
           >
-            <div className="card-title">{tr('financeLimits')}</div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-              {tr('limit6m')} (6M RSD): {fmt(limitsData.annual_total)} / {fmt(limitsData.annual_limit)} RSD
+            <div className="finance-debt-summary">
+              <span>
+                {tr('reportOutstanding')}: <strong>{formatMoney2(data.ar.totals.ar_total)} RSD</strong>
+              </span>
+              <span>
+                {tr('reportOverdue')}:{' '}
+                <strong className="negative">{formatMoney2(data.ar.totals.ar_overdue)} RSD</strong>
+              </span>
             </div>
-            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
-              <div
-                className={`progress-bar-fill ${annualRisk === 'high' ? 'danger' : annualRisk === 'medium' ? 'warning' : ''}`.trim()}
-                style={{ width: `${Math.min(limitsData.annual_percent, 100)}%` }}
-              />
-            </div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-              {tr('limit8m')} ({tr('limitMonths12')}): {fmt(limitsData.rolling_12_total)} /{' '}
-              {fmt(limitsData.vat_limit)} RSD
-            </div>
-            <div className="progress-bar" style={{ marginBottom: '0.75rem' }}>
-              <div
-                className={`progress-bar-fill ${rollingRisk === 'high' ? 'danger' : rollingRisk === 'medium' ? 'warning' : ''}`.trim()}
-                style={{ width: `${Math.min(limitsData.vat_percent, 100)}%` }}
-              />
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '0.75rem',
-                color: 'var(--color-text-muted)',
-                fontSize: '0.9rem',
-              }}
-            >
-              <div>
-                {tr('averageMonthlyIncome')}:{' '}
-                <strong style={{ color: 'var(--color-text)' }}>
-                  {fmt(limitsData.average_monthly_income)} RSD
-                </strong>
-              </div>
-              <div>
-                {tr('forecastYearEnd')}:{' '}
-                <strong style={{ color: 'var(--color-text)' }}>
-                  {fmt(limitsData.forecast_year_end)} RSD
-                </strong>
-              </div>
-              <div>
-                {tr('estimatedLimitDate')}:{' '}
-                <strong style={{ color: 'var(--color-text)' }}>
-                  {limitsData.estimated_limit_date || tr('notAvailable')}
-                </strong>
-              </div>
-              <div>
-                {tr('limit6m')}:{' '}
-                <strong style={{ color: getRiskColor(annualRisk) }}>
-                  {tr(`risk${annualRisk.charAt(0).toUpperCase() + annualRisk.slice(1)}`)}
-                </strong>
-              </div>
-              <div>
-                {tr('limit8m')}:{' '}
-                <strong style={{ color: getRiskColor(rollingRisk) }}>
-                  {tr(`risk${rollingRisk.charAt(0).toUpperCase() + rollingRisk.slice(1)}`)}
-                </strong>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* График */}
-        <div className="card" style={{ marginBottom: '2rem', minHeight: 300 }}>
-          <div className="card-title">{tr('financeChart')}</div>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="period" />
-                <YAxis tickFormatter={(v) => fmt(v)} />
-                <Tooltip formatter={(v) => fmt(v) + ' RSD'} />
-                <Legend formatter={(_, entry) => chartSeriesNames[entry?.dataKey] || entry?.value || ''} />
-                {mode === 'both' ? (
-                  <>
-                    <Bar
-                      dataKey="revenue_accrual"
-                      fill="var(--color-success)"
-                      name={chartSeriesNames.revenue_accrual}
-                    />
-                    <Bar
-                      dataKey="expense_accrual"
-                      fill="var(--color-danger)"
-                      name={chartSeriesNames.expense_accrual}
-                    />
-                    <Bar
-                      dataKey="revenue_cash"
-                      fill="rgba(76,175,80,0.6)"
-                      name={chartSeriesNames.revenue_cash}
-                    />
-                    <Bar
-                      dataKey="expense_cash"
-                      fill="rgba(244,67,54,0.6)"
-                      name={chartSeriesNames.expense_cash}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <Bar dataKey="revenue" fill="var(--color-success)" name={tr('income')} />
-                    <Bar dataKey="expense" fill="var(--color-danger)" name={tr('expenses')} />
-                  </>
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-              {tr('noData')}
-            </div>
-          )}
-        </div>
-
-        {/* Дебиторка: 5 самых старых неоплаченных (просрочено >30 дн.) */}
-        <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1rem',
-            }}
-          >
-            <div className="card-title">{tr('financeAROverdue')}</div>
-            <Link to="/finance/ar" className="btn btn-sm btn-primary">
-              {tr('financeGoTo')}
-            </Link>
-          </div>
-          {overdueItems.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{tr('invoiceNumber')}</th>
-                    <th>{tr('client')}</th>
-                    <th>{tr('date')}</th>
-                    <th>{tr('valuta')}</th>
-                    <th>{tr('amount')}</th>
-                    <th>{tr('financeDaysOverdue')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overdueItems.map((i) => (
-                    <tr key={i.income_id}>
-                      <td>{i.invoice_number}</td>
-                      <td>{i.client_name || '—'}</td>
-                      <td>{i.issued_date}</td>
-                      <td>{i.due_date || '—'}</td>
-                      <td>{fmt(i.amount)} RSD</td>
-                      <td style={{ color: 'var(--color-danger)' }}>
-                        {Math.max(0, i.days_overdue ?? 0)} {tr('financeDaysShort')}
-                      </td>
+            {overdue.length > 0 ? (
+              <div className="table-wrap finance-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{tr('invoiceNumber')}</th>
+                      <th>{tr('client')}</th>
+                      <th>{tr('reportDueDate')}</th>
+                      <th className="numeric">{tr('reportRemaining')}</th>
+                      <th className="numeric">{tr('financeDaysOverdue')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {overdue.map((item) => (
+                      <tr key={item.income_id}>
+                        <td>
+                          <InvoiceLink item={item} />
+                        </td>
+                        <td>{item.client_name || '—'}</td>
+                        <td>{formatDateSr(item.due_date)}</td>
+                        <td className="numeric">{formatMoney2(item.amount)}</td>
+                        <td className="numeric negative">
+                          {item.days_overdue} {tr('days')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="finance-muted">{tr('financeNoOverdue')}</p>
+            )}
+            {data.ar.totals.ar_without_due_date > 0 && (
+              <p className="finance-muted">
+                {tr('reportNoDueAmount', {
+                  amount: `${formatMoney2(data.ar.totals.ar_without_due_date)} RSD`,
+                })}
+              </p>
+            )}
+            {data.ar.missing_payment_dates > 0 && (
+              <FinanceNote warning>
+                {tr('reportUndatedPayments', { count: data.ar.missing_payment_dates })}
+              </FinanceNote>
+            )}
+          </FinanceSection>
+          <FinanceSection
+            title={tr('financeLimits')}
+            note={tr('reportLimitsAsOf', { date: formatDateSr(to) })}
+          >
+            <div className="finance-two-columns">
+              {[
+                {
+                  label: 'limit6m',
+                  amount: data.limits.annual_total,
+                  limit: data.limits.annual_limit,
+                  percent: data.limits.annual_percent,
+                  note: tr('reportAnnualRange', { year: to.slice(0, 4) }),
+                },
+                {
+                  label: 'limit8m',
+                  amount: data.limits.rolling_12_total,
+                  limit: data.limits.vat_limit,
+                  percent: data.limits.vat_percent,
+                  note: tr('reportRollingRange'),
+                },
+              ].map((limit) => (
+                <div key={limit.label}>
+                  <div className="finance-muted">
+                    {tr(limit.label)} · {limit.note}
+                  </div>
+                  <div className="finance-limit-value">
+                    {formatMoney2(limit.amount)} <small>/ {formatMoney2(limit.limit)} RSD</small>
+                  </div>
+                  <div
+                    className={`finance-limit-progress ${limit.percent >= 90 ? 'negative' : limit.percent >= 70 ? 'warning' : 'positive'}`}
+                    role="progressbar"
+                    aria-label={tr(limit.label)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.min(100, Math.max(0, limit.percent))}
+                  >
+                    <div style={{ width: `${Math.min(100, Math.max(0, limit.percent))}%` }} />
+                  </div>
+                  <span className="finance-muted">
+                    {Number(limit.percent).toFixed(1)}% ·{' '}
+                    {tr(Number(limit.amount) > limit.limit ? 'reportExceededBy' : 'reportRemainingLimit', {
+                      amount: `${formatMoney2(Math.abs(limit.limit - Number(limit.amount)))} RSD`,
+                    })}
+                  </span>
+                </div>
+              ))}
             </div>
-          ) : (
-            <div style={{ color: 'var(--color-text-muted)' }}>{tr('financeNoOverdue')}</div>
-          )}
-        </div>
-      </div>
-    </>
+            <details className="finance-method">
+              <summary>{tr('reportForecastTitle')}</summary>
+              <p>
+                {tr('reportForecastValue', {
+                  average: `${formatMoney2(data.limits.average_monthly_income)} RSD`,
+                  forecast: `${formatMoney2(data.limits.forecast_year_end)} RSD`,
+                })}
+              </p>
+              <p>{tr('reportForecastHint')}</p>
+            </details>
+          </FinanceSection>
+        </>
+      )}
+    </FinanceFrame>
   )
 }

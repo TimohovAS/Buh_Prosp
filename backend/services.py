@@ -260,7 +260,7 @@ async def get_income_limit_status(db: AsyncSession, year: int) -> dict:
 async def get_finance_limits_overview(db: AsyncSession, as_of: Optional[date] = None) -> dict:
     """Accrual-based paucal income limits using Income.issued_date."""
     current_date = as_of or date.today()
-    annual_total = await get_income_total(db, year=current_date.year)
+    annual_total = await get_income_total(db, year=current_date.year, end_date=current_date)
     rolling_12_total = await get_income_total_12_months(db, current_date)
 
     annual_limit = settings.income_limit_pausal

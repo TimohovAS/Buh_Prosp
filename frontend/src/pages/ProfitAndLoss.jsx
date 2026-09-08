@@ -1,193 +1,191 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { BarChart, Bar, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../api'
-import { tr } from '../i18n'
-import PageTabs from '../components/PageTabs'
-import YearFilterSelect from '../components/YearFilterSelect'
-import useAvailableYears from '../hooks/useAvailableYears'
-import { formatInteger as fmt } from '../utils/formatters'
-
-const MONTH_LABELS = ['', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+import { tr, getMonthNamesFull, getMonthNamesShort } from '../i18n'
+import { formatDateSr, formatMoney2 } from '../utils/formatters'
+import useFinanceData from '../hooks/useFinanceData'
+import {
+  FinanceFrame,
+  FinanceMetric,
+  FinanceStatus,
+  FinanceSection,
+  FinanceNote,
+  FinanceChart,
+} from '../components/finance/FinanceUI'
 
 export default function ProfitAndLoss() {
-  const location = useLocation()
-  const isActivePage = location.pathname === '/finance/pnl'
-  const { year, setYear, availableYears, applyAvailableYears, resetAvailableYears } = useAvailableYears({
-    initialYear: new Date().getFullYear(),
-    includeAllTime: false,
-  })
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
+  const { pathname } = useLocation()
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear)
+  const [years, setYears] = useState([currentYear])
+  const active = pathname === '/finance/pnl'
   useEffect(() => {
-    if (!isActivePage) return
-    setLoading(true)
-    Promise.all([api.finance.pnl(year), api.finance.pnlYears()])
-      .then(([response, years]) => {
-        setData(response)
-        applyAvailableYears(years)
-        setError(null)
+    if (!active) return
+    let current = true
+    api.finance
+      .pnlYears()
+      .then((values) => {
+        if (current)
+          setYears(
+            [
+              ...new Set([currentYear, ...values.filter((value) => value >= 1900 && value <= currentYear)]),
+            ].sort((a, b) => b - a)
+          )
       })
-      .catch((e) => {
-        resetAvailableYears()
-        setError(e.message)
+      .catch(() => {
+        /* The report remains usable if year discovery is unavailable. */
       })
-      .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, isActivePage])
-
-  const items = data?.items || []
-  const totals = data?.totals || {}
-  const chartData = items.map((item) => ({
-    month: MONTH_LABELS[item.month] || String(item.month),
-    revenue: item.revenue ?? 0,
-    expenses: item.expenses ?? 0,
-    profit: item.profit ?? 0,
-  }))
-
+    return () => {
+      current = false
+    }
+  }, [active, currentYear])
+  const load = useCallback(() => api.finance.pnl(year), [year])
+  const report = useFinanceData(active, String(year), load)
+  const items =
+    report.data?.items.map((item) => ({
+      ...item,
+      revenue: Number(item.revenue),
+      expenses: Number(item.expenses),
+      taxes: Number(item.taxes),
+      profit: Number(item.profit),
+      label: getMonthNamesShort()[item.month - 1],
+    })) || []
+  const totals = report.data?.totals
+  const revenue = Number(totals?.revenue || 0)
+  const profit = Number(totals?.profit || 0)
+  const margin = revenue > 0 ? (profit / revenue) * 100 : null
+  const hasActivity = items.some((item) => item.revenue || item.expenses || item.taxes)
   return (
-    <>
-      <div className="page-header">
-        <div className="page-header-main">
-          <h1 className="page-title">{tr('pnlTitle')}</h1>
-        </div>
-        <div className="page-header-actions">
-          <YearFilterSelect
+    <FinanceFrame title={tr('pnlTitle')} subtitle={tr('reportPnlSubtitle')} badge={tr('reportByDocuments')}>
+      <div className="card finance-control-row">
+        <div className="finance-as-of">
+          <label htmlFor="pnl-year">{tr('year')}</label>
+          <select
+            id="pnl-year"
+            className="form-input"
             value={year}
-            availableYears={availableYears}
-            onChange={setYear}
-            includeAllTime={false}
-          />
+            onChange={(e) => setYear(Number(e.target.value))}
+          >
+            {[...new Set([year, ...years])]
+              .sort((a, b) => b - a)
+              .map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+          </select>
         </div>
+        <p className="finance-muted">
+          {year === currentYear ? tr('reportYearToDate') : tr('reportFullYear')}
+        </p>
       </div>
-
-      <PageTabs group="finance" />
-
-      <div className="page-body">
-        {loading && !data ? (
-          <div className="card">{tr('loading')}</div>
-        ) : error ? (
-          <div className="card" style={{ color: 'var(--color-danger)' }}>
-            {tr('loadError')}: {error}
+      <FinanceStatus {...report} />
+      {!report.pending && report.data && (
+        <>
+          <div className="finance-metrics">
+            <FinanceMetric
+              title={tr('reportRevenue')}
+              value={revenue}
+              tone="positive"
+              note={tr('reportIssuedInvoices')}
+            />
+            <FinanceMetric
+              title={tr('reportAllExpenses')}
+              value={Number(totals.expenses) + Number(totals.taxes)}
+              tone="negative"
+              note={tr('reportTaxesIncluded', { amount: `${formatMoney2(totals.taxes)} RSD` })}
+            />
+            <FinanceMetric
+              title={tr('reportNetProfit')}
+              value={profit}
+              tone={profit < 0 ? 'negative' : 'positive'}
+              note={tr('reportAfterTaxes')}
+            />
+            <FinanceMetric
+              title={tr('reportMargin')}
+              value={margin}
+              unit="%"
+              note={tr(margin == null ? 'reportMarginUndefined' : 'reportMarginHint')}
+            />
           </div>
-        ) : (
-          <>
-            <div className="card" style={{ marginBottom: '1.5rem' }}>
-              <div className="card-title">{tr('pnlExplanation')}</div>
-              <div style={{ color: 'var(--color-text-muted)' }}>{tr('pnlAccrualNote')}</div>
+          <FinanceNote>{tr('reportPnlMethod')}</FinanceNote>
+          {hasActivity ? (
+            <div className="finance-two-columns">
+              <FinanceSection title={tr('reportPnlStructure')} note={tr('reportTaxStackNote')}>
+                <FinanceChart
+                  data={items}
+                  series={[
+                    { key: 'revenue', name: tr('reportRevenue'), color: '#34d399' },
+                    { key: 'expenses', name: tr('reportExpensesExTax'), color: '#fb7185', stack: 'cost' },
+                    { key: 'taxes', name: tr('taxes'), color: '#fbbf24', stack: 'cost' },
+                  ]}
+                />
+              </FinanceSection>
+              <FinanceSection title={tr('reportProfitTrend')} note={tr('reportAfterTaxes')}>
+                <FinanceChart
+                  data={items}
+                  series={[{ key: 'profit', name: tr('reportNetProfit'), color: '#60a5fa' }]}
+                />
+              </FinanceSection>
             </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '1rem',
-                marginBottom: '1.5rem',
-              }}
-            >
-              <div className="card">
-                <div className="card-title">{tr('income')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.revenue)} RSD</div>
-              </div>
-              <div className="card">
-                <div className="card-title">{tr('expenses')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.expenses)} RSD</div>
-              </div>
-              <div className="card">
-                <div className="card-title">{tr('taxes')}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.taxes)} RSD</div>
-              </div>
-              <div className="card">
-                <div className="card-title">{tr('profit')}</div>
-                <div
-                  style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color: (totals.profit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                  }}
-                >
-                  {fmt(totals.profit)} RSD
-                </div>
-              </div>
-            </div>
-
-            <div className="card" style={{ minHeight: 320, marginBottom: '1.5rem' }}>
-              <div className="card-title">{tr('pnlChart')}</div>
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis tickFormatter={(v) => fmt(v)} />
-                    <Tooltip formatter={(v) => `${fmt(v)} RSD`} />
-                    <Legend />
-                    <Bar dataKey="revenue" fill="var(--color-success)" name={tr('income')} />
-                    <Bar dataKey="expenses" fill="var(--color-warning)" name={tr('expenses')} />
-                    <Bar dataKey="profit" fill="var(--color-accent)" name={tr('profit')} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                  {tr('noData')}
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="card-title">{tr('pnlTable')}</div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr('month')}</th>
-                      <th>{tr('income')}</th>
-                      <th>{tr('expenses')}</th>
-                      <th>{tr('taxes')}</th>
-                      <th>{tr('profit')}</th>
+          ) : (
+            <div className="card finance-empty">{tr('reportNoActivity')}</div>
+          )}
+          <FinanceSection
+            title={tr('pnlTable')}
+            note={`${formatDateSr(report.data.date_from)} — ${formatDateSr(report.data.date_to)} · RSD`}
+          >
+            <div className="table-wrap finance-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{tr('month')}</th>
+                    <th className="numeric">{tr('reportRevenue')}</th>
+                    <th className="numeric">{tr('reportExpensesExTax')}</th>
+                    <th className="numeric">{tr('taxes')}</th>
+                    <th className="numeric">{tr('reportNetProfit')}</th>
+                    <th className="numeric">{tr('reportMargin')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.month}>
+                      <th scope="row">
+                        {getMonthNamesFull()[item.month - 1]}
+                        {year === currentYear && item.month === new Date().getMonth() + 1 && (
+                          <small className="finance-muted">{tr('cashflowPartialPeriod')}</small>
+                        )}
+                      </th>
+                      <td className="numeric positive">{formatMoney2(item.revenue)}</td>
+                      <td className="numeric">{formatMoney2(item.expenses)}</td>
+                      <td className="numeric">{formatMoney2(item.taxes)}</td>
+                      <td className={`numeric ${item.profit < 0 ? 'negative' : 'positive'}`}>
+                        {formatMoney2(item.profit)}
+                      </td>
+                      <td className="numeric">
+                        {item.revenue > 0 ? `${((item.profit / item.revenue) * 100).toFixed(1)}%` : '—'}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {items.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} style={{ color: 'var(--color-text-muted)' }}>
-                          {tr('noData')}
-                        </td>
-                      </tr>
-                    ) : (
-                      items.map((item) => (
-                        <tr key={item.month}>
-                          <td>{MONTH_LABELS[item.month] || item.month}</td>
-                          <td>{fmt(item.revenue)} RSD</td>
-                          <td>{fmt(item.expenses)} RSD</td>
-                          <td>{fmt(item.taxes)} RSD</td>
-                          <td
-                            style={{
-                              color: item.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-                            }}
-                          >
-                            {fmt(item.profit)} RSD
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th>{tr('total')}</th>
-                      <th>{fmt(totals.revenue)} RSD</th>
-                      <th>{fmt(totals.expenses)} RSD</th>
-                      <th>{fmt(totals.taxes)} RSD</th>
-                      <th>{fmt(totals.profit)} RSD</th>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row">{tr('total')}</th>
+                    <td className="numeric">{formatMoney2(revenue)}</td>
+                    <td className="numeric">{formatMoney2(totals.expenses)}</td>
+                    <td className="numeric">{formatMoney2(totals.taxes)}</td>
+                    <td className={`numeric ${profit < 0 ? 'negative' : 'positive'}`}>
+                      {formatMoney2(profit)}
+                    </td>
+                    <td className="numeric">{margin == null ? '—' : `${margin.toFixed(1)}%`}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          </>
-        )}
-      </div>
-    </>
+            <div className="finance-equation">{tr('reportPnlEquation')}</div>
+          </FinanceSection>
+        </>
+      )}
+    </FinanceFrame>
   )
 }

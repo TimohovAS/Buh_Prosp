@@ -1,186 +1,286 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
-import PageHeader from '../components/PageHeader'
-import PageTabs from '../components/PageTabs'
-import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
-import { UI_DASH, formatDateSr as formatDate, formatInteger as fmt } from '../utils/formatters'
-import { amountSearchHay } from '../utils/searchUtils'
+import { formatDateSr, formatMoney2, localDateIso } from '../utils/formatters'
+import { selectReceivables, receivablesTotal } from '../utils/receivables'
+import useFinanceData from '../hooks/useFinanceData'
+import {
+  FinanceFrame,
+  FinanceMetric,
+  FinanceStatus,
+  FinanceSection,
+  FinanceNote,
+  InvoiceLink,
+} from '../components/finance/FinanceUI'
+
+const AGING = {
+  not_due: 'reportNotDue',
+  '1_30': 'reportAge1',
+  '31_60': 'reportAge31',
+  '61_90': 'reportAge61',
+  over_90: 'reportAge90',
+  no_due: 'reportNoDue',
+}
+const COLUMNS = {
+  invoice_number: 'invoiceNumber',
+  client_name: 'client',
+  due_date: 'reportDueDate',
+  amount_full: 'reportInvoiceAmount',
+  amount_paid: 'reportPaidToDate',
+  amount: 'reportRemaining',
+  days_overdue: 'financeDaysOverdue',
+}
 
 export default function AccountsReceivable() {
   const location = useLocation()
-  const isActivePage = location.pathname === '/finance/ar'
-  const [items, setItems] = useState([])
-  const [totals, setTotals] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [onlyOverdue, setOnlyOverdue] = useState(false)
+  const today = localDateIso()
+  const [asOf, setAsOf] = useState(location.state?.asOf || today)
+  const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [sortCol, setSortCol] = useState('days_overdue')
-  const [sortAsc, setSortAsc] = useState(false)
-
-  const load = () => {
-    setLoading(true)
-    api.finance
-      .ar()
-      .then((data) => {
-        setItems(data.items || [])
-        setTotals(data.totals || null)
-        setError(null)
-      })
-      .catch((e) => {
-        setError(e.message)
-        setItems([])
-        setTotals(null)
-      })
-      .finally(() => setLoading(false))
-  }
-
+  const [sort, setSort] = useState({ column: 'days_overdue', ascending: false })
   useEffect(() => {
-    if (!isActivePage) return
-    load()
-  }, [isActivePage])
-
-  const filtered = useMemo(() => {
-    const s = (search || '').trim().toLowerCase()
-    let rows = onlyOverdue ? items.filter((i) => (i.days_overdue ?? 0) > 0) : items
-    if (s)
-      rows = rows.filter(
-        (i) =>
-          (i.invoice_number || '').toLowerCase().includes(s) ||
-          (i.client_name || UI_DASH).toLowerCase().includes(s) ||
-          amountSearchHay(i.amount).includes(s)
-      )
-    return [...rows].sort((a, b) => {
-      const valA = a[sortCol] ?? 0
-      const valB = b[sortCol] ?? 0
-      if (valA < valB) return sortAsc ? -1 : 1
-      if (valA > valB) return sortAsc ? 1 : -1
-      return 0
-    })
-  }, [items, onlyOverdue, search, sortCol, sortAsc])
-
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortAsc((v) => !v)
-    else {
-      setSortCol(col)
-      setSortAsc(true)
-    }
-  }
-  if (loading && items.length === 0) {
-    return (
-      <div className="page">
-        <h1>{tr('financeAR')}</h1>
-        <PageTabs group="finance" />
-        <p>{tr('loading')}</p>
-      </div>
-    )
-  }
-
+    if (location.state?.asOf) setAsOf(location.state.asOf)
+  }, [location.key, location.state?.asOf])
+  const validation = !asOf ? 'reportChooseAsOf' : asOf > today ? 'cashflowFutureRange' : ''
+  const load = useCallback(() => api.finance.ar({ as_of: asOf }), [asOf])
+  const report = useFinanceData(location.pathname === '/finance/ar' && !validation, asOf, load)
+  const data = report.data
+  const rows = useMemo(
+    () => selectReceivables(data?.items || [], filter, search, sort.column, sort.ascending),
+    [data, filter, search, sort]
+  )
+  const totals = data?.totals
+  const toggleSort = (column) =>
+    setSort((value) => ({
+      column,
+      ascending:
+        value.column === column
+          ? !value.ascending
+          : !['amount', 'amount_full', 'amount_paid', 'days_overdue'].includes(column),
+    }))
   return (
-    <div className="page">
-      <PageHeader
-        title={tr('financeAR')}
-        actions={
-          <>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={onlyOverdue}
-                onChange={(e) => setOnlyOverdue(e.target.checked)}
-              />
-              <span>{tr('arFilterOverdue')}</span>
-            </label>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 200 }}
-            />
-          </>
-        }
-      />
-
-      <PageTabs group="finance" />
-
-      {error && <div className="alert alert-danger">{error}</div>}
-
-      {totals && (
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-          <div className="card" style={{ minWidth: 140 }}>
-            <div className="card-title">{tr('total')}</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.ar_total)} RSD</div>
-          </div>
-          <div className="card" style={{ minWidth: 140, borderLeft: '4px solid var(--color-danger)' }}>
-            <div className="card-title">{tr('financeAROverdue')}</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{fmt(totals.ar_overdue)} RSD</div>
-          </div>
+    <FinanceFrame title={tr('financeAR')} subtitle={tr('reportArSubtitle')} badge={tr('reportDebtRegister')}>
+      <div className="card finance-control-row">
+        <div className="finance-as-of">
+          <label htmlFor="ar-as-of">{tr('reportAsOf')}</label>
+          <DatePicker id="ar-as-of" value={asOf} onChange={setAsOf} maxDate={new Date(`${today}T12:00:00`)} />
         </div>
-      )}
-
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>
-                  {tr('invoiceNumber')} <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('client_name')}>
-                  {tr('client')} <SortIndicator active={sortCol === 'client_name'} asc={sortAsc} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('issued_date')}>
-                  {tr('date')} <SortIndicator active={sortCol === 'issued_date'} asc={sortAsc} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('due_date')}>
-                  {tr('valuta')} <SortIndicator active={sortCol === 'due_date'} asc={sortAsc} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
-                  {tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} />
-                </th>
-                <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('days_overdue')}>
-                  {tr('financeDaysOverdue')}{' '}
-                  <SortIndicator active={sortCol === 'days_overdue'} asc={sortAsc} />
-                </th>
-                <th style={{ width: 140 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}
-                  >
-                    {onlyOverdue ? tr('financeNoOverdue') : tr('noData')}
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((i) => (
-                  <tr key={i.income_id}>
-                    <td>{i.invoice_number}</td>
-                    <td>{i.client_name || UI_DASH}</td>
-                    <td>{formatDate(i.issued_date)}</td>
-                    <td>{formatDate(i.due_date)}</td>
-                    <td>{fmt(i.amount)} RSD</td>
-                    <td style={{ color: (i.days_overdue ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
-                      {Math.max(0, i.days_overdue ?? 0)} {tr('days')}
-                    </td>
-                    <td>
-                      <a href="/bank" className="btn btn-sm btn-primary" style={{ textDecoration: 'none' }}>
-                        {'\uD83D\uDD17'} {tr('bankTransactions')}
-                      </a>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="finance-buttons">
+          <button className="btn btn-secondary btn-sm" onClick={() => setAsOf(today)}>
+            {tr('reportToday')}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={report.pending || !!validation}
+            onClick={report.reload}
+          >
+            {tr('reportRefresh')}
+          </button>
         </div>
+        <span className="finance-muted">{tr('reportDebtDateHint')}</span>
       </div>
-    </div>
+      <FinanceStatus {...report} validation={validation} />
+      {!validation && !report.pending && data && (
+        <>
+          <div className="finance-metrics">
+            <FinanceMetric
+              title={tr('reportOutstanding')}
+              value={totals.ar_total}
+              note={tr('reportInvoiceCount', { count: totals.invoice_count })}
+            />
+            <FinanceMetric
+              title={tr('reportOverdue')}
+              value={totals.ar_overdue}
+              tone={totals.ar_overdue > 0 ? 'negative' : ''}
+              note={tr('reportOverdueCount', { count: totals.overdue_count })}
+            />
+            <FinanceMetric
+              title={tr('reportNotDue')}
+              value={totals.ar_not_due}
+              tone="positive"
+              note={tr('reportNotDueHint')}
+            />
+            <FinanceMetric
+              title={tr('reportNoDue')}
+              value={totals.ar_without_due_date}
+              tone={totals.ar_without_due_date > 0 ? 'warning' : ''}
+              note={tr('reportNoDueHint')}
+            />
+          </div>
+          {data.missing_payment_dates > 0 && (
+            <FinanceNote warning>
+              {tr('reportUndatedPayments', { count: data.missing_payment_dates })}
+            </FinanceNote>
+          )}
+          {data.items.length > 0 ? (
+            <>
+              <FinanceSection title={tr('reportAgingTitle')} note={tr('reportAgingHint')}>
+                <div className="finance-aging">
+                  {data.aging.map((bucket) => (
+                    <button
+                      key={bucket.key}
+                      aria-pressed={filter === bucket.key}
+                      onClick={() => setFilter((value) => (value === bucket.key ? 'all' : bucket.key))}
+                    >
+                      <span className="finance-muted">{tr(AGING[bucket.key])}</span>
+                      <strong
+                        className={
+                          ['1_30', '31_60', '61_90', 'over_90'].includes(bucket.key) &&
+                          Number(bucket.amount) > 0
+                            ? 'negative'
+                            : ''
+                        }
+                      >
+                        {formatMoney2(bucket.amount)} <small>RSD</small>
+                      </strong>
+                      <span className="finance-muted">
+                        {tr('reportInvoiceCount', { count: bucket.count })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </FinanceSection>
+              <FinanceSection
+                title={tr('reportInvoicesToCollect')}
+                note={tr('reportArTableNote', { date: formatDateSr(asOf) })}
+              >
+                <div className="finance-ar-toolbar">
+                  <div className="finance-buttons">
+                    {['all', 'overdue'].map((key) => (
+                      <button
+                        className={`btn btn-sm ${filter === key ? 'btn-primary' : 'btn-secondary'}`}
+                        key={key}
+                        aria-pressed={filter === key}
+                        onClick={() => setFilter(key)}
+                      >
+                        {tr(key === 'all' ? 'reportAllInvoices' : 'arFilterOverdue')}
+                      </button>
+                    ))}
+                    {!['all', 'overdue'].includes(filter) && (
+                      <span className="finance-tag">{tr(AGING[filter])}</span>
+                    )}
+                  </div>
+                  <input
+                    className="form-input finance-search"
+                    aria-label={tr('reportSearchInvoices')}
+                    placeholder={tr('reportSearchInvoices')}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <p className="finance-muted">
+                  {tr('reportFilteredTotal', {
+                    count: rows.length,
+                    amount: `${formatMoney2(receivablesTotal(rows))} RSD`,
+                  })}
+                </p>
+                <div className="table-wrap finance-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {Object.entries(COLUMNS).map(([key, title]) => (
+                          <th
+                            key={key}
+                            scope="col"
+                            className={key.startsWith('amount') || key === 'days_overdue' ? 'numeric' : ''}
+                            aria-sort={
+                              sort.column === key ? (sort.ascending ? 'ascending' : 'descending') : 'none'
+                            }
+                          >
+                            <button className="finance-sort" onClick={() => toggleSort(key)}>
+                              {tr(title)}
+                              <SortIndicator active={sort.column === key} asc={sort.ascending} />
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={7}>
+                            <div className="finance-empty">
+                              {tr('reportNoMatches')}
+                              <p>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    setFilter('all')
+                                    setSearch('')
+                                  }}
+                                >
+                                  {tr('reportResetFilters')}
+                                </button>
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((item) => (
+                          <tr key={item.income_id}>
+                            <td>
+                              <InvoiceLink item={item} />
+                              <small className="finance-muted">{formatDateSr(item.issued_date)}</small>
+                            </td>
+                            <td>
+                              {item.client_name || '—'}
+                              {item.status === 'partial' && (
+                                <small className="finance-muted">{tr('reportPartPaid')}</small>
+                              )}
+                            </td>
+                            <td>
+                              {item.due_date ? (
+                                formatDateSr(item.due_date)
+                              ) : (
+                                <span className="warning">{tr('reportNoDue')}</span>
+                              )}
+                            </td>
+                            <td className="numeric">{formatMoney2(item.amount_full)}</td>
+                            <td className="numeric">{formatMoney2(item.amount_paid)}</td>
+                            <td className={`numeric ${Number(item.days_overdue) > 0 ? 'negative' : ''}`}>
+                              <strong>{formatMoney2(item.amount)}</strong>
+                            </td>
+                            <td className={`numeric ${Number(item.days_overdue) > 0 ? 'negative' : ''}`}>
+                              {item.days_overdue == null
+                                ? '—'
+                                : item.days_overdue > 0
+                                  ? `${item.days_overdue} ${tr('days')}`
+                                  : tr('reportOnTime')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    {rows.length > 0 && (
+                      <tfoot>
+                        <tr>
+                          <th scope="row" colSpan={5}>
+                            {tr('reportFilteredFooter')}
+                          </th>
+                          <td className="numeric">{formatMoney2(receivablesTotal(rows))}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </FinanceSection>
+            </>
+          ) : (
+            <div className="card finance-empty">
+              <strong>{tr('reportNoDebt')}</strong>
+              <p>{tr('reportNoDebtHint', { date: formatDateSr(asOf) })}</p>
+            </div>
+          )}
+          <details className="finance-method">
+            <summary>{tr('reportArHowCalculated')}</summary>
+            <p>{tr('reportArMethod')}</p>
+          </details>
+        </>
+      )}
+    </FinanceFrame>
   )
 }

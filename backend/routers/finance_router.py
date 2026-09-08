@@ -43,12 +43,15 @@ async def finance_pnl_years_list(
 
 @router.get("/pnl", response_model=FinancePnlResponse)
 async def finance_pnl(
-    year: int = Query(...),
+    year: int = Query(..., ge=1900, le=9998),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     """Monthly accrual-based P&L."""
-    return FinancePnlResponse(**(await get_finance_pnl(db, year)))
+    try:
+        return FinancePnlResponse(**(await get_finance_pnl(db, year)))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/summary")
@@ -77,7 +80,12 @@ async def finance_summary(
         filters["category"] = category
     if is_tax_related is not None:
         filters["is_tax_related"] = is_tax_related
-    return await get_finance_summary(db, from_, to, group_by, mode, filters)
+    try:
+        if from_ > date.today():
+            raise ValueError("Financial reports are available only up to today")
+        return await get_finance_summary(db, from_, min(to, date.today()), group_by, mode, filters)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/ar")
@@ -86,8 +94,11 @@ async def finance_ar(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Дебиторская задолженность: unpaid incomes (paid_date is null)."""
-    return await get_accounts_receivable(db, as_of)
+    """Outstanding invoices after payments recorded on or before the selected date."""
+    try:
+        return await get_accounts_receivable(db, as_of)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/cashflow")

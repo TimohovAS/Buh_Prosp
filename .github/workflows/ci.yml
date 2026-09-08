@@ -45,8 +45,8 @@ jobs:
         run: npm run lint
       - name: i18n keys
         run: npm run i18n:check
-      - name: Cash flow period tests
-        run: npm run test:cashflow
+      - name: Finance report tests
+        run: npm run test:finance
       - name: Format check (prettier)
         run: npm run format:check
       - name: Build

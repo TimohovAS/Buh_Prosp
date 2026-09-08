@@ -1371,6 +1371,8 @@ class FinancePnlTotals(BaseModel):
 
 class FinancePnlResponse(BaseModel):
     year: int
+    date_from: date
+    date_to: date
     items: list[FinancePnlMonthItem] = Field(default_factory=list)
     totals: FinancePnlTotals
 

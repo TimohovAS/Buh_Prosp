@@ -3,12 +3,12 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Optional
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.cash_service import CASH_TRANSFER_SOURCE
-from backend.date_utils import coerce_date, days_between
+from backend.date_utils import coerce_date
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
     Income,
@@ -83,6 +83,10 @@ async def get_finance_summary(
     Агрегатор метрик для accrual/cash.
     filters: client_id, contract_id, project_id (income), category, is_tax_related (expenses)
     """
+    if date_from > date_to:
+        raise ValueError("Start date must not be after end date")
+    if group_by == "day" and (date_to - date_from).days >= 366:
+        raise ValueError("Daily detail is limited to 366 days")
     filters = filters or {}
     client_id = filters.get("client_id")
     contract_id = filters.get("contract_id")
@@ -172,12 +176,13 @@ async def get_finance_summary(
     if category is not None:
         expense_tax_base = and_(expense_tax_base, Expense.category == category)
 
-    periods_data: dict[str, dict[str, float]] = {}
+    periods_data: dict[str, dict[str, Decimal]] = {}
     for pk in _iter_periods(date_from, date_to, group_by):
         periods_data[pk] = {
             "revenue_accrual": ZERO_DECIMAL,
             "revenue_cash": ZERO_DECIMAL,
             "expense_accrual": ZERO_DECIMAL,
+            "taxes_accrual": ZERO_DECIMAL,
             "expense_cash": ZERO_DECIMAL,
             "taxes_cash": ZERO_DECIMAL,
             "net_profit_accrual": ZERO_DECIMAL,
@@ -226,6 +231,14 @@ async def get_finance_summary(
             p = str(row.period)
             if p in periods_data:
                 periods_data[p]["expense_accrual"] = to_decimal(row.s)
+
+        tax_rows = await db.execute(
+            select(grp_exp.label("period"), func.coalesce(func.sum(expense_amount), 0).label("s"))
+            .where(expense_accrual_base, expense_is_tax == True)
+            .group_by(grp_exp)
+        )
+        for row in tax_rows.fetchall():
+            _append_period_amount(periods_data, str(row.period), "taxes_accrual", row.s)
 
     if need_cash:
         bt_date = BankTransaction.date
@@ -394,6 +407,7 @@ async def get_finance_summary(
         "revenue_accrual": sum(d["revenue_accrual"] for d in periods_data.values()),
         "revenue_cash": sum(d["revenue_cash"] for d in periods_data.values()),
         "expense_accrual": sum(d["expense_accrual"] for d in periods_data.values()),
+        "taxes_accrual": sum(d["taxes_accrual"] for d in periods_data.values()),
         "expense_cash": sum(d["expense_cash"] for d in periods_data.values()),
         "taxes_cash": sum(d["taxes_cash"] for d in periods_data.values()),
     }
@@ -410,55 +424,135 @@ async def get_finance_summary(
 
 
 async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None) -> dict:
+    """Reconstruct balances using current invoice links and dated payments.
+
+    An undated manual payment is usable for today's snapshot only. A missing
+    contractual due date is not replaced with an invented payment deadline.
     """
-    Дебиторская задолженность: unpaid и partial incomes.
-    Для partial показывает остаток (amount_rsd - paid_amount).
-    """
-    today = as_of or date.today()
-    q = (
-        select(Income)
-        .options(selectinload(Income.client))
-        .where(
-            Income.status.in_(["issued", "partial"]),
-            Income.issued_date <= today,
-        )
-        .order_by(Income.issued_date.asc())
+    cutoff = as_of or date.today()
+    if cutoff > date.today():
+        raise ValueError("Receivables are available only up to today")
+    incomes = list(
+        (
+            await db.scalars(
+                select(Income)
+                .options(selectinload(Income.client))
+                .where(Income.status != "cancelled", Income.issued_date <= cutoff)
+                .order_by(Income.issued_date, Income.id)
+            )
+        ).all()
     )
-    r = await db.execute(q)
-    incomes = r.scalars().all()
+
+    payments: dict[int, dict[str, Decimal]] = {}
+    # Keep all-time linked totals to separate manual amounts from bank amounts;
+    # use only payments up to the cutoff in the historical balance.
+    for income_col, amount_col, is_allocation in (
+        (BankTransaction.matched_id, BankTransaction.amount, False),
+        (BankTransactionIncomeAllocation.income_id, BankTransactionIncomeAllocation.amount, True),
+    ):
+        query = select(
+            income_col.label("income_id"),
+            func.sum(amount_col).label("all_paid"),
+            func.sum(case((BankTransaction.date <= cutoff, amount_col), else_=0)).label("paid_to_date"),
+        ).select_from(BankTransaction)
+        if is_allocation:
+            query = query.join(
+                BankTransactionIncomeAllocation,
+                BankTransactionIncomeAllocation.bank_transaction_id == BankTransaction.id,
+            )
+        query = (
+            query.join(Income, Income.id == income_col)
+            .where(
+                Income.status != "cancelled",
+                Income.issued_date <= cutoff,
+                BankTransaction.status == "matched",
+                BankTransaction.direction == "in",
+                BankTransaction.matched_type == ("income_allocation" if is_allocation else "income"),
+            )
+            .group_by(income_col)
+        )
+        for row in (await db.execute(query)).all():
+            entry = payments.setdefault(row.income_id, {"all": ZERO_DECIMAL, "dated": ZERO_DECIMAL})
+            entry["all"] += to_decimal(row.all_paid)
+            entry["dated"] += to_decimal(row.paid_to_date)
+
+    buckets = {
+        key: {"key": key, "amount": ZERO_DECIMAL, "count": 0}
+        for key in ("not_due", "1_30", "31_60", "61_90", "over_90", "no_due")
+    }
     items = []
-    ar_total = ZERO_DECIMAL
-    ar_overdue = ZERO_DECIMAL
-    for i in incomes:
-        # Для частичной оплаты показываем остаток
-        remaining = to_decimal(i.amount_rsd) - to_decimal(i.paid_amount or ZERO_DECIMAL)
+    missing_payment_dates = 0
+    for income in incomes:
+        full = to_decimal(income.amount_rsd)
+        linked = payments.get(income.id, {"all": ZERO_DECIMAL, "dated": ZERO_DECIMAL})
+        recorded = to_decimal(income.paid_amount)
+        if income.status == "paid" and recorded <= 0:
+            recorded = full
+        manual = max(ZERO_DECIMAL, recorded - linked["all"])
+        paid_date = coerce_date(income.paid_date)
+        missing_date = manual > 0 and paid_date is None
+        if missing_date:
+            missing_payment_dates += 1
+        paid = linked["dated"]
+        if manual > 0 and ((paid_date and paid_date <= cutoff) or (missing_date and cutoff == date.today())):
+            paid += manual
+        paid = min(full, max(ZERO_DECIMAL, paid))
+        remaining = full - paid
         if remaining <= 0:
             continue
-        issued_date = coerce_date(i.issued_date)
-        due_dt = coerce_date(i.due_date) or ((issued_date + timedelta(days=30)) if issued_date else today)
-        days_out = days_between(today, issued_date, absolute=False) if issued_date else 0
-        days_overdue = days_between(today, due_dt, absolute=False)
+        due_date = coerce_date(income.due_date)
+        overdue_days = max(0, (cutoff - due_date).days) if due_date else None
+        bucket = (
+            "no_due"
+            if due_date is None
+            else "not_due"
+            if overdue_days == 0
+            else (
+                "1_30"
+                if overdue_days <= 30
+                else "31_60"
+                if overdue_days <= 60
+                else "61_90"
+                if overdue_days <= 90
+                else "over_90"
+            )
+        )
+        buckets[bucket]["amount"] += remaining
+        buckets[bucket]["count"] += 1
         items.append(
             {
-                "income_id": i.id,
-                "invoice_number": i.invoice_number,
-                "client_name": i.client_name or (i.client.name if i.client else None),
-                "issued_date": issued_date.isoformat() if issued_date else None,
-                "due_date": due_dt.isoformat(),
-                "amount": float(remaining),  # остаток к оплате
-                "amount_full": float(to_decimal(i.amount_rsd)),
-                "amount_paid": float(to_decimal(i.paid_amount or ZERO_DECIMAL)),
-                "status": i.status,
-                "days_outstanding": days_out,
-                "days_overdue": days_overdue,
+                "income_id": income.id,
+                "client_id": income.client_id,
+                "invoice_number": income.invoice_number,
+                "client_name": income.client_name or (income.client.name if income.client else None),
+                "issued_date": income.issued_date.isoformat(),
+                "due_date": due_date.isoformat() if due_date else None,
+                "amount": remaining,
+                "amount_full": full,
+                "amount_paid": paid,
+                "status": "partial" if paid > 0 else "issued",
+                "days_outstanding": (cutoff - income.issued_date).days,
+                "days_overdue": overdue_days,
+                "aging_bucket": bucket,
+                "payment_date_missing": missing_date,
             }
         )
-        ar_total += remaining
-        if days_overdue > 0:
-            ar_overdue += remaining
+    overdue = [item for item in items if (item["days_overdue"] or 0) > 0]
     return {
+        "as_of": cutoff.isoformat(),
         "items": items,
-        "totals": {"ar_total": float(ar_total), "ar_overdue": float(ar_overdue)},
+        "aging": list(buckets.values()),
+        "missing_payment_dates": missing_payment_dates,
+        "totals": {
+            "ar_total": sum((item["amount"] for item in items), ZERO_DECIMAL),
+            "ar_overdue": sum((item["amount"] for item in overdue), ZERO_DECIMAL),
+            "ar_not_due": buckets["not_due"]["amount"],
+            "ar_without_due_date": buckets["no_due"]["amount"],
+            "invoice_count": len(items),
+            "overdue_count": len(overdue),
+            "client_count": len({item["client_id"] or (item["client_name"] or "").casefold() for item in items}),
+            "oldest_overdue_days": max((item["days_overdue"] for item in overdue), default=0),
+        },
     }
 
 
@@ -1144,99 +1238,30 @@ async def get_project_movements(
 
 
 async def get_finance_pnl(db: AsyncSession, year: int) -> dict:
-    """Monthly accrual-based P&L by Income.issued_date and Expense.date."""
+    """Accrual P&L shares recognition rules with the overview; taxes are a subset."""
+    if not 1900 <= year <= date.today().year:
+        raise ValueError("Select a year between 1900 and the current year")
     date_from = date(year, 1, 1)
-    date_to = date(year, 12, 31)
-
-    months: dict[int, dict[str, Decimal]] = {
-        month: {
-            "revenue": ZERO_DECIMAL,
-            "expenses": ZERO_DECIMAL,
-            "taxes": ZERO_DECIMAL,
-            "profit": ZERO_DECIMAL,
+    date_to = min(date(year, 12, 31), date.today())
+    summary = await get_finance_summary(db, date_from, date_to, "month", "accrual")
+    items = [
+        {
+            "month": int(row["period"][-2:]),
+            "revenue": row["revenue_accrual"],
+            "expenses": row["expense_accrual"] - row["taxes_accrual"],
+            "taxes": row["taxes_accrual"],
+            "profit": row["net_profit_accrual"],
         }
-        for month in range(1, 13)
-    }
-
-    revenue_rows = await db.execute(
-        select(
-            func.strftime("%m", Income.issued_date).label("month"),
-            func.coalesce(func.sum(Income.amount_rsd), 0).label("amount"),
-        )
-        .where(
-            Income.status != "cancelled",
-            Income.issued_date >= date_from,
-            Income.issued_date <= date_to,
-        )
-        .group_by(func.strftime("%m", Income.issued_date))
-    )
-    for row in revenue_rows.fetchall():
-        months[int(row.month)]["revenue"] = to_decimal(row.amount)
-
-    operating_rows = await db.execute(
-        select(
-            func.strftime("%m", Expense.date).label("month"),
-            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
-        )
-        .where(
-            _visible_expense_condition(),
-            Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.date >= date_from,
-            Expense.date <= date_to,
-            func.coalesce(Expense.is_tax_related, False) == False,
-        )
-        .group_by(func.strftime("%m", Expense.date))
-    )
-    for row in operating_rows.fetchall():
-        months[int(row.month)]["expenses"] = to_decimal(row.amount)
-
-    tax_rows = await db.execute(
-        select(
-            func.strftime("%m", Expense.date).label("month"),
-            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
-        )
-        .where(
-            _visible_expense_condition(),
-            Expense.source != CASH_TRANSFER_SOURCE,
-            Expense.date >= date_from,
-            Expense.date <= date_to,
-            Expense.is_tax_related == True,
-        )
-        .group_by(func.strftime("%m", Expense.date))
-    )
-    for row in tax_rows.fetchall():
-        months[int(row.month)]["taxes"] = to_decimal(row.amount)
-
-    items = []
-    totals = {
-        "revenue": ZERO_DECIMAL,
-        "expenses": ZERO_DECIMAL,
-        "taxes": ZERO_DECIMAL,
-        "profit": ZERO_DECIMAL,
-    }
-    for month in range(1, 13):
-        revenue = months[month]["revenue"]
-        expenses = months[month]["expenses"]
-        taxes = months[month]["taxes"]
-        profit = revenue - expenses - taxes
-        items.append(
-            {
-                "month": month,
-                "revenue": revenue,
-                "expenses": expenses,
-                "taxes": taxes,
-                "profit": profit,
-            }
-        )
-        totals["revenue"] += revenue
-        totals["expenses"] += expenses
-        totals["taxes"] += taxes
-        totals["profit"] += profit
-
+        for row in summary["series"]
+    ]
     return {
         "year": year,
+        "date_from": date_from,
+        "date_to": date_to,
         "items": items,
-        "totals": totals,
+        "totals": {
+            key: sum((item[key] for item in items), ZERO_DECIMAL) for key in ("revenue", "expenses", "taxes", "profit")
+        },
     }
 
 
