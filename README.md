@@ -558,9 +558,12 @@ python run.py
 ```
 
 **Frontend:**
+
+Node.js: 20.19+ в ветке 20, 22.13+ в ветке 22 или 24+. Версию можно проверить командой `node --version`.
+
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
