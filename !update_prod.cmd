@@ -57,7 +57,10 @@ if /I "%GIT_BRANCH%"=="HEAD" (
   exit /b 1
 )
 echo [ProspEl] Current branch: %GIT_BRANCH%
-git pull --ff-only origin %GIT_BRANCH%
+rem Keep automatic Git housekeeping out of deployment: on Windows, another
+rem process can hold a pack index open and make repacking wait for input.
+rem These overrides apply only to this pull and its child Git processes.
+git -c gc.auto=0 -c maintenance.auto=false pull --ff-only origin "%GIT_BRANCH%"
 if errorlevel 1 (
   echo [ERROR] git pull failed.
   exit /b 1
