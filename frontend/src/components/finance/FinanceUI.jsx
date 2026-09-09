@@ -17,18 +17,31 @@ import DatePicker from '../DatePicker'
 import PageTabs from '../PageTabs'
 import './FinanceUI.css'
 
-export function FinanceFrame({ title, subtitle, badge, children }) {
+export function FinanceHeader({ title, subtitle, badge, actions }) {
+  return (
+    <header className="finance-header" aria-label={title}>
+      <PageTabs group="finance" />
+      <div className="finance-header-actions">
+        {actions}
+        <details className="finance-help">
+          <summary aria-label={tr('reportAbout')} title={tr('reportAbout')}>
+            <Info size={18} aria-hidden="true" />
+          </summary>
+          <div className="finance-help-content">
+            {badge && <strong>{badge}</strong>}
+            <p>{subtitle}</p>
+          </div>
+        </details>
+      </div>
+    </header>
+  )
+}
+
+export function FinanceFrame({ title, subtitle, badge, actions, children }) {
   return (
     <div className="page finance-report">
-      <h1>{title}</h1>
-      <PageTabs group="finance" />
-      <div className="finance-report-content">
-        <div className="finance-report-intro">
-          <p>{subtitle}</p>
-          {badge && <span className="finance-tag">{badge}</span>}
-        </div>
-        {children}
-      </div>
+      <FinanceHeader title={title} subtitle={subtitle} badge={badge} actions={actions} />
+      <div className="finance-report-content">{children}</div>
     </div>
   )
 }
@@ -97,7 +110,7 @@ export function InvoiceLink({ item }) {
   )
 }
 
-export function FinancePeriodControls({ value: v, children }) {
+export function FinancePeriodControls({ value: v, children, idPrefix = 'finance' }) {
   const groups = {
     auto: 'cashflowGroupAuto',
     day: 'cashflowGroupDay',
@@ -122,8 +135,11 @@ export function FinancePeriodControls({ value: v, children }) {
             })
           : tr('financePeriodCustom')
   return (
-    <section className="card finance-controls" aria-label={tr('financePeriod')}>
-      <div className="finance-control-row">
+    <section
+      className={`card finance-controls ${children ? '' : 'finance-controls-only'}`}
+      aria-label={tr('financePeriod')}
+    >
+      <div className="finance-control-primary">
         <div className="finance-buttons">
           {Object.entries(periods).map(([key, label]) => (
             <button
@@ -163,33 +179,31 @@ export function FinancePeriodControls({ value: v, children }) {
             </>
           )}
         </div>
-      </div>
-      <div className="finance-control-row finance-control-dates">
         <div className="finance-date-pair">
           <div>
-            <label htmlFor="finance-from">{tr('periodFrom')}</label>
+            <label htmlFor={`${idPrefix}-from`}>{tr('periodFrom')}</label>
             <DatePicker
-              id="finance-from"
+              id={`${idPrefix}-from`}
               value={v.from}
               onChange={(date) => v.changeDate('from', date)}
               maxDate={new Date(`${v.today}T12:00:00`)}
             />
           </div>
           <div>
-            <label htmlFor="finance-to">{tr('periodTo')}</label>
+            <label htmlFor={`${idPrefix}-to`}>{tr('periodTo')}</label>
             <DatePicker
-              id="finance-to"
+              id={`${idPrefix}-to`}
               value={v.to}
               onChange={(date) => v.changeDate('to', date)}
               maxDate={new Date(`${v.today}T12:00:00`)}
             />
           </div>
         </div>
-        <div>
-          <label htmlFor="finance-group">{tr('cashflowDetail')}</label>
+        <div className="finance-group-field">
+          <label htmlFor={`${idPrefix}-group`}>{tr('cashflowDetail')}</label>
           <select
             className="form-input"
-            id="finance-group"
+            id={`${idPrefix}-group`}
             value={v.grouping}
             onChange={(e) => v.setGrouping(e.target.value)}
           >
@@ -201,13 +215,15 @@ export function FinancePeriodControls({ value: v, children }) {
             ))}
           </select>
         </div>
+      </div>
+      <div className="finance-control-secondary">
+        {children}
         <span className="finance-muted finance-period-note">
           {v.incomplete
             ? tr('cashflowThroughToday', { date: formatDateSr(v.today) })
             : tr('cashflowFullPeriod')}
         </span>
       </div>
-      {children}
     </section>
   )
 }
@@ -244,7 +260,7 @@ export function FinanceChart({ data, series }) {
         ))}
       </div>
       <div className="finance-chart">
-        <ResponsiveContainer width="100%" height={265} minWidth={0}>
+        <ResponsiveContainer width="100%" height={200} minWidth={0}>
           <BarChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 8 }} accessibilityLayer>
             <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 5" />
             <XAxis

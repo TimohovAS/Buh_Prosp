@@ -235,6 +235,7 @@ const ru = {
   reportAllDebts: 'Открыть дебиторку',
   reportOutstanding: 'Осталось получить',
   reportOverdue: 'Просрочено',
+  reportAbout: 'Об отчёте',
   reportDueDate: 'Срок оплаты',
   reportRemaining: 'Остаток долга',
   reportNoDueAmount: 'Без указанного срока оплаты: {amount}. Эти суммы не отнесены к просрочке.',

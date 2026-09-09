@@ -62,26 +62,36 @@ export default function AccountsReceivable() {
           : !['amount', 'amount_full', 'amount_paid', 'days_overdue'].includes(column),
     }))
   return (
-    <FinanceFrame title={tr('financeAR')} subtitle={tr('reportArSubtitle')} badge={tr('reportDebtRegister')}>
-      <div className="card finance-control-row">
-        <div className="finance-as-of">
-          <label htmlFor="ar-as-of">{tr('reportAsOf')}</label>
-          <DatePicker id="ar-as-of" value={asOf} onChange={setAsOf} maxDate={new Date(`${today}T12:00:00`)} />
-        </div>
-        <div className="finance-buttons">
-          <button className="btn btn-secondary btn-sm" onClick={() => setAsOf(today)}>
-            {tr('reportToday')}
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            disabled={report.pending || !!validation}
-            onClick={report.reload}
-          >
-            {tr('reportRefresh')}
-          </button>
-        </div>
-        <span className="finance-muted">{tr('reportDebtDateHint')}</span>
-      </div>
+    <FinanceFrame
+      title={tr('financeAR')}
+      subtitle={`${tr('reportArSubtitle')} ${tr('reportDebtDateHint')}`}
+      badge={tr('reportDebtRegister')}
+      actions={
+        <>
+          <div className="finance-as-of">
+            <label htmlFor="ar-as-of">{tr('reportAsOf')}</label>
+            <DatePicker
+              id="ar-as-of"
+              value={asOf}
+              onChange={setAsOf}
+              maxDate={new Date(`${today}T12:00:00`)}
+            />
+          </div>
+          <div className="finance-buttons">
+            <button className="btn btn-secondary btn-sm" onClick={() => setAsOf(today)}>
+              {tr('reportToday')}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={report.pending || !!validation}
+              onClick={report.reload}
+            >
+              {tr('reportRefresh')}
+            </button>
+          </div>
+        </>
+      }
+    >
       <FinanceStatus {...report} validation={validation} />
       {!validation && !report.pending && data && (
         <>

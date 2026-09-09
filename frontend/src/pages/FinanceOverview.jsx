@@ -67,13 +67,18 @@ export default function FinanceOverview() {
               </button>
             ))}
           </div>
-          <span className="finance-muted">{tr('reportModeHint')}</span>
         </div>
       </FinancePeriodControls>
       <FinanceStatus {...report} validation={period.validation} />
       {!period.validation && !report.pending && data && (
         <>
-          <div className={methods.length === 2 ? 'finance-two-columns' : ''}>
+          <div
+            className={
+              methods.length === 2
+                ? 'finance-two-columns finance-overview-methods'
+                : 'finance-overview-methods'
+            }
+          >
             {methods.map((method) => {
               const totals = data.summary.totals
               const revenue = Number(totals[`revenue_${method}`])
@@ -139,130 +144,136 @@ export default function FinanceOverview() {
               )
             })}
           </div>
-          <FinanceNote>
-            {tr('reportCompareNote')} <Link to="/finance/cashflow">{tr('cashflowTitle')}</Link>
-          </FinanceNote>
-          <FinanceSection
-            title={tr('reportDebtSnapshot', { date: formatDateSr(to) })}
-            note={tr('reportDebtSnapshotHint')}
-            action={
-              <Link className="btn btn-secondary btn-sm" to="/finance/ar" state={{ asOf: to }}>
-                {tr('reportAllDebts')}
-              </Link>
-            }
-          >
-            <div className="finance-debt-summary">
-              <span>
-                {tr('reportOutstanding')}: <strong>{formatMoney2(data.ar.totals.ar_total)} RSD</strong>
-              </span>
-              <span>
-                {tr('reportOverdue')}:{' '}
-                <strong className="negative">{formatMoney2(data.ar.totals.ar_overdue)} RSD</strong>
-              </span>
-            </div>
-            {overdue.length > 0 ? (
-              <div className="table-wrap finance-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{tr('invoiceNumber')}</th>
-                      <th>{tr('client')}</th>
-                      <th>{tr('reportDueDate')}</th>
-                      <th className="numeric">{tr('reportRemaining')}</th>
-                      <th className="numeric">{tr('financeDaysOverdue')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overdue.map((item) => (
-                      <tr key={item.income_id}>
-                        <td>
-                          <InvoiceLink item={item} />
-                        </td>
-                        <td>{item.client_name || '—'}</td>
-                        <td>{formatDateSr(item.due_date)}</td>
-                        <td className="numeric">{formatMoney2(item.amount)}</td>
-                        <td className="numeric negative">
-                          {item.days_overdue} {tr('days')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="finance-overview-bottom">
+            <FinanceSection
+              title={tr('reportDebtSnapshot', { date: formatDateSr(to) })}
+              note={tr('reportDebtSnapshotHint')}
+              action={
+                <Link className="btn btn-secondary btn-sm" to="/finance/ar" state={{ asOf: to }}>
+                  {tr('reportAllDebts')}
+                </Link>
+              }
+            >
+              <div className="finance-debt-summary">
+                <span>
+                  {tr('reportOutstanding')}: <strong>{formatMoney2(data.ar.totals.ar_total)} RSD</strong>
+                </span>
+                <span>
+                  {tr('reportOverdue')}:{' '}
+                  <strong className="negative">{formatMoney2(data.ar.totals.ar_overdue)} RSD</strong>
+                </span>
               </div>
-            ) : (
-              <p className="finance-muted">{tr('financeNoOverdue')}</p>
-            )}
-            {data.ar.totals.ar_without_due_date > 0 && (
-              <p className="finance-muted">
-                {tr('reportNoDueAmount', {
-                  amount: `${formatMoney2(data.ar.totals.ar_without_due_date)} RSD`,
-                })}
-              </p>
-            )}
-            {data.ar.missing_payment_dates > 0 && (
-              <FinanceNote warning>
-                {tr('reportUndatedPayments', { count: data.ar.missing_payment_dates })}
-              </FinanceNote>
-            )}
-          </FinanceSection>
-          <FinanceSection
-            title={tr('financeLimits')}
-            note={tr('reportLimitsAsOf', { date: formatDateSr(to) })}
-          >
-            <div className="finance-two-columns">
-              {[
-                {
-                  label: 'limit6m',
-                  amount: data.limits.annual_total,
-                  limit: data.limits.annual_limit,
-                  percent: data.limits.annual_percent,
-                  note: tr('reportAnnualRange', { year: to.slice(0, 4) }),
-                },
-                {
-                  label: 'limit8m',
-                  amount: data.limits.rolling_12_total,
-                  limit: data.limits.vat_limit,
-                  percent: data.limits.vat_percent,
-                  note: tr('reportRollingRange'),
-                },
-              ].map((limit) => (
-                <div key={limit.label}>
-                  <div className="finance-muted">
-                    {tr(limit.label)} · {limit.note}
-                  </div>
-                  <div className="finance-limit-value">
-                    {formatMoney2(limit.amount)} <small>/ {formatMoney2(limit.limit)} RSD</small>
-                  </div>
-                  <div
-                    className={`finance-limit-progress ${limit.percent >= 90 ? 'negative' : limit.percent >= 70 ? 'warning' : 'positive'}`}
-                    role="progressbar"
-                    aria-label={tr(limit.label)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.min(100, Math.max(0, limit.percent))}
-                  >
-                    <div style={{ width: `${Math.min(100, Math.max(0, limit.percent))}%` }} />
-                  </div>
-                  <span className="finance-muted">
-                    {Number(limit.percent).toFixed(1)}% ·{' '}
-                    {tr(Number(limit.amount) > limit.limit ? 'reportExceededBy' : 'reportRemainingLimit', {
-                      amount: `${formatMoney2(Math.abs(limit.limit - Number(limit.amount)))} RSD`,
-                    })}
-                  </span>
+              {overdue.length > 0 ? (
+                <div className="table-wrap finance-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{tr('invoiceNumber')}</th>
+                        <th>{tr('client')}</th>
+                        <th>{tr('reportDueDate')}</th>
+                        <th className="numeric">{tr('reportRemaining')}</th>
+                        <th className="numeric">{tr('financeDaysOverdue')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {overdue.map((item) => (
+                        <tr key={item.income_id}>
+                          <td>
+                            <InvoiceLink item={item} />
+                          </td>
+                          <td>{item.client_name || '—'}</td>
+                          <td>{formatDateSr(item.due_date)}</td>
+                          <td className="numeric">{formatMoney2(item.amount)}</td>
+                          <td className="numeric negative">
+                            {item.days_overdue} {tr('days')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-            <details className="finance-method">
-              <summary>{tr('reportForecastTitle')}</summary>
-              <p>
-                {tr('reportForecastValue', {
-                  average: `${formatMoney2(data.limits.average_monthly_income)} RSD`,
-                  forecast: `${formatMoney2(data.limits.forecast_year_end)} RSD`,
-                })}
-              </p>
-              <p>{tr('reportForecastHint')}</p>
-            </details>
-          </FinanceSection>
+              ) : (
+                <p className="finance-muted">{tr('financeNoOverdue')}</p>
+              )}
+              {data.ar.totals.ar_without_due_date > 0 && (
+                <p className="finance-muted">
+                  {tr('reportNoDueAmount', {
+                    amount: `${formatMoney2(data.ar.totals.ar_without_due_date)} RSD`,
+                  })}
+                </p>
+              )}
+              {data.ar.missing_payment_dates > 0 && (
+                <FinanceNote warning>
+                  {tr('reportUndatedPayments', { count: data.ar.missing_payment_dates })}
+                </FinanceNote>
+              )}
+            </FinanceSection>
+            <FinanceSection
+              title={tr('financeLimits')}
+              note={tr('reportLimitsAsOf', { date: formatDateSr(to) })}
+            >
+              <div className="finance-two-columns">
+                {[
+                  {
+                    label: 'limit6m',
+                    amount: data.limits.annual_total,
+                    limit: data.limits.annual_limit,
+                    percent: data.limits.annual_percent,
+                    note: tr('reportAnnualRange', { year: to.slice(0, 4) }),
+                  },
+                  {
+                    label: 'limit8m',
+                    amount: data.limits.rolling_12_total,
+                    limit: data.limits.vat_limit,
+                    percent: data.limits.vat_percent,
+                    note: tr('reportRollingRange'),
+                  },
+                ].map((limit) => (
+                  <div key={limit.label}>
+                    <div className="finance-muted">
+                      {tr(limit.label)} · {limit.note}
+                    </div>
+                    <div className="finance-limit-value">
+                      {formatMoney2(limit.amount)} <small>/ {formatMoney2(limit.limit)} RSD</small>
+                    </div>
+                    <div
+                      className={`finance-limit-progress ${limit.percent >= 90 ? 'negative' : limit.percent >= 70 ? 'warning' : 'positive'}`}
+                      role="progressbar"
+                      aria-label={tr(limit.label)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.min(100, Math.max(0, limit.percent))}
+                    >
+                      <div style={{ width: `${Math.min(100, Math.max(0, limit.percent))}%` }} />
+                    </div>
+                    <span className="finance-muted">
+                      {Number(limit.percent).toFixed(1)}% ·{' '}
+                      {tr(Number(limit.amount) > limit.limit ? 'reportExceededBy' : 'reportRemainingLimit', {
+                        amount: `${formatMoney2(Math.abs(limit.limit - Number(limit.amount)))} RSD`,
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <details className="finance-method">
+                <summary>{tr('reportForecastTitle')}</summary>
+                <p>
+                  {tr('reportForecastValue', {
+                    average: `${formatMoney2(data.limits.average_monthly_income)} RSD`,
+                    forecast: `${formatMoney2(data.limits.forecast_year_end)} RSD`,
+                  })}
+                </p>
+                <p>{tr('reportForecastHint')}</p>
+              </details>
+            </FinanceSection>
+          </div>
+          <details className="finance-method">
+            <summary>{tr('reportAbout')}</summary>
+            <p>
+              {tr('reportModeHint')} {tr('reportCompareNote')}{' '}
+              <Link to="/finance/cashflow">{tr('cashflowTitle')}</Link>
+            </p>
+          </details>
         </>
       )}
     </FinanceFrame>

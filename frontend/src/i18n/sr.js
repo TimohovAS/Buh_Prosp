@@ -233,6 +233,7 @@ const sr = {
   reportAllDebts: 'Отвори потраживања',
   reportOutstanding: 'Преостало за наплату',
   reportOverdue: 'Доспело',
+  reportAbout: 'О извештају',
   reportDueDate: 'Рок плаћања',
   reportRemaining: 'Преостали дуг',
   reportNoDueAmount: 'Без наведеног рока плаћања: {amount}. Ови износи нису сврстани у доспела дуговања.',
