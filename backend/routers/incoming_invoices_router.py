@@ -217,7 +217,14 @@ async def _load_payment_details(db: AsyncSession, invoice: IncomingInvoice) -> d
     warning = None
     if invoice.expense_id and not expense:
         warning = "missing_linked_expense"
-    elif invoice.status == "paid" and invoice.expense_id and not linked_bank_tx and not settlement_bank_ids:
+    elif (
+        invoice.status == "paid"
+        # A zero payable amount (including an advance-covered closing invoice) needs no bank payment.
+        and to_decimal(invoice.amount or 0) > 0
+        and invoice.expense_id
+        and not linked_bank_tx
+        and not settlement_bank_ids
+    ):
         warning = "linked_expense_without_bank_transaction"
 
     return {
