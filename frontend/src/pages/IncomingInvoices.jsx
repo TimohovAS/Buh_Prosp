@@ -6,12 +6,10 @@ import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
-import PageHeader from '../components/PageHeader'
+import InvoiceRegister from '../components/incoming-invoices/InvoiceRegister'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
-import SortIndicator from '../components/SortIndicator'
 import SharedStatusBadge from '../components/StatusBadge'
-import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
 import {
@@ -22,7 +20,6 @@ import {
   todayIso,
 } from '../utils/formatters'
 
-const STATUSES = ['unpaid', 'partial', 'paid', 'cancelled']
 const STATUS_LABELS = {
   unpaid: 'statusUnpaid',
   partial: 'statusPartial',
@@ -239,6 +236,7 @@ export default function IncomingInvoices() {
         applyAvailableYears(years)
       })
       .catch(() => {
+        setPageError(tr('loadError'))
         setItems([])
         resetAvailableYears()
       })
@@ -285,8 +283,9 @@ export default function IncomingInvoices() {
       )
     }
     return [...rows].sort((a, b) => {
-      const av = a[sortCol] ?? ''
-      const bv = b[sortCol] ?? ''
+      const isNumeric = ['amount', 'settled_amount', 'remaining_amount'].includes(sortCol)
+      const av = isNumeric ? Number(a[sortCol] || 0) : (a[sortCol] ?? '')
+      const bv = isNumeric ? Number(b[sortCol] || 0) : (b[sortCol] ?? '')
       if (av < bv) return sortAsc ? -1 : 1
       if (av > bv) return sortAsc ? 1 : -1
       return 0
@@ -385,14 +384,6 @@ export default function IncomingInvoices() {
     openDetail(item.id)
   }
 
-  const totalAmount = useMemo(
-    () => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0),
-    [filtered]
-  )
-  const totalRemaining = useMemo(
-    () => filtered.reduce((sum, item) => sum + Number(item.remaining_amount || 0), 0),
-    [filtered]
-  )
   const getProjectLabel = (item) =>
     [item?.project_code, item?.project_name].filter(Boolean).join(' / ') ||
     projects.find((project) => project.id === item?.project_id)?.name ||
@@ -522,182 +513,31 @@ export default function IncomingInvoices() {
     ) : null
 
   return (
-    <div className="page">
-      <PageHeader
-        title={tr('incomingInvoices')}
-        actions={
-          <>
-            {filtered.length > 0 ? (
-              <div
-                style={{
-                  alignSelf: 'center',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  flexWrap: 'wrap',
-                  marginRight: '0.5rem',
-                }}
-              >
-                <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                  {tr('total')}: {filtered.length}
-                </span>
-                <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{fmt(totalAmount)}</span>
-                <span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                  {tr('remainingAmount')}: {fmt(totalRemaining)}
-                </span>
-              </div>
-            ) : null}
-            <YearFilterSelect
-              value={year}
-              availableYears={availableYears}
-              onChange={(nextYear) => {
-                setYear(nextYear)
-                if (nextYear === '') setMonth('')
-              }}
-              style={{ width: 120 }}
-            />
-            <select
-              className="form-input"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              style={{ width: 80 }}
-              disabled={!year}
-            >
-              <option value="">-</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ width: 130 }}
-            >
-              <option value="">{tr('all') || 'All'}</option>
-              {STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {tr(STATUS_LABELS[status])}
-                </option>
-              ))}
-            </select>
-            <SearchInput
-              placeholder={tr('search')}
-              value={search}
-              onChange={setSearch}
-              style={{ width: 200 }}
-            />
-            <button className="btn btn-primary" onClick={openAdd}>
-              {tr('createIncomingInvoice')}
-            </button>
-          </>
-        }
+    <div className="page incoming-invoices-page">
+      <InvoiceRegister
+        items={filtered}
+        loading={loading}
+        error={pageError}
+        year={year}
+        availableYears={availableYears}
+        onYearChange={(value) => {
+          setYear(value)
+          if (value === '') setMonth('')
+        }}
+        month={month}
+        onMonthChange={setMonth}
+        status={filterStatus}
+        onStatusChange={setFilterStatus}
+        search={search}
+        onSearchChange={setSearch}
+        sortCol={sortCol}
+        sortAsc={sortAsc}
+        onSort={toggleSort}
+        onAdd={openAdd}
+        onOpen={openDetail}
+        onRetry={load}
+        projectLabel={renderProjectLabel}
       />
-
-      {pageError && <div className="alert alert-danger">{pageError}</div>}
-
-      <div className="page-body">
-        <div className="card">
-          <div className="table-wrap">
-            <table className="incoming-invoices-list-table">
-              <thead>
-                <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>
-                    {tr('date')} <SortIndicator active={sortCol === 'date'} asc={sortAsc} />
-                  </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('invoice_number')}>
-                    {tr('invoiceNumber')}{' '}
-                    <SortIndicator active={sortCol === 'invoice_number'} asc={sortAsc} />
-                  </th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('counterparty_name')}>
-                    {tr('counterpartyName')}{' '}
-                    <SortIndicator active={sortCol === 'counterparty_name'} asc={sortAsc} />
-                  </th>
-                  <th>{tr('description')}</th>
-                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
-                    {tr('amount')} <SortIndicator active={sortCol === 'amount'} asc={sortAsc} />
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={5}>{tr('loading')}</td>
-                  </tr>
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>{tr('noRecords')}</td>
-                  </tr>
-                ) : (
-                  filtered.map((inv) => (
-                    <tr
-                      key={inv.id}
-                      className={`record-row ${inv.status === 'cancelled' ? 'row-reversal' : ''}`.trim()}
-                      onClick={() => openDetail(inv.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          openDetail(inv.id)
-                        }
-                      }}
-                      tabIndex={0}
-                    >
-                      <td className="incoming-invoice-date-cell">
-                        <div className="incoming-invoice-date-primary">{fmtDate(inv.date)}</div>
-                      </td>
-                      <td className="incoming-invoice-document-cell">
-                        <div className="incoming-invoice-number">{inv.invoice_number || UI_DASH}</div>
-                      </td>
-                      <td className="incoming-invoice-party-cell">
-                        <div
-                          className="incoming-invoice-party-name"
-                          title={inv.counterparty_name || inv.client_name || UI_DASH}
-                        >
-                          {inv.counterparty_name || inv.client_name || UI_DASH}
-                        </div>
-                        <div className="income-meta-chips">
-                          <span
-                            className="income-meta-chip income-meta-chip-accent"
-                            title={renderProjectLabel(inv)}
-                          >
-                            {renderProjectLabel(inv)}
-                          </span>
-                          {inv.client_name && inv.client_name !== inv.counterparty_name ? (
-                            <span className="income-meta-chip" title={inv.client_name}>
-                              {tr('client')}: {inv.client_name}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="incoming-invoice-description-cell">
-                        <div className="incoming-invoice-description" title={inv.description || UI_DASH}>
-                          {inv.description || UI_DASH}
-                        </div>
-                      </td>
-                      <td className="incoming-invoice-amount-cell">
-                        <div className="incoming-invoice-amount-primary">
-                          {fmt(inv.amount)} {inv.currency || 'RSD'}
-                        </div>
-                        <div className="incoming-invoice-status-inline">
-                          <StatusBadge status={inv.status} />
-                        </div>
-                        <div className="incoming-invoice-amount-meta">
-                          {tr('settledAmount')}: {fmt(inv.settled_amount)}
-                        </div>
-                        <div className="incoming-invoice-amount-meta">
-                          {tr('remainingAmount')}: {fmt(inv.remaining_amount)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
 
       <Modal
         isOpen={!!modal}
