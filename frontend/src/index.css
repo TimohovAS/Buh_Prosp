@@ -2867,8 +2867,15 @@ tr.row-reversal {
 }
 
 .income-form-grid-dates {
-  grid-template-columns: repeat(2, minmax(150px, 180px));
+  grid-template-columns: repeat(2, minmax(0, 180px)) minmax(0, 280px);
+  align-items: start;
   justify-content: start;
+}
+
+.income-invoice-number-hint {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 .income-modal-main .form-input {
@@ -2933,6 +2940,66 @@ tr.row-reversal {
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
+}
+
+.income-line-start {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.income-line-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: grab;
+}
+
+.income-line-drag-handle:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.income-line-drag-handle:active {
+  cursor: grabbing;
+}
+
+.income-line-drag-handle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.income-line-drag-handle:focus-visible,
+.income-line-add:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.income-line-dragging {
+  opacity: 0.45;
+}
+
+.income-line-drop-before > td {
+  box-shadow: inset 0 2px var(--color-accent);
+}
+
+.income-line-drop-after > td {
+  box-shadow: inset 0 -2px var(--color-accent);
+}
+
+.income-line-add {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.5rem;
+  border: 1px dashed var(--color-border);
 }
 
 .income-calculated-field {

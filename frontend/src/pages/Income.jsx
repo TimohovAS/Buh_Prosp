@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { GripVertical } from 'lucide-react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import ClientSelect from '../components/ClientSelect'
@@ -40,7 +41,9 @@ const EFAKTURA_REFERENCE_FIELDS = [
   { name: 'efaktura_payment_reference', label: 'efakturaPaymentReference' },
   { name: 'efaktura_payment_model', label: 'efakturaPaymentModel', maxLength: 10 },
 ]
+let nextIncomeLineKey = 0
 const newIncomeLine = () => ({
+  rowKey: nextIncomeLineKey++,
   name: '',
   quantity: '1',
   unit: 'kom',
@@ -107,8 +110,10 @@ export default function Income() {
   const [itemSuggestions, setItemSuggestions] = useState([])
   const [itemSearchSuggestions, setItemSearchSuggestions] = useState([])
   const [activeLineIndex, setActiveLineIndex] = useState(null)
+  const [lineDrag, setLineDrag] = useState(null)
+  const pendingLineFocus = useRef(null)
   const [efakturaFieldsOpen, setEfakturaFieldsOpen] = useState(false)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     date: todayIso(),
     due_date: '',
     invoice_number: '',
@@ -127,7 +132,7 @@ export default function Income() {
     amount_rsd: '',
     items: [newIncomeLine()],
     note: '',
-  })
+  }))
 
   const load = () => {
     setLoading(true)
@@ -186,15 +191,23 @@ export default function Income() {
       setItemSearchSuggestions([])
       return undefined
     }
+    let cancelled = false
     const timer = window.setTimeout(() => {
       const params = { search: term, limit: 8 }
       if (form.client_id) params.client_id = form.client_id
       api.income
         .itemSuggestions(params)
-        .then(setItemSearchSuggestions)
-        .catch(() => setItemSearchSuggestions([]))
+        .then((suggestions) => {
+          if (!cancelled) setItemSearchSuggestions(suggestions)
+        })
+        .catch(() => {
+          if (!cancelled) setItemSearchSuggestions([])
+        })
     }, 250)
-    return () => window.clearTimeout(timer)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [modal, form.client_id, form.items, activeLineIndex])
 
   const [nextInvoiceHint, setNextInvoiceHint] = useState('')
@@ -215,6 +228,7 @@ export default function Income() {
   }, [])
 
   const closeModal = () => {
+    setLineDrag(null)
     setModal(null)
     setNextInvoiceHint('')
     setSubmitError('')
@@ -281,6 +295,7 @@ export default function Income() {
       amount_rsd: item.amount_rsd,
       items: item.items?.length
         ? item.items.map((line) => ({
+            ...newIncomeLine(),
             name: line.name || '',
             quantity: String(line.quantity ?? '1'),
             unit: line.unit || 'kom',
@@ -654,8 +669,71 @@ export default function Income() {
     })
   }
 
-  const addIncomeLine = (line = null) => {
-    setForm((previous) => ({ ...previous, items: [...(previous.items || []), line || newIncomeLine()] }))
+  const addIncomeLine = () => {
+    const line = newIncomeLine()
+    pendingLineFocus.current = line.rowKey
+    closeItemSearchSuggestions()
+    setForm((previous) => ({ ...previous, items: [...(previous.items || []), line] }))
+  }
+
+  const moveIncomeLine = (rowKey, targetKey, after) => {
+    if (rowKey === targetKey) return
+    closeItemSearchSuggestions()
+    setForm((previous) => {
+      const lines = [...(previous.items || [])]
+      const sourceIndex = lines.findIndex((line) => line.rowKey === rowKey)
+      if (sourceIndex < 0 || !lines.some((line) => line.rowKey === targetKey)) return previous
+      const [line] = lines.splice(sourceIndex, 1)
+      const targetIndex = lines.findIndex((item) => item.rowKey === targetKey)
+      lines.splice(targetIndex + (after ? 1 : 0), 0, line)
+      return { ...previous, items: lines }
+    })
+  }
+
+  const startIncomeLineDrag = (event, rowKey) => {
+    closeItemSearchSuggestions()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(rowKey))
+    const row = event.currentTarget.closest('tr')
+    const rect = row.getBoundingClientRect()
+    event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top)
+    setLineDrag({ rowKey, targetKey: rowKey, after: false })
+  }
+
+  const dragOverIncomeLine = (event, targetKey) => {
+    if (!lineDrag) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const rect = event.currentTarget.getBoundingClientRect()
+    const after = event.clientY > rect.top + rect.height / 2
+    setLineDrag((current) =>
+      current && (current.targetKey !== targetKey || current.after !== after)
+        ? { ...current, targetKey, after }
+        : current
+    )
+  }
+
+  const dropIncomeLine = (event, targetKey) => {
+    if (!lineDrag) return
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    moveIncomeLine(lineDrag.rowKey, targetKey, event.clientY > rect.top + rect.height / 2)
+    setLineDrag(null)
+  }
+
+  const moveIncomeLineWithKeyboard = (event, index) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    const after = event.key === 'ArrowDown'
+    const target = form.items[index + (after ? 1 : -1)]
+    if (!target) return
+    moveIncomeLine(form.items[index].rowKey, target.rowKey, after)
+    const handle = event.currentTarget
+    window.requestAnimationFrame(() => {
+      if (!handle.isConnected) return
+      handle.focus({ preventScroll: true })
+      handle.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
   }
 
   const removeIncomeLine = (index) => {
@@ -672,6 +750,7 @@ export default function Income() {
   }
 
   const lineFromSuggestion = (suggestion) => ({
+    ...newIncomeLine(),
     name: suggestion.name || '',
     quantity: String(suggestion.quantity ?? 1),
     unit: suggestion.unit || 'kom',
@@ -684,7 +763,7 @@ export default function Income() {
     const line = lineFromSuggestion(suggestion)
     setForm((previous) => {
       const lines = [...(previous.items || [])]
-      lines[index] = line
+      lines[index] = { ...line, rowKey: lines[index].rowKey }
       return { ...previous, items: lines }
     })
     setActiveLineIndex(null)
@@ -698,7 +777,7 @@ export default function Income() {
       const firstEmpty = lines.findIndex((item) => !String(item.name || '').trim())
       if (firstEmpty >= 0) {
         const next = [...lines]
-        next[firstEmpty] = line
+        next[firstEmpty] = { ...line, rowKey: next[firstEmpty].rowKey }
         return { ...previous, items: next }
       }
       return { ...previous, items: [...lines, line] }
@@ -1378,29 +1457,33 @@ export default function Income() {
                     onChange={(value) => setForm({ ...form, due_date: value })}
                   />
                 </div>
-              </div>
-              <div className="form-group form-group-compact">
-                <label className="form-label">{tr('invoiceNumber')}</label>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="income-invoice-number">
+                    {tr('invoiceNumber')}
+                  </label>
+                  <input
+                    id="income-invoice-number"
+                    type="text"
+                    className="form-input"
+                    value={form.invoice_number}
+                    onChange={(event) => setForm({ ...form, invoice_number: event.target.value })}
+                    placeholder={modal === 'add' && nextInvoiceHint ? nextInvoiceHint : ''}
+                    required={modal !== 'add'}
+                    aria-describedby={modal === 'add' ? 'income-invoice-number-hint' : undefined}
+                  />
+                  {invoiceDuplicate && (
+                    <div
+                      style={{ fontSize: '0.875rem', color: 'var(--color-warning)', marginTop: '0.25rem' }}
+                    >
+                      {tr('invoiceExistsWarning')}
+                    </div>
+                  )}
+                </div>
                 {modal === 'add' && (
-                  <div
-                    style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}
-                  >
+                  <div id="income-invoice-number-hint" className="income-invoice-number-hint">
                     {nextInvoiceHint
                       ? `${tr('suggestedNext')}: ${nextInvoiceHint}. ${tr('invoiceYearHint')}`
                       : tr('invoiceYearHint')}
-                  </div>
-                )}
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.invoice_number}
-                  onChange={(event) => setForm({ ...form, invoice_number: event.target.value })}
-                  placeholder={modal === 'add' && nextInvoiceHint ? nextInvoiceHint : ''}
-                  required={modal !== 'add'}
-                />
-                {invoiceDuplicate && (
-                  <div style={{ fontSize: '0.875rem', color: 'var(--color-warning)', marginTop: '0.25rem' }}>
-                    {tr('invoiceExistsWarning')}
                   </div>
                 )}
               </div>
@@ -1495,27 +1578,12 @@ export default function Income() {
                 </div>
               </details>
               <div className="form-group">
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '0.75rem',
-                    alignItems: 'center',
-                    marginBottom: '0.5rem',
-                  }}
-                >
-                  <label className="form-label" style={{ margin: 0 }}>
-                    {tr('invoiceItems')}
-                  </label>
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIncomeLine()}>
-                    {tr('addLine')}
-                  </button>
-                </div>
+                <label className="form-label">{tr('invoiceItems')}</label>
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th style={{ width: 42 }}>#</th>
+                        <th style={{ width: 76 }}>#</th>
                         <th>{tr('name')}</th>
                         <th style={{ width: 95 }}>{tr('quantity')}</th>
                         <th style={{ width: 80 }}>{tr('unit')}</th>
@@ -1527,8 +1595,37 @@ export default function Income() {
                     <tbody>
                       {(form.items || []).length ? (
                         (form.items || []).map((line, index) => (
-                          <tr key={index}>
-                            <td className="income-line-number">{index + 1}</td>
+                          <tr
+                            key={line.rowKey}
+                            className={
+                              lineDrag?.rowKey === line.rowKey
+                                ? 'income-line-dragging'
+                                : lineDrag?.targetKey === line.rowKey
+                                  ? `income-line-drop-${lineDrag.after ? 'after' : 'before'}`
+                                  : undefined
+                            }
+                            onDragOver={(event) => dragOverIncomeLine(event, line.rowKey)}
+                            onDrop={(event) => dropIncomeLine(event, line.rowKey)}
+                          >
+                            <td>
+                              <div className="income-line-start">
+                                <button
+                                  type="button"
+                                  className="income-line-drag-handle"
+                                  draggable={form.items.length > 1}
+                                  disabled={form.items.length < 2}
+                                  onDragStart={(event) => startIncomeLineDrag(event, line.rowKey)}
+                                  onDragEnd={() => setLineDrag(null)}
+                                  onKeyDown={(event) => moveIncomeLineWithKeyboard(event, index)}
+                                  aria-label={tr('moveInvoiceLine', { number: index + 1 })}
+                                  aria-keyshortcuts="ArrowUp ArrowDown"
+                                  title={tr('moveInvoiceLine', { number: index + 1 })}
+                                >
+                                  <GripVertical size={16} aria-hidden="true" />
+                                </button>
+                                <span className="income-line-number">{index + 1}</span>
+                              </div>
+                            </td>
                             <td>
                               <div
                                 className="income-item-name-field"
@@ -1538,6 +1635,12 @@ export default function Income() {
                                 }}
                               >
                                 <input
+                                  ref={(input) => {
+                                    if (!input || pendingLineFocus.current !== line.rowKey) return
+                                    pendingLineFocus.current = null
+                                    input.focus({ preventScroll: true })
+                                    input.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+                                  }}
                                   type="text"
                                   className="form-input"
                                   value={line.name}
@@ -1607,6 +1710,8 @@ export default function Income() {
                                 type="button"
                                 className="btn btn-sm btn-danger"
                                 onClick={() => removeIncomeLine(index)}
+                                aria-label={tr('removeInvoiceLine', { number: index + 1 })}
+                                title={tr('removeInvoiceLine', { number: index + 1 })}
                               >
                                 {UI_CLOSE}
                               </button>
@@ -1623,6 +1728,13 @@ export default function Income() {
                     </tbody>
                   </table>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary income-line-add"
+                  onClick={() => addIncomeLine()}
+                >
+                  {tr('addLine')}
+                </button>
                 <div className="income-invoice-total-row">
                   <div className="income-invoice-total-label">{tr('amount')}</div>
                   <div>

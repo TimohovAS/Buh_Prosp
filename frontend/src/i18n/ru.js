@@ -17,6 +17,8 @@ const ru = {
   addExpensePosition: 'Добавить позицию',
   addItem: 'Добавить позицию',
   addLine: 'Добавить позицию',
+  moveInvoiceLine: 'Перетащите позицию {number}. На клавиатуре: ↑ / ↓.',
+  removeInvoiceLine: 'Удалить позицию {number}',
   address: 'Адрес',
   addressNotSpecified: 'Адрес не указан',
   adminHardDeleteExpense: 'Админ: удалить запись',

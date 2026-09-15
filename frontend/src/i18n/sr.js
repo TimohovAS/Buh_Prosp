@@ -17,6 +17,8 @@ const sr = {
   addExpensePosition: 'Додај ставку',
   addItem: 'Додај позицију',
   addLine: 'Dodaj stavku',
+  moveInvoiceLine: 'Prevucite stavku {number}. Na tastaturi: ↑ / ↓.',
+  removeInvoiceLine: 'Obriši stavku {number}',
   address: 'Адреса',
   addressNotSpecified: 'Адреса није наведена',
   adminHardDeleteExpense: 'Админ: обриши запис',
