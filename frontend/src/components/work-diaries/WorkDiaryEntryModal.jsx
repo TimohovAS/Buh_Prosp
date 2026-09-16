@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, ChevronDown, ChevronRight, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, Plus, RotateCcw, Save } from 'lucide-react'
 import { api } from '../../api'
 import { tr } from '../../i18n'
 import DatePicker from '../DatePicker'
 import FieldTooltip from '../FieldTooltip'
 import Modal from '../Modal'
+import ItemDragHandle from '../ItemDragHandle'
+import ItemRemoveButton from '../ItemRemoveButton'
+import useReorderableItems from '../../hooks/useReorderableItems'
+import { createEditorRowKey } from '../../utils/reorderItems'
 import MultiSelect from '../MultiSelect'
 import ProjectSelect from '../ProjectSelect'
 import {
@@ -112,6 +116,7 @@ function formFromEntry(entry, defaultProjectId, materialBillingMultiplier) {
 
 function materialsFromEntry(entry) {
   return (entry?.materials || []).map((material) => ({
+    rowKey: createEditorRowKey(),
     description: material.description || '',
     quantity: material.quantity == null ? '' : String(material.quantity),
     unit: material.unit || '',
@@ -149,6 +154,18 @@ export default function WorkDiaryEntryModal({
   const [expenseOptions, setExpenseOptions] = useState([])
   const [showAllowances, setShowAllowances] = useState(false)
   const [showDiaryDetails, setShowDiaryDetails] = useState(false)
+  const materialEditor = useReorderableItems({
+    items: materials,
+    onChange: setMaterials,
+    getKey: (material) => material.rowKey,
+    disabled: !isOpen || readOnly || saving,
+  })
+
+  const addMaterial = () => {
+    const material = { ...emptyMaterial, rowKey: createEditorRowKey() }
+    materialEditor.focusNewItem(material.rowKey)
+    setMaterials((previous) => [...previous, material])
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -239,6 +256,7 @@ export default function WorkDiaryEntryModal({
 
   const materialRowFromItem = (option, item) => ({
     ...emptyMaterial,
+    rowKey: createEditorRowKey(),
     source: 'expense',
     expense_id: String(option.id),
     source_item_type: item.source_item_type,
@@ -282,7 +300,9 @@ export default function WorkDiaryEntryModal({
       )
       if (alreadySelected) return prev
       const updated = prev.map((material, materialIndex) =>
-        materialIndex === index ? { ...material, ...materialRowFromItem(option, item) } : material
+        materialIndex === index
+          ? { ...material, ...materialRowFromItem(option, item), rowKey: material.rowKey }
+          : material
       )
       const expenseId = String(option.id)
       const selectedKeys = new Set(
@@ -605,7 +625,18 @@ export default function WorkDiaryEntryModal({
             <strong>{tr('workDiariesMaterials')}</strong>
           </div>
           {materials.map((material, index) => (
-            <div className="work-diaries-material-block" key={index}>
+            <div
+              key={material.rowKey}
+              {...materialEditor.getRowProps(
+                material,
+                `work-diaries-material-block${readOnly ? '' : ' is-reorderable'}`
+              )}
+            >
+              {!readOnly ? (
+                <div className="work-diaries-material-drag">
+                  <ItemDragHandle number={index + 1} {...materialEditor.getHandleProps(material)} />
+                </div>
+              ) : null}
               <div className="work-diaries-material-row">
                 <select
                   className="form-input"
@@ -626,6 +657,7 @@ export default function WorkDiaryEntryModal({
                   <option value="expense">{tr('workDiariesMaterialSourceExpense')}</option>
                 </select>
                 <input
+                  ref={materialEditor.getInputRef(material)}
                   className="form-input"
                   value={material.description}
                   placeholder={tr('description')}
@@ -674,13 +706,10 @@ export default function WorkDiaryEntryModal({
                   onChange={(event) => updateMaterial(index, { amount: event.target.value })}
                 />
                 {!readOnly ? (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-danger"
+                  <ItemRemoveButton
+                    number={index + 1}
                     onClick={() => setMaterials((prev) => prev.filter((_, i) => i !== index))}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  />
                 ) : null}
               </div>
               {shouldShowExpensePicker(material) ? (
@@ -817,10 +846,11 @@ export default function WorkDiaryEntryModal({
             <div className="work-diaries-material-add-row">
               <button
                 type="button"
-                className="btn btn-sm btn-secondary"
-                onClick={() => setMaterials((prev) => [...prev, { ...emptyMaterial }])}
+                className="btn btn-secondary item-editor-add"
+                onClick={addMaterial}
+                disabled={saving}
               >
-                <Plus size={16} /> {tr('add')}
+                {tr('addItem')}
               </button>
             </div>
           ) : null}

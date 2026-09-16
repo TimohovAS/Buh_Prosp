@@ -2685,6 +2685,11 @@ tr.row-reversal {
   table-layout: fixed;
 }
 
+.expense-lines-edit-table th:first-child,
+.expense-lines-edit-table td:first-child {
+  width: 76px;
+}
+
 .expense-lines-edit-table th:nth-child(3),
 .expense-lines-edit-table td:nth-child(3) {
   width: 120px;
@@ -2711,13 +2716,18 @@ tr.row-reversal {
   background: rgba(59, 130, 246, 0.06);
 }
 
+.expense-lines-edit-table th:last-child,
 .expense-line-actions-cell {
-  width: 118px;
+  width: 56px;
   text-align: right;
 }
 
-.expense-line-actions-cell .btn {
-  white-space: nowrap;
+.expense-lines-table .expense-lines-add-row td {
+  background: transparent;
+}
+
+.expense-lines-add-row .item-editor-add {
+  margin-top: 0;
 }
 
 .receipt-import-layout {
@@ -2815,6 +2825,19 @@ tr.row-reversal {
 .form-input:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.document-fields-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  align-items: start;
+  gap: 0.55rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.document-fields-row > .form-group {
+  min-width: 0;
+  margin-bottom: 0;
 }
 
 .modal-body.income-modal-body {
@@ -2935,20 +2958,20 @@ tr.row-reversal {
   padding: 0.4rem 0.55rem;
 }
 
-.income-line-number {
+.item-reorder-number {
   color: var(--color-text-muted);
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
 }
 
-.income-line-start {
+.item-reorder-start {
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.income-line-drag-handle {
+.item-reorder-handle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2963,43 +2986,57 @@ tr.row-reversal {
   cursor: grab;
 }
 
-.income-line-drag-handle:hover:not(:disabled) {
+.item-reorder-handle:hover:not(:disabled) {
   color: var(--color-text);
   background: var(--color-surface-hover);
 }
 
-.income-line-drag-handle:active {
+.item-reorder-handle:active {
   cursor: grabbing;
 }
 
-.income-line-drag-handle:disabled {
+.item-reorder-handle:disabled {
   opacity: 0.35;
   cursor: default;
 }
 
-.income-line-drag-handle:focus-visible,
-.income-line-add:focus-visible {
+.item-reorder-handle:focus-visible,
+.item-editor-remove:focus-visible,
+.item-editor-add:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.income-line-dragging {
+.item-reorder-dragging {
   opacity: 0.45;
 }
 
-.income-line-drop-before > td {
+.item-reorder-drop-before:not(tr),
+.item-reorder-drop-before > td {
   box-shadow: inset 0 2px var(--color-accent);
 }
 
-.income-line-drop-after > td {
+.item-reorder-drop-after:not(tr),
+.item-reorder-drop-after > td {
   box-shadow: inset 0 -2px var(--color-accent);
 }
 
-.income-line-add {
+.item-editor-add {
   width: 100%;
   justify-content: center;
   margin-top: 0.5rem;
   border: 1px dashed var(--color-border);
+}
+
+.item-editor-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0;
 }
 
 .income-calculated-field {
@@ -3545,11 +3582,17 @@ th {
 }
 
 .work-diaries-invoice-lines th:first-child,
-.work-diaries-invoice-lines td:first-child,
-.work-diaries-invoice-lines th:nth-child(3),
-.work-diaries-invoice-lines td:nth-child(3),
+.work-diaries-invoice-lines td:first-child {
+  width: 76px;
+  white-space: nowrap;
+}
+
+.work-diaries-invoice-lines th:nth-child(2),
+.work-diaries-invoice-lines td:nth-child(2),
 .work-diaries-invoice-lines th:nth-child(4),
-.work-diaries-invoice-lines td:nth-child(4) {
+.work-diaries-invoice-lines td:nth-child(4),
+.work-diaries-invoice-lines th:nth-child(5),
+.work-diaries-invoice-lines td:nth-child(5) {
   width: 1%;
   white-space: nowrap;
 }
@@ -3829,6 +3872,17 @@ th {
 
 .work-diaries-material-block + .work-diaries-material-block {
   margin-top: 0.35rem;
+}
+
+.work-diaries-material-block.is-reorderable {
+  position: relative;
+  padding-left: 3.6rem;
+}
+
+.work-diaries-material-drag {
+  position: absolute;
+  top: 0.25rem;
+  left: 0;
 }
 
 .work-diaries-material-expense-row {
@@ -4641,7 +4695,7 @@ tr:hover td {
 }
 
 .contract-editor-item-columns {
-  padding: 0.55rem 0.9rem 0.45rem 3.6rem;
+  padding: 0.55rem 0.9rem 0.45rem 4.6rem;
   border-bottom: 1px solid rgba(45, 58, 77, 0.75);
   color: var(--color-text-muted);
   font-size: 0.7rem;
@@ -4660,7 +4714,7 @@ tr:hover td {
 
 .contract-editor-item-row {
   position: relative;
-  padding: 0.65rem 0.9rem 0.65rem 3.6rem;
+  padding: 0.65rem 0.9rem 0.65rem 4.6rem;
   border-bottom: 1px solid rgba(45, 58, 77, 0.72);
 }
 
@@ -4679,17 +4733,8 @@ tr:hover td {
 
 .contract-editor-item-index {
   position: absolute;
-  left: 0.9rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 7px;
-  background: rgba(148, 163, 184, 0.1);
-  color: var(--color-text-muted);
-  font-size: 0.74rem;
-  font-weight: 700;
+  left: 0.65rem;
+  top: 0.65rem;
 }
 
 .contract-editor-item-row .form-input {
@@ -4705,24 +4750,6 @@ tr:hover td {
 
 .contract-editor-item-amount strong {
   font-size: 0.82rem;
-}
-
-.contract-editor-remove-item {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 1px solid rgba(239, 68, 68, 0.26);
-  border-radius: 7px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #fb7185;
-}
-
-.contract-editor-remove-item:hover {
-  border-color: rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.16);
 }
 
 .contract-editor-items-empty {
@@ -4807,7 +4834,7 @@ tr:hover td {
   .contract-editor-item-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: end;
-    padding-left: 3.6rem;
+    padding-left: 4.6rem;
   }
 
   .contract-editor-item-description {
@@ -4857,7 +4884,7 @@ tr:hover td {
   }
 
   .contract-editor-item-row {
-    padding-left: 3.6rem;
+    padding-left: 4.6rem;
   }
 
   .contract-editor-actions {

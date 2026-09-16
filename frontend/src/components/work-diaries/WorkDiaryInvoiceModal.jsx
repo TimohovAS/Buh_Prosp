@@ -4,6 +4,8 @@ import { api } from '../../api'
 import { tr, trFor } from '../../i18n'
 import DatePicker from '../DatePicker'
 import Modal from '../Modal'
+import ItemDragHandle from '../ItemDragHandle'
+import useReorderableItems from '../../hooks/useReorderableItems'
 import { dateLabel, money } from './workDiaryUtils'
 
 function todayIso() {
@@ -68,6 +70,12 @@ export default function WorkDiaryInvoiceModal({ isOpen, onClose, onCreated, entr
   const [contracts, setContracts] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const lineEditor = useReorderableItems({
+    items: lines,
+    onChange: setLines,
+    getKey: (line) => line.entry_id,
+    disabled: !isOpen || saving,
+  })
 
   useEffect(() => {
     if (!isOpen) return
@@ -258,6 +266,7 @@ export default function WorkDiaryInvoiceModal({ isOpen, onClose, onCreated, entr
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 76 }}>#</th>
                   <th>{tr('date')}</th>
                   <th>{tr('workDiariesInvoiceLine')}</th>
                   <th style={{ textAlign: 'right' }}>{tr('workDiariesInvoiceAvailable')}</th>
@@ -265,8 +274,11 @@ export default function WorkDiaryInvoiceModal({ isOpen, onClose, onCreated, entr
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
-                  <tr key={line.entry_id}>
+                {lines.map((line, index) => (
+                  <tr key={line.entry_id} {...lineEditor.getRowProps(line)}>
+                    <td>
+                      <ItemDragHandle number={index + 1} {...lineEditor.getHandleProps(line)} />
+                    </td>
                     <td className="date-cell">{dateLabel(line.date)}</td>
                     <td className="work-diaries-invoice-line-cell">
                       <InvoiceLineTextarea

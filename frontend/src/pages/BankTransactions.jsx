@@ -5,6 +5,7 @@ import { getLang, tr } from '../i18n'
 import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import Modal from '../components/Modal'
+import ItemRemoveButton from '../components/ItemRemoveButton'
 import PageHeader from '../components/PageHeader'
 import PageTabs from '../components/PageTabs'
 import ProjectSelect from '../components/ProjectSelect'
@@ -1410,7 +1411,7 @@ export default function BankTransactions() {
                 {tr('bankTxAllocationEmpty')}
               </p>
             ) : (
-              allocationLines.map((line) => (
+              allocationLines.map((line, index) => (
                 <div key={`selected-${line.income_id}`} className="bank-match-item selected">
                   <div style={{ minWidth: 0 }}>
                     <div className="bank-match-item-title">
@@ -1442,13 +1443,10 @@ export default function BankTransactions() {
                       value={line.amount}
                       onChange={(event) => updateAllocationAmount(line.income_id, event.target.value)}
                     />
-                    <button
-                      className="btn btn-sm btn-secondary"
-                      type="button"
+                    <ItemRemoveButton
+                      number={index + 1}
                       onClick={() => removeAllocationLine(line.income_id)}
-                    >
-                      {tr('delete')}
-                    </button>
+                    />
                   </div>
                 </div>
               ))

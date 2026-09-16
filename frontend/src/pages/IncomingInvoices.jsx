@@ -546,18 +546,23 @@ export default function IncomingInvoices() {
       >
         {modal ? (
           <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">{tr('invoiceNumber')}</label>
-              <input
-                className="form-input"
-                required
-                value={form.invoice_number}
-                onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{tr('date')}</label>
-              <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
+            <div className="document-fields-row">
+              <div className="form-group">
+                <label className="form-label">{tr('date')}</label>
+                <DatePicker value={form.date} onChange={(value) => setForm({ ...form, date: value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="incoming-invoice-number">
+                  {tr('invoiceNumber')}
+                </label>
+                <input
+                  id="incoming-invoice-number"
+                  className="form-input"
+                  required
+                  value={form.invoice_number}
+                  onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
+                />
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">{tr('counterpartyName')}</label>

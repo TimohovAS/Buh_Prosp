@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, ListChecks, Pencil, Plus, Save, StickyNote, Trash2 } from 'lucide-react'
+import { FileText, ListChecks, Pencil, Save, StickyNote, Trash2 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
@@ -7,12 +7,16 @@ import DatePicker from '../components/DatePicker'
 import ClientSelect from '../components/ClientSelect'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
+import ItemDragHandle from '../components/ItemDragHandle'
+import ItemRemoveButton from '../components/ItemRemoveButton'
 import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
+import useReorderableItems from '../hooks/useReorderableItems'
+import { createEditorRowKey } from '../utils/reorderItems'
 import { getProjectName as resolveProjectName } from '../utils/entityLabels'
 import { UI_DASH, formatDateSr, formatInteger, formatMoney2, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
@@ -20,6 +24,13 @@ import { amountSearchHay } from '../utils/searchUtils'
 const CONTRACT_TYPE_KEYS = { service: 'service', supply: 'supply', rent: 'rent', commission: 'commission' }
 const STATUS_KEYS = { active: 'active', completed: 'completed', cancelled: 'cancelled' }
 const DEFAULT_UNIT = '\u0448\u0442'
+const newContractItem = () => ({
+  rowKey: createEditorRowKey(),
+  description: '',
+  quantity: 1,
+  unit: DEFAULT_UNIT,
+  price: 0,
+})
 
 export default function Contracts() {
   const location = useLocation()
@@ -52,6 +63,12 @@ export default function Contracts() {
   const [itemsForm, setItemsForm] = useState([])
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const itemEditor = useReorderableItems({
+    items: itemsForm,
+    onChange: setItemsForm,
+    getKey: (item) => item.rowKey,
+    disabled: !modal || saving,
+  })
 
   const hasContractItems = useMemo(() => itemsForm.some((item) => item.description?.trim()), [itemsForm])
   const contractItemsTotal = useMemo(
@@ -142,7 +159,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
+        setItemsForm([newContractItem()])
         setModal('add')
       })
       .catch(() => {
@@ -159,7 +176,7 @@ export default function Contracts() {
           status: 'active',
           note: '',
         })
-        setItemsForm([{ description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
+        setItemsForm([newContractItem()])
         setModal('add')
       })
   }
@@ -182,6 +199,7 @@ export default function Contracts() {
     setItemsForm(
       contract.items?.length
         ? contract.items.map((item) => ({
+            rowKey: createEditorRowKey(),
             description: item.description,
             quantity: item.quantity,
             unit: item.unit,
@@ -202,7 +220,9 @@ export default function Contracts() {
   }
 
   const addItem = () => {
-    setItemsForm([...itemsForm, { description: '', quantity: 1, unit: DEFAULT_UNIT, price: 0 }])
+    const item = newContractItem()
+    itemEditor.focusNewItem(item.rowKey)
+    setItemsForm((previous) => [...previous, item])
   }
 
   const removeItem = (index) => {
@@ -662,20 +682,20 @@ export default function Contracts() {
               </div>
               <div className="contract-editor-fields">
                 <div className="form-group">
+                  <label className="form-label">{tr('date')}</label>
+                  <DatePicker
+                    value={form.date}
+                    onChange={(value) => setForm({ ...form, date: value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
                   <label className="form-label">{tr('contractNumber')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={form.number}
                     onChange={(event) => setForm({ ...form, number: event.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{tr('date')}</label>
-                  <DatePicker
-                    value={form.date}
-                    onChange={(value) => setForm({ ...form, date: value })}
                     required
                   />
                 </div>
@@ -777,9 +797,6 @@ export default function Contracts() {
                   <h4>{tr('contractItems')}</h4>
                   <p>{tr('contractItemsHint')}</p>
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>
-                  <Plus size={16} /> {tr('addItem')}
-                </button>
               </div>
               <div className="contract-editor-item-columns" aria-hidden="true">
                 <span>{tr('description')}</span>
@@ -794,11 +811,14 @@ export default function Contracts() {
                   <div className="contract-editor-items-empty">{tr('contractItemsEmpty')}</div>
                 ) : null}
                 {itemsForm.map((item, index) => (
-                  <div key={index} className="contract-editor-item-row">
-                    <span className="contract-editor-item-index">{index + 1}</span>
+                  <div key={item.rowKey} {...itemEditor.getRowProps(item, 'contract-editor-item-row')}>
+                    <div className="contract-editor-item-index">
+                      <ItemDragHandle number={index + 1} {...itemEditor.getHandleProps(item)} />
+                    </div>
                     <div className="form-group contract-editor-item-description">
                       <label className="form-label">{tr('description')}</label>
                       <input
+                        ref={itemEditor.getInputRef(item)}
                         type="text"
                         className="form-input"
                         value={item.description}
@@ -841,18 +861,22 @@ export default function Contracts() {
                       <span>{tr('amount')}</span>
                       <strong>{formatMoney2((item.quantity || 0) * (item.price || 0))} RSD</strong>
                     </div>
-                    <button
-                      type="button"
+                    <ItemRemoveButton
+                      number={index + 1}
                       className="contract-editor-remove-item"
                       onClick={() => removeItem(index)}
-                      aria-label={`${tr('delete')} ${index + 1}`}
-                      title={tr('delete')}
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    />
                   </div>
                 ))}
               </div>
+              <button
+                type="button"
+                className="btn btn-secondary item-editor-add"
+                onClick={addItem}
+                disabled={saving}
+              >
+                {tr('addItem')}
+              </button>
             </section>
 
             <section className="contract-editor-section">

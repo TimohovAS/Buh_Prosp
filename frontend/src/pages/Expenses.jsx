@@ -5,6 +5,8 @@ import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
+import ItemDragHandle from '../components/ItemDragHandle'
+import ItemRemoveButton from '../components/ItemRemoveButton'
 import PageHeader from '../components/PageHeader'
 import PageTabs from '../components/PageTabs'
 import ProjectSelect from '../components/ProjectSelect'
@@ -16,6 +18,7 @@ import useAvailableYears from '../hooks/useAvailableYears'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
 import useListPageState from '../hooks/useListPageState'
 import useProjectContractForm from '../hooks/useProjectContractForm'
+import useReorderableItems from '../hooks/useReorderableItems'
 import {
   filterContractsForProject,
   findUnassignedProject,
@@ -197,6 +200,12 @@ export default function Expenses() {
     loadDismissedDuplicateGroups()
   )
   const [expenseLines, setExpenseLines] = useState([makeExpenseLine()])
+  const lineEditor = useReorderableItems({
+    items: expenseLines,
+    onChange: setExpenseLines,
+    getKey: (line) => line.key,
+    disabled: !modal && !detailEditMode,
+  })
   const [form, setForm] = useState({
     date: todayIso(),
     description: '',
@@ -363,7 +372,9 @@ export default function Expenses() {
   }
 
   const addExpenseLine = () => {
-    setExpenseLines((previous) => [...previous, makeExpenseLine()])
+    const line = makeExpenseLine()
+    lineEditor.focusNewItem(line.key)
+    setExpenseLines((previous) => [...previous, line])
   }
 
   const removeExpenseLine = (key) => {
@@ -756,9 +767,6 @@ export default function Expenses() {
     <div className="expense-lines-editor">
       <div className="expense-lines-editor-header">
         <span className="record-field-label">{tr('expensePositions')}</span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={addExpenseLine}>
-          {tr('addExpensePosition')}
-        </button>
       </div>
       <div className="table-wrap table-wrap-scroll expense-lines-table-wrap">
         <table className="expense-lines-table expense-lines-edit-table">
@@ -776,11 +784,14 @@ export default function Expenses() {
             {expenseLines.map((line, index) => {
               const isLineTotalCalculated = hasExpenseLineUnitCalculation(line)
               return (
-                <tr key={line.key}>
-                  <td>{index + 1}</td>
+                <tr key={line.key} {...lineEditor.getRowProps(line)}>
+                  <td>
+                    <ItemDragHandle number={index + 1} {...lineEditor.getHandleProps(line)} />
+                  </td>
                   <td>
                     <div className="expense-line-name-stack">
                       <input
+                        ref={lineEditor.getInputRef(line)}
                         type="text"
                         className="form-input expense-line-name-input"
                         value={line.name}
@@ -826,20 +837,20 @@ export default function Expenses() {
                     />
                   </td>
                   <td className="expense-line-actions-cell">
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      onClick={() => removeExpenseLine(line.key)}
-                      title={tr('removeExpensePosition')}
-                    >
-                      {tr('removeExpensePosition')}
-                    </button>
+                    <ItemRemoveButton number={index + 1} onClick={() => removeExpenseLine(line.key)} />
                   </td>
                 </tr>
               )
             })}
           </tbody>
           <tfoot>
+            <tr className="expense-lines-add-row">
+              <td colSpan={6}>
+                <button type="button" className="btn btn-secondary item-editor-add" onClick={addExpenseLine}>
+                  {tr('addExpensePosition')}
+                </button>
+              </td>
+            </tr>
             <tr>
               <td colSpan={4}>{tr('expenseLinesTotal')}</td>
               <td>{formatMoneyWithCurrency(expenseLinesTotal, form.currency || 'RSD')}</td>

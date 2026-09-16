@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { GripVertical } from 'lucide-react'
 import { api } from '../api'
 import { tr } from '../i18n'
 import ClientSelect from '../components/ClientSelect'
 import DatePicker from '../components/DatePicker'
 import EntityDetailModal from '../components/EntityDetailModal'
 import Modal from '../components/Modal'
+import ItemDragHandle from '../components/ItemDragHandle'
+import ItemRemoveButton from '../components/ItemRemoveButton'
 import PageHeader from '../components/PageHeader'
 import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
@@ -16,13 +17,14 @@ import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useListPageState from '../hooks/useListPageState'
 import useProjectContractForm from '../hooks/useProjectContractForm'
+import useReorderableItems from '../hooks/useReorderableItems'
 import {
   buildContractLabel,
   filterContractsForProject,
   findUnassignedProject,
   getProjectName as resolveProjectName,
 } from '../utils/entityLabels'
-import { UI_CLOSE, UI_DASH, todayIso } from '../utils/formatters'
+import { UI_DASH, todayIso } from '../utils/formatters'
 import { MONTHS } from '../utils/constants'
 import { amountSearchHay } from '../utils/searchUtils'
 
@@ -110,8 +112,6 @@ export default function Income() {
   const [itemSuggestions, setItemSuggestions] = useState([])
   const [itemSearchSuggestions, setItemSearchSuggestions] = useState([])
   const [activeLineIndex, setActiveLineIndex] = useState(null)
-  const [lineDrag, setLineDrag] = useState(null)
-  const pendingLineFocus = useRef(null)
   const [efakturaFieldsOpen, setEfakturaFieldsOpen] = useState(false)
   const [form, setForm] = useState(() => ({
     date: todayIso(),
@@ -227,8 +227,15 @@ export default function Income() {
     setItemSearchSuggestions([])
   }, [])
 
+  const lineEditor = useReorderableItems({
+    items: form.items || [],
+    getKey: (line) => line.rowKey,
+    onChange: (update) => setForm((previous) => ({ ...previous, items: update(previous.items || []) })),
+    disabled: !modal || submitting,
+    onBeforeMove: closeItemSearchSuggestions,
+  })
+
   const closeModal = () => {
-    setLineDrag(null)
     setModal(null)
     setNextInvoiceHint('')
     setSubmitError('')
@@ -671,69 +678,9 @@ export default function Income() {
 
   const addIncomeLine = () => {
     const line = newIncomeLine()
-    pendingLineFocus.current = line.rowKey
+    lineEditor.focusNewItem(line.rowKey)
     closeItemSearchSuggestions()
     setForm((previous) => ({ ...previous, items: [...(previous.items || []), line] }))
-  }
-
-  const moveIncomeLine = (rowKey, targetKey, after) => {
-    if (rowKey === targetKey) return
-    closeItemSearchSuggestions()
-    setForm((previous) => {
-      const lines = [...(previous.items || [])]
-      const sourceIndex = lines.findIndex((line) => line.rowKey === rowKey)
-      if (sourceIndex < 0 || !lines.some((line) => line.rowKey === targetKey)) return previous
-      const [line] = lines.splice(sourceIndex, 1)
-      const targetIndex = lines.findIndex((item) => item.rowKey === targetKey)
-      lines.splice(targetIndex + (after ? 1 : 0), 0, line)
-      return { ...previous, items: lines }
-    })
-  }
-
-  const startIncomeLineDrag = (event, rowKey) => {
-    closeItemSearchSuggestions()
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', String(rowKey))
-    const row = event.currentTarget.closest('tr')
-    const rect = row.getBoundingClientRect()
-    event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top)
-    setLineDrag({ rowKey, targetKey: rowKey, after: false })
-  }
-
-  const dragOverIncomeLine = (event, targetKey) => {
-    if (!lineDrag) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-    const rect = event.currentTarget.getBoundingClientRect()
-    const after = event.clientY > rect.top + rect.height / 2
-    setLineDrag((current) =>
-      current && (current.targetKey !== targetKey || current.after !== after)
-        ? { ...current, targetKey, after }
-        : current
-    )
-  }
-
-  const dropIncomeLine = (event, targetKey) => {
-    if (!lineDrag) return
-    event.preventDefault()
-    const rect = event.currentTarget.getBoundingClientRect()
-    moveIncomeLine(lineDrag.rowKey, targetKey, event.clientY > rect.top + rect.height / 2)
-    setLineDrag(null)
-  }
-
-  const moveIncomeLineWithKeyboard = (event, index) => {
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-    event.preventDefault()
-    const after = event.key === 'ArrowDown'
-    const target = form.items[index + (after ? 1 : -1)]
-    if (!target) return
-    moveIncomeLine(form.items[index].rowKey, target.rowKey, after)
-    const handle = event.currentTarget
-    window.requestAnimationFrame(() => {
-      if (!handle.isConnected) return
-      handle.focus({ preventScroll: true })
-      handle.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-    })
   }
 
   const removeIncomeLine = (index) => {
@@ -1595,36 +1542,9 @@ export default function Income() {
                     <tbody>
                       {(form.items || []).length ? (
                         (form.items || []).map((line, index) => (
-                          <tr
-                            key={line.rowKey}
-                            className={
-                              lineDrag?.rowKey === line.rowKey
-                                ? 'income-line-dragging'
-                                : lineDrag?.targetKey === line.rowKey
-                                  ? `income-line-drop-${lineDrag.after ? 'after' : 'before'}`
-                                  : undefined
-                            }
-                            onDragOver={(event) => dragOverIncomeLine(event, line.rowKey)}
-                            onDrop={(event) => dropIncomeLine(event, line.rowKey)}
-                          >
+                          <tr key={line.rowKey} {...lineEditor.getRowProps(line)}>
                             <td>
-                              <div className="income-line-start">
-                                <button
-                                  type="button"
-                                  className="income-line-drag-handle"
-                                  draggable={form.items.length > 1}
-                                  disabled={form.items.length < 2}
-                                  onDragStart={(event) => startIncomeLineDrag(event, line.rowKey)}
-                                  onDragEnd={() => setLineDrag(null)}
-                                  onKeyDown={(event) => moveIncomeLineWithKeyboard(event, index)}
-                                  aria-label={tr('moveInvoiceLine', { number: index + 1 })}
-                                  aria-keyshortcuts="ArrowUp ArrowDown"
-                                  title={tr('moveInvoiceLine', { number: index + 1 })}
-                                >
-                                  <GripVertical size={16} aria-hidden="true" />
-                                </button>
-                                <span className="income-line-number">{index + 1}</span>
-                              </div>
+                              <ItemDragHandle number={index + 1} {...lineEditor.getHandleProps(line)} />
                             </td>
                             <td>
                               <div
@@ -1635,12 +1555,7 @@ export default function Income() {
                                 }}
                               >
                                 <input
-                                  ref={(input) => {
-                                    if (!input || pendingLineFocus.current !== line.rowKey) return
-                                    pendingLineFocus.current = null
-                                    input.focus({ preventScroll: true })
-                                    input.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-                                  }}
+                                  ref={lineEditor.getInputRef(line)}
                                   type="text"
                                   className="form-input"
                                   value={line.name}
@@ -1706,15 +1621,7 @@ export default function Income() {
                               </div>
                             </td>
                             <td>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-danger"
-                                onClick={() => removeIncomeLine(index)}
-                                aria-label={tr('removeInvoiceLine', { number: index + 1 })}
-                                title={tr('removeInvoiceLine', { number: index + 1 })}
-                              >
-                                {UI_CLOSE}
-                              </button>
+                              <ItemRemoveButton number={index + 1} onClick={() => removeIncomeLine(index)} />
                             </td>
                           </tr>
                         ))
@@ -1730,7 +1637,7 @@ export default function Income() {
                 </div>
                 <button
                   type="button"
-                  className="btn btn-secondary income-line-add"
+                  className="btn btn-secondary item-editor-add"
                   onClick={() => addIncomeLine()}
                 >
                   {tr('addLine')}
