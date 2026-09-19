@@ -319,38 +319,43 @@ export default function BankImport() {
         title={tr('bankImport')}
         subtitle={tr('bankImportSubtitle')}
         actions={
-          <section
-            className={`bank-import-header-dropzone${isDragging ? ' is-dragging' : ''}${loading ? ' is-loading' : ''}`}
-            onDragEnter={(event) => {
-              event.preventDefault()
-              setIsDragging(true)
-            }}
-            onDragOver={(event) => event.preventDefault()}
-            onDragLeave={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) setIsDragging(false)
-            }}
-            onDrop={handleDrop}
-          >
-            <div className="bank-import-header-dropzone-icon">
-              <UploadCloud size={22} />
+          <section className="bank-import-header-overview" aria-label={tr('bankImportHistorySummary')}>
+            <div className="bank-import-stat">
+              <span className="bank-import-stat-icon">
+                <History size={17} />
+              </span>
+              <div>
+                <strong>{recentFiles.length}</strong>
+                <span title={tr('bankImportFilesProcessed')}>{tr('bankImportFilesProcessed')}</span>
+              </div>
             </div>
-            <div className="bank-import-header-dropzone-copy">
-              <strong>{loading ? tr('loading') : tr('bankImportDropTitle')}</strong>
-              <span>{tr('bankImportDropHint')} · XLS / XLSX</span>
+            <div className="bank-import-stat">
+              <span className="bank-import-stat-icon">
+                <FileSpreadsheet size={17} />
+              </span>
+              <div>
+                <strong>{historyTotals.rows}</strong>
+                <span title={tr('bankImportRowsFound')}>{tr('bankImportRowsFound')}</span>
+              </div>
             </div>
-            <FileInput
-              label={
-                <>
-                  <UploadCloud size={17} />
-                  {loading ? `${tr('loading')}...` : tr('bankImportChooseFiles')}
-                </>
-              }
-              accept=".xls,.xlsx"
-              multiple
-              disabled={loading}
-              onChange={handleFileChange}
-              buttonClassName="btn btn-primary bank-import-header-upload"
-            />
+            <div className="bank-import-stat bank-import-stat--success">
+              <span className="bank-import-stat-icon">
+                <CircleCheck size={17} />
+              </span>
+              <div>
+                <strong>{historyTotals.created}</strong>
+                <span title={tr('bankImportOperationsCreated')}>{tr('bankImportOperationsCreated')}</span>
+              </div>
+            </div>
+            <div className={`bank-import-stat${historyTotals.errors ? ' bank-import-stat--warning' : ''}`}>
+              <span className="bank-import-stat-icon">
+                <CircleAlert size={17} />
+              </span>
+              <div>
+                <strong>{historyTotals.errors}</strong>
+                <span title={tr('bankImportIssues')}>{tr('bankImportIssues')}</span>
+              </div>
+            </div>
           </section>
         }
       />
@@ -359,6 +364,47 @@ export default function BankImport() {
 
       <div className="page-body bank-import-page">
         {pageError ? <div className="alert alert-danger">{pageError}</div> : null}
+
+        <section
+          className={`bank-import-dropzone${isDragging ? ' is-dragging' : ''}${loading ? ' is-loading' : ''}`}
+          onDragEnter={(event) => {
+            event.preventDefault()
+            setIsDragging(true)
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setIsDragging(false)
+          }}
+          onDrop={handleDrop}
+        >
+          <FileInput
+            label={<UploadCloud size={22} aria-hidden="true" />}
+            accept=".xls,.xlsx"
+            multiple
+            disabled={loading}
+            onChange={handleFileChange}
+            buttonClassName="bank-import-dropzone-icon bank-import-dropzone-icon-button"
+            ariaLabel={tr('bankImportChooseFiles')}
+            title={tr('bankImportChooseFiles')}
+          />
+          <div className="bank-import-dropzone-copy">
+            <strong>{loading ? tr('loading') : tr('bankImportDropTitle')}</strong>
+            <span>{tr('bankImportDropHint')} · XLS / XLSX</span>
+          </div>
+          <FileInput
+            label={
+              <>
+                <UploadCloud size={17} />
+                {loading ? `${tr('loading')}...` : tr('bankImportChooseFiles')}
+              </>
+            }
+            accept=".xls,.xlsx"
+            multiple
+            disabled={loading}
+            onChange={handleFileChange}
+            buttonClassName="btn btn-primary bank-import-upload"
+          />
+        </section>
 
         {result ? (
           <div className="bank-import-result" role="status">
@@ -406,45 +452,6 @@ export default function BankImport() {
             </div>
           </div>
         ) : null}
-
-        <section className="bank-import-overview" aria-label={tr('bankImportHistorySummary')}>
-          <div className="bank-import-stat">
-            <span className="bank-import-stat-icon">
-              <History size={18} />
-            </span>
-            <div>
-              <strong>{recentFiles.length}</strong>
-              <span>{tr('bankImportFilesProcessed')}</span>
-            </div>
-          </div>
-          <div className="bank-import-stat">
-            <span className="bank-import-stat-icon">
-              <FileSpreadsheet size={18} />
-            </span>
-            <div>
-              <strong>{historyTotals.rows}</strong>
-              <span>{tr('bankImportRowsFound')}</span>
-            </div>
-          </div>
-          <div className="bank-import-stat bank-import-stat--success">
-            <span className="bank-import-stat-icon">
-              <CircleCheck size={18} />
-            </span>
-            <div>
-              <strong>{historyTotals.created}</strong>
-              <span>{tr('bankImportOperationsCreated')}</span>
-            </div>
-          </div>
-          <div className={`bank-import-stat${historyTotals.errors ? ' bank-import-stat--warning' : ''}`}>
-            <span className="bank-import-stat-icon">
-              <CircleAlert size={18} />
-            </span>
-            <div>
-              <strong>{historyTotals.errors}</strong>
-              <span>{tr('bankImportIssues')}</span>
-            </div>
-          </div>
-        </section>
 
         {skippedFiles.length > 0 ? (
           <div className="alert alert-warning bank-import-attention">
@@ -598,6 +605,33 @@ export default function BankImport() {
           </section>
         ) : null}
 
+        <SelectionSummary
+          count={selectedRows.length}
+          items={[
+            {
+              label: tr('incomeLabel'),
+              value: `${fmtMoney(selectedSummary.income.amount)} RSD`,
+              tone: 'positive',
+            },
+            {
+              label: tr('expenseLabel'),
+              value: `${fmtMoney(selectedSummary.expense.amount)} RSD`,
+              tone: 'negative',
+            },
+          ]}
+          actions={
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={handleApply}
+              disabled={applying}
+            >
+              {applying ? tr('importing') : tr('importSelected')}
+            </button>
+          }
+          onClear={clearAllSelections}
+        />
+
         <section className="card bank-import-history-card">
           <div className="bank-import-section-head">
             <div>
@@ -712,28 +746,6 @@ export default function BankImport() {
           )}
         </section>
       </div>
-
-      <SelectionSummary
-        count={selectedRows.length}
-        items={[
-          {
-            label: tr('incomeLabel'),
-            value: `${fmtMoney(selectedSummary.income.amount)} RSD`,
-            tone: 'positive',
-          },
-          {
-            label: tr('expenseLabel'),
-            value: `${fmtMoney(selectedSummary.expense.amount)} RSD`,
-            tone: 'negative',
-          },
-        ]}
-        actions={
-          <button type="button" className="btn btn-sm btn-primary" onClick={handleApply} disabled={applying}>
-            {applying ? tr('importing') : tr('importSelected')}
-          </button>
-        }
-        onClear={clearAllSelections}
-      />
     </>
   )
 }

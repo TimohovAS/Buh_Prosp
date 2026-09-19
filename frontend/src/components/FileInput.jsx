@@ -8,12 +8,21 @@ export default function FileInput({
   onChange,
   selectedName = '',
   buttonClassName = 'btn btn-secondary',
+  ariaLabel,
+  title,
 }) {
   return (
     <div className={`file-input${disabled ? ' file-input-disabled' : ''}`}>
-      <label className={buttonClassName}>
+      <label className={buttonClassName} aria-label={ariaLabel} title={title}>
         {label}
-        <input type="file" accept={accept} multiple={multiple} disabled={disabled} onChange={onChange} />
+        <input
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          disabled={disabled}
+          onChange={onChange}
+          aria-label={ariaLabel}
+        />
       </label>
       {selectedName ? <span className="file-input-name">{selectedName}</span> : null}
     </div>

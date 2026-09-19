@@ -6046,37 +6046,39 @@ tr:hover td {
   margin-bottom: 0;
 }
 
-.bank-import-header-upload,
+.bank-import-upload,
 .bank-import-page .btn {
   gap: 0.45rem;
 }
 
-.bank-import-overview {
+.bank-import-header-overview {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.45rem;
+  width: clamp(600px, 48vw, 760px);
 }
 
 .bank-import-stat {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.55rem;
   min-width: 0;
-  padding: 1rem;
+  min-height: 62px;
+  padding: 0.55rem 0.65rem;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(145deg, rgba(36, 48, 68, 0.9), rgba(26, 35, 50, 0.94));
 }
 
 .bank-import-stat-icon,
 .bank-import-result-icon,
-.bank-import-header-dropzone-icon {
+.bank-import-dropzone-icon {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.1rem;
+  height: 2.1rem;
   border-radius: 10px;
   background: rgba(59, 130, 246, 0.14);
   color: #7db2ff;
@@ -6090,14 +6092,14 @@ tr:hover td {
 
 .bank-import-stat strong {
   color: var(--color-text);
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   line-height: 1.15;
 }
 
 .bank-import-stat span:last-child {
   overflow: hidden;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6112,16 +6114,17 @@ tr:hover td {
   color: #fbbf24;
 }
 
-.bank-import-header-dropzone {
+.bank-import-dropzone {
   position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  width: clamp(520px, 48vw, 760px);
-  min-height: 62px;
-  padding: 0.6rem 0.75rem;
+  width: 100%;
+  min-height: 72px;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
   border: 1px dashed rgba(96, 165, 250, 0.55);
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(59, 130, 246, 0.055);
   transition:
     border-color 0.18s,
@@ -6129,29 +6132,52 @@ tr:hover td {
     transform 0.18s;
 }
 
-.bank-import-header-dropzone.is-dragging {
+.bank-import-dropzone.is-dragging {
   border-color: #60a5fa;
   background: rgba(59, 130, 246, 0.14);
   transform: translateY(-1px);
 }
 
-.bank-import-header-dropzone.is-loading {
+.bank-import-dropzone.is-loading {
   opacity: 0.72;
 }
 
-.bank-import-header-dropzone-copy {
+.bank-import-dropzone-copy {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
 }
 
-.bank-import-header-dropzone-copy strong {
+.bank-import-dropzone > .file-input {
+  flex: 0 0 auto;
+}
+
+.bank-import-dropzone-icon-button {
+  border: 0;
+  transition:
+    color 0.18s,
+    background 0.18s,
+    transform 0.18s;
+}
+
+.bank-import-dropzone-icon-button:hover {
+  background: rgba(59, 130, 246, 0.24);
+  color: #a9cfff;
+  transform: translateY(-1px);
+}
+
+.bank-import-dropzone-icon-button:focus-within {
+  outline: 2px solid rgba(96, 165, 250, 0.72);
+  outline-offset: 2px;
+}
+
+.bank-import-dropzone-copy strong {
   color: var(--color-text);
   font-size: 0.95rem;
 }
 
-.bank-import-header-dropzone-copy span,
+.bank-import-dropzone-copy span,
 .bank-import-section-head p {
   margin: 0;
   color: var(--color-text-muted);
@@ -6227,6 +6253,12 @@ tr:hover td {
 .bank-import-history-card {
   padding: 0;
   overflow: hidden;
+}
+
+.bank-import-page > .selection-summary {
+  width: 100%;
+  margin: 0;
+  box-shadow: none;
 }
 
 .bank-import-section-head {
@@ -6432,8 +6464,8 @@ tr:hover td {
 }
 
 @media (max-width: 1100px) {
-  .bank-import-overview {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .bank-import-header-overview {
+    width: min(100%, 760px);
   }
 
   .bank-import-result {
@@ -6448,7 +6480,10 @@ tr:hover td {
 }
 
 @media (max-width: 768px) {
-  .bank-import-overview,
+  .bank-import-header-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .bank-import-preview-summary {
     grid-template-columns: 1fr;
   }
@@ -6460,10 +6495,6 @@ tr:hover td {
 
   .bank-import-preview-summary > div:last-child {
     border-bottom: 0;
-  }
-
-  .bank-import-header-dropzone {
-    width: 100%;
   }
 
   .bank-import-section-head,
@@ -6489,19 +6520,19 @@ tr:hover td {
 }
 
 @media (max-width: 640px) {
-  .bank-import-header-dropzone {
+  .bank-import-dropzone {
     gap: 0.6rem;
   }
 
-  .bank-import-header-dropzone-copy span {
+  .bank-import-dropzone-copy span {
     display: none;
   }
 
-  .bank-import-header-dropzone-copy strong {
+  .bank-import-dropzone-copy strong {
     font-size: 0.82rem;
   }
 
-  .bank-import-header-upload {
+  .bank-import-upload {
     padding-inline: 0.75rem;
     white-space: nowrap;
   }
