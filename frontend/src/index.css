@@ -3339,9 +3339,20 @@ th {
 .page-tabs {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--color-border);
+}
+
+/* Контролы страницы в строке вкладок: справа от них обычно пустует вся ширина. */
+.page-tabs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin-left: auto;
+  padding: 0 0 0.35rem 0.75rem;
 }
 
 .page-tab {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { getLang, tr } from '../i18n'
 import DatePicker from '../components/DatePicker'
@@ -116,7 +116,13 @@ function findOpenTripAdvance(payouts) {
 
 export default function CashRegister() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/cash'
+  // Из статистики работника сюда приходят со ссылкой ?payout=<id>, чтобы
+  // открыть конкретную выплату в этой же форме, а не заводить вторую.
+  const openedPayoutRef = useRef(null)
+  // Откуда пришли, чтобы вернуть пользователя в карточку работника.
+  const [returnTo, setReturnTo] = useState(null)
   const { year, setYear, availableYears, applyAvailableYears } = useAvailableYears({
     initialYear: '',
   })
@@ -879,6 +885,25 @@ export default function CashRegister() {
       setSaving(false)
     }
   }
+
+  useEffect(() => {
+    if (!isActivePage || !workers.length) return
+    const params = new URLSearchParams(location.search || '')
+    const payoutId = params.get('payout')
+    if (!payoutId || openedPayoutRef.current === payoutId) return
+    openedPayoutRef.current = payoutId
+    if (location.state?.fromWorker) {
+      setReturnTo({
+        worker: location.state.fromWorker,
+        path: location.state.fromPath || '/workers/payouts',
+      })
+    }
+    openWorkerPayoutEdit({ worker_payout_id: Number(payoutId) })
+    // Убираем параметр, иначе выплата откроется снова при обновлении страницы.
+    params.delete('payout')
+    navigate({ pathname: '/cash', search: params.toString() }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActivePage, workers, location.search])
 
   const prefillTripFinalFromAdvance = async (workerId) => {
     if (!workerId || workerPayoutModal?.payoutId) return
@@ -1741,10 +1766,22 @@ export default function CashRegister() {
       </Modal>
 
       <Modal
-        isOpen={!!workerPayoutModal}
+        // Страницы остаются смонтированными, поэтому модалку надо явно гасить
+        // при уходе — иначе она висит поверх соседнего раздела.
+        isOpen={!!workerPayoutModal && isActivePage}
         onClose={() => setWorkerPayoutModal(null)}
         title={workerPayoutModal?.payoutId ? tr('workerPayoutEditTitle') : tr('workerPayoutCreateTitle')}
         className="worker-payout-modal"
+        headerExtra={
+          returnTo ? (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate(returnTo.path, { state: { openWorker: returnTo.worker } })}
+            >
+              ← {tr('workerPayoutsBackToWorker', { worker: returnTo.worker.name })}
+            </button>
+          ) : null
+        }
       >
         <form onSubmit={handleSaveWorkerPayout} className="worker-payout-form">
           <div className="worker-payout-section worker-payout-main-grid">

@@ -1,0 +1,280 @@
+/* Высоту задаём явно: таблицы внутри растягиваются (flex-basis 0), поэтому по
+   содержимому окно сжалось бы до их минимумов, оставив экран пустым. Потолок в
+   90vh держит .modal, так что окно всегда помещается без внешней прокрутки. */
+.modal.worker-statistics-modal {
+  height: min(880px, 90vh);
+}
+
+/* Окно не прокручивается целиком: тело — колонка фиксированной высоты,
+   а расширяются и прокручиваются только таблицы внутри. */
+.modal-body.worker-statistics {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  /* auto, а не hidden: при размере по умолчанию прокрутки нет, но если окно
+     уменьшить вручную ниже минимума, содержимое прокрутится, а не обрежется. */
+  overflow: auto;
+}
+
+.worker-statistics h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.worker-statistics-year {
+  width: 150px;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.worker-statistics-hint {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+/* ---- Верхний ряд: график и итоги — та же раскладка, что на вкладке ---- */
+
+.worker-statistics-top {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.worker-statistics-kpi {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.worker-statistics-hero {
+  display: block;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.worker-statistics-hero-note {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.worker-statistics-split {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  margin: 0.85rem 0 0.7rem;
+}
+
+.worker-statistics-split i {
+  display: block;
+  border-radius: 3px;
+}
+
+.worker-statistics-kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem 1rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+}
+
+.worker-statistics-kv dt {
+  color: var(--color-text-muted);
+}
+
+.worker-statistics-kv dt i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+}
+
+.worker-statistics-kv dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- Две таблицы делят остаток высоты и прокручиваются по отдельности ---- */
+
+.worker-statistics-panes {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.worker-statistics-pane {
+  flex: 1 1 0;
+  min-height: 5.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Разделитель заодно даёт чёткую границу между таблицами. */
+.worker-statistics-splitter {
+  flex: 0 0 auto;
+  position: relative;
+  height: 14px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.worker-statistics-splitter::before {
+  content: '';
+  position: absolute;
+  inset: 6px 0 auto;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.worker-statistics-splitter::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 46px;
+  height: 8px;
+  margin-left: -23px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.worker-statistics-splitter:hover::before,
+.worker-statistics-splitter:hover::after,
+.worker-statistics-splitter:focus-visible::before,
+.worker-statistics-splitter:focus-visible::after {
+  background: var(--color-accent);
+}
+
+.worker-statistics-splitter:focus-visible {
+  outline: none;
+}
+
+/* Шапка остаётся на месте при прокрутке — видно, к какой таблице относится строка. */
+.worker-statistics-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+
+.worker-statistics-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.worker-statistics-number {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.worker-statistics-month {
+  white-space: nowrap;
+}
+
+/* Строка месяца выбирает период истории под таблицей. */
+.worker-statistics-row {
+  cursor: pointer;
+}
+
+.worker-statistics-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.worker-statistics-row.is-selected {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+/* Строка истории открывает эту выплату в «Наличке». */
+.worker-statistics-payout {
+  cursor: pointer;
+}
+
+.worker-statistics-payout:hover,
+.worker-statistics-payout:focus-visible {
+  background: var(--color-surface-hover);
+}
+
+/* ---- История: группировка по дням, тип выплаты меткой ---- */
+
+.worker-statistics-history td,
+.worker-statistics-scroll td {
+  vertical-align: top;
+}
+
+.worker-statistics-day th {
+  padding-top: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.worker-statistics-scroll tbody:first-of-type .worker-statistics-day th {
+  padding-top: 0.5rem;
+}
+
+.worker-statistics-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 38%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.worker-statistics-chip.is-trip {
+  border-color: color-mix(in srgb, #d97706 42%, transparent);
+  background: color-mix(in srgb, #d97706 17%, transparent);
+  color: #f0a53c;
+}
+
+.worker-statistics-period {
+  margin-left: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.worker-statistics-note {
+  display: block;
+  margin-top: 0.15rem;
+  max-width: 420px;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.worker-statistics-pagination {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 860px) {
+  .worker-statistics-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

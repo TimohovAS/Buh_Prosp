@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import Modal from '../components/Modal'
 import FieldTooltip from '../components/FieldTooltip'
 import PageHeader from '../components/PageHeader'
+import PageTabs from '../components/PageTabs'
+import WorkerStatisticsModal from '../components/WorkerStatisticsModal'
 import SearchInput from '../components/SearchInput'
 import SortIndicator from '../components/SortIndicator'
 import { formatInteger as fmtAmount } from '../utils/formatters'
@@ -59,6 +61,17 @@ export default function Workers() {
   const [sortCol, setSortCol] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [modal, setModal] = useState(null)
+  const [statisticsWorker, setStatisticsWorker] = useState(null)
+  // Возврат из «Налички»: открываем карточку работника, из которой ушли.
+  // Сравниваем сам объект state: у каждого перехода он свой, поэтому к одному
+  // и тому же работнику можно вернуться повторно.
+  const restoredStateRef = useRef(null)
+  useEffect(() => {
+    const restored = location.state?.openWorker
+    if (!restored || restoredStateRef.current === location.state) return
+    restoredStateRef.current = location.state
+    setStatisticsWorker(restored)
+  }, [location.state])
   const [form, setForm] = useState(emptyForm)
 
   const load = () => {
@@ -191,6 +204,7 @@ export default function Workers() {
         }
       />
 
+      <PageTabs group="workers" />
       <div className="page-body">
         <div className="card">
           <div className="table-wrap">
@@ -223,7 +237,21 @@ export default function Workers() {
                   </tr>
                 ) : (
                   sorted.map((item) => (
-                    <tr key={item.id} className="record-row" onClick={() => openEdit(item)} tabIndex={0}>
+                    <tr
+                      key={item.id}
+                      className="record-row"
+                      onClick={() => setStatisticsWorker(item)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.target === event.currentTarget &&
+                          (event.key === 'Enter' || event.key === ' ')
+                        ) {
+                          event.preventDefault()
+                          setStatisticsWorker(item)
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td>{item.name}</td>
                       <td>{workerTypeLabel(item.worker_type)}</td>
                       <td>{paySchemeLabel(item.pay_scheme)}</td>
@@ -243,6 +271,16 @@ export default function Workers() {
                       <td style={{ textAlign: 'right' }}>
                         <button
                           className="btn btn-sm btn-secondary"
+                          style={{ marginRight: '0.5rem' }}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEdit(item)
+                          }}
+                        >
+                          {tr('edit')}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-secondary"
                           onClick={(event) => {
                             event.stopPropagation()
                             archiveWorker(item)
@@ -259,6 +297,18 @@ export default function Workers() {
           </div>
         </div>
       </div>
+
+      {statisticsWorker && isActivePage && (
+        <WorkerStatisticsModal
+          key={statisticsWorker.id}
+          worker={statisticsWorker}
+          onClose={() => setStatisticsWorker(null)}
+          onEdit={() => {
+            openEdit(statisticsWorker)
+            setStatisticsWorker(null)
+          }}
+        />
+      )}
 
       <Modal
         isOpen={!!modal}

@@ -228,18 +228,34 @@ export function FinancePeriodControls({ value: v, children, idPrefix = 'finance'
   )
 }
 
-function FinanceTooltip({ active, label, payload }) {
-  if (!active || !payload?.length) return null
+// Общий вид подсказки: используется и графиками, и наведением на полосы
+// в других разделах, чтобы всплывающие окна выглядели одинаково.
+export function FinanceTooltipCard({ label, rows }) {
   return (
     <div className="finance-tooltip">
       <strong>{label}</strong>
-      {payload.map((item) => (
-        <div key={item.dataKey}>
-          <span style={{ color: item.color }}>{item.name}</span>
-          <b>{formatMoney2(item.value)} RSD</b>
+      {rows.map((row) => (
+        <div key={row.key}>
+          <span style={{ color: row.color }}>{row.name}</span>
+          <b>{row.value}</b>
         </div>
       ))}
     </div>
+  )
+}
+
+function FinanceTooltip({ active, label, payload }) {
+  if (!active || !payload?.length) return null
+  return (
+    <FinanceTooltipCard
+      label={label}
+      rows={payload.map((item) => ({
+        key: item.dataKey,
+        name: item.name,
+        color: item.color,
+        value: `${formatMoney2(item.value)} RSD`,
+      }))}
+    />
   )
 }
 

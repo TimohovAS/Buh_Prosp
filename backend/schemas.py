@@ -1964,6 +1964,39 @@ class WorkerPayoutResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WorkerPayoutSummary(BaseModel):
+    worker_id: int
+    worker_name: str
+    is_active: bool
+    total_paid: Decimal
+    # trip_paid — без стоимости жилья, она вынесена в lodging_paid;
+    # regular_paid + trip_paid + lodging_paid = total_paid.
+    regular_paid: Decimal
+    trip_paid: Decimal
+    lodging_paid: Decimal
+    payout_count: int
+    last_payout_date: DateType
+
+
+class WorkerPayoutMonthlySummary(BaseModel):
+    month: str
+    total_paid: Decimal
+    regular_paid: Decimal
+    trip_paid: Decimal
+    lodging_paid: Decimal
+    payout_count: int
+
+
+class WorkerPayoutReport(BaseModel):
+    total_paid: Decimal
+    payout_count: int
+    worker_count: int
+    average_payout: Decimal
+    workers: list[WorkerPayoutSummary]
+    months: list[WorkerPayoutMonthlySummary]
+    items: list[WorkerPayoutResponse]
+
+
 class WorkerPayoutCreateResponse(BaseModel):
     payout: WorkerPayoutResponse
     cash_entry: CashEntryResponse

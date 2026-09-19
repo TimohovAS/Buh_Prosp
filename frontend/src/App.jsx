@@ -30,6 +30,11 @@ const APP_PAGE_ROUTES = [
   },
   { id: 'clients', path: '/clients', Component: lazy(() => import('./pages/Clients')) },
   { id: 'workers', path: '/workers', Component: lazy(() => import('./pages/Workers')) },
+  {
+    id: 'worker-payouts',
+    path: '/workers/payouts',
+    Component: lazy(() => import('./pages/WorkerPayouts')),
+  },
   { id: 'finance', path: '/finance', Component: lazy(() => import('./pages/FinanceOverview')) },
   { id: 'finance-pnl', path: '/finance/pnl', Component: lazy(() => import('./pages/ProfitAndLoss')) },
   { id: 'finance-ar', path: '/finance/ar', Component: lazy(() => import('./pages/AccountsReceivable')) },

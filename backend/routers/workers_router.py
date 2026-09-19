@@ -1,9 +1,10 @@
 """Workers and cash payout helpers."""
 
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,7 +24,10 @@ from backend.schemas import (
     WorkerCreate,
     WorkerPayoutCreate,
     WorkerPayoutCreateResponse,
+    WorkerPayoutMonthlySummary,
+    WorkerPayoutReport,
     WorkerPayoutResponse,
+    WorkerPayoutSummary,
     WorkerResponse,
     WorkerUpdate,
 )
@@ -331,6 +335,113 @@ async def list_worker_payouts(
         query = query.where(WorkerPayout.worker_id == worker_id)
     result = await db.execute(query.order_by(WorkerPayout.date.desc(), WorkerPayout.id.desc()).limit(limit))
     return [_serialize_worker_payout(item) for item in result.scalars().all()]
+
+
+@router.get("/payouts/report", response_model=WorkerPayoutReport)
+async def get_worker_payout_report(
+    worker_id: int | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(400, "Start date must not be after end date")
+
+    filters = []
+    if worker_id is not None:
+        filters.append(WorkerPayout.worker_id == worker_id)
+    if date_from is not None:
+        filters.append(WorkerPayout.date >= date_from)
+    if date_to is not None:
+        filters.append(WorkerPayout.date <= date_to)
+
+    # Only money actually issued is additive. Gross amounts and prior advances
+    # can describe the same trip in both its advance and final settlement.
+    is_trip = WorkerPayout.payout_type.in_(("trip_advance", "trip_final"))
+    # Жильё оплачивается гостинице, а не работнику, поэтому в командировочные
+    # выплаты оно не входит. Деньги на него выдаются один раз: вместе с авансом,
+    # а если аванса не было — в окончательном расчёте. Поле lodging_amount
+    # хранится на обеих записях поездки, так что вычитать его на каждой нельзя.
+    carries_lodging = is_trip & (
+        (WorkerPayout.payout_type == "trip_advance") | (func.coalesce(WorkerPayout.advance_paid, 0) == 0)
+    )
+    # Сумму выдачи могли поправить вручную, поэтому вычитаем не больше выданного.
+    lodging_cash = case(
+        (
+            carries_lodging & (WorkerPayout.lodging_amount > WorkerPayout.cash_paid_amount),
+            WorkerPayout.cash_paid_amount,
+        ),
+        (carries_lodging, WorkerPayout.lodging_amount),
+        else_=0,
+    )
+    amount_columns = [
+        func.sum(WorkerPayout.cash_paid_amount).label("total_paid"),
+        func.sum(case((~is_trip, WorkerPayout.cash_paid_amount), else_=0)).label("regular_paid"),
+        func.sum(case((is_trip, WorkerPayout.cash_paid_amount - lodging_cash), else_=0)).label("trip_paid"),
+        func.sum(lodging_cash).label("lodging_paid"),
+        func.count(WorkerPayout.id).label("payout_count"),
+    ]
+    result = await db.execute(
+        select(
+            Worker.id.label("worker_id"),
+            Worker.name.label("worker_name"),
+            Worker.is_active,
+            *amount_columns,
+            func.max(WorkerPayout.date).label("last_payout_date"),
+        )
+        .join(WorkerPayout, WorkerPayout.worker_id == Worker.id)
+        .where(*filters)
+        .group_by(Worker.id, Worker.name, Worker.is_active)
+        # Сортируем по заработку, а не по выданной наличности: стоимость жилья
+        # в заработок не входит и не должна поднимать работника в списке.
+        .order_by(
+            func.sum(WorkerPayout.cash_paid_amount - lodging_cash).desc(),
+            Worker.name.asc(),
+            Worker.id.asc(),
+        )
+    )
+    workers = [WorkerPayoutSummary(**row) for row in result.mappings().all()]
+    total_paid = sum((item.total_paid for item in workers), ZERO_DECIMAL)
+    payout_count = sum(item.payout_count for item in workers)
+    payout_year = func.extract("year", WorkerPayout.date)
+    payout_month = func.extract("month", WorkerPayout.date)
+    result = await db.execute(
+        select(payout_year.label("year"), payout_month.label("month"), *amount_columns)
+        .where(*filters)
+        .group_by(payout_year, payout_month)
+        .order_by(payout_year.desc(), payout_month.desc())
+    )
+    months = [
+        WorkerPayoutMonthlySummary(
+            month=f"{int(row.year):04d}-{int(row.month):02d}",
+            total_paid=row.total_paid,
+            regular_paid=row.regular_paid,
+            trip_paid=row.trip_paid,
+            lodging_paid=row.lodging_paid,
+            payout_count=row.payout_count,
+        )
+        for row in result.all()
+    ]
+    result = await db.execute(
+        select(WorkerPayout)
+        .options(selectinload(WorkerPayout.worker))
+        .where(*filters)
+        .order_by(WorkerPayout.date.desc(), WorkerPayout.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return WorkerPayoutReport(
+        total_paid=total_paid,
+        payout_count=payout_count,
+        worker_count=len(workers),
+        average_payout=_dec(total_paid / payout_count) if payout_count else ZERO_DECIMAL,
+        workers=workers,
+        months=months,
+        items=[_serialize_worker_payout(item) for item in result.scalars().all()],
+    )
 
 
 @router.get("/payouts/{payout_id}", response_model=WorkerPayoutResponse)
