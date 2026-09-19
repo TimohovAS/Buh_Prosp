@@ -1935,6 +1935,33 @@ class WorkerPayoutCreate(BaseModel):
         return result
 
 
+class WorkerPayoutAttach(BaseModel):
+    """Привязка уже существующего наличного расхода к работнику.
+
+    Деньги записи не меняются: дата, сумма, проект и договор берутся из самого
+    расхода, поэтому старую выплату можно учесть в статистике, ничего не
+    переписывая в кассе.
+    """
+
+    cash_entry_id: int
+    worker_id: int
+    payout_type: str = "regular"
+    period_start: Optional[DateType] = None
+    period_end: Optional[DateType] = None
+    note: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("period_start", "period_end", "note"):
+            if key in result and result[key] == "":
+                result[key] = None
+        return result
+
+
 class WorkerPayoutResponse(BaseModel):
     id: int
     worker_id: int

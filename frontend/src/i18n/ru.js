@@ -1172,6 +1172,12 @@ const ru = {
   workerPayMonthly: 'Раз в месяц',
   workerPayoutAdvancePaid: 'Аванс уже выдан',
   workerPayoutCalculation: 'Расчет',
+  workerPayoutAttach: 'Привязать к работнику',
+  workerPayoutAttachTitle: 'Привязать расход к работнику',
+  workerPayoutAttachHint:
+    'Запись останется в кассе как есть: дата, сумма и проект не изменятся. Добавится только связь с работником, чтобы расход попал в статистику выплат.',
+  workerPayoutAttachEntry: 'Операция',
+  workerPayoutAttachSubmit: 'Привязать',
   workerPayoutCash: 'К выдаче',
   workerPayoutCreateTitle: 'Выплата работнику',
   workerPayoutDay: 'День',

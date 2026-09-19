@@ -1166,6 +1166,12 @@ const sr = {
   workerPayMonthly: 'Месечно',
   workerPayoutAdvancePaid: 'Аванс већ исплаћен',
   workerPayoutCalculation: 'Обрачун',
+  workerPayoutAttach: 'Повежи са радником',
+  workerPayoutAttachTitle: 'Повежи трошак са радником',
+  workerPayoutAttachHint:
+    'Запис у благајни остаје исти: датум, износ и пројекат се не мењају. Додаје се само веза са радником, да би трошак ушао у статистику исплата.',
+  workerPayoutAttachEntry: 'Операција',
+  workerPayoutAttachSubmit: 'Повежи',
   workerPayoutCash: 'За исплату',
   workerPayoutCreateTitle: 'Исплата раднику',
   workerPayoutDay: 'Дан',

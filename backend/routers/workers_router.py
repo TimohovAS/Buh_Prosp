@@ -22,6 +22,7 @@ from backend.planned_expenses_service import sync_worker_payout_planned_payment,
 from backend.schemas import (
     CashEntryResponse,
     WorkerCreate,
+    WorkerPayoutAttach,
     WorkerPayoutCreate,
     WorkerPayoutCreateResponse,
     WorkerPayoutMonthlySummary,
@@ -34,6 +35,8 @@ from backend.schemas import (
 from backend.state_machine import initialize_expense_status
 
 router = APIRouter(prefix="/workers", tags=["workers"])
+
+PAYOUT_TYPES = ("regular", "weekly", "monthly", "trip_advance", "trip_final")
 
 
 def _dec(value) -> Decimal:
@@ -539,6 +542,87 @@ async def create_worker_payout(
         project_id=project_id,
         contract_id=contract_id,
         category_id=category_id,
+        created_by=current_user.id,
+    )
+    db.add(payout)
+    await db.flush()
+    await sync_worker_payout_planned_payment(db, payout)
+
+    await db.commit()
+    await db.refresh(payout, ["worker"])
+    await db.refresh(entry)
+    return WorkerPayoutCreateResponse(
+        payout=_serialize_worker_payout(payout),
+        cash_entry=_serialize_cash_entry(entry, payout),
+    )
+
+
+@router.post("/payouts/attach", response_model=WorkerPayoutCreateResponse)
+async def attach_worker_payout(
+    data: WorkerPayoutAttach,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Учесть уже записанный наличный расход как выплату работнику.
+
+    Нужно для записей, сделанных до появления модуля выплат: деньги в кассе
+    остаются прежними, добавляется только связь с работником, чтобы запись
+    попала в статистику выплат и открывалась в редакторе выплаты.
+    """
+    if data.payout_type not in PAYOUT_TYPES:
+        raise HTTPException(400, "Unknown payout type")
+    if data.period_start and data.period_end and data.period_end < data.period_start:
+        raise HTTPException(400, "Period end must not be before period start")
+
+    # Архивных работников не отсекаем: старые выплаты часто относятся к тем,
+    # кто уже не работает, и без них статистика останется неполной.
+    worker = await _get_worker_or_404(db, data.worker_id)
+
+    result = await db.execute(select(CashEntry).where(CashEntry.id == data.cash_entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(404, "Cash entry not found")
+    if entry.entry_type != "expense" or not entry.expense_id:
+        raise HTTPException(400, "Only cash expenses can be linked to a worker")
+
+    result = await db.execute(
+        select(WorkerPayout.id).where(
+            or_(WorkerPayout.cash_entry_id == entry.id, WorkerPayout.expense_id == entry.expense_id)
+        )
+    )
+    if result.scalars().first():
+        raise HTTPException(400, "Cash entry is already linked to a worker payout")
+
+    result = await db.execute(select(Expense).where(Expense.id == entry.expense_id))
+    expense = result.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(404, "Linked cash expense was not found")
+
+    amount = _dec(entry.amount)
+    if amount <= ZERO_DECIMAL:
+        raise HTTPException(400, "Cash paid amount must be greater than zero")
+
+    note = data.note.strip() if data.note and data.note.strip() else entry.note
+    payout = WorkerPayout(
+        worker_id=worker.id,
+        cash_entry_id=entry.id,
+        expense_id=expense.id,
+        payout_type=data.payout_type,
+        date=entry.date,
+        period_start=data.period_start,
+        period_end=data.period_end,
+        # Ставок и дней за старой записью нет, известна только выданная сумма.
+        # Считаем её же начисленной, иначе в отчёте заработок окажется меньше выплат.
+        gross_amount=amount,
+        cash_paid_amount=amount,
+        remaining_amount=ZERO_DECIMAL,
+        description=(entry.description or expense.description or worker.name)[:500],
+        note=note,
+        # Проект, договор и категорию берём из расхода: перепривязка сместила бы
+        # историю по проектам.
+        project_id=expense.project_id,
+        contract_id=expense.contract_id,
+        category_id=expense.category_id,
         created_by=current_user.id,
     )
     db.add(payout)
