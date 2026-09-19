@@ -8,7 +8,7 @@ import {
   RefreshCw,
   UploadCloud,
 } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
 import FileInput from '../components/FileInput'
@@ -43,6 +43,7 @@ function getImportStatus(file) {
 
 export default function BankImport() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isActivePage = location.pathname === '/bank-import'
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -158,6 +159,7 @@ export default function BankImport() {
       setParseMeta([])
       setSkippedFiles([])
       loadRecentFiles()
+      navigate('/bank')
     } catch (error) {
       setPageError(error?.message || tr('loadError'))
     } finally {
