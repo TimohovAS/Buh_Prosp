@@ -1210,19 +1210,51 @@ export default function CashRegister() {
     }
   }
 
+  // Тип выплаты меняем этой же формой: полный редактор выплаты пересчитал бы
+  // суммы по ставкам работника и переписал описание операции.
+  const openPayoutLinkEdit = async (entry) => {
+    if (!entry.worker_payout_id) return
+    setSaving(true)
+    setPageError('')
+    try {
+      const [list, payout] = await Promise.all([
+        api.workers.list(),
+        api.workers.getPayout(entry.worker_payout_id),
+      ])
+      setAttachWorkers(list)
+      setAttachPayoutForm({
+        ...emptyAttachPayoutForm,
+        worker_id: toFormValue(payout.worker_id),
+        payout_type: payout.payout_type || 'regular',
+        period_start: payout.period_start || '',
+        period_end: payout.period_end || '',
+      })
+      setDetailModal(null)
+      setAttachPayoutModal({ entry, payoutId: payout.id })
+    } catch (error) {
+      setPageError(error.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAttachPayout = async (event) => {
     event.preventDefault()
     if (!attachPayoutModal?.entry || !attachPayoutForm.worker_id) return
     setSaving(true)
     setPageError('')
     try {
-      await api.workers.attachPayout({
-        cash_entry_id: attachPayoutModal.entry.id,
+      const payload = {
         worker_id: parseInt(attachPayoutForm.worker_id, 10),
         payout_type: attachPayoutForm.payout_type,
         period_start: attachPayoutForm.period_start || null,
         period_end: attachPayoutForm.period_end || null,
-      })
+      }
+      if (attachPayoutModal.payoutId) {
+        await api.workers.updatePayoutLink(attachPayoutModal.payoutId, payload)
+      } else {
+        await api.workers.attachPayout({ ...payload, cash_entry_id: attachPayoutModal.entry.id })
+      }
       setAttachPayoutModal(null)
       await loadData()
     } catch (error) {
@@ -1620,6 +1652,16 @@ export default function CashRegister() {
                     {tr('workerPayoutAttach')}
                   </button>
                 ) : null}
+                {detailModal.worker_payout_id ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={saving}
+                    onClick={() => openPayoutLinkEdit(detailModal)}
+                  >
+                    {tr('workerPayoutRetype')}
+                  </button>
+                ) : null}
                 {detailModal.entry_type === 'expense' ? (
                   <button
                     type="button"
@@ -1868,11 +1910,11 @@ export default function CashRegister() {
       <Modal
         isOpen={!!attachPayoutModal && isActivePage}
         onClose={() => setAttachPayoutModal(null)}
-        title={tr('workerPayoutAttachTitle')}
+        title={attachPayoutModal?.payoutId ? tr('workerPayoutRetype') : tr('workerPayoutAttachTitle')}
       >
         <form onSubmit={handleAttachPayout} className="card" style={{ padding: '1rem' }}>
           <p className="text-muted" style={{ marginTop: 0 }}>
-            {tr('workerPayoutAttachHint')}
+            {attachPayoutModal?.payoutId ? tr('workerPayoutRetypeHint') : tr('workerPayoutAttachHint')}
           </p>
           <div className="form-group">
             <label className="form-label">{tr('workerPayoutAttachEntry')}</label>
@@ -1941,7 +1983,11 @@ export default function CashRegister() {
               className="btn btn-primary"
               disabled={saving || !attachPayoutForm.worker_id}
             >
-              {saving ? tr('loading') : tr('workerPayoutAttachSubmit')}
+              {saving
+                ? tr('loading')
+                : attachPayoutModal?.payoutId
+                  ? tr('save')
+                  : tr('workerPayoutAttachSubmit')}
             </button>
           </div>
         </form>

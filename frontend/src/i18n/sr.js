@@ -1172,6 +1172,9 @@ const sr = {
     'Запис у благајни остаје исти: датум, износ и пројекат се не мењају. Додаје се само веза са радником, да би трошак ушао у статистику исплата.',
   workerPayoutAttachEntry: 'Операција',
   workerPayoutAttachSubmit: 'Повежи',
+  workerPayoutRetype: 'Измени тип исплате',
+  workerPayoutRetypeHint:
+    'Мењају се само радник, тип исплате и период. Датум, износ и опис операције остају исти.',
   workerPayoutCash: 'За исплату',
   workerPayoutCreateTitle: 'Исплата раднику',
   workerPayoutDay: 'Дан',

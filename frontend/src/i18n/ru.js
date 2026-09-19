@@ -1178,6 +1178,9 @@ const ru = {
     'Запись останется в кассе как есть: дата, сумма и проект не изменятся. Добавится только связь с работником, чтобы расход попал в статистику выплат.',
   workerPayoutAttachEntry: 'Операция',
   workerPayoutAttachSubmit: 'Привязать',
+  workerPayoutRetype: 'Изменить тип выплаты',
+  workerPayoutRetypeHint:
+    'Меняются только работник, тип выплаты и период. Дата, сумма и описание операции остаются прежними.',
   workerPayoutCash: 'К выдаче',
   workerPayoutCreateTitle: 'Выплата работнику',
   workerPayoutDay: 'День',

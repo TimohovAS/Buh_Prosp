@@ -25,6 +25,7 @@ from backend.schemas import (
     WorkerPayoutAttach,
     WorkerPayoutCreate,
     WorkerPayoutCreateResponse,
+    WorkerPayoutLinkUpdate,
     WorkerPayoutMonthlySummary,
     WorkerPayoutReport,
     WorkerPayoutResponse,
@@ -205,6 +206,13 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         "cash_paid_amount": cash_paid_amount,
         "remaining_amount": remaining_amount,
     }
+
+
+def _validate_payout_link(data: WorkerPayoutLinkUpdate) -> None:
+    if data.payout_type not in PAYOUT_TYPES:
+        raise HTTPException(400, "Unknown payout type")
+    if data.period_start and data.period_end and data.period_end < data.period_start:
+        raise HTTPException(400, "Period end must not be before period start")
 
 
 def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
@@ -569,10 +577,7 @@ async def attach_worker_payout(
     остаются прежними, добавляется только связь с работником, чтобы запись
     попала в статистику выплат и открывалась в редакторе выплаты.
     """
-    if data.payout_type not in PAYOUT_TYPES:
-        raise HTTPException(400, "Unknown payout type")
-    if data.period_start and data.period_end and data.period_end < data.period_start:
-        raise HTTPException(400, "Period end must not be before period start")
+    _validate_payout_link(data)
 
     # Архивных работников не отсекаем: старые выплаты часто относятся к тем,
     # кто уже не работает, и без них статистика останется неполной.
@@ -627,6 +632,50 @@ async def attach_worker_payout(
     )
     db.add(payout)
     await db.flush()
+    await sync_worker_payout_planned_payment(db, payout)
+
+    await db.commit()
+    await db.refresh(payout, ["worker"])
+    await db.refresh(entry)
+    return WorkerPayoutCreateResponse(
+        payout=_serialize_worker_payout(payout),
+        cash_entry=_serialize_cash_entry(entry, payout),
+    )
+
+
+@router.patch("/payouts/{payout_id}/link", response_model=WorkerPayoutCreateResponse)
+async def update_worker_payout_link(
+    payout_id: int,
+    data: WorkerPayoutLinkUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Сменить работника, тип или период выплаты, не трогая деньги.
+
+    Полный редактор выплаты пересчитывает суммы по ставкам работника и
+    переписывает описание расхода, поэтому для записей без расчёта — например
+    привязанных задним числом — тип выплаты меняется здесь.
+    """
+    _validate_payout_link(data)
+
+    result = await db.execute(
+        select(WorkerPayout).options(selectinload(WorkerPayout.cash_entry)).where(WorkerPayout.id == payout_id)
+    )
+    payout = result.scalar_one_or_none()
+    if not payout:
+        raise HTTPException(404, "Worker payout not found")
+    entry = payout.cash_entry
+    if not entry:
+        raise HTTPException(404, "Linked cash expense was not found")
+
+    worker = await _get_worker_or_404(db, data.worker_id)
+    payout.worker_id = worker.id
+    payout.payout_type = data.payout_type
+    payout.period_start = data.period_start
+    payout.period_end = data.period_end
+    await db.flush()
+    # Напоминание о плановой зарплате привязано к типу выплаты, поэтому метку
+    # переставляем: у командировочных её быть не должно.
     await sync_worker_payout_planned_payment(db, payout)
 
     await db.commit()

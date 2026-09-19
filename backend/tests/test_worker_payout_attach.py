@@ -177,3 +177,108 @@ async def test_attach_rejects_unknown_payout_type(attach_client, db_session):
     )
 
     assert response.status_code == 400
+
+
+async def test_payout_type_can_be_changed_later_without_touching_the_money(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    entry, expense = await make_cash_expense(db_session, description="Andrei Timokhov Struja")
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={"cash_entry_id": entry.id, "worker_id": worker.id},
+        )
+    ).json()["payout"]
+
+    response = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "monthly",
+            "period_start": "2026-02-01",
+            "period_end": "2026-02-28",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["payout"]["payout_type"] == "monthly"
+
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.payout_type == "monthly"
+    assert payout.period_start == date(2026, 2, 1)
+    assert payout.period_end == date(2026, 2, 28)
+    assert Decimal(payout.cash_paid_amount) == Decimal("15000.00")
+    # Ни описание операции, ни расход правка типа трогать не должна.
+    assert payout.description == "Andrei Timokhov Struja"
+    assert entry.description == "Andrei Timokhov Struja"
+    assert expense.description == "Andrei Timokhov Struja"
+    assert Decimal(expense.amount) == Decimal("15000.00")
+
+
+async def test_payout_link_update_can_move_the_record_to_another_worker(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    other = Worker(name="Denis Čistjakov")
+    db_session.add_all([worker, other])
+    await db_session.flush()
+    entry, _ = await make_cash_expense(db_session)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={"cash_entry_id": entry.id, "worker_id": worker.id},
+        )
+    ).json()["payout"]
+
+    response = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={"worker_id": other.id, "payout_type": "weekly"},
+    )
+
+    assert response.status_code == 200
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.worker_id == other.id
+
+
+async def test_payout_link_update_rejects_bad_type_and_period(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    entry, _ = await make_cash_expense(db_session)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={"cash_entry_id": entry.id, "worker_id": worker.id},
+        )
+    ).json()["payout"]
+
+    bad_type = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={"worker_id": worker.id, "payout_type": "bonus"},
+    )
+    bad_period = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "regular",
+            "period_start": "2026-02-28",
+            "period_end": "2026-02-01",
+        },
+    )
+
+    assert bad_type.status_code == 400
+    assert bad_period.status_code == 400
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.payout_type == "regular"
+
+
+async def test_payout_link_update_returns_404_for_unknown_payout(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+
+    response = await attach_client.patch(
+        "/api/workers/payouts/999/link",
+        json={"worker_id": worker.id, "payout_type": "regular"},
+    )
+
+    assert response.status_code == 404
