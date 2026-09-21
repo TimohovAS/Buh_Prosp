@@ -102,7 +102,9 @@ def invoice_identity(invoice_number: Optional[str], invoice_year: Optional[int])
     year_key = parsed_year if parsed_year is not None else invoice_year
     if serial is not None:
         return year_key, str(serial)
-    return year_key, raw
+    # Номера с суффиксом (0012-2026-A) шаблоны выше не разбирают: приводим их к
+    # канону, иначе 0012-2026-A и 2026-0012-A считаются разными счетами.
+    return year_key, canonical_invoice_number(raw, invoice_year)
 
 
 def to_number_year_format(invoice_number: Optional[str], fallback_year: Optional[int] = None) -> str:
@@ -112,6 +114,33 @@ def to_number_year_format(invoice_number: Optional[str], fallback_year: Optional
     year_val = parsed_year if parsed_year is not None else fallback_year
     if serial is not None and year_val is not None:
         return f"{serial:04d}-{year_val}"
+    return raw
+
+
+def canonical_invoice_number(value: Optional[str], fallback_year: Optional[int] = None) -> str:
+    """
+    Привести номер фактуры к единому виду для сопоставления, включая суффиксы.
+    В отличие от to_number_year_format понимает номера вида 0012-2026-A:
+    и 0012-2026-A, и 2026-0012-A дают один ключ 12-2026-A.
+    """
+    raw = (value or "").strip().upper()
+    raw = " ".join(raw.split())
+    if not raw:
+        return ""
+
+    match = re.fullmatch(r"0*(\d+)-(20\d{2})(.*)", raw)
+    if match:
+        serial, year, suffix = match.groups()
+        return f"{int(serial)}-{year}{suffix}"
+
+    match = re.fullmatch(r"(20\d{2})-0*(\d+)(.*)", raw)
+    if match:
+        year, serial, suffix = match.groups()
+        return f"{int(serial)}-{year}{suffix}"
+
+    normalized = to_number_year_format(raw, fallback_year)
+    if normalized != raw:
+        return canonical_invoice_number(normalized, fallback_year)
     return raw
 
 

@@ -11,10 +11,9 @@ from backend.invoice_export_service import (
     build_income_efaktura_xml,
 )
 from backend.models import Client, Enterprise, Income, IncomeItem
-from backend.income_service import parse_efaktura_invoice
+from backend.income_service import canonical_invoice_number, parse_efaktura_invoice
 from backend.routers.income_router import _is_legacy_full_invoice_item, _normalize_income_items
 from backend.schemas import IncomeItemCreate
-from backend.scripts.backfill_income_items_from_efaktura import canonical_invoice_number
 
 
 NS = {
@@ -250,7 +249,7 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         self.assertEqual(parsed["items"][0]["unit_price"], Decimal("1200.00"))
         self.assertEqual(parsed["items"][0]["total_amount"], Decimal("2400.00"))
 
-    def test_backfill_canonical_invoice_number_keeps_suffix(self):
+    def test_canonical_invoice_number_keeps_suffix(self):
         self.assertEqual(canonical_invoice_number("0012-2026-A"), "12-2026-A")
         self.assertEqual(canonical_invoice_number("12-2026-A"), "12-2026-A")
         self.assertEqual(canonical_invoice_number("0012-2026-A2"), "12-2026-A2")
