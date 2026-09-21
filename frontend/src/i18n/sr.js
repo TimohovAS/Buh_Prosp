@@ -881,6 +881,8 @@ const sr = {
   plannedNoItems: 'Нема уноса',
   plannedNoUnpaidUpcoming: 'Нема неплаћених обавеза у изабраном периоду',
   plannedNoUpcoming: 'Нема надолазећих плаћања',
+  plannedPartiallySettled: 'Измирено {paid}, остало {remaining}',
+  plannedPartlyPaid: 'Делимично',
   plannedPaymentDay: 'Дан уплате',
   plannedPaymentDayOfWeek: 'Дан у недељи',
   plannedPeriod: 'Период',

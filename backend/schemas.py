@@ -1657,6 +1657,10 @@ class UpcomingPaymentItem(BaseModel):
     currency: str
     due_date: str  # YYYY-MM-DD
     reminder_days: int
+    # Зарплату закрывают частями: деньгами и покупками в её счёт, поэтому платёж
+    # бывает погашен не полностью, и напоминание остаётся открытым на остаток.
+    paid_amount: Decimal = Decimal("0")
+    remaining_amount: Decimal = Decimal("0")
     is_paid: bool = False
     worker_id: Optional[int] = None
     worker_payout_id: Optional[int] = None

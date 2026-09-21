@@ -885,6 +885,8 @@ const ru = {
   plannedNoItems: 'Нет записей',
   plannedNoUnpaidUpcoming: 'Нет неоплаченных платежей в выбранном периоде',
   plannedNoUpcoming: 'Нет предстоящих платежей',
+  plannedPartiallySettled: 'Погашено {paid}, осталось {remaining}',
+  plannedPartlyPaid: 'Частично',
   plannedPaymentDay: 'День уплаты',
   plannedPaymentDayOfWeek: 'День недели',
   plannedPeriod: 'Период',

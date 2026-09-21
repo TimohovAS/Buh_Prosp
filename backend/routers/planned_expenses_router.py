@@ -1,6 +1,7 @@
 """Роутер разовых и периодических планируемых расходов."""
 
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -8,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.db_utils import get_category_or_none, get_unassigned_project_id
+from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import PlannedExpense, PlannedExpensePayment, User, Worker
-from backend.planned_expenses_service import payment_dates_in_range
+from backend.planned_expenses_service import (
+    occurrence_remaining,
+    payment_dates_in_range,
+    settled_amounts_by_occurrence,
+)
 from backend.schemas import (
     PlannedExpenseCreate,
     PlannedExpenseUpdate,
@@ -72,22 +78,30 @@ async def get_upcoming_payments(
     range_end = today + timedelta(days=days)
     r = await db.execute(select(PlannedExpense).where(PlannedExpense.is_active == True))
     items = r.scalars().all()
-    paid_set = set()
+    settled: dict[tuple[int, date], Decimal] = {}
+    payout_links: dict[tuple[int, date], int] = {}
     if items:
         r_paid = await db.execute(
             select(
                 PlannedExpensePayment.planned_expense_id,
                 PlannedExpensePayment.due_date,
                 PlannedExpensePayment.worker_payout_id,
+                PlannedExpensePayment.amount,
             ).where(PlannedExpensePayment.planned_expense_id.in_([pe.id for pe in items]))
         )
-        paid_set = {(row[0], row[1]): row[2] for row in r_paid.fetchall()}
+        for planned_id, due, payout_id, amount in r_paid.fetchall():
+            key = (planned_id, due)
+            settled[key] = settled.get(key, ZERO_DECIMAL) + to_decimal(amount or ZERO_DECIMAL)
+            if payout_id and key not in payout_links:
+                payout_links[key] = payout_id
 
     unpaid = []
     paid = []
     for pe in items:
         dates = payment_dates_in_range(pe, range_start, range_end, limit=24)
         for d in dates:
+            paid_amount = settled.get((pe.id, d), ZERO_DECIMAL)
+            remaining = occurrence_remaining(pe, paid_amount)
             item = UpcomingPaymentItem(
                 planned_expense_id=pe.id,
                 name=pe.name,
@@ -95,9 +109,13 @@ async def get_upcoming_payments(
                 currency=pe.currency,
                 due_date=d.isoformat(),
                 reminder_days=pe.reminder_days or 0,
-                is_paid=(pe.id, d) in paid_set,
+                paid_amount=paid_amount,
+                remaining_amount=remaining,
+                # Погашенным считаем только закрытый целиком: пока есть остаток,
+                # напоминание должно оставаться открытым.
+                is_paid=paid_amount > ZERO_DECIMAL and remaining <= ZERO_DECIMAL,
                 worker_id=pe.worker_id,
-                worker_payout_id=paid_set.get((pe.id, d)),
+                worker_payout_id=payout_links.get((pe.id, d)),
             )
             if item.is_paid:
                 paid.append(item)
@@ -121,23 +139,21 @@ async def mark_planned_expense_paid(
         raise HTTPException(404, "Планируемый расход не найден")
     due_d = data.due_date if hasattr(data.due_date, "year") else date.fromisoformat(str(data.due_date))
     paid_d = data.paid_date if hasattr(data.paid_date, "year") else date.fromisoformat(str(data.paid_date))
-    r_exist = await db.execute(
-        select(PlannedExpensePayment).where(
-            PlannedExpensePayment.planned_expense_id == pe.id,
-            PlannedExpensePayment.due_date == due_d,
-        )
-    )
-    if r_exist.scalar_one_or_none():
+    settled = await settled_amounts_by_occurrence(db, {pe.id})
+    remaining = occurrence_remaining(pe, settled.get((pe.id, due_d), ZERO_DECIMAL))
+    if remaining <= ZERO_DECIMAL:
         raise HTTPException(400, "Этот платёж уже отмечен как оплаченный")
+    # Часть могла быть закрыта выплатой или покупкой — вручную добираем остаток.
     pep = PlannedExpensePayment(
         planned_expense_id=pe.id,
         due_date=due_d,
         paid_date=paid_d,
+        amount=remaining,
         note=data.note,
     )
     db.add(pep)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "amount": remaining}
 
 
 @router.post("/mark-unpaid")
@@ -154,10 +170,12 @@ async def mark_planned_expense_unpaid(
             PlannedExpensePayment.due_date == due_d,
         )
     )
-    pep = r.scalar_one_or_none()
-    if not pep:
+    # Погашений за период может быть несколько — снимаем их все.
+    payments = r.scalars().all()
+    if not payments:
         raise HTTPException(404, "Оплата не найдена")
-    await db.delete(pep)
+    for payment in payments:
+        await db.delete(payment)
     await db.commit()
     return {"ok": True}
 

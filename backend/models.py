@@ -1082,7 +1082,7 @@ class PlannedExpense(Base):
 
 
 class PlannedExpensePayment(Base):
-    """Отметки об оплате конкретного экземпляра планируемого расхода (planned_expense_id + due_date)."""
+    """Погашение конкретного экземпляра планируемого расхода (planned_expense_id + due_date)."""
 
     __tablename__ = "planned_expense_payments"
 
@@ -1090,6 +1090,9 @@ class PlannedExpensePayment(Base):
     planned_expense_id = Column(Integer, ForeignKey("planned_expenses.id"), nullable=False)
     due_date = Column(Date, nullable=False)
     paid_date = Column(Date, nullable=False)
+    # Зарплату закрывают частями — деньгами и покупками в её счёт, поэтому на один
+    # плановый платёж отметок может быть несколько, и каждая несёт свою сумму.
+    amount = Column(Numeric(14, 2), nullable=False, default=0)
     worker_payout_id = Column(Integer, ForeignKey("worker_payouts.id"), nullable=True)
     note = Column(String(200))
     created_at = Column(DateTime, default=datetime.utcnow)

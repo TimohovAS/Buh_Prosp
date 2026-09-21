@@ -5,13 +5,16 @@ import calendar
 from decimal import Decimal
 
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
 
 
 AUTO_WORKER_SALARY_NOTE = "auto:worker_salary_plan"
+# Командировочные к зарплате за период отношения не имеют, остальное — да,
+# включая покупку работнику в счёт зарплаты.
+SALARY_SETTLING_PAYOUT_TYPES = frozenset({"regular", "weekly", "monthly", "purchase"})
 DEFAULT_MONTHLY_SALARY_DAY = 5
 DEFAULT_WEEKLY_SALARY_WEEKDAY = 0
 
@@ -310,21 +313,52 @@ def planned_expenses_sum_until_including_overdue(
     return total
 
 
+async def settled_amounts_by_occurrence(
+    db: AsyncSession,
+    planned_expense_ids: set[int],
+) -> dict[tuple[int, date], Decimal]:
+    """Сколько уже погашено по каждому плановому платежу."""
+    if not planned_expense_ids:
+        return {}
+    result = await db.execute(
+        select(
+            PlannedExpensePayment.planned_expense_id,
+            PlannedExpensePayment.due_date,
+            func.sum(PlannedExpensePayment.amount),
+        )
+        .where(PlannedExpensePayment.planned_expense_id.in_(planned_expense_ids))
+        .group_by(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date)
+    )
+    return {(row[0], row[1]): to_decimal(row[2] or ZERO_DECIMAL) for row in result.fetchall()}
+
+
+def occurrence_remaining(planned: PlannedExpense, settled: Decimal) -> Decimal:
+    """Остаток планового платежа: переплату в минус не уводим."""
+    remaining = to_decimal(planned.amount or ZERO_DECIMAL) - to_decimal(settled or ZERO_DECIMAL)
+    return remaining if remaining > ZERO_DECIMAL else ZERO_DECIMAL
+
+
 async def sync_worker_payout_planned_payment(
     db: AsyncSession,
     payout: WorkerPayout,
 ) -> PlannedExpensePayment | None:
-    """Mark one linked planned expense occurrence as paid by this worker payout.
+    """Погасить частью плановой зарплаты то, что работник получил этой выплатой.
 
-    This keeps planned expenses as reminders only: no expenses or cash entries are
-    created here. Existing automatic marks for the same payout are rebuilt so
-    editing a payout moves the reminder mark instead of leaving stale rows.
+    Планируемые расходы остаются напоминанием: ни расходов, ни записей в кассе
+    здесь не создаётся. Своя прежняя отметка выплаты пересобирается, поэтому
+    правка выплаты переносит погашение, а не оставляет старое.
+
+    Покупка в счёт зарплаты участвует наравне с деньгами: работник получил её
+    вместо части зарплаты, значит остаток за период должен уменьшиться.
     """
     await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
 
-    if payout.payout_type not in {"regular", "weekly", "monthly"}:
+    if payout.payout_type not in SALARY_SETTLING_PAYOUT_TYPES:
         return None
     if not payout.worker_id or not payout.date:
+        return None
+    paid_amount = to_decimal(payout.cash_paid_amount or ZERO_DECIMAL)
+    if paid_amount <= ZERO_DECIMAL:
         return None
 
     range_start = payout.period_start or (payout.date - timedelta(days=45))
@@ -348,21 +382,17 @@ async def sync_worker_payout_planned_payment(
     if not candidate_pairs:
         return None
 
-    paid_result = await db.execute(
-        select(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date).where(
-            PlannedExpensePayment.planned_expense_id.in_({item.id for item, _ in candidate_pairs})
-        )
-    )
-    paid_pairs = {(row[0], row[1]) for row in paid_result.fetchall()}
-
-    unpaid_pairs = [
-        (planned, due_date) for planned, due_date in candidate_pairs if (planned.id, due_date) not in paid_pairs
+    settled = await settled_amounts_by_occurrence(db, {item.id for item, _ in candidate_pairs})
+    open_pairs = [
+        (planned, due_date)
+        for planned, due_date in candidate_pairs
+        if occurrence_remaining(planned, settled.get((planned.id, due_date), ZERO_DECIMAL)) > ZERO_DECIMAL
     ]
-    if not unpaid_pairs:
+    if not open_pairs:
         return None
 
     planned, due_date = min(
-        unpaid_pairs,
+        open_pairs,
         key=lambda pair: (
             abs((pair[1] - payout.date).days),
             pair[1] > payout.date,
@@ -370,10 +400,13 @@ async def sync_worker_payout_planned_payment(
             pair[0].id,
         ),
     )
+    # Больше остатка не засчитываем: лишнее к этому периоду отношения не имеет.
+    remaining = occurrence_remaining(planned, settled.get((planned.id, due_date), ZERO_DECIMAL))
     payment = PlannedExpensePayment(
         planned_expense_id=planned.id,
         due_date=due_date,
         paid_date=payout.date,
+        amount=min(paid_amount, remaining),
         worker_payout_id=payout.id,
         note=f"auto_worker_payout:{payout.id}",
     )

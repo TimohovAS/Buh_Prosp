@@ -518,6 +518,15 @@ export default function PlannedExpenses() {
                       <td>{formatDate(u.due_date)}</td>
                       <td>
                         {fmtAmount(u.amount)} {u.currency}
+                        {/* Зарплату закрывают частями: деньгами и покупками в её счёт. */}
+                        {!u.is_paid && Number(u.paid_amount) > 0 ? (
+                          <div className="text-muted" style={{ fontSize: '0.85em' }}>
+                            {tr('plannedPartiallySettled', {
+                              paid: fmtAmount(u.paid_amount),
+                              remaining: fmtAmount(u.remaining_amount),
+                            })}
+                          </div>
+                        ) : null}
                       </td>
                       <td>{getWorkerName(u.worker_id) || UI_DASH}</td>
                       <td>
@@ -533,9 +542,11 @@ export default function PlannedExpenses() {
                         >
                           {u.is_paid
                             ? tr('paid')
-                            : new Date(u.due_date + 'T12:00:00') < new Date()
-                              ? tr('obligationsOverdue')
-                              : tr('unpaid')}
+                            : Number(u.paid_amount) > 0
+                              ? tr('plannedPartlyPaid')
+                              : new Date(u.due_date + 'T12:00:00') < new Date()
+                                ? tr('obligationsOverdue')
+                                : tr('unpaid')}
                         </SharedStatusBadge>
                       </td>
                       <td>
