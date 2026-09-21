@@ -345,9 +345,13 @@ async def test_purchase_for_a_worker_is_counted_in_the_report_without_a_cash_ent
 
     report = (await attach_client.get("/api/workers/payouts/report")).json()
     assert Decimal(report["total_paid"]) == Decimal("5260.00")
-    # Покупка — не командировка, поэтому идёт в обычный заработок целиком.
-    assert Decimal(report["workers"][0]["regular_paid"]) == Decimal("5260.00")
-    assert Decimal(report["workers"][0]["lodging_paid"]) == Decimal("0")
+    # Доход работника, но выданный не деньгами: в обычную выплату не попадает.
+    worker_row = report["workers"][0]
+    assert Decimal(worker_row["purchase_paid"]) == Decimal("5260.00")
+    assert Decimal(worker_row["money_paid"]) == Decimal("0")
+    assert Decimal(worker_row["regular_paid"]) == Decimal("0")
+    assert Decimal(worker_row["trip_paid"]) == Decimal("0")
+    assert Decimal(worker_row["lodging_paid"]) == Decimal("0")
 
 
 async def test_attach_by_expense_id_also_links_the_cash_entry_of_a_cash_expense(attach_client, db_session):

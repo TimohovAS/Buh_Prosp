@@ -143,6 +143,12 @@ export default function WorkerPayouts() {
           value: money(worker.regular_paid),
         },
         {
+          key: 'purchase',
+          name: tr('workerPayoutsPurchases'),
+          color: PAYOUT_SERIES_COLORS.purchase,
+          value: money(worker.purchase_paid),
+        },
+        {
           key: 'trip',
           name: tr('workerPayoutsTrips'),
           color: PAYOUT_SERIES_COLORS.trip,
@@ -153,6 +159,7 @@ export default function WorkerPayouts() {
 
   const summary = report?.workers || []
   const regularPaid = sumMoney(summary, 'regular_paid')
+  const purchasePaid = sumMoney(summary, 'purchase_paid')
   const tripPaid = sumMoney(summary, 'trip_paid')
   // Вкладка отвечает на вопрос «сколько работник заработал», поэтому стоимость
   // жилья сюда не входит — она справочно показана в карточке работника.
@@ -166,6 +173,7 @@ export default function WorkerPayouts() {
   const chartData = [...(report?.months || [])].reverse().map((item) => ({
     label: `${getMonthNamesShort()[Number(item.month.slice(5)) - 1]} ${item.month.slice(2, 4)}`,
     regular: Number(item.regular_paid),
+    purchase: Number(item.purchase_paid),
     trip: Number(item.trip_paid),
   }))
 
@@ -273,12 +281,18 @@ export default function WorkerPayouts() {
                 </p>
                 <div
                   className="worker-payouts-split"
-                  title={`${tr('workerPayoutsRegular')}: ${money(regularPaid)} · ${tr('workerPayoutsTrips')}: ${money(tripPaid)}`}
+                  title={`${tr('workerPayoutsRegular')}: ${money(regularPaid)} · ${tr('workerPayoutsPurchases')}: ${money(purchasePaid)} · ${tr('workerPayoutsTrips')}: ${money(tripPaid)}`}
                 >
                   <i
                     style={{
                       background: PAYOUT_SERIES_COLORS.regular,
                       width: `${sharePercent(regularPaid)}%`,
+                    }}
+                  />
+                  <i
+                    style={{
+                      background: PAYOUT_SERIES_COLORS.purchase,
+                      width: `${sharePercent(purchasePaid)}%`,
                     }}
                   />
                   <i style={{ background: PAYOUT_SERIES_COLORS.trip, width: `${sharePercent(tripPaid)}%` }} />
@@ -290,6 +304,13 @@ export default function WorkerPayouts() {
                   </dt>
                   <dd>
                     {money(regularPaid)} · {sharePercent(regularPaid)}%
+                  </dd>
+                  <dt>
+                    <i style={{ background: PAYOUT_SERIES_COLORS.purchase }} />
+                    {tr('workerPayoutsPurchases')}
+                  </dt>
+                  <dd>
+                    {money(purchasePaid)} · {sharePercent(purchasePaid)}%
                   </dd>
                   <dt>
                     <i style={{ background: PAYOUT_SERIES_COLORS.trip }} />
@@ -336,6 +357,7 @@ export default function WorkerPayouts() {
                       summary.map((worker) => {
                         const total = payoutEarned(worker)
                         const regular = Number(worker.regular_paid)
+                        const purchase = Number(worker.purchase_paid)
                         const trip = Number(worker.trip_paid)
                         return (
                           <tr key={worker.worker_id}>
@@ -367,13 +389,21 @@ export default function WorkerPayouts() {
                                   width: maxWorkerPaid > 0 ? `${(total / maxWorkerPaid) * 100}%` : 0,
                                 }}
                                 role="img"
-                                aria-label={`${tr('workerPayoutsRegular')}: ${money(regular)} · ${tr('workerPayoutsTrips')}: ${money(trip)}`}
+                                aria-label={`${tr('workerPayoutsRegular')}: ${money(regular)} · ${tr('workerPayoutsPurchases')}: ${money(purchase)} · ${tr('workerPayoutsTrips')}: ${money(trip)}`}
                               >
                                 {regular > 0 && (
                                   <i
                                     style={{
                                       background: PAYOUT_SERIES_COLORS.regular,
                                       width: total > 0 ? `${(regular / total) * 100}%` : 0,
+                                    }}
+                                  />
+                                )}
+                                {purchase > 0 && (
+                                  <i
+                                    style={{
+                                      background: PAYOUT_SERIES_COLORS.purchase,
+                                      width: total > 0 ? `${(purchase / total) * 100}%` : 0,
                                     }}
                                   />
                                 )}

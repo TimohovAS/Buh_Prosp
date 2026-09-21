@@ -9,6 +9,7 @@ import {
   groupPayoutsByDate,
   payoutChartSeries,
   payoutEarned,
+  payoutNonTrip,
   payoutMoney as money,
   payoutTypeChipLabel,
   payoutTypeLabel,
@@ -121,13 +122,17 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
   // Карточка тоже про заработок; жильё показано отдельной справочной строкой.
   const totalPaid = sumPayoutEarned(months)
   const regularPaid = sumMoney(months, 'regular_paid')
+  const purchasePaid = sumMoney(months, 'purchase_paid')
+  const moneyPaid = sumMoney(months, 'money_paid')
   const tripPaid = sumMoney(months, 'trip_paid')
   const lodgingPaid = sumMoney(months, 'lodging_paid')
+  const nonTripPaid = months.reduce((sum, item) => sum + payoutNonTrip(item), 0)
   const payoutCount = months.reduce((sum, item) => sum + item.payout_count, 0)
   const sharePercent = (value) => (totalPaid > 0 ? Math.round((value / totalPaid) * 100) : 0)
   const chartData = [...months].reverse().map((item) => ({
     label: `${getMonthNamesShort()[Number(item.month.slice(5)) - 1]} ${item.month.slice(2, 4)}`,
     regular: Number(item.regular_paid),
+    purchase: Number(item.purchase_paid),
     trip: Number(item.trip_paid),
   }))
   const historyGroups = groupPayoutsByDate(history?.items)
@@ -232,6 +237,12 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                   />
                   <i
                     style={{
+                      background: PAYOUT_SERIES_COLORS.purchase,
+                      width: `${sharePercent(purchasePaid)}%`,
+                    }}
+                  />
+                  <i
+                    style={{
                       background: PAYOUT_SERIES_COLORS.trip,
                       width: `${sharePercent(tripPaid)}%`,
                     }}
@@ -244,6 +255,13 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                   </dt>
                   <dd>
                     {money(regularPaid)} · {sharePercent(regularPaid)}%
+                  </dd>
+                  <dt>
+                    <i style={{ background: PAYOUT_SERIES_COLORS.purchase }} />
+                    {tr('workerPayoutsPurchases')}
+                  </dt>
+                  <dd>
+                    {money(purchasePaid)} · {sharePercent(purchasePaid)}%
                   </dd>
                   <dt>
                     <i style={{ background: PAYOUT_SERIES_COLORS.trip }} />
@@ -274,9 +292,11 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                     <thead>
                       <tr>
                         <th>{tr('workerPayoutMonthly')}</th>
-                        <th className="worker-statistics-number">{tr('workerPayoutsEarned')}</th>
-                        <th className="worker-statistics-number">{tr('workerPayoutsRegular')}</th>
+                        <th className="worker-statistics-number">{tr('workerPayoutsMoney')}</th>
+                        <th className="worker-statistics-number">{tr('workerPayoutsPurchases')}</th>
+                        <th className="worker-statistics-number">{tr('workerPayoutsNonTrip')}</th>
                         <th className="worker-statistics-number">{tr('workerPayoutsTrips')}</th>
+                        <th className="worker-statistics-number">{tr('workerPayoutsReceived')}</th>
                         <th className="worker-statistics-number worker-statistics-hint">
                           {tr('workerPayoutsLodgingNote')}
                         </th>
@@ -286,7 +306,7 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                     <tbody>
                       {months.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="worker-statistics-hint">
+                          <td colSpan={8} className="worker-statistics-hint">
                             {tr('workerPayoutsEmpty')}
                           </td>
                         </tr>
@@ -306,11 +326,13 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                             }}
                           >
                             <td className="worker-statistics-month">{monthLabel(item.month)}</td>
+                            <td className="worker-statistics-number">{money(item.money_paid)}</td>
+                            <td className="worker-statistics-number">{money(item.purchase_paid)}</td>
+                            <td className="worker-statistics-number">{money(payoutNonTrip(item))}</td>
+                            <td className="worker-statistics-number">{money(item.trip_paid)}</td>
                             <td className="worker-statistics-number">
                               <strong>{money(payoutEarned(item))}</strong>
                             </td>
-                            <td className="worker-statistics-number">{money(item.regular_paid)}</td>
-                            <td className="worker-statistics-number">{money(item.trip_paid)}</td>
                             <td className="worker-statistics-number worker-statistics-hint">
                               {money(item.lodging_paid)}
                             </td>
@@ -323,9 +345,11 @@ export default function WorkerStatisticsModal({ worker, onClose, onEdit }) {
                       <tfoot>
                         <tr>
                           <th>{tr('total')}</th>
-                          <th className="worker-statistics-number">{money(totalPaid)}</th>
-                          <th className="worker-statistics-number">{money(regularPaid)}</th>
+                          <th className="worker-statistics-number">{money(moneyPaid)}</th>
+                          <th className="worker-statistics-number">{money(purchasePaid)}</th>
+                          <th className="worker-statistics-number">{money(nonTripPaid)}</th>
                           <th className="worker-statistics-number">{money(tripPaid)}</th>
+                          <th className="worker-statistics-number">{money(totalPaid)}</th>
                           <th className="worker-statistics-number worker-statistics-hint">
                             {money(lodgingPaid)}
                           </th>

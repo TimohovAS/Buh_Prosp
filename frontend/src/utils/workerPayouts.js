@@ -4,8 +4,9 @@
 import { tr } from '../i18n'
 import { formatMoney2 } from './formatters'
 
-// Пара проверена на различимость при дальтонизме на тёмной подложке карточки.
-export const PAYOUT_SERIES_COLORS = { regular: '#3b82f6', trip: '#d97706' }
+// Тройка проверена на различимость при дальтонизме на тёмной подложке карточки;
+// порядок сегментов и подписи рядом несут то же самое и без цвета.
+export const PAYOUT_SERIES_COLORS = { regular: '#3b82f6', purchase: '#a855f7', trip: '#d97706' }
 
 export const TRIP_PAYOUT_TYPES = new Set(['trip_advance', 'trip_final'])
 
@@ -31,10 +32,16 @@ export const payoutMoney = (value) => `${formatMoney2(value)} RSD`
 export const sumPayoutMoney = (items, field) =>
   items.reduce((sum, item) => sum + Math.round(Number(item[field]) * 100), 0) / 100
 
-// Заработок работника — обычная оплата и командировочные без стоимости жилья:
-// гостиницу оплачивают отелю, и в заработке она не участвует.
+const cents = (value) => Math.round(Number(value || 0) * 100)
+
+// Доход работника вне командировок: обычная выплата плюс купленное ему в счёт
+// зарплаты — деньгами оно не выдавалось, но получено им же.
+export const payoutNonTrip = (item) => (cents(item.regular_paid) + cents(item.purchase_paid)) / 100
+
+// Заработок работника — доход без командировок и командировочные без стоимости
+// жилья: гостиницу оплачивают отелю, и в заработке она не участвует.
 export const payoutEarned = (item) =>
-  (Math.round(Number(item.regular_paid) * 100) + Math.round(Number(item.trip_paid) * 100)) / 100
+  (cents(item.regular_paid) + cents(item.purchase_paid) + cents(item.trip_paid)) / 100
 
 export const sumPayoutEarned = (items) => items.reduce((sum, item) => sum + payoutEarned(item), 0)
 
@@ -63,6 +70,12 @@ export const payoutChartSeries = () => [
     key: 'regular',
     name: tr('workerPayoutsRegular'),
     color: PAYOUT_SERIES_COLORS.regular,
+    stack: 'paid',
+  },
+  {
+    key: 'purchase',
+    name: tr('workerPayoutsPurchases'),
+    color: PAYOUT_SERIES_COLORS.purchase,
     stack: 'paid',
   },
   {

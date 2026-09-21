@@ -2009,27 +2009,35 @@ class WorkerPayoutResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class WorkerPayoutSummary(BaseModel):
+class WorkerPayoutAmounts(BaseModel):
+    """Разбивка выданного работнику.
+
+    Стоимость жилья оплачивают гостинице, в заработок работника она не входит и
+    показывается справочно, поэтому:
+    total_paid = money_paid + purchase_paid + lodging_paid — вся выданная сумма;
+    money_paid + purchase_paid = полученное работником, два разреза этого дохода:
+    по форме выдачи — money_paid (деньгами) и purchase_paid (покупками),
+    по виду — regular_paid + purchase_paid (без командировок) и trip_paid.
+    """
+
+    total_paid: Decimal
+    money_paid: Decimal
+    purchase_paid: Decimal
+    regular_paid: Decimal
+    trip_paid: Decimal
+    lodging_paid: Decimal
+    payout_count: int
+
+
+class WorkerPayoutSummary(WorkerPayoutAmounts):
     worker_id: int
     worker_name: str
     is_active: bool
-    total_paid: Decimal
-    # trip_paid — без стоимости жилья, она вынесена в lodging_paid;
-    # regular_paid + trip_paid + lodging_paid = total_paid.
-    regular_paid: Decimal
-    trip_paid: Decimal
-    lodging_paid: Decimal
-    payout_count: int
     last_payout_date: DateType
 
 
-class WorkerPayoutMonthlySummary(BaseModel):
+class WorkerPayoutMonthlySummary(WorkerPayoutAmounts):
     month: str
-    total_paid: Decimal
-    regular_paid: Decimal
-    trip_paid: Decimal
-    lodging_paid: Decimal
-    payout_count: int
 
 
 class WorkerPayoutReport(BaseModel):

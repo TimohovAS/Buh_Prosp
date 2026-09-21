@@ -42,7 +42,8 @@ from backend.state_machine import initialize_expense_status
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
-PAYOUT_TYPES = ("regular", "weekly", "monthly", "purchase", "trip_advance", "trip_final")
+PAYOUT_TYPE_PURCHASE = "purchase"
+PAYOUT_TYPES = ("regular", "weekly", "monthly", PAYOUT_TYPE_PURCHASE, "trip_advance", "trip_final")
 
 
 def _dec(value) -> Decimal:
@@ -180,7 +181,7 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         gross_amount = weekly_rate
     elif payout_type == "regular":
         gross_amount = work_days * regular_day_rate
-    elif payout_type == "purchase":
+    elif payout_type == PAYOUT_TYPE_PURCHASE:
         # Покупка в счёт зарплаты: ставок за ней нет, начислено равно потраченному.
         gross_amount = _dec(data.cash_paid_amount)
     else:
@@ -427,9 +428,14 @@ async def get_worker_payout_report(
         (carries_lodging, WorkerPayout.lodging_amount),
         else_=0,
     )
+    # Покупка в счёт зарплаты — это тоже доход работника, но выданный не деньгами,
+    # поэтому в отчёте она отделена и от обычной выплаты, и от командировочных.
+    is_purchase = WorkerPayout.payout_type == PAYOUT_TYPE_PURCHASE
     amount_columns = [
         func.sum(WorkerPayout.cash_paid_amount).label("total_paid"),
-        func.sum(case((~is_trip, WorkerPayout.cash_paid_amount), else_=0)).label("regular_paid"),
+        func.sum(case((~is_purchase, WorkerPayout.cash_paid_amount - lodging_cash), else_=0)).label("money_paid"),
+        func.sum(case((is_purchase, WorkerPayout.cash_paid_amount), else_=0)).label("purchase_paid"),
+        func.sum(case((~is_trip & ~is_purchase, WorkerPayout.cash_paid_amount), else_=0)).label("regular_paid"),
         func.sum(case((is_trip, WorkerPayout.cash_paid_amount - lodging_cash), else_=0)).label("trip_paid"),
         func.sum(lodging_cash).label("lodging_paid"),
         func.count(WorkerPayout.id).label("payout_count"),
@@ -468,6 +474,8 @@ async def get_worker_payout_report(
         WorkerPayoutMonthlySummary(
             month=f"{int(row.year):04d}-{int(row.month):02d}",
             total_paid=row.total_paid,
+            money_paid=row.money_paid,
+            purchase_paid=row.purchase_paid,
             regular_paid=row.regular_paid,
             trip_paid=row.trip_paid,
             lodging_paid=row.lodging_paid,

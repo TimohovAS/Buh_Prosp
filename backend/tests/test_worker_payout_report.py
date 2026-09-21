@@ -84,6 +84,8 @@ async def test_report_counts_actual_cash_once_and_keeps_archived_workers(report_
         "worker_name": "Same name",
         "is_active": True,
         "total_paid": 10301.10,
+        "money_paid": 10301.10,
+        "purchase_paid": 0,
         "regular_paid": 300.33,
         "trip_paid": 10000.77,
         "lodging_paid": 0,
@@ -116,6 +118,8 @@ async def test_report_filters_by_payment_date_inclusively_and_worker(report_clie
         {
             "month": "2026-08",
             "total_paid": 30.03,
+            "money_paid": 30.03,
+            "purchase_paid": 0,
             "regular_paid": 30.03,
             "trip_paid": 0,
             "lodging_paid": 0,
@@ -206,6 +210,8 @@ async def test_monthly_worker_statistics_separate_years_and_trip_cash(report_cli
         {
             "month": "2026-09",
             "total_paid": 700.07,
+            "money_paid": 700.07,
+            "purchase_paid": 0,
             "regular_paid": 0,
             "trip_paid": 700.07,
             "lodging_paid": 0,
@@ -214,6 +220,8 @@ async def test_monthly_worker_statistics_separate_years_and_trip_cash(report_cli
         {
             "month": "2026-08",
             "total_paid": 500.05,
+            "money_paid": 500.05,
+            "purchase_paid": 0,
             "regular_paid": 200.02,
             "trip_paid": 300.03,
             "lodging_paid": 0,
@@ -222,6 +230,8 @@ async def test_monthly_worker_statistics_separate_years_and_trip_cash(report_cli
         {
             "month": "2025-08",
             "total_paid": 100.01,
+            "money_paid": 100.01,
+            "purchase_paid": 0,
             "regular_paid": 100.01,
             "trip_paid": 0,
             "lodging_paid": 0,
@@ -295,6 +305,8 @@ async def test_lodging_is_excluded_from_trip_payouts_once_per_trip(report_client
         {
             "month": "2026-08",
             "total_paid": 29500,
+            "money_paid": 24000,
+            "purchase_paid": 0,
             "regular_paid": 0,
             "trip_paid": 24000,
             "lodging_paid": 5500,
@@ -308,3 +320,44 @@ async def test_report_requires_authentication():
     app.include_router(router, prefix="/api")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/workers/payouts/report")).status_code == 401
+
+
+async def test_report_splits_money_purchases_and_trips(report_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    await add_payout(db_session, worker, "80000", date(2026, 9, 5), "monthly")
+    await add_payout(db_session, worker, "20000", date(2026, 9, 18), "purchase")
+    await add_payout(
+        db_session,
+        worker,
+        "33500",
+        date(2026, 9, 20),
+        "trip_advance",
+        gross_amount=Decimal("33500"),
+        lodging_amount=Decimal("6000"),
+        period_start=date(2026, 9, 20),
+        period_end=date(2026, 9, 24),
+    )
+
+    report = (await report_client.get("/api/workers/payouts/report")).json()
+    row = report["workers"][0]
+    month = report["months"][0]
+
+    assert row["money_paid"] == 107500
+    assert row["purchase_paid"] == 20000
+    assert row["regular_paid"] == 80000
+    assert row["trip_paid"] == 27500
+    assert row["lodging_paid"] == 6000
+    assert row["total_paid"] == 133500
+    # Полученное работником — без стоимости жилья, и складывается двумя способами.
+    received = row["money_paid"] + row["purchase_paid"]
+    assert received == 127500
+    assert received == row["regular_paid"] + row["purchase_paid"] + row["trip_paid"]
+    assert received + row["lodging_paid"] == row["total_paid"]
+    assert {key: month[key] for key in ("money_paid", "purchase_paid", "regular_paid", "trip_paid")} == {
+        "money_paid": 107500,
+        "purchase_paid": 20000,
+        "regular_paid": 80000,
+        "trip_paid": 27500,
+    }
