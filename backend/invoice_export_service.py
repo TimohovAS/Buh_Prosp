@@ -132,7 +132,10 @@ def _line_items(income: Income) -> list[IncomeItem]:
     return [fallback]
 
 
-def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Client | None = None) -> bytes:
+def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Client) -> bytes:
+    if client is None:
+        raise ValueError("Invoice client is required for eFaktura export")
+
     currency = income.currency or "RSD"
     items = _line_items(income)
     line_total = sum((to_decimal(item.total_amount or 0) for item in items), Decimal("0"))
@@ -182,10 +185,10 @@ def build_income_efaktura_xml(income: Income, enterprise: Enterprise, client: Cl
         enterprise.maticni_broj,
         enterprise.address,
     )
-    customer_name = client.name if client else income.client_name
-    customer_pib = client.pib if client else None
-    customer_registration_number = client.maticni_broj if client else None
-    customer_address = client.address if client else None
+    customer_name = client.name
+    customer_pib = client.pib
+    customer_registration_number = client.maticni_broj
+    customer_address = client.address
     _party(
         invoice,
         "AccountingCustomerParty",

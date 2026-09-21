@@ -276,7 +276,6 @@ def parse_efaktura_invoice(xml_bytes: bytes, file_name: str) -> dict:
         "due_date": due_date,
         "amount_rsd": amount_rsd,
         "currency": currency,
-        "client_name": customer_name,
         "customer_name": customer_name,
         "customer_pib": customer_pib,
         "supplier_name": supplier_name,

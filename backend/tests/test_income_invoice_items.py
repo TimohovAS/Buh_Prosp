@@ -58,7 +58,6 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         income = Income(
             issued_date=date(2026, 6, 26),
             invoice_number="0001-2026",
-            client_name="Buyer",
             amount_rsd=Decimal("1200"),
             currency="RSD",
             efaktura_contract_number="UG-2026-15",
@@ -177,7 +176,6 @@ class IncomeInvoiceItemsTest(unittest.TestCase):
         income = Income(
             issued_date=date(2026, 7, 13),
             invoice_number="0031-2026",
-            client_name="Buyer",
             amount_rsd=Decimal("500000"),
             currency="RSD",
         )

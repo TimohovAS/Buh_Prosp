@@ -1056,7 +1056,6 @@ async def create_invoice_from_entries(
         invoice_number=invoice_number,
         invoice_year=invoice_year,
         client_id=project.client_id,
-        client_name=project.client.name,
         contract_id=contract.id if contract is not None else None,
         contract_payment_type=data.contract_payment_type if contract is not None else None,
         description=description,

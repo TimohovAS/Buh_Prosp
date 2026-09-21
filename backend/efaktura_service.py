@@ -581,12 +581,7 @@ async def import_efaktura_documents(
             )
             continue
 
-        matched_client = None
-        if parsed.get("customer_pib"):
-            matched_client = clients_by_pib.get(parsed["customer_pib"])
-        if matched_client is None and parsed.get("client_name"):
-            matched_client = clients_by_name.get(normalize_name(parsed["client_name"]))
-
+        outgoing_client: Client | None = None
         try:
             async with db.begin_nested():
                 if direction == "incoming":
@@ -674,12 +669,34 @@ async def import_efaktura_documents(
                     )
                     continue
 
+                customer_name = " ".join(str(parsed.get("customer_name") or "").split()).strip()
+                customer_pib = normalize_pib(parsed.get("customer_pib"))
+                if not customer_name:
+                    raise ValueError("Outgoing eFaktura has no customer name")
+
+                if customer_pib:
+                    outgoing_client = clients_by_pib.get(customer_pib)
+                if outgoing_client is None:
+                    name_key = normalize_name(customer_name)
+                    name_match = clients_by_name.get(name_key) if name_key else None
+                    name_match_pib = normalize_pib(name_match.pib) if name_match else None
+                    if name_match is not None and not (
+                        customer_pib and name_match_pib and customer_pib != name_match_pib
+                    ):
+                        outgoing_client = name_match
+
+                if outgoing_client is None:
+                    outgoing_client = Client(name=customer_name, pib=customer_pib)
+                    db.add(outgoing_client)
+                    await db.flush()
+                elif customer_pib and not normalize_pib(outgoing_client.pib):
+                    outgoing_client.pib = customer_pib
+
                 income = Income(
                     issued_date=parsed["issued_date"],
                     invoice_number=normalized_invoice_number,
                     invoice_year=invoice_year,
-                    client_id=matched_client.id if matched_client else None,
-                    client_name=matched_client.name if matched_client else parsed["client_name"],
+                    client_id=outgoing_client.id,
                     description=parsed["description"],
                     amount_rsd=parsed["amount_rsd"],
                     currency=parsed["currency"],
@@ -723,10 +740,18 @@ async def import_efaktura_documents(
                         "document_type": "income",
                         "income_id": income.id,
                         "invoice_number": income.invoice_number,
-                        "counterparty_name": income.client_name,
+                        "counterparty_name": outgoing_client.name,
                     }
                 )
                 created_income_count += 1
+
+            if outgoing_client is not None:
+                pib_key = normalize_pib(outgoing_client.pib)
+                if pib_key:
+                    clients_by_pib[pib_key] = outgoing_client
+                name_key = normalize_name(outgoing_client.name)
+                if name_key:
+                    clients_by_name.setdefault(name_key, outgoing_client)
         except Exception as exc:
             errors.append(
                 {

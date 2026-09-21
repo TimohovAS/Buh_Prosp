@@ -638,8 +638,7 @@ class IncomeBase(BaseModel):
     due_date: Optional[DateType] = None  # Valuta / срок оплаты
     invoice_number: str
     invoice_year: Optional[int] = None
-    client_id: Optional[int] = None
-    client_name: Optional[str] = None
+    client_id: int
     contract_id: Optional[int] = None
     contract_payment_type: Optional[str] = None  # advance, intermediate, closing
     description: Optional[str] = None
@@ -707,7 +706,6 @@ class IncomeUpdate(BaseModel):
     invoice_year: Optional[int] = None
     invoice_number: Optional[str] = None
     client_id: Optional[int] = None
-    client_name: Optional[str] = None
     contract_id: Optional[int] = None
     contract_payment_type: Optional[str] = None
     description: Optional[str] = None
@@ -773,6 +771,7 @@ class BulkAssignProject(BaseModel):
 
 class IncomeResponse(IncomeBase):
     id: int
+    client_name: Optional[str] = None
     is_paid: bool
     paid_amount: Decimal = Decimal("0.00")
     created_at: datetime

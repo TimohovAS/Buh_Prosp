@@ -17,29 +17,35 @@ from backend.models import BankTransaction, Client, Income, IncomingInvoice, Pur
 def test_matches_counterparty_name_accepts_exact_and_substring_matches():
     tx = BankTransaction(counterparty_name="ACME DOO BEOGRAD")
 
-    assert _matches_counterparty_name(tx, Income(client_name="acme doo beograd")) is True
-    assert _matches_counterparty_name(tx, Income(client_name="ACME DOO")) is True
+    assert _matches_counterparty_name(tx, Income(client=Client(name="acme doo beograd"))) is True
+    assert _matches_counterparty_name(tx, Income(client=Client(name="ACME DOO"))) is True
 
 
 def test_matches_counterparty_name_accepts_two_common_words_from_first_four():
     tx = BankTransaction(counterparty_name="ALFA BETA GAMMA DELTA EPSILON")
-    income = Income(client_name="zz alfa beta yy")
+    income = Income(client=Client(name="zz alfa beta yy"))
 
     assert _matches_counterparty_name(tx, income) is True
 
 
 def test_matches_counterparty_name_rejects_empty_or_weak_names():
-    assert _matches_counterparty_name(BankTransaction(counterparty_name=None), Income(client_name="Client")) is False
-    assert _matches_counterparty_name(BankTransaction(counterparty_name="Client"), Income(client_name=None)) is False
     assert (
-        _matches_counterparty_name(BankTransaction(counterparty_name="Only One"), Income(client_name="Only Other"))
+        _matches_counterparty_name(BankTransaction(counterparty_name=None), Income(client=Client(name="Client")))
+        is False
+    )
+    assert _matches_counterparty_name(BankTransaction(counterparty_name="Client"), Income(client=None)) is False
+    assert (
+        _matches_counterparty_name(
+            BankTransaction(counterparty_name="Only One"),
+            Income(client=Client(name="Only Other")),
+        )
         is False
     )
 
 
 def test_matches_counterparty_name_ignores_generic_legal_and_trade_words():
     tx = BankTransaction(counterparty_name="S.B.H.-SO TRADE DOO INDUSTRIJSKA ZONA")
-    income = Income(client_name="JELA TRADE DOO")
+    income = Income(client=Client(name="JELA TRADE DOO"))
 
     assert _matches_counterparty_name(tx, income) is False
 

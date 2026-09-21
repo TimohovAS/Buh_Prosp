@@ -77,6 +77,22 @@ async def test_update_income_keeps_existing_completed_project(
     assert updated.description == "Corrected"
 
 
+async def test_update_income_returns_name_from_new_client_link(db_session, make_income, make_client):
+    original_client = await make_client(db_session, name="Original client")
+    replacement_client = await make_client(db_session, name="Replacement client")
+    income = await make_income(db_session, invoice_number="INV-CLIENT-LINK", client_id=original_client.id)
+
+    updated = await update_income(
+        income.id,
+        IncomeUpdate(client_id=replacement_client.id),
+        db_session,
+        SimpleNamespace(id=1),
+    )
+
+    assert updated.client_id == replacement_client.id
+    assert updated.client_name == "Replacement client"
+
+
 @pytest.mark.parametrize(
     ("stored", "entered"),
     [

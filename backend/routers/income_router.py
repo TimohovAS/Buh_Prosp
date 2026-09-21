@@ -210,8 +210,7 @@ def _income_items_match(income: Income, items: list[IncomeItemCreate]) -> bool:
 
 def _income_response(income: Income) -> IncomeResponse:
     data = IncomeResponse.model_validate(income).model_dump()
-    if income.client:
-        data["client_name"] = income.client.name
+    data["client_name"] = income.client.name if income.client else None
     return IncomeResponse(**data)
 
 
@@ -286,12 +285,9 @@ async def create_income(
     current_user: User = Depends(require_edit_access),
 ):
     """Добавить запись дохода (КПО). Номер счёта: авто (по году) или передан; уникальность per year."""
-    client_name = data.client_name
-    if data.client_id:
-        r = await db.execute(select(Client).where(Client.id == data.client_id))
-        client = r.scalar_one_or_none()
-        if client:
-            client_name = client_name or client.name
+    r = await db.execute(select(Client).where(Client.id == data.client_id))
+    if r.scalar_one_or_none() is None:
+        raise HTTPException(404, "Клиент не найден")
 
     year = data.invoice_year or (data.issued_date.year if data.issued_date else None) or date.today().year
     invoice_number = (data.invoice_number or "").strip() if data.invoice_number is not None else ""
@@ -326,7 +322,6 @@ async def create_income(
         invoice_number=invoice_number,
         invoice_year=invoice_year_val,
         client_id=data.client_id,
-        client_name=client_name,
         contract_id=contract_id,
         contract_payment_type=(data.contract_payment_type or None) if contract_id is not None else None,
         description=data.description,
@@ -501,7 +496,7 @@ async def income_item_suggestions(
                     invoice_id=income.id,
                     invoice_number=income.invoice_number,
                     issued_date=income.issued_date,
-                    client_name=income.client.name if income.client else income.client_name,
+                    client_name=income.client.name if income.client else None,
                     project_name=income.project.name if income.project else None,
                 )
             )
@@ -647,6 +642,12 @@ async def update_income(
         raise HTTPException(400, "Cancelled income cannot be updated")
     requested_items = data.items if "items" in data.model_fields_set else None
     dump = data.model_dump(exclude_unset=True, exclude={"items"})
+    if "client_id" in dump:
+        if dump["client_id"] is None:
+            raise HTTPException(400, "Клиент обязателен")
+        client_result = await db.execute(select(Client.id).where(Client.id == dump["client_id"]))
+        if client_result.scalar_one_or_none() is None:
+            raise HTTPException(404, "Клиент не найден")
     if income.work_diary_allocations:
         if requested_items is not None:
             if not _income_items_match(income, requested_items):

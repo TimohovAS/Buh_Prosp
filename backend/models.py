@@ -703,8 +703,7 @@ class Income(Base):
     issued_date = Column("date", Date, nullable=False)  # дата счёта (колонка в БД: date)
     invoice_number = Column(String(50), nullable=False)
     invoice_year = Column(Integer, nullable=True)  # Период счёта (год): нумерация NNNN-YYYY сбрасывается по годам
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
-    client_name = Column(String(200))  # На случай если клиент не в справочнике
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     description = Column(String(500))  # Основание платежа / описание услуги
     amount_rsd = Column(Numeric(14, 2), nullable=False)
     currency = Column(String(5), default="RSD")

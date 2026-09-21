@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.database import Base
-from backend.models import BankTransaction, Expense, Income, Project
+from backend.models import BankTransaction, Client, Expense, Income, Project
 
 TEST_NOW = datetime(2026, 7, 6, 9, 0, 0)
 TEST_DATE = date(2026, 7, 6)
@@ -51,7 +51,22 @@ def make_unassigned_project(make_project):
 
 
 @pytest.fixture
-def make_income():
+def make_client():
+    counter = 0
+
+    async def _make_client(db, *, name=None, pib=None):
+        nonlocal counter
+        counter += 1
+        client = Client(name=name or f"Client {counter}", pib=pib)
+        db.add(client)
+        await db.flush()
+        return client
+
+    return _make_client
+
+
+@pytest.fixture
+def make_income(make_client):
     async def _make_income(
         db,
         *,
@@ -64,11 +79,13 @@ def make_income():
         client_id=None,
         project_id=None,
     ):
+        if client_id is None:
+            client = await make_client(db, name=client_name)
+            client_id = client.id
         income = Income(
             issued_date=issued_date,
             invoice_number=invoice_number,
             invoice_year=issued_date.year,
-            client_name=client_name,
             client_id=client_id,
             amount_rsd=Decimal(str(amount)),
             currency="RSD",

@@ -633,11 +633,10 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
     receivables_q = (
         select(
             Income.client_id,
-            func.coalesce(Income.client_name, "").label("client_name_fallback"),
             func.sum(Income.amount_rsd - Income.paid_amount).label("receivable"),
         )
         .where(Income.status.in_(["issued", "partial"]))
-        .group_by(Income.client_id, Income.client_name)
+        .group_by(Income.client_id)
     )
     receivables_result = await db.execute(receivables_q)
     receivables_rows = receivables_result.all()
@@ -696,7 +695,7 @@ async def get_counterparty_balances(db: AsyncSession) -> list[dict]:
         )
 
     for row in receivables_rows:
-        name = client_names.get(row.client_id, row.client_name_fallback) if row.client_id else row.client_name_fallback
+        name = client_names.get(row.client_id, "—")
         entry = balance_entry(row.client_id, name)
         entry["document_receivables"] += to_decimal(row.receivable or ZERO_DECIMAL)
 

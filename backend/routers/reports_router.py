@@ -72,7 +72,7 @@ def _split_kpo_amounts(income: Income) -> tuple[Decimal, Decimal]:
 
 
 def _build_kpo_description(income: Income) -> str:
-    client = income.client_name or (income.client.name if income.client else "") or "-"
+    client = (income.client.name if income.client else "") or "-"
     parts = [
         f"Racun {income.invoice_number}",
         client,

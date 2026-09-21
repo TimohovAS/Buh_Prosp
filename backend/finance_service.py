@@ -11,6 +11,7 @@ from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.date_utils import coerce_date
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import (
+    Client,
     Income,
     Expense,
     Enterprise,
@@ -524,7 +525,7 @@ async def get_accounts_receivable(db: AsyncSession, as_of: Optional[date] = None
                 "income_id": income.id,
                 "client_id": income.client_id,
                 "invoice_number": income.invoice_number,
-                "client_name": income.client_name or (income.client.name if income.client else None),
+                "client_name": income.client.name if income.client else None,
                 "issued_date": income.issued_date.isoformat(),
                 "due_date": due_date.isoformat() if due_date else None,
                 "amount": remaining,
@@ -979,11 +980,13 @@ async def get_project_movements(
                 Income.id,
                 Income.issued_date,
                 Income.invoice_number,
-                Income.client_name,
+                Client.name,
                 Income.description,
                 Income.amount_rsd,
                 Income.status,
-            ).where(
+            )
+            .join(Client, Client.id == Income.client_id)
+            .where(
                 and_(
                     Income.project_id == project_id,
                     Income.status != "cancelled",

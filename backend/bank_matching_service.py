@@ -80,7 +80,7 @@ def _normalize_party_tokens(value: str | None) -> list[str]:
 
 
 def _matches_counterparty_name(tx: BankTransaction, income: Income) -> bool:
-    raw_name = income.client_name or (income.client.name if income.client else "")
+    raw_name = income.client.name if income.client else ""
     transaction_tokens = set(_normalize_party_tokens(tx.counterparty_name))
     client_tokens = set(_normalize_party_tokens(raw_name))
     if not transaction_tokens or not client_tokens:
@@ -775,7 +775,7 @@ async def _suggest_income_matches(
     ) -> dict:
         total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
         paid = total - remaining
-        client_label = income.client_name or (income.client.name if income.client else "")
+        client_label = income.client.name if income.client else ""
         return {
             "id": income.id,
             "type": "income",
@@ -891,7 +891,7 @@ def _build_income_allocation_line(
     allocated_amount,
     available_amount,
 ) -> dict:
-    client_label = income.client_name or (income.client.name if income.client else "")
+    client_label = income.client.name if income.client else ""
     project = getattr(income, "project", None)
     total = to_decimal(income.amount_rsd or ZERO_DECIMAL)
     available = to_decimal(available_amount or ZERO_DECIMAL)
