@@ -1179,6 +1179,9 @@ const ru = {
   workerPayoutAttachEntry: 'Операция',
   workerPayoutAttachSubmit: 'Привязать',
   workerPayoutRetype: 'Изменить тип выплаты',
+  workerPayoutUnlink: 'Отвязать от работника',
+  workerPayoutUnlinkConfirm:
+    'Убрать эту запись из дохода работника? Сам расход и операция в кассе останутся на месте.',
   workerPayoutRetypeHint:
     'Меняются только работник, тип выплаты и период. Дата, сумма и описание операции остаются прежними.',
   workerPayoutCash: 'К выдаче',

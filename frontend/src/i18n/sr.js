@@ -1173,6 +1173,9 @@ const sr = {
   workerPayoutAttachEntry: 'Операција',
   workerPayoutAttachSubmit: 'Повежи',
   workerPayoutRetype: 'Измени тип исплате',
+  workerPayoutUnlink: 'Одвежи од радника',
+  workerPayoutUnlinkConfirm:
+    'Уклонити овај запис из прихода радника? Сам трошак и операција у благајни остају.',
   workerPayoutRetypeHint:
     'Мењају се само радник, тип исплате и период. Датум, износ и опис операције остају исти.',
   workerPayoutCash: 'За исплату',

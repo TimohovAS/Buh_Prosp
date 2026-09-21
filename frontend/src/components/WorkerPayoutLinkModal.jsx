@@ -120,6 +120,20 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
     }
   }
 
+  const handleUnlink = async () => {
+    if (!payoutId || !confirm(tr('workerPayoutUnlinkConfirm'))) return
+    setSaving(true)
+    setError('')
+    try {
+      await api.workers.unlinkPayout(payoutId)
+      onSaved()
+    } catch (unlinkError) {
+      setError(unlinkError.message || tr('loadError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const summary = target
     ? `${target.date || UI_DASH} ${UI_DASH} ${fmtAmount(target.amount)} ${target.currency || 'RSD'} ${UI_DASH} ${
         target.description || ''
@@ -188,6 +202,17 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
           />
         </div>
         <div className="modal-actions">
+          {payoutId ? (
+            <button
+              type="button"
+              className="btn btn-danger"
+              style={{ marginRight: 'auto' }}
+              disabled={saving || loading}
+              onClick={handleUnlink}
+            >
+              {tr('workerPayoutUnlink')}
+            </button>
+          ) : null}
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             {tr('cancel')}
           </button>

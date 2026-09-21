@@ -17,6 +17,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
+from backend.expense_service import is_payout_currency, unlink_worker_payout
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
 from backend.planned_expenses_service import sync_worker_payout_planned_payment, sync_worker_salary_plan
 from backend.schemas import (
@@ -230,9 +231,13 @@ async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> 
     expense = result.scalar_one_or_none()
     if not expense:
         raise HTTPException(404, "Linked cash expense was not found")
-    # Сторнированная трата в доход работнику не идёт: деньги вернулись.
-    if expense.status == "reversed" or expense.reversal_of_id:
+    # Сторно в доход работнику не идёт: деньги вернулись. Это и сама сторнирующая
+    # запись (reversal_of_id), и уже сторнированный оригинал (reversed_expense_id).
+    if expense.status == "reversed" or expense.reversal_of_id or expense.reversed_expense_id:
         raise HTTPException(400, "Reversed expenses cannot be linked to a worker")
+    # Валюты у выплаты нет, сумма считается динарами: чужая валюта исказила бы доход.
+    if not is_payout_currency(expense.currency) or (entry and not is_payout_currency(entry.currency)):
+        raise HTTPException(400, "Worker payouts are kept in RSD only")
     return entry, expense
 
 
@@ -704,6 +709,29 @@ async def update_worker_payout_link(
         payout=_serialize_worker_payout(payout),
         cash_entry=_serialize_cash_entry(entry, payout) if entry else None,
     )
+
+
+@router.delete("/payouts/{payout_id}/link")
+async def delete_worker_payout_link(
+    payout_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Отвязать расход от работника, оставив саму трату в учёте.
+
+    Нужно, когда привязали не того работника или не ту запись: выплата исчезает
+    из его дохода, а расход и операция в кассе остаются как были.
+    """
+    result = await db.execute(select(WorkerPayout).where(WorkerPayout.id == payout_id))
+    payout = result.scalar_one_or_none()
+    if not payout:
+        raise HTTPException(404, "Worker payout not found")
+
+    expense_id = payout.expense_id
+    cash_entry_id = payout.cash_entry_id
+    await unlink_worker_payout(db, payout)
+    await db.commit()
+    return {"ok": True, "expense_id": expense_id, "cash_entry_id": cash_entry_id}
 
 
 @router.patch("/payouts/{payout_id}", response_model=WorkerPayoutCreateResponse)

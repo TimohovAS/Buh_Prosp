@@ -9,8 +9,10 @@ from sqlalchemy import select
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
+from backend.expense_service import sync_worker_payout_from_expense, unlink_worker_payout_from_expense
 from backend.models import CashEntry, Expense, Worker, WorkerPayout
 from backend.routers.workers_router import router
+from backend.services import create_expense_reversal
 
 
 @pytest.fixture
@@ -410,3 +412,126 @@ async def test_purchase_type_can_be_changed_without_a_cash_entry(attach_client, 
     payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
     assert payout.payout_type == "monthly"
     assert Decimal(payout.cash_paid_amount) == Decimal("5260.00")
+
+
+async def attach_card_expense(client, db, *, currency="RSD", amount="5260.00", status="paid"):
+    worker = Worker(name="Andrei Timokhov")
+    db.add(worker)
+    await db.flush()
+    expense = await make_card_expense(db, amount=amount, status=status)
+    expense.currency = currency
+    await db.flush()
+    response = await client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+    return worker, expense, response
+
+
+async def test_attach_is_rejected_for_an_expense_that_was_already_reversed(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session)
+    await create_expense_reversal(db_session, expense)
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+
+    assert response.status_code == 400
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def test_reversing_an_expense_takes_it_out_of_the_worker_income(attach_client, db_session):
+    _, expense, response = await attach_card_expense(attach_client, db_session)
+    assert response.status_code == 200
+
+    await create_expense_reversal(db_session, expense)
+
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+    report = (await attach_client.get("/api/workers/payouts/report")).json()
+    assert Decimal(report["total_paid"]) == Decimal("0")
+
+
+async def test_editing_the_expense_moves_the_payout_with_it(attach_client, db_session):
+    _, expense, response = await attach_card_expense(attach_client, db_session)
+    assert response.status_code == 200
+
+    expense.amount = Decimal("7000.00")
+    expense.date = date(2026, 9, 25)
+    expense.paid_date = date(2026, 9, 25)
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert Decimal(payout.cash_paid_amount) == Decimal("7000.00")
+    assert Decimal(payout.gross_amount) == Decimal("7000.00")
+    assert payout.date == date(2026, 9, 25)
+    report = (await attach_client.get("/api/workers/payouts/report")).json()
+    assert Decimal(report["total_paid"]) == Decimal("7000.00")
+
+
+async def test_editing_the_expense_keeps_a_calculated_accrual_untouched(attach_client, db_session):
+    _, expense, _ = await attach_card_expense(attach_client, db_session)
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    # Посчитанная выплата: начислено по ставкам, выдана часть.
+    payout.gross_amount = Decimal("20000.00")
+    payout.remaining_amount = Decimal("14740.00")
+    await db_session.flush()
+
+    expense.amount = Decimal("6000.00")
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    assert Decimal(payout.gross_amount) == Decimal("20000.00")
+    assert Decimal(payout.cash_paid_amount) == Decimal("6000.00")
+    assert Decimal(payout.remaining_amount) == Decimal("14000.00")
+
+
+async def test_attach_is_rejected_for_a_foreign_currency_expense(attach_client, db_session):
+    _, _, response = await attach_card_expense(attach_client, db_session, currency="EUR")
+
+    assert response.status_code == 400
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def test_unlink_removes_the_payout_and_keeps_the_expense(attach_client, db_session):
+    _, expense, response = await attach_card_expense(attach_client, db_session)
+    payout_id = response.json()["payout"]["id"]
+
+    unlinked = await attach_client.delete(f"/api/workers/payouts/{payout_id}/link")
+
+    assert unlinked.status_code == 200
+    assert unlinked.json()["expense_id"] == expense.id
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+    kept = (await db_session.execute(select(Expense).where(Expense.id == expense.id))).scalar_one()
+    assert Decimal(kept.amount) == Decimal("5260.00")
+    assert kept.description == "Kartica 4025480007356295 : SALAS RUSTIK"
+
+
+async def test_unlink_returns_404_for_unknown_payout(attach_client, db_session):
+    assert (await attach_client.delete("/api/workers/payouts/999/link")).status_code == 404
+
+
+async def test_the_same_expense_can_be_attached_again_after_unlinking(attach_client, db_session):
+    worker, expense, response = await attach_card_expense(attach_client, db_session)
+    payout_id = response.json()["payout"]["id"]
+    await attach_client.delete(f"/api/workers/payouts/{payout_id}/link")
+
+    again = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+
+    assert again.status_code == 200
+
+
+async def test_deleting_the_expense_clears_the_payout(attach_client, db_session):
+    _, expense, _ = await attach_card_expense(attach_client, db_session)
+
+    removed = await unlink_worker_payout_from_expense(db_session, expense.id)
+
+    assert removed is True
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []

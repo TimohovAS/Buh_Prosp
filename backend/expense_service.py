@@ -11,7 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.cash_service import CASH_TRANSFER_SOURCE
 from backend.db_utils import get_contract_or_404, get_unassigned_project_id, resolve_project_contract_links
 from backend.decimal_utils import ZERO_DECIMAL, money_gt, to_decimal
-from backend.models import BankTransaction, CashEntry, Expense, ExpenseItem, MonthlyObligation
+from backend.models import (
+    BankTransaction,
+    CashEntry,
+    Expense,
+    ExpenseItem,
+    MonthlyObligation,
+    PlannedExpensePayment,
+    WorkerPayout,
+)
 from backend.schemas import ExpenseDuplicateGroup, ExpenseDuplicateItem
 from backend.state_machine import mark_expense_paid
 
@@ -338,6 +346,62 @@ async def sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> No
     cash_entry.currency = expense.currency or "RSD"
     cash_entry.description = (expense.description or "")[:500]
     cash_entry.note = expense.note
+
+
+PAYOUT_CURRENCY = "RSD"
+
+
+def is_payout_currency(value: Optional[str]) -> bool:
+    """В выплатах работникам валюты нет, суммы считаются динарами."""
+    return (value or PAYOUT_CURRENCY).strip().upper() == PAYOUT_CURRENCY
+
+
+async def get_expense_worker_payout(db: AsyncSession, expense_id: int) -> Optional[WorkerPayout]:
+    result = await db.execute(select(WorkerPayout).where(WorkerPayout.expense_id == expense_id))
+    return result.scalar_one_or_none()
+
+
+async def sync_worker_payout_from_expense(db: AsyncSession, expense: Expense) -> None:
+    """Держать выплату работнику в согласии с расходом, к которому она привязана.
+
+    Без этого правка суммы или даты расхода оставила бы статистику работника со
+    старыми цифрами.
+    """
+    payout = await get_expense_worker_payout(db, expense.id)
+    if not payout:
+        return
+
+    amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
+    # Начислено равно выданному только у привязанных записей, за которыми нет
+    # расчёта по ставкам. У посчитанной выплаты начисление менять нельзя:
+    # изменилась выданная сумма, а не заработок.
+    if to_decimal(payout.gross_amount or ZERO_DECIMAL) == to_decimal(payout.cash_paid_amount or ZERO_DECIMAL):
+        payout.gross_amount = amount
+    payout.cash_paid_amount = amount
+    remaining = (
+        to_decimal(payout.gross_amount or ZERO_DECIMAL) - to_decimal(payout.advance_paid or ZERO_DECIMAL) - amount
+    )
+    payout.remaining_amount = remaining if remaining > ZERO_DECIMAL else ZERO_DECIMAL
+    payout.date = expense.paid_date or expense.date
+    payout.project_id = expense.project_id
+    payout.contract_id = expense.contract_id
+    payout.category_id = expense.category_id
+
+
+async def unlink_worker_payout(db: AsyncSession, payout: WorkerPayout) -> None:
+    """Убрать выплату, оставив сам расход: связь с работником была ошибочной или отменена."""
+    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
+    await db.delete(payout)
+    await db.flush()
+
+
+async def unlink_worker_payout_from_expense(db: AsyncSession, expense_id: int) -> bool:
+    """Снять трату с дохода работника: при сторно и при удалении расхода."""
+    payout = await get_expense_worker_payout(db, expense_id)
+    if not payout:
+        return False
+    await unlink_worker_payout(db, payout)
+    return True
 
 
 async def sync_bank_transactions_from_expense(db: AsyncSession, expense: Expense) -> None:

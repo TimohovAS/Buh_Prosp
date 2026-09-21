@@ -23,12 +23,16 @@ from backend.expense_service import (
     expense_amount_from_items,
     expense_description_from_items,
     find_expense_duplicate_groups,
+    get_expense_worker_payout,
+    is_payout_currency,
     is_reversal_row,
     merge_duplicate_expenses,
     normalize_expense_items,
     resolve_expense_links,
     sync_bank_transactions_from_expense,
     sync_cash_entry_from_expense,
+    sync_worker_payout_from_expense,
+    unlink_worker_payout_from_expense,
 )
 from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import (
@@ -398,6 +402,11 @@ async def update_expense(
     dump["contract_id"] = desired_contract_id
     dump["is_tax_related"] = is_tax_related
 
+    if not is_payout_currency(dump.get("currency", expense.currency)) and await get_expense_worker_payout(
+        db, expense.id
+    ):
+        raise HTTPException(400, "Worker payouts are kept in RSD only")
+
     if item_payload is not None:
         try:
             expense_items = normalize_expense_items(item_payload)
@@ -416,6 +425,7 @@ async def update_expense(
         await sync_cash_entry_from_expense(db, expense)
     await sync_bank_transactions_from_expense(db, expense)
     await sync_receipt_project_from_expense(db, expense)
+    await sync_worker_payout_from_expense(db, expense)
 
     await db.flush()
     await db.commit()
@@ -425,6 +435,9 @@ async def update_expense(
 
 async def _admin_clear_expense_links(db: AsyncSession, expense_ids: list[int]) -> None:
     await db.execute(delete(ExpenseItem).where(ExpenseItem.expense_id.in_(expense_ids)))
+    # Выплата работнику без расхода повисла бы в его доходе навсегда.
+    for expense_id in expense_ids:
+        await unlink_worker_payout_from_expense(db, expense_id)
     await db.execute(
         update(Expense).where(Expense.reversed_expense_id.in_(expense_ids)).values(reversed_expense_id=None)
     )

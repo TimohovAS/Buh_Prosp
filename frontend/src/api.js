@@ -599,6 +599,7 @@ export const api = {
       request('/workers/payouts/attach', { method: 'POST', body: JSON.stringify(data) }),
     updatePayoutLink: (id, data) =>
       request(`/workers/payouts/${id}/link`, { method: 'PATCH', body: JSON.stringify(data) }),
+    unlinkPayout: (id) => request(`/workers/payouts/${id}/link`, { method: 'DELETE' }),
     updatePayout: (id, data) =>
       request(`/workers/payouts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
