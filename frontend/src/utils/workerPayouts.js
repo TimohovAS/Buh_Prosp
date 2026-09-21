@@ -13,6 +13,7 @@ const PAYOUT_LABELS = {
   regular: 'workerPayoutRegular',
   weekly: 'workerPayoutWeekly',
   monthly: 'workerPayoutMonthly',
+  purchase: 'workerPayoutPurchase',
   trip_advance: 'workerPayoutTripAdvance',
   trip_final: 'workerPayoutTripFinal',
 }
@@ -20,6 +21,7 @@ const PAYOUT_LABELS = {
 // Командировочные подписаны коротко: цвет метки и период работ рядом уже
 // говорят, что это командировка, а полное название разрывает строку на три.
 const PAYOUT_CHIP_LABELS = {
+  purchase: 'workerPayoutPurchaseShort',
   trip_advance: 'workerPayoutTripAdvanceShort',
   trip_final: 'workerPayoutTripFinalShort',
 }

@@ -40,6 +40,7 @@ from backend.models import (
     MonthlyObligation,
     PurchaseReceipt,
     User,
+    WorkerPayout,
 )
 from backend.schemas import (
     BulkAssignProject,
@@ -309,6 +310,16 @@ async def get_expense(
     response = ExpenseDetailResponse.model_validate(expense)
     if expense.purchase_receipt:
         response.receipt = PurchaseReceiptDetailResponse.model_validate(expense.purchase_receipt)
+    # Трата могла быть учтена как выплата работнику — например покупка ему
+    # чего-либо в счёт зарплаты.
+    result = await db.execute(
+        select(WorkerPayout).options(selectinload(WorkerPayout.worker)).where(WorkerPayout.expense_id == expense.id)
+    )
+    payout = result.scalar_one_or_none()
+    if payout:
+        response.worker_payout_id = payout.id
+        response.worker_payout_type = payout.payout_type
+        response.worker_payout_worker_name = getattr(payout.worker, "name", None)
     return response
 
 

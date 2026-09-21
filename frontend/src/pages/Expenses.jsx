@@ -13,6 +13,7 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
+import WorkerPayoutLinkModal from '../components/WorkerPayoutLinkModal'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
@@ -29,6 +30,7 @@ import { UI_DASH, formatMoney2 as fmtMoney, todayIso } from '../utils/formatters
 import { MONTHS } from '../utils/constants'
 import { downloadTextFile } from '../utils/download'
 import { amountSearchHay } from '../utils/searchUtils'
+import { payoutTypeLabel } from '../utils/workerPayouts'
 import { MODAL_CHAIN_CLOSE_EVENT, closeParentModalChain } from '../utils/modalNavigation'
 
 const DUPLICATE_DISMISS_STORAGE_KEY = 'expenses_duplicate_dismissed_v1'
@@ -185,6 +187,7 @@ export default function Expenses() {
   const [modal, setModal] = useState(null)
   const [modalAssign, setModalAssign] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
+  const [payoutLinkModal, setPayoutLinkModal] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [detailEditMode, setDetailEditMode] = useState(false)
@@ -515,6 +518,31 @@ export default function Expenses() {
       console.error(error)
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  // Покупка работнику в счёт зарплаты: расход остаётся расходом, но попадает
+  // в доход работника. Для наличных трат это же делается из кассы.
+  const openPayoutLink = (expense, payoutId = null) => {
+    setPayoutLinkModal({
+      payoutId,
+      expenseId: expense.id,
+      date: expense.date,
+      amount: expense.amount,
+      currency: expense.currency,
+      description: expense.description,
+      defaultPayoutType: expense.source === 'cash' ? 'regular' : 'purchase',
+    })
+  }
+
+  const handlePayoutLinkSaved = async () => {
+    const expenseId = payoutLinkModal?.expenseId
+    setPayoutLinkModal(null)
+    if (!expenseId) return
+    try {
+      setDetailModal(await api.expenses.get(expenseId))
+    } catch (error) {
+      setDetailError(error.message || tr('loadError'))
     }
   }
 
@@ -1282,6 +1310,16 @@ export default function Expenses() {
                 <span className="record-field-label">{tr('source')}</span>
                 <span className="record-field-value">{detailModal.source || UI_DASH}</span>
               </div>
+              {detailModal.worker_payout_id ? (
+                <div className="record-field">
+                  <span className="record-field-label">{tr('workerPayoutCreateTitle')}</span>
+                  <span className="record-field-value">
+                    {`${detailModal.worker_payout_worker_name || UI_DASH} ${UI_DASH} ${payoutTypeLabel(
+                      detailModal.worker_payout_type
+                    )}`}
+                  </span>
+                </div>
+              ) : null}
               <div className="record-field full">
                 <span className="record-field-label">{tr('contract')}</span>
                 <span className="record-field-value">
@@ -1353,6 +1391,24 @@ export default function Expenses() {
                     >
                       {tr('edit')}
                     </button>
+                    {detailModal.worker_payout_id ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => openPayoutLink(detailModal, detailModal.worker_payout_id)}
+                      >
+                        {tr('workerPayoutRetype')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
+                        onClick={() => openPayoutLink(detailModal)}
+                      >
+                        {tr('workerPayoutAttach')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-danger"
@@ -1496,6 +1552,13 @@ export default function Expenses() {
           </>
         ) : null}
       </EntityDetailModal>
+
+      <WorkerPayoutLinkModal
+        isOpen={!!payoutLinkModal}
+        target={payoutLinkModal}
+        onClose={() => setPayoutLinkModal(null)}
+        onSaved={handlePayoutLinkSaved}
+      />
 
       <Modal
         isOpen={!!modal}

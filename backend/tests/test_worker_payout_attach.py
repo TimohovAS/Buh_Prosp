@@ -64,6 +64,32 @@ async def make_cash_expense(
     return entry, expense
 
 
+async def make_card_expense(
+    db,
+    *,
+    amount="5260.00",
+    entry_date=date(2026, 9, 18),
+    description="Kartica 4025480007356295 : SALAS RUSTIK",
+    status="paid",
+    project_id=None,
+):
+    """Покупка с карты: расход есть, записи в кассе нет."""
+    expense = Expense(
+        date=entry_date,
+        description=description,
+        amount=Decimal(amount),
+        currency="RSD",
+        category="Зарплата",
+        source="bank_import",
+        status=status,
+        paid_date=entry_date,
+        project_id=project_id,
+    )
+    db.add(expense)
+    await db.flush()
+    return expense
+
+
 async def test_attach_links_legacy_expense_without_touching_the_money(attach_client, db_session, make_project):
     project = await make_project(db_session, code="PR-SALARY")
     worker = Worker(name="Andrei Timokhov")
@@ -282,3 +308,105 @@ async def test_payout_link_update_returns_404_for_unknown_payout(attach_client, 
     )
 
     assert response.status_code == 404
+
+
+async def test_purchase_for_a_worker_is_counted_in_the_report_without_a_cash_entry(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session)
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["cash_entry"] is None
+    assert payload["payout"]["payout_type"] == "purchase"
+
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.expense_id == expense.id
+    assert payout.cash_entry_id is None
+    assert payout.date == date(2026, 9, 18)
+    assert Decimal(payout.cash_paid_amount) == Decimal("5260.00")
+    assert expense.description == "Kartica 4025480007356295 : SALAS RUSTIK"
+
+    report = (await attach_client.get("/api/workers/payouts/report")).json()
+    assert Decimal(report["total_paid"]) == Decimal("5260.00")
+    # Покупка — не командировка, поэтому идёт в обычный заработок целиком.
+    assert Decimal(report["workers"][0]["regular_paid"]) == Decimal("5260.00")
+    assert Decimal(report["workers"][0]["lodging_paid"]) == Decimal("0")
+
+
+async def test_attach_by_expense_id_also_links_the_cash_entry_of_a_cash_expense(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    entry, expense = await make_cash_expense(db_session)
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["cash_entry"]["id"] == entry.id
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.cash_entry_id == entry.id
+
+
+async def test_attach_is_rejected_for_a_reversed_expense(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, status="reversed")
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+
+    assert response.status_code == 400
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def test_attach_requires_exactly_one_target(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    entry, expense = await make_cash_expense(db_session)
+
+    both = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"cash_entry_id": entry.id, "expense_id": expense.id, "worker_id": worker.id},
+    )
+    neither = await attach_client.post("/api/workers/payouts/attach", json={"worker_id": worker.id})
+
+    assert both.status_code == 422
+    assert neither.status_code == 422
+
+
+async def test_purchase_type_can_be_changed_without_a_cash_entry(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        )
+    ).json()["payout"]
+
+    response = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={"worker_id": worker.id, "payout_type": "monthly"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["cash_entry"] is None
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.payout_type == "monthly"
+    assert Decimal(payout.cash_paid_amount) == Decimal("5260.00")

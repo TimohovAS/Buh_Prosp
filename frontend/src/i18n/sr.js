@@ -1187,6 +1187,8 @@ const sr = {
   workerPayoutPayNow: 'Исплатити сада',
   workerPayoutPeriodEnd: 'Период до',
   workerPayoutPeriodStart: 'Период од',
+  workerPayoutPurchase: 'Куповина на рачун плате',
+  workerPayoutPurchaseShort: 'Куповина',
   workerPayoutRegular: 'Радни дани',
   workerPayoutRemaining: 'Остатак',
   workerPayoutTripAdvance: 'Аванс за службени пут',

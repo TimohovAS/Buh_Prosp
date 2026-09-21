@@ -1193,6 +1193,8 @@ const ru = {
   workerPayoutPayNow: 'Выдать сейчас',
   workerPayoutPeriodEnd: 'Период по',
   workerPayoutPeriodStart: 'Период с',
+  workerPayoutPurchase: 'Покупка в счёт зарплаты',
+  workerPayoutPurchaseShort: 'Покупка',
   workerPayoutRegular: 'Выходы',
   workerPayoutRemaining: 'Остаток',
   workerPayoutTripAdvance: 'Аванс за командировку',

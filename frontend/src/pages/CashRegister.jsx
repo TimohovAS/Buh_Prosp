@@ -8,6 +8,7 @@ import ProjectSelect from '../components/ProjectSelect'
 import SearchInput from '../components/SearchInput'
 import SelectionSummary from '../components/SelectionSummary'
 import SortIndicator from '../components/SortIndicator'
+import WorkerPayoutLinkModal from '../components/WorkerPayoutLinkModal'
 import YearFilterSelect from '../components/YearFilterSelect'
 import useAvailableYears from '../hooks/useAvailableYears'
 import useCategoryProjectResolver from '../hooks/useCategoryProjectResolver'
@@ -19,6 +20,7 @@ import {
   getContractLabelById,
 } from '../utils/entityLabels'
 import { UI_DASH, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { payoutTypeLabel } from '../utils/workerPayouts'
 import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
 
@@ -63,13 +65,6 @@ const emptyWorkerPayoutForm = {
   contract_id: '',
   category_id: '',
   note: '',
-}
-
-const emptyAttachPayoutForm = {
-  worker_id: '',
-  payout_type: 'regular',
-  period_start: '',
-  period_end: '',
 }
 
 const toNumber = (value) => Number(value || 0)
@@ -195,8 +190,6 @@ export default function CashRegister() {
     note: '',
   })
   const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
-  const [attachPayoutForm, setAttachPayoutForm] = useState(emptyAttachPayoutForm)
-  const [attachWorkers, setAttachWorkers] = useState([])
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
 
   const lang = getLang()
@@ -277,16 +270,6 @@ export default function CashRegister() {
     if (isSalaryCategory(category) && salaryProject) return String(salaryProject.id)
     return ''
   }
-  const getWorkerPayoutTypeLabel = (payoutType) => {
-    const labels = {
-      regular: tr('workerPayoutRegular'),
-      weekly: tr('workerPayoutWeekly'),
-      monthly: tr('workerPayoutMonthly'),
-      trip_advance: tr('workerPayoutTripAdvance'),
-      trip_final: tr('workerPayoutTripFinal'),
-    }
-    return labels[payoutType] || tr('workerPayoutCreateTitle')
-  }
   const getEntryTypeLabel = (entry) => {
     if (entry.entry_type === 'withdrawal') return tr('cashEntryTypeWithdrawal')
     if (entry.entry_type === 'pending_withdrawal') return tr('cashEntryTypePendingWithdrawal')
@@ -317,7 +300,7 @@ export default function CashRegister() {
         entry.worker_payout_period_start && entry.worker_payout_period_end
           ? ` ${entry.worker_payout_period_start}-${entry.worker_payout_period_end}`
           : ''
-      return `${getWorkerPayoutTypeLabel(entry.worker_payout_type)}: ${entry.worker_payout_worker_name}${period}`
+      return `${payoutTypeLabel(entry.worker_payout_type)}: ${entry.worker_payout_worker_name}${period}`
     }
     return description
   }
@@ -883,6 +866,17 @@ export default function CashRegister() {
     setPageError('')
     try {
       const payout = await api.workers.getPayout(entry.worker_payout_id)
+      if (!payout.cash_entry_id) {
+        setDetailModal(null)
+        setAttachPayoutModal({
+          payoutId: payout.id,
+          expenseId: payout.expense_id,
+          date: payout.date,
+          amount: payout.cash_paid_amount,
+          description: payout.description,
+        })
+        return
+      }
       setArchivedPayoutWorker(
         workers.some((worker) => Number(worker.id) === Number(payout.worker_id))
           ? null
@@ -1174,94 +1168,23 @@ export default function CashRegister() {
     openEditEntry(entry)
   }
 
-  // Старые записи заводились до модуля выплат, поэтому работник в них только
-  // в описании: подставляем его, если имя совпало точно.
-  const matchWorkerIdByName = (list, description) => {
-    const value = String(description || '')
-      .trim()
-      .toLowerCase()
-    if (!value) return ''
-    const match = (list || []).find(
-      (worker) =>
-        String(worker.name || '')
-          .trim()
-          .toLowerCase() === value
-    )
-    return match ? String(match.id) : ''
+  // Тип выплаты и работника правим отдельной формой: полный редактор выплаты
+  // пересчитал бы суммы по ставкам работника и переписал описание операции.
+  const openPayoutLink = (entry, payoutId = null) => {
+    setDetailModal(null)
+    setAttachPayoutModal({
+      payoutId,
+      cashEntryId: entry.id,
+      date: entry.date,
+      amount: entry.amount,
+      currency: entry.currency,
+      description: entry.description,
+    })
   }
 
-  const openAttachPayout = async (entry) => {
-    setSaving(true)
-    setPageError('')
-    try {
-      // Берём и архивных: старые выплаты часто уходили тем, кто уже не работает.
-      const list = await api.workers.list()
-      setAttachWorkers(list)
-      setAttachPayoutForm({
-        ...emptyAttachPayoutForm,
-        worker_id: matchWorkerIdByName(list, entry.description),
-      })
-      setDetailModal(null)
-      setAttachPayoutModal({ entry })
-    } catch (error) {
-      setPageError(error.message || tr('loadError'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Тип выплаты меняем этой же формой: полный редактор выплаты пересчитал бы
-  // суммы по ставкам работника и переписал описание операции.
-  const openPayoutLinkEdit = async (entry) => {
-    if (!entry.worker_payout_id) return
-    setSaving(true)
-    setPageError('')
-    try {
-      const [list, payout] = await Promise.all([
-        api.workers.list(),
-        api.workers.getPayout(entry.worker_payout_id),
-      ])
-      setAttachWorkers(list)
-      setAttachPayoutForm({
-        ...emptyAttachPayoutForm,
-        worker_id: toFormValue(payout.worker_id),
-        payout_type: payout.payout_type || 'regular',
-        period_start: payout.period_start || '',
-        period_end: payout.period_end || '',
-      })
-      setDetailModal(null)
-      setAttachPayoutModal({ entry, payoutId: payout.id })
-    } catch (error) {
-      setPageError(error.message || tr('loadError'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleAttachPayout = async (event) => {
-    event.preventDefault()
-    if (!attachPayoutModal?.entry || !attachPayoutForm.worker_id) return
-    setSaving(true)
-    setPageError('')
-    try {
-      const payload = {
-        worker_id: parseInt(attachPayoutForm.worker_id, 10),
-        payout_type: attachPayoutForm.payout_type,
-        period_start: attachPayoutForm.period_start || null,
-        period_end: attachPayoutForm.period_end || null,
-      }
-      if (attachPayoutModal.payoutId) {
-        await api.workers.updatePayoutLink(attachPayoutModal.payoutId, payload)
-      } else {
-        await api.workers.attachPayout({ ...payload, cash_entry_id: attachPayoutModal.entry.id })
-      }
-      setAttachPayoutModal(null)
-      await loadData()
-    } catch (error) {
-      setPageError(error.message || tr('loadError'))
-    } finally {
-      setSaving(false)
-    }
+  const handlePayoutLinkSaved = async () => {
+    setAttachPayoutModal(null)
+    await loadData()
   }
 
   const handleDeleteCashEntry = async (entry) => {
@@ -1647,7 +1570,7 @@ export default function CashRegister() {
                     type="button"
                     className="btn btn-primary"
                     disabled={saving}
-                    onClick={() => openAttachPayout(detailModal)}
+                    onClick={() => openPayoutLink(detailModal)}
                   >
                     {tr('workerPayoutAttach')}
                   </button>
@@ -1657,7 +1580,7 @@ export default function CashRegister() {
                     type="button"
                     className="btn btn-secondary"
                     disabled={saving}
-                    onClick={() => openPayoutLinkEdit(detailModal)}
+                    onClick={() => openPayoutLink(detailModal, detailModal.worker_payout_id)}
                   >
                     {tr('workerPayoutRetype')}
                   </button>
@@ -1907,91 +1830,12 @@ export default function CashRegister() {
         </form>
       </Modal>
 
-      <Modal
+      <WorkerPayoutLinkModal
         isOpen={!!attachPayoutModal && isActivePage}
+        target={attachPayoutModal}
         onClose={() => setAttachPayoutModal(null)}
-        title={attachPayoutModal?.payoutId ? tr('workerPayoutRetype') : tr('workerPayoutAttachTitle')}
-      >
-        <form onSubmit={handleAttachPayout} className="card" style={{ padding: '1rem' }}>
-          <p className="text-muted" style={{ marginTop: 0 }}>
-            {attachPayoutModal?.payoutId ? tr('workerPayoutRetypeHint') : tr('workerPayoutAttachHint')}
-          </p>
-          <div className="form-group">
-            <label className="form-label">{tr('workerPayoutAttachEntry')}</label>
-            <div className="record-field-text">
-              {attachPayoutModal?.entry
-                ? `${attachPayoutModal.entry.date} ${UI_DASH} ${fmtAmount(attachPayoutModal.entry.amount)} ${
-                    attachPayoutModal.entry.currency || 'RSD'
-                  } ${UI_DASH} ${attachPayoutModal.entry.description || ''}`.trim()
-                : UI_DASH}
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('worker')}</label>
-            <select
-              className="form-input"
-              value={attachPayoutForm.worker_id}
-              onChange={(event) =>
-                setAttachPayoutForm((previous) => ({ ...previous, worker_id: event.target.value }))
-              }
-              required
-            >
-              <option value="">{UI_DASH}</option>
-              {attachWorkers.map((worker) => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.is_active ? worker.name : `${worker.name} (${tr('archive')})`}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('workerPayoutType')}</label>
-            <select
-              className="form-input"
-              value={attachPayoutForm.payout_type}
-              onChange={(event) =>
-                setAttachPayoutForm((previous) => ({ ...previous, payout_type: event.target.value }))
-              }
-            >
-              <option value="regular">{tr('workerPayoutRegular')}</option>
-              <option value="weekly">{tr('workerPayoutWeekly')}</option>
-              <option value="monthly">{tr('workerPayoutMonthly')}</option>
-              <option value="trip_advance">{tr('workerPayoutTripAdvance')}</option>
-              <option value="trip_final">{tr('workerPayoutTripFinal')}</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('workerPayoutPeriodStart')}</label>
-            <DatePicker
-              value={attachPayoutForm.period_start}
-              onChange={(value) => setAttachPayoutForm((previous) => ({ ...previous, period_start: value }))}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{tr('workerPayoutPeriodEnd')}</label>
-            <DatePicker
-              value={attachPayoutForm.period_end}
-              onChange={(value) => setAttachPayoutForm((previous) => ({ ...previous, period_end: value }))}
-            />
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setAttachPayoutModal(null)}>
-              {tr('cancel')}
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={saving || !attachPayoutForm.worker_id}
-            >
-              {saving
-                ? tr('loading')
-                : attachPayoutModal?.payoutId
-                  ? tr('save')
-                  : tr('workerPayoutAttachSubmit')}
-            </button>
-          </div>
-        </form>
-      </Modal>
+        onSaved={handlePayoutLinkSaved}
+      />
 
       <Modal
         // Страницы остаются смонтированными, поэтому модалку надо явно гасить
@@ -2039,6 +1883,7 @@ export default function CashRegister() {
                 <option value="regular">{tr('workerPayoutRegular')}</option>
                 <option value="weekly">{tr('workerPayoutWeekly')}</option>
                 <option value="monthly">{tr('workerPayoutMonthly')}</option>
+                <option value="purchase">{tr('workerPayoutPurchase')}</option>
                 <option value="trip_advance">{tr('workerPayoutTripAdvance')}</option>
                 <option value="trip_final">{tr('workerPayoutTripFinal')}</option>
               </select>

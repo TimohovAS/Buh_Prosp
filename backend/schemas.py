@@ -1544,6 +1544,9 @@ class ExpenseResponse(ExpenseBase):
 class ExpenseDetailResponse(ExpenseResponse):
     receipt: Optional[PurchaseReceiptDetailResponse] = None
     items: list[ExpenseItemResponse] = Field(default_factory=list)
+    worker_payout_id: Optional[int] = None
+    worker_payout_type: Optional[str] = None
+    worker_payout_worker_name: Optional[str] = None
 
 
 # --- PlannedExpense (Планируемые расходы) ---
@@ -1956,15 +1959,24 @@ class WorkerPayoutLinkUpdate(BaseModel):
 
 
 class WorkerPayoutAttach(WorkerPayoutLinkUpdate):
-    """Привязка уже существующего наличного расхода к работнику.
+    """Привязка уже существующего расхода к работнику.
 
     Деньги записи не меняются: дата, сумма, проект и договор берутся из самого
-    расхода, поэтому старую выплату можно учесть в статистике, ничего не
-    переписывая в кассе.
+    расхода, поэтому выплату можно учесть в статистике, ничего не переписывая в
+    кассе. Расход указывается либо наличной операцией (cash_entry_id), либо
+    напрямую (expense_id) — так учитываются покупки работнику с карты или по
+    чеку, для которых записи в кассе нет.
     """
 
-    cash_entry_id: int
+    cash_entry_id: Optional[int] = None
+    expense_id: Optional[int] = None
     note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_single_target(self):
+        if bool(self.cash_entry_id) == bool(self.expense_id):
+            raise ValueError("Pass either cash_entry_id or expense_id")
+        return self
 
 
 class WorkerPayoutResponse(BaseModel):
@@ -2031,7 +2043,8 @@ class WorkerPayoutReport(BaseModel):
 
 class WorkerPayoutCreateResponse(BaseModel):
     payout: WorkerPayoutResponse
-    cash_entry: CashEntryResponse
+    # У покупки в счёт зарплаты записи в кассе нет: деньги ушли с карты или по чеку.
+    cash_entry: Optional[CashEntryResponse] = None
 
 
 class CashEntryUpdate(BaseModel):

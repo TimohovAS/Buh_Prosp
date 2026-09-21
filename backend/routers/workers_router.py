@@ -37,7 +37,7 @@ from backend.state_machine import initialize_expense_status
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
-PAYOUT_TYPES = ("regular", "weekly", "monthly", "trip_advance", "trip_final")
+PAYOUT_TYPES = ("regular", "weekly", "monthly", "purchase", "trip_advance", "trip_final")
 
 
 def _dec(value) -> Decimal:
@@ -175,6 +175,9 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         gross_amount = weekly_rate
     elif payout_type == "regular":
         gross_amount = work_days * regular_day_rate
+    elif payout_type == "purchase":
+        # Покупка в счёт зарплаты: ставок за ней нет, начислено равно потраченному.
+        gross_amount = _dec(data.cash_paid_amount)
     else:
         gross_amount = trip_days * (trip_work_day_rate + trip_per_diem_rate + trip_food_rate) + lodging_amount
 
@@ -206,6 +209,31 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         "cash_paid_amount": cash_paid_amount,
         "remaining_amount": remaining_amount,
     }
+
+
+async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> tuple[CashEntry | None, Expense]:
+    """Найти расход и, если он наличный, его операцию в кассе."""
+    if data.cash_entry_id:
+        result = await db.execute(select(CashEntry).where(CashEntry.id == data.cash_entry_id))
+        entry = result.scalar_one_or_none()
+        if not entry:
+            raise HTTPException(404, "Cash entry not found")
+        if entry.entry_type != "expense" or not entry.expense_id:
+            raise HTTPException(400, "Only cash expenses can be linked to a worker")
+        expense_id = entry.expense_id
+    else:
+        expense_id = data.expense_id
+        result = await db.execute(select(CashEntry).where(CashEntry.expense_id == expense_id))
+        entry = result.scalar_one_or_none()
+
+    result = await db.execute(select(Expense).where(Expense.id == expense_id))
+    expense = result.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(404, "Linked cash expense was not found")
+    # Сторнированная трата в доход работнику не идёт: деньги вернулись.
+    if expense.status == "reversed" or expense.reversal_of_id:
+        raise HTTPException(400, "Reversed expenses cannot be linked to a worker")
+    return entry, expense
 
 
 def _validate_payout_link(data: WorkerPayoutLinkUpdate) -> None:
@@ -571,57 +599,47 @@ async def attach_worker_payout(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_edit_access),
 ):
-    """Учесть уже записанный наличный расход как выплату работнику.
+    """Учесть уже записанный расход как выплату работнику.
 
-    Нужно для записей, сделанных до появления модуля выплат: деньги в кассе
-    остаются прежними, добавляется только связь с работником, чтобы запись
-    попала в статистику выплат и открывалась в редакторе выплаты.
+    Нужно в двух случаях: записи, сделанные до появления модуля выплат, и
+    покупки работнику в счёт зарплаты — с карты или по чеку, когда записи в
+    кассе нет вовсе. Деньги расхода остаются прежними, добавляется только связь
+    с работником, чтобы трата попала в его доход.
     """
     _validate_payout_link(data)
 
     # Архивных работников не отсекаем: старые выплаты часто относятся к тем,
     # кто уже не работает, и без них статистика останется неполной.
     worker = await _get_worker_or_404(db, data.worker_id)
+    entry, expense = await _resolve_payout_target(db, data)
 
-    result = await db.execute(select(CashEntry).where(CashEntry.id == data.cash_entry_id))
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(404, "Cash entry not found")
-    if entry.entry_type != "expense" or not entry.expense_id:
-        raise HTTPException(400, "Only cash expenses can be linked to a worker")
-
-    result = await db.execute(
-        select(WorkerPayout.id).where(
-            or_(WorkerPayout.cash_entry_id == entry.id, WorkerPayout.expense_id == entry.expense_id)
-        )
-    )
+    conditions = [WorkerPayout.expense_id == expense.id]
+    if entry:
+        conditions.append(WorkerPayout.cash_entry_id == entry.id)
+    result = await db.execute(select(WorkerPayout.id).where(or_(*conditions)))
     if result.scalars().first():
         raise HTTPException(400, "Cash entry is already linked to a worker payout")
 
-    result = await db.execute(select(Expense).where(Expense.id == entry.expense_id))
-    expense = result.scalar_one_or_none()
-    if not expense:
-        raise HTTPException(404, "Linked cash expense was not found")
-
-    amount = _dec(entry.amount)
+    amount = _dec(entry.amount if entry else expense.amount)
     if amount <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
-    note = data.note.strip() if data.note and data.note.strip() else entry.note
+    source_note = entry.note if entry else expense.note
+    note = data.note.strip() if data.note and data.note.strip() else source_note
     payout = WorkerPayout(
         worker_id=worker.id,
-        cash_entry_id=entry.id,
+        cash_entry_id=entry.id if entry else None,
         expense_id=expense.id,
         payout_type=data.payout_type,
-        date=entry.date,
+        date=entry.date if entry else expense.date,
         period_start=data.period_start,
         period_end=data.period_end,
-        # Ставок и дней за старой записью нет, известна только выданная сумма.
+        # Ставок и дней за такой записью нет, известна только потраченная сумма.
         # Считаем её же начисленной, иначе в отчёте заработок окажется меньше выплат.
         gross_amount=amount,
         cash_paid_amount=amount,
         remaining_amount=ZERO_DECIMAL,
-        description=(entry.description or expense.description or worker.name)[:500],
+        description=((entry.description if entry else None) or expense.description or worker.name)[:500],
         note=note,
         # Проект, договор и категорию берём из расхода: перепривязка сместила бы
         # историю по проектам.
@@ -636,10 +654,11 @@ async def attach_worker_payout(
 
     await db.commit()
     await db.refresh(payout, ["worker"])
-    await db.refresh(entry)
+    if entry:
+        await db.refresh(entry)
     return WorkerPayoutCreateResponse(
         payout=_serialize_worker_payout(payout),
-        cash_entry=_serialize_cash_entry(entry, payout),
+        cash_entry=_serialize_cash_entry(entry, payout) if entry else None,
     )
 
 
@@ -664,9 +683,8 @@ async def update_worker_payout_link(
     payout = result.scalar_one_or_none()
     if not payout:
         raise HTTPException(404, "Worker payout not found")
+    # У покупки в счёт зарплаты записи в кассе нет — это нормально.
     entry = payout.cash_entry
-    if not entry:
-        raise HTTPException(404, "Linked cash expense was not found")
 
     worker = await _get_worker_or_404(db, data.worker_id)
     payout.worker_id = worker.id
@@ -680,10 +698,11 @@ async def update_worker_payout_link(
 
     await db.commit()
     await db.refresh(payout, ["worker"])
-    await db.refresh(entry)
+    if entry:
+        await db.refresh(entry)
     return WorkerPayoutCreateResponse(
         payout=_serialize_worker_payout(payout),
-        cash_entry=_serialize_cash_entry(entry, payout),
+        cash_entry=_serialize_cash_entry(entry, payout) if entry else None,
     )
 
 
