@@ -165,6 +165,11 @@ class WorkerPayout(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True)
+    # calculated — выплата посчитана по ставкам работника; expense_link — существующий
+    # расход учтён как выплата, своего расчёта за ним нет.
+    origin = Column(String(20), nullable=False, default="calculated")
+    # Сторно расхода не удаляет выплату, а гасит её: отмена сторно возвращает запись.
+    cancelled_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 

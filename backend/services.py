@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Income, Expense
 from backend.config import get_settings
-from backend.expense_service import unlink_worker_payout_from_expense
+from backend.expense_service import cancel_worker_payout_for_expense
 from backend.decimal_utils import MONEY_PLACES, ZERO_DECIMAL, to_decimal
 from backend.state_machine import ensure_expense_can_reverse, initialize_expense_status
 
@@ -220,7 +220,8 @@ async def create_expense_reversal(
     await db.flush()
     expense.reversed_expense_id = reversal.id
     # Деньги вернулись, поэтому в доходе работника сторнированной трате не место.
-    await unlink_worker_payout_from_expense(db, expense.id)
+    # Гасим, а не удаляем: отмена сторно должна вернуть связь с работником.
+    await cancel_worker_payout_for_expense(db, expense.id)
     await db.flush()
     await db.refresh(reversal)
     return reversal

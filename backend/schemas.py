@@ -1985,6 +1985,8 @@ class WorkerPayoutResponse(BaseModel):
     cash_entry_id: Optional[int] = None
     expense_id: Optional[int] = None
     payout_type: str
+    # calculated — посчитана по ставкам; expense_link — привязанный расход.
+    origin: str = "calculated"
     date: DateType
     period_start: Optional[DateType] = None
     period_end: Optional[DateType] = None

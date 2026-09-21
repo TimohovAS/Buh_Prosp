@@ -22,13 +22,13 @@ from backend.expense_service import (
     clear_contract_if_project_mismatch,
     expense_amount_from_items,
     expense_description_from_items,
+    PayoutCurrencyError,
     find_expense_duplicate_groups,
-    get_expense_worker_payout,
-    is_payout_currency,
     is_reversal_row,
     merge_duplicate_expenses,
     normalize_expense_items,
     resolve_expense_links,
+    restore_worker_payout_for_expense,
     sync_bank_transactions_from_expense,
     sync_cash_entry_from_expense,
     sync_worker_payout_from_expense,
@@ -317,7 +317,9 @@ async def get_expense(
     # Трата могла быть учтена как выплата работнику — например покупка ему
     # чего-либо в счёт зарплаты.
     result = await db.execute(
-        select(WorkerPayout).options(selectinload(WorkerPayout.worker)).where(WorkerPayout.expense_id == expense.id)
+        select(WorkerPayout)
+        .options(selectinload(WorkerPayout.worker))
+        .where(WorkerPayout.expense_id == expense.id, WorkerPayout.cancelled_at.is_(None))
     )
     payout = result.scalar_one_or_none()
     if payout:
@@ -402,11 +404,6 @@ async def update_expense(
     dump["contract_id"] = desired_contract_id
     dump["is_tax_related"] = is_tax_related
 
-    if not is_payout_currency(dump.get("currency", expense.currency)) and await get_expense_worker_payout(
-        db, expense.id
-    ):
-        raise HTTPException(400, "Worker payouts are kept in RSD only")
-
     if item_payload is not None:
         try:
             expense_items = normalize_expense_items(item_payload)
@@ -425,7 +422,10 @@ async def update_expense(
         await sync_cash_entry_from_expense(db, expense)
     await sync_bank_transactions_from_expense(db, expense)
     await sync_receipt_project_from_expense(db, expense)
-    await sync_worker_payout_from_expense(db, expense)
+    try:
+        await sync_worker_payout_from_expense(db, expense)
+    except PayoutCurrencyError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     await db.flush()
     await db.commit()
@@ -519,6 +519,8 @@ async def delete_expense(
             original_expense = original_result.scalar_one_or_none()
             if original_expense and original_expense.reversed_expense_id == expense.id:
                 original_expense.reversed_expense_id = None
+                # Сторно отменили — трата снова в силе, значит и в доходе работника.
+                await restore_worker_payout_for_expense(db, original_expense.id)
 
         await db.execute(
             update(BankTransaction)

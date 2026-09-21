@@ -17,7 +17,11 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from backend.expense_service import is_payout_currency, unlink_worker_payout
+from backend.expense_service import (
+    PAYOUT_ORIGIN_EXPENSE_LINK,
+    is_payout_currency,
+    unlink_worker_payout,
+)
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
 from backend.planned_expenses_service import sync_worker_payout_planned_payment, sync_worker_salary_plan
 from backend.schemas import (
@@ -256,6 +260,7 @@ def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
         cash_entry_id=payout.cash_entry_id,
         expense_id=payout.expense_id,
         payout_type=payout.payout_type,
+        origin=payout.origin or "calculated",
         date=payout.date,
         period_start=payout.period_start,
         period_end=payout.period_end,
@@ -374,7 +379,7 @@ async def list_worker_payouts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    query = select(WorkerPayout).options(selectinload(WorkerPayout.worker))
+    query = select(WorkerPayout).options(selectinload(WorkerPayout.worker)).where(WorkerPayout.cancelled_at.is_(None))
     if worker_id is not None:
         query = query.where(WorkerPayout.worker_id == worker_id)
     result = await db.execute(query.order_by(WorkerPayout.date.desc(), WorkerPayout.id.desc()).limit(limit))
@@ -394,7 +399,8 @@ async def get_worker_payout_report(
     if date_from and date_to and date_from > date_to:
         raise HTTPException(400, "Start date must not be after end date")
 
-    filters = []
+    # Погашенная сторно выплата в доходе не участвует, но остаётся в истории.
+    filters = [WorkerPayout.cancelled_at.is_(None)]
     if worker_id is not None:
         filters.append(WorkerPayout.worker_id == worker_id)
     if date_from is not None:
@@ -644,6 +650,7 @@ async def attach_worker_payout(
         gross_amount=amount,
         cash_paid_amount=amount,
         remaining_amount=ZERO_DECIMAL,
+        origin=PAYOUT_ORIGIN_EXPENSE_LINK,
         description=((entry.description if entry else None) or expense.description or worker.name)[:500],
         note=note,
         # Проект, договор и категорию берём из расхода: перепривязка сместила бы

@@ -1,7 +1,7 @@
 """Business helpers for expenses."""
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 import re
 
@@ -20,6 +20,7 @@ from backend.models import (
     PlannedExpensePayment,
     WorkerPayout,
 )
+from backend.planned_expenses_service import sync_worker_payout_planned_payment
 from backend.schemas import ExpenseDuplicateGroup, ExpenseDuplicateItem
 from backend.state_machine import mark_expense_paid
 
@@ -29,6 +30,10 @@ RECEIPT_SOURCE = "receipt"
 
 class NotFoundError(ValueError):
     """Domain reference was not found."""
+
+
+class PayoutCurrencyError(ValueError):
+    """Expense currency does not fit a worker payout."""
 
 
 def _item_field(item, key: str):
@@ -297,6 +302,12 @@ async def merge_duplicate_expenses(db: AsyncSession, keep_id: int, merge_ids: li
             raise ValueError("Reversal expenses cannot be merged")
         duplicates.append(duplicate)
 
+    # Объединение уводит расход из учёта, а привязанная к нему выплата осталась бы
+    # висеть на удалённой записи. Просим сначала отвязать её от работника.
+    for expense in (keep, *duplicates):
+        if await get_expense_worker_payout(db, expense.id):
+            raise ValueError("Unlink the worker payout before merging this expense")
+
     payment_refs = _non_empty_payment_refs([keep, *duplicates])
     if len(payment_refs) > 1:
         raise ValueError("Expenses with different payment references cannot be merged")
@@ -349,6 +360,8 @@ async def sync_cash_entry_from_expense(db: AsyncSession, expense: Expense) -> No
 
 
 PAYOUT_CURRENCY = "RSD"
+PAYOUT_ORIGIN_CALCULATED = "calculated"
+PAYOUT_ORIGIN_EXPENSE_LINK = "expense_link"
 
 
 def is_payout_currency(value: Optional[str]) -> bool:
@@ -356,26 +369,34 @@ def is_payout_currency(value: Optional[str]) -> bool:
     return (value or PAYOUT_CURRENCY).strip().upper() == PAYOUT_CURRENCY
 
 
-async def get_expense_worker_payout(db: AsyncSession, expense_id: int) -> Optional[WorkerPayout]:
-    result = await db.execute(select(WorkerPayout).where(WorkerPayout.expense_id == expense_id))
+async def get_expense_worker_payout(
+    db: AsyncSession, expense_id: int, *, include_cancelled: bool = False
+) -> Optional[WorkerPayout]:
+    query = select(WorkerPayout).where(WorkerPayout.expense_id == expense_id)
+    if not include_cancelled:
+        query = query.where(WorkerPayout.cancelled_at.is_(None))
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
 async def sync_worker_payout_from_expense(db: AsyncSession, expense: Expense) -> None:
     """Держать выплату работнику в согласии с расходом, к которому она привязана.
 
-    Без этого правка суммы или даты расхода оставила бы статистику работника со
-    старыми цифрами.
+    Без этого правка суммы, даты или валюты расхода оставила бы статистику
+    работника со старыми цифрами. Вызывать из каждого места, где меняются деньги
+    расхода: правка вручную, сопоставление с банком, пересчёт по входящей фактуре.
     """
     payout = await get_expense_worker_payout(db, expense.id)
     if not payout:
         return
+    if not is_payout_currency(expense.currency):
+        raise PayoutCurrencyError("Worker payouts are kept in RSD only")
 
     amount = abs(to_decimal(expense.amount or ZERO_DECIMAL))
-    # Начислено равно выданному только у привязанных записей, за которыми нет
-    # расчёта по ставкам. У посчитанной выплаты начисление менять нельзя:
-    # изменилась выданная сумма, а не заработок.
-    if to_decimal(payout.gross_amount or ZERO_DECIMAL) == to_decimal(payout.cash_paid_amount or ZERO_DECIMAL):
+    # У посчитанной по ставкам выплаты начисление менять нельзя: изменилась
+    # выданная сумма, а не заработок. У привязанного расхода своего расчёта нет,
+    # поэтому начисление идёт следом за тратой.
+    if payout.origin == PAYOUT_ORIGIN_EXPENSE_LINK:
         payout.gross_amount = amount
     payout.cash_paid_amount = amount
     remaining = (
@@ -386,6 +407,32 @@ async def sync_worker_payout_from_expense(db: AsyncSession, expense: Expense) ->
     payout.project_id = expense.project_id
     payout.contract_id = expense.contract_id
     payout.category_id = expense.category_id
+    await db.flush()
+    # Дата выплаты переехала — отметка об оплате плановой зарплаты должна
+    # переехать вместе с ней, иначе они окажутся в разных месяцах.
+    await sync_worker_payout_planned_payment(db, payout)
+
+
+async def cancel_worker_payout_for_expense(db: AsyncSession, expense_id: int) -> bool:
+    """Погасить выплату при сторно расхода, сохранив её для истории."""
+    payout = await get_expense_worker_payout(db, expense_id)
+    if not payout:
+        return False
+    payout.cancelled_at = datetime.utcnow()
+    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
+    await db.flush()
+    return True
+
+
+async def restore_worker_payout_for_expense(db: AsyncSession, expense_id: int) -> bool:
+    """Вернуть выплату, когда сторно расхода отменили."""
+    payout = await get_expense_worker_payout(db, expense_id, include_cancelled=True)
+    if not payout or payout.cancelled_at is None:
+        return False
+    payout.cancelled_at = None
+    await db.flush()
+    await sync_worker_payout_planned_payment(db, payout)
+    return True
 
 
 async def unlink_worker_payout(db: AsyncSession, payout: WorkerPayout) -> None:

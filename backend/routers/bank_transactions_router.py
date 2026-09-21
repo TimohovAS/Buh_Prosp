@@ -35,6 +35,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, money_abs, money_eq, to_decimal
+from backend.expense_service import PayoutCurrencyError, sync_worker_payout_from_expense
 from backend.models import (
     BankTransaction,
     CounterpartyLoan,
@@ -569,6 +570,12 @@ async def create_expense_from_transaction(
             raise HTTPException(400, str(exc)) from exc
         expense.note = data.note
         expense.project_id = project_id
+        # Расход могли уже учесть как выплату работнику: сумма, дата и валюта
+        # операции перетирают его деньги, выплата должна идти следом.
+        try:
+            await sync_worker_payout_from_expense(db, expense)
+        except PayoutCurrencyError as exc:
+            raise HTTPException(400, str(exc)) from exc
     else:
         expense = Expense(
             date=data.date or transaction.date,

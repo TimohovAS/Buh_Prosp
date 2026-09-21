@@ -9,8 +9,16 @@ from sqlalchemy import select
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
-from backend.expense_service import sync_worker_payout_from_expense, unlink_worker_payout_from_expense
-from backend.models import CashEntry, Expense, Worker, WorkerPayout
+from backend.expense_service import (
+    PAYOUT_ORIGIN_CALCULATED,
+    PAYOUT_ORIGIN_EXPENSE_LINK,
+    PayoutCurrencyError,
+    merge_duplicate_expenses,
+    restore_worker_payout_for_expense,
+    sync_worker_payout_from_expense,
+    unlink_worker_payout_from_expense,
+)
+from backend.models import CashEntry, Expense, PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
 from backend.routers.workers_router import router
 from backend.services import create_expense_reversal
 
@@ -450,9 +458,26 @@ async def test_reversing_an_expense_takes_it_out_of_the_worker_income(attach_cli
 
     await create_expense_reversal(db_session, expense)
 
-    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+    # Запись остаётся ради истории, но в доходе больше не участвует.
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.cancelled_at is not None
     report = (await attach_client.get("/api/workers/payouts/report")).json()
     assert Decimal(report["total_paid"]) == Decimal("0")
+    assert report["payout_count"] == 0
+    assert (await attach_client.get("/api/workers/payouts")).json() == []
+
+
+async def test_cancelling_a_reversal_brings_the_payout_back(attach_client, db_session):
+    _, expense, _ = await attach_card_expense(attach_client, db_session)
+    await create_expense_reversal(db_session, expense)
+
+    restored = await restore_worker_payout_for_expense(db_session, expense.id)
+
+    assert restored is True
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.cancelled_at is None
+    report = (await attach_client.get("/api/workers/payouts/report")).json()
+    assert Decimal(report["total_paid"]) == Decimal("5260.00")
 
 
 async def test_editing_the_expense_moves_the_payout_with_it(attach_client, db_session):
@@ -473,21 +498,55 @@ async def test_editing_the_expense_moves_the_payout_with_it(attach_client, db_se
     assert Decimal(report["total_paid"]) == Decimal("7000.00")
 
 
-async def test_editing_the_expense_keeps_a_calculated_accrual_untouched(attach_client, db_session):
-    _, expense, _ = await attach_card_expense(attach_client, db_session)
-    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
-    # Посчитанная выплата: начислено по ставкам, выдана часть.
-    payout.gross_amount = Decimal("20000.00")
-    payout.remaining_amount = Decimal("14740.00")
+async def make_calculated_payout(db, *, gross="100000.00", cash_paid="100000.00"):
+    """Зарплата, посчитанная по ставке: выплачена полностью, суммы совпали."""
+    worker = Worker(name="Andrei Timokhov", monthly_rate=Decimal(gross))
+    db.add(worker)
+    await db.flush()
+    expense = await make_card_expense(db, amount=cash_paid)
+    payout = WorkerPayout(
+        worker_id=worker.id,
+        expense_id=expense.id,
+        payout_type="monthly",
+        date=expense.date,
+        monthly_rate=Decimal(gross),
+        gross_amount=Decimal(gross),
+        cash_paid_amount=Decimal(cash_paid),
+        remaining_amount=Decimal("0"),
+        description="worker_payout:monthly: Andrei Timokhov",
+        origin=PAYOUT_ORIGIN_CALCULATED,
+    )
+    db.add(payout)
+    await db.flush()
+    return worker, expense, payout
+
+
+async def test_editing_the_expense_keeps_a_fully_paid_accrual_untouched(attach_client, db_session):
+    # Начислено и выдано совпадают, но это расчёт по ставке, а не привязка:
+    # исправление суммы траты не должно переписывать заработок.
+    _, expense, payout = await make_calculated_payout(db_session)
+
+    expense.amount = Decimal("90000.00")
+    await sync_worker_payout_from_expense(db_session, expense)
     await db_session.flush()
+
+    assert Decimal(payout.gross_amount) == Decimal("100000.00")
+    assert Decimal(payout.cash_paid_amount) == Decimal("90000.00")
+    assert Decimal(payout.remaining_amount) == Decimal("10000.00")
+
+
+async def test_editing_the_expense_moves_a_linked_accrual(attach_client, db_session):
+    _, expense, response = await attach_card_expense(attach_client, db_session)
+    assert response.json()["payout"]["origin"] == PAYOUT_ORIGIN_EXPENSE_LINK
 
     expense.amount = Decimal("6000.00")
     await sync_worker_payout_from_expense(db_session, expense)
     await db_session.flush()
 
-    assert Decimal(payout.gross_amount) == Decimal("20000.00")
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert Decimal(payout.gross_amount) == Decimal("6000.00")
     assert Decimal(payout.cash_paid_amount) == Decimal("6000.00")
-    assert Decimal(payout.remaining_amount) == Decimal("14000.00")
+    assert Decimal(payout.remaining_amount) == Decimal("0")
 
 
 async def test_attach_is_rejected_for_a_foreign_currency_expense(attach_client, db_session):
@@ -535,3 +594,92 @@ async def test_deleting_the_expense_clears_the_payout(attach_client, db_session)
 
     assert removed is True
     assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def test_foreign_currency_on_a_linked_expense_is_refused(attach_client, db_session):
+    _, expense, _ = await attach_card_expense(attach_client, db_session)
+
+    expense.currency = "EUR"
+    with pytest.raises(PayoutCurrencyError):
+        await sync_worker_payout_from_expense(db_session, expense)
+
+
+async def test_moving_the_expense_date_moves_the_planned_salary_mark(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    plan = PlannedExpense(
+        name="Andrei Timokhov",
+        amount=Decimal("50000.00"),
+        currency="RSD",
+        period="monthly",
+        payment_day=5,
+        start_date=date(2026, 1, 5),
+        is_active=True,
+        worker_id=worker.id,
+    )
+    db_session.add(plan)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, entry_date=date(2026, 9, 4))
+    await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+    )
+
+    marked = (await db_session.execute(select(PlannedExpensePayment))).scalar_one()
+    assert marked.due_date == date(2026, 9, 5)
+
+    expense.date = date(2026, 8, 4)
+    expense.paid_date = date(2026, 8, 4)
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    moved = (await db_session.execute(select(PlannedExpensePayment))).scalar_one()
+    assert moved.due_date == date(2026, 8, 5)
+
+
+async def test_cancelled_payout_releases_its_planned_salary_mark(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    db_session.add(
+        PlannedExpense(
+            name="Andrei Timokhov",
+            amount=Decimal("50000.00"),
+            currency="RSD",
+            period="monthly",
+            payment_day=5,
+            start_date=date(2026, 1, 5),
+            is_active=True,
+            worker_id=worker.id,
+        )
+    )
+    await db_session.flush()
+    expense = await make_card_expense(db_session, entry_date=date(2026, 9, 4))
+    await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+    )
+    assert (await db_session.execute(select(PlannedExpensePayment))).scalars().all() != []
+
+    await create_expense_reversal(db_session, expense)
+
+    assert (await db_session.execute(select(PlannedExpensePayment))).scalars().all() == []
+
+
+async def test_merging_a_linked_expense_is_refused(attach_client, db_session):
+    _, kept, _ = await attach_card_expense(attach_client, db_session)
+    duplicate = await make_card_expense(db_session, description="Kartica duplicate")
+
+    with pytest.raises(ValueError, match="Unlink the worker payout"):
+        await merge_duplicate_expenses(db_session, kept.id, [duplicate.id])
+
+
+async def test_merging_is_allowed_once_the_worker_link_is_gone(attach_client, db_session):
+    _, kept, response = await attach_card_expense(attach_client, db_session)
+    duplicate = await make_card_expense(db_session, description="Kartica duplicate")
+    await attach_client.delete(f"/api/workers/payouts/{response.json()['payout']['id']}/link")
+
+    merged = await merge_duplicate_expenses(db_session, kept.id, [duplicate.id])
+
+    assert merged.id == kept.id

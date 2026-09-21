@@ -1403,7 +1403,11 @@ export default function Expenses() {
                       <button
                         type="button"
                         className="btn btn-secondary"
-                        disabled={detailModal.status === 'reversed' || !!detailModal.reversal_of_id}
+                        disabled={
+                          detailModal.status === 'reversed' ||
+                          !!detailModal.reversal_of_id ||
+                          !!detailModal.reversed_expense_id
+                        }
                         onClick={() => openPayoutLink(detailModal)}
                       >
                         {tr('workerPayoutAttach')}

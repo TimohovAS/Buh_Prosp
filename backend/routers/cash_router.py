@@ -20,6 +20,7 @@ from backend.db_utils import (
     resolve_category_expense_links,
 )
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
+from backend.expense_service import PayoutCurrencyError, sync_worker_payout_from_expense
 from backend.models import (
     BankTransaction,
     CashEntry,
@@ -237,7 +238,7 @@ async def _serialize_refreshed_entry(db: AsyncSession, entry_id: int) -> CashEnt
     payout_result = await db.execute(
         select(WorkerPayout)
         .options(selectinload(WorkerPayout.worker))
-        .where(WorkerPayout.cash_entry_id == entry_id)
+        .where(WorkerPayout.cash_entry_id == entry_id, WorkerPayout.cancelled_at.is_(None))
         .limit(1)
     )
     return _serialize_cash_entry(
@@ -275,7 +276,10 @@ async def _build_cash_summary(
         payout_result = await db.execute(
             select(WorkerPayout)
             .options(selectinload(WorkerPayout.worker))
-            .where(WorkerPayout.cash_entry_id.in_([entry.id for entry in entries]))
+            .where(
+                WorkerPayout.cash_entry_id.in_([entry.id for entry in entries]),
+                WorkerPayout.cancelled_at.is_(None),
+            )
         )
         payout_by_entry_id = {
             int(payout.cash_entry_id): payout for payout in payout_result.scalars().all() if payout.cash_entry_id
@@ -440,6 +444,11 @@ async def update_cash_entry(
         entry.currency = currency
         entry.description = expense.description
         entry.note = note
+        # Наличный расход мог быть учтён как выплата работнику.
+        try:
+            await sync_worker_payout_from_expense(db, expense)
+        except PayoutCurrencyError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     elif entry.entry_type == "pending_withdrawal":
         if entry.bank_transaction_id or entry.expense_id:

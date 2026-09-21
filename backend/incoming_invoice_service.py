@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from backend.db_utils import get_project_or_404, get_unassigned_project_id
 from backend.counterparty_loan_service import loan_totals
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
+from backend.expense_service import sync_worker_payout_from_expense
 from backend.models import (
     BankTransaction,
     CashEntry,
@@ -134,6 +135,8 @@ async def update_incoming_invoice(
             expense.date = invoice.date
             if "project_id" in fields:
                 expense.project_id = invoice.project_id
+            # Расход мог быть учтён как выплата работнику.
+            await sync_worker_payout_from_expense(db, expense)
     return invoice
 
 
