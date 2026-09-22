@@ -328,7 +328,13 @@ async def test_purchase_for_a_worker_is_counted_in_the_report_without_a_cash_ent
 
     response = await attach_client.post(
         "/api/workers/payouts/attach",
-        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
     )
 
     assert response.status_code == 200
@@ -379,7 +385,13 @@ async def test_attach_is_rejected_for_a_reversed_expense(attach_client, db_sessi
 
     response = await attach_client.post(
         "/api/workers/payouts/attach",
-        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
     )
 
     assert response.status_code == 400
@@ -410,7 +422,13 @@ async def test_purchase_type_can_be_changed_without_a_cash_entry(attach_client, 
     attached = (
         await attach_client.post(
             "/api/workers/payouts/attach",
-            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+            json={
+                "expense_id": expense.id,
+                "worker_id": worker.id,
+                "payout_type": "purchase",
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+            },
         )
     ).json()["payout"]
 
@@ -435,7 +453,13 @@ async def attach_card_expense(client, db, *, currency="RSD", amount="5260.00", s
     await db.flush()
     response = await client.post(
         "/api/workers/payouts/attach",
-        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
     )
     return worker, expense, response
 
@@ -449,7 +473,13 @@ async def test_attach_is_rejected_for_an_expense_that_was_already_reversed(attac
 
     response = await attach_client.post(
         "/api/workers/payouts/attach",
-        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
     )
 
     assert response.status_code == 400
@@ -585,7 +615,13 @@ async def test_the_same_expense_can_be_attached_again_after_unlinking(attach_cli
 
     again = await attach_client.post(
         "/api/workers/payouts/attach",
-        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
     )
 
     assert again.status_code == 200
@@ -687,3 +723,19 @@ async def test_merging_is_allowed_once_the_worker_link_is_gone(attach_client, db
     merged = await merge_duplicate_expenses(db_session, kept.id, [duplicate.id])
 
     assert merged.id == kept.id
+
+
+async def test_purchase_needs_the_salary_period_it_belongs_to(attach_client, db_session):
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, entry_date=date(2026, 9, 30))
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "purchase"},
+    )
+
+    # Без периода трата 30 сентября закрыла бы октябрьскую зарплату.
+    assert response.status_code == 400
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []

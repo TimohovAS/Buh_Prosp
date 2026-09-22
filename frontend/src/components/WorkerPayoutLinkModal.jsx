@@ -27,6 +27,22 @@ const PAYOUT_TYPE_OPTIONS = [
 
 const toFormValue = (value) => (value === null || value === undefined ? '' : String(value))
 
+// Покупка закрывает зарплату за конкретный месяц, поэтому период подставляем от
+// даты траты: иначе покупка 30 сентября ушла бы в октябрьскую зарплату.
+const monthRange = (isoDate) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || ''))) return null
+  const [year, month] = isoDate.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const pad = (value) => String(value).padStart(2, '0')
+  return { start: `${isoDate.slice(0, 7)}-01`, end: `${isoDate.slice(0, 7)}-${pad(lastDay)}` }
+}
+
+const withSalaryPeriod = (form, payoutType, isoDate) => {
+  if (payoutType !== 'purchase' || (form.period_start && form.period_end)) return form
+  const range = monthRange(isoDate)
+  return range ? { ...form, period_start: range.start, period_end: range.end } : form
+}
+
 // В старых записях работник указан только в описании: подставляем его, если
 // имя совпало точно.
 const matchWorkerIdByName = (list, description) => {
@@ -73,11 +89,15 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
               period_start: payout.period_start || '',
               period_end: payout.period_end || '',
             }
-          : {
-              ...emptyForm,
-              payout_type: target?.defaultPayoutType || emptyForm.payout_type,
-              worker_id: matchWorkerIdByName(list, target?.description),
-            }
+          : withSalaryPeriod(
+              {
+                ...emptyForm,
+                payout_type: target?.defaultPayoutType || emptyForm.payout_type,
+                worker_id: matchWorkerIdByName(list, target?.description),
+              },
+              target?.defaultPayoutType || emptyForm.payout_type,
+              target?.date
+            )
       )
     }
     load()
@@ -134,6 +154,10 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
     }
   }
 
+  // Без месяца покупка ушла бы в ближайшую открытую зарплату, поэтому период обязателен.
+  const needsSalaryPeriod = form.payout_type === 'purchase'
+  const missingSalaryPeriod = needsSalaryPeriod && !(form.period_start && form.period_end)
+
   const summary = target
     ? `${target.date || UI_DASH} ${UI_DASH} ${fmtAmount(target.amount)} ${target.currency || 'RSD'} ${UI_DASH} ${
         target.description || ''
@@ -177,7 +201,15 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
           <select
             className="form-input"
             value={form.payout_type}
-            onChange={(event) => setForm((previous) => ({ ...previous, payout_type: event.target.value }))}
+            onChange={(event) =>
+              setForm((previous) =>
+                withSalaryPeriod(
+                  { ...previous, payout_type: event.target.value },
+                  event.target.value,
+                  target?.date
+                )
+              )
+            }
             disabled={loading}
           >
             {PAYOUT_TYPE_OPTIONS.map(([value, labelKey]) => (
@@ -192,6 +224,7 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
           <DatePicker
             value={form.period_start}
             onChange={(value) => setForm((previous) => ({ ...previous, period_start: value }))}
+            required={needsSalaryPeriod}
           />
         </div>
         <div className="form-group">
@@ -199,8 +232,14 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
           <DatePicker
             value={form.period_end}
             onChange={(value) => setForm((previous) => ({ ...previous, period_end: value }))}
+            required={needsSalaryPeriod}
           />
         </div>
+        {needsSalaryPeriod ? (
+          <p className="text-muted" style={{ marginTop: 0 }}>
+            {tr('workerPayoutPurchasePeriodHint')}
+          </p>
+        ) : null}
         <div className="modal-actions">
           {payoutId ? (
             <button
@@ -216,7 +255,11 @@ export default function WorkerPayoutLinkModal({ isOpen, target, onClose, onSaved
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             {tr('cancel')}
           </button>
-          <button type="submit" className="btn btn-primary" disabled={saving || loading || !form.worker_id}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={saving || loading || !form.worker_id || missingSalaryPeriod}
+          >
             {saving || loading ? tr('loading') : payoutId ? tr('save') : tr('workerPayoutAttachSubmit')}
           </button>
         </div>

@@ -22,12 +22,16 @@ from backend.models import (
     MonthlyObligation,
     PaymentType,
     PlannedExpense,
-    PlannedExpensePayment,
     User,
 )
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
 from backend.payments_service import get_or_create_obligations
-from backend.planned_expenses_service import payment_dates_in_range, planned_expenses_sum_until_including_overdue
+from backend.planned_expenses_service import (
+    occurrence_remaining,
+    payment_dates_in_range,
+    planned_expenses_sum_until_including_overdue,
+    settled_amounts_by_occurrence,
+)
 from backend.schemas import (
     DashboardIncomingInvoiceItem,
     DashboardStats,
@@ -160,20 +164,15 @@ async def get_dashboard(
     planned_result = await db.execute(select(PlannedExpense).where(PlannedExpense.is_active == True))
     planned_items = planned_result.scalars().all()
 
-    paid_pairs = set()
-    if planned_items:
-        paid_result = await db.execute(
-            select(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date).where(
-                PlannedExpensePayment.planned_expense_id.in_([item.id for item in planned_items])
-            )
-        )
-        paid_pairs = {(row[0], row[1]) for row in paid_result.fetchall()}
+    # Зарплату закрывают частями, поэтому берём непогашенные остатки: частичная
+    # оплата не должна прятать со сводки весь плановый платёж.
+    settled = await settled_amounts_by_occurrence(db, {item.id for item in planned_items})
 
     planned_expenses_only_until_month_end = planned_expenses_sum_until_including_overdue(
         planned_items,
         range_start,
         month_end,
-        paid_pairs,
+        settled,
     )
     planned_expenses_until_month_end = planned_expenses_only_until_month_end
 
@@ -253,14 +252,16 @@ async def get_dashboard(
     for planned_expense in planned_items:
         due_dates = payment_dates_in_range(planned_expense, range_start_planned, range_end_planned, limit=12)
         for due_date in due_dates:
-            if (planned_expense.id, due_date) in paid_pairs:
+            # Частично закрытый платёж остаётся в списке, но уже на остаток.
+            remaining = occurrence_remaining(planned_expense, settled.get((planned_expense.id, due_date), ZERO_DECIMAL))
+            if remaining <= ZERO_DECIMAL:
                 continue
             days_until = days_between(due_date, today, absolute=False)
             upcoming_planned.append(
                 UpcomingPlannedItem(
                     planned_expense_id=planned_expense.id,
                     name=planned_expense.name,
-                    amount=planned_expense.amount,
+                    amount=remaining,
                     currency=planned_expense.currency or "RSD",
                     due_date=due_date.isoformat(),
                     status="overdue" if due_date < today else "upcoming",

@@ -1227,6 +1227,9 @@ const ru = {
   workerPayoutPeriodStart: 'Период с',
   workerPayoutPurchase: 'Покупка в счёт зарплаты',
   workerPayoutPurchaseShort: 'Покупка',
+  workerPayoutPurchasePeriodHint:
+    'Укажите зарплатный месяц, за который сделана покупка: на него и уменьшится остаток.',
+  workerPayoutSalaryRemainder: 'За {month} уже закрыто {paid}, осталось выдать {remaining}',
   workerPayoutRegular: 'Выходы',
   workerPayoutRemaining: 'Остаток',
   workerPayoutTripAdvance: 'Аванс за командировку',

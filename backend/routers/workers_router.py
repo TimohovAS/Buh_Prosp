@@ -23,7 +23,11 @@ from backend.expense_service import (
     unlink_worker_payout,
 )
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
-from backend.planned_expenses_service import sync_worker_payout_planned_payment, sync_worker_salary_plan
+from backend.planned_expenses_service import (
+    resync_worker_salary_settlements,
+    sync_worker_payout_planned_payment,
+    sync_worker_salary_plan,
+)
 from backend.schemas import (
     CashEntryResponse,
     WorkerCreate,
@@ -246,11 +250,19 @@ async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> 
     return entry, expense
 
 
+def _validate_payout_period(payout_type: str, period_start, period_end) -> None:
+    if period_start and period_end and period_end < period_start:
+        raise HTTPException(400, "Period end must not be before period start")
+    # Без периода покупка ушла бы в ближайший открытый месяц: трата 30 сентября
+    # закрыла бы октябрьскую зарплату. Месяц называем явно.
+    if payout_type == PAYOUT_TYPE_PURCHASE and not (period_start and period_end):
+        raise HTTPException(400, "A purchase against salary needs the salary period it belongs to")
+
+
 def _validate_payout_link(data: WorkerPayoutLinkUpdate) -> None:
     if data.payout_type not in PAYOUT_TYPES:
         raise HTTPException(400, "Unknown payout type")
-    if data.period_start and data.period_end and data.period_end < data.period_start:
-        raise HTTPException(400, "Period end must not be before period start")
+    _validate_payout_period(data.payout_type, data.period_start, data.period_end)
 
 
 def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
@@ -526,6 +538,7 @@ async def create_worker_payout(
     worker = await _get_worker_or_404(db, data.worker_id)
     if not worker.is_active:
         raise HTTPException(400, "Worker is inactive")
+    _validate_payout_period(data.payout_type, data.period_start, data.period_end)
 
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
     calc = _calculate_payout(worker, data)
@@ -707,14 +720,17 @@ async def update_worker_payout_link(
     entry = payout.cash_entry
 
     worker = await _get_worker_or_404(db, data.worker_id)
+    previous_worker_id = payout.worker_id
     payout.worker_id = worker.id
     payout.payout_type = data.payout_type
     payout.period_start = data.period_start
     payout.period_end = data.period_end
     await db.flush()
-    # Напоминание о плановой зарплате привязано к типу выплаты, поэтому метку
-    # переставляем: у командировочных её быть не должно.
+    # Погашения плановой зарплаты пересобираем: у прежнего работника освободился
+    # остаток, у нового — закрылся.
     await sync_worker_payout_planned_payment(db, payout)
+    if previous_worker_id != worker.id:
+        await resync_worker_salary_settlements(db, previous_worker_id)
 
     await db.commit()
     await db.refresh(payout, ["worker"])
@@ -744,7 +760,10 @@ async def delete_worker_payout_link(
 
     expense_id = payout.expense_id
     cash_entry_id = payout.cash_entry_id
+    worker_id = payout.worker_id
     await unlink_worker_payout(db, payout)
+    # Освободившийся остаток зарплаты должен вернуться и перераспределиться.
+    await resync_worker_salary_settlements(db, worker_id)
     await db.commit()
     return {"ok": True, "expense_id": expense_id, "cash_entry_id": cash_entry_id}
 
@@ -770,6 +789,8 @@ async def update_worker_payout(
         raise HTTPException(404, "Worker payout not found")
 
     worker = await _get_worker_or_404(db, data.worker_id)
+    _validate_payout_period(data.payout_type, data.period_start, data.period_end)
+    previous_worker_id = payout.worker_id
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
     calc = _calculate_payout(worker, data)
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
@@ -838,6 +859,8 @@ async def update_worker_payout(
     payout.category_id = category_id
 
     await sync_worker_payout_planned_payment(db, payout)
+    if previous_worker_id != worker.id:
+        await resync_worker_salary_settlements(db, previous_worker_id)
     await db.commit()
     await db.refresh(payout, ["worker"])
     await db.refresh(entry)

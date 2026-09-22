@@ -272,3 +272,93 @@ async def test_deleting_the_purchase_expense_reopens_the_remainder(client, db_se
     await unlink_worker_payout_from_expense(db_session, purchase_expense.id)
 
     assert Decimal(str((await occurrence(client))["remaining_amount"])) == PURCHASE
+
+
+async def test_the_split_does_not_depend_on_the_order_of_operations(client, db_session):
+    """Сторно одной выплаты перераспределяет остальные, а не оставляет их урезанными."""
+    worker = await make_worker_with_salary_plan(db_session)
+    purchase_expense = await make_expense(db_session, PURCHASE)
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": purchase_expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+    # Деньгами выдали всю зарплату, но раскладка идёт по датам выплат, а не по
+    # порядку заведения: покупка от 4 сентября считается первой и целиком.
+    money_payout = await add_money_payout(db_session, worker, SALARY)
+    purchase_mark = (
+        await db_session.execute(
+            select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id != money_payout.id)
+        )
+    ).scalar_one()
+    assert Decimal(purchase_mark.amount) == PURCHASE
+    assert await settled_total(db_session) == SALARY
+
+    money_payout.cancelled_at = date(2026, 9, 30)
+    await db_session.flush()
+    await sync_worker_payout_planned_payment(db_session, money_payout)
+
+    # После сторно денежной выплаты покупка снова считается целиком.
+    marks = (await db_session.execute(select(PlannedExpensePayment))).scalars().all()
+    assert len(marks) == 1
+    assert Decimal(marks[0].amount) == PURCHASE
+    assert Decimal(str((await occurrence(client))["remaining_amount"])) == Decimal("80000.00")
+
+
+async def test_unmarking_by_hand_keeps_confirmations_of_real_payouts(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    purchase_expense = await make_expense(db_session, PURCHASE)
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": purchase_expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+    plan = (await db_session.execute(select(PlannedExpense))).scalar_one()
+    body = {"planned_expense_id": plan.id, "due_date": DUE_DATE.isoformat()}
+
+    refused = await client.post("/api/planned-expenses/mark-unpaid", json=body)
+
+    assert refused.status_code == 400
+    assert await settled_total(db_session) == PURCHASE
+
+    # Ручную отметку снять можно — подтверждение покупки при этом остаётся.
+    await client.post("/api/planned-expenses/mark-paid", json={**body, "paid_date": DUE_DATE.isoformat()})
+    removed = await client.post("/api/planned-expenses/mark-unpaid", json=body)
+
+    assert removed.status_code == 200
+    assert await settled_total(db_session) == PURCHASE
+
+
+async def test_the_same_split_whichever_was_entered_first(client, db_session):
+    """Деньги сначала или покупка сначала — раскладка одинаковая."""
+    worker = await make_worker_with_salary_plan(db_session)
+    await add_money_payout(db_session, worker, SALARY)
+    purchase_expense = await make_expense(db_session, PURCHASE)
+
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": purchase_expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+
+    marks = {
+        mark.worker_payout_id: Decimal(mark.amount)
+        for mark in (await db_session.execute(select(PlannedExpensePayment))).scalars().all()
+    }
+    assert sorted(marks.values()) == [PURCHASE, Decimal("80000.00")]
+    assert await settled_total(db_session) == SALARY

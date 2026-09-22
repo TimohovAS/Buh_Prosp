@@ -16,6 +16,12 @@ from backend.db_utils import (
     get_unassigned_project_id,
 )
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, money_abs, money_eq, to_decimal
+from backend.expense_service import (
+    cancel_worker_payout_for_expense,
+    is_reversal_row,
+    restore_worker_payout_for_expense,
+    sync_worker_payout_from_expense,
+)
 from backend.incoming_invoice_service import settle_via_bank
 from backend.obligation_payment_service import (
     link_obligation_bank_transaction,
@@ -1347,6 +1353,12 @@ async def match_transaction(db: AsyncSession, tx_id: int, match_type: str, match
 
         await _sync_incoming_invoice_on_match(db, expense, tx)
         await sync_receipt_for_expense_match(db, expense, tx)
+        # Расход мог быть учтён как выплата работнику: дата и проект изменились,
+        # значит и она должна поехать следом. Деньги снова подтверждены — если
+        # выплату гасили при снятии сопоставления, возвращаем её.
+        if not is_reversal_row(expense) and not getattr(expense, "reversed_expense_id", None):
+            await restore_worker_payout_for_expense(db, expense.id)
+        await sync_worker_payout_from_expense(db, expense)
 
     elif match_type == "obligation":
         obligation_response = await db.execute(select(MonthlyObligation).where(MonthlyObligation.id == match_id))
@@ -1404,6 +1416,9 @@ async def unmatch_transaction(db: AsyncSession, tx_id: int, current_user_id: int
             await _sync_incoming_invoice_on_unmatch(db, expense, tx)
             await sync_receipt_for_expense_unmatch(db, expense)
             reopen_expense_for_unmatch(expense)
+            # Расход вернулся в планируемые: неподтверждённые деньги в доходе
+            # работника держать нельзя, сопоставят заново — вернём.
+            await cancel_worker_payout_for_expense(db, expense.id)
 
     elif tx.matched_type == MATCH_TYPE_OWNER_FUNDS:
         pass

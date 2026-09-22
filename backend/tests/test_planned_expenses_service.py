@@ -49,11 +49,25 @@ def test_one_time_planned_expense_is_removed_from_forecast_after_payment():
         [expense],
         date(2026, 1, 1),
         date(2026, 9, 30),
-        {(expense.id, expense.start_date)},
+        {(expense.id, expense.start_date): Decimal("12500.00")},
     )
 
     assert unpaid_total == Decimal("12500.00")
     assert paid_total == Decimal("0.00")
+
+
+def test_partially_settled_planned_expense_keeps_its_remainder_in_the_forecast():
+    expense = make_planned_expense()
+
+    partial_total = planned_expenses_sum_until_including_overdue(
+        [expense],
+        date(2026, 1, 1),
+        date(2026, 9, 30),
+        {(expense.id, expense.start_date): Decimal("2500.00")},
+    )
+
+    # Оплата части не должна прятать со сводки весь платёж.
+    assert partial_total == Decimal("10000.00")
 
 
 def test_future_recurring_expense_can_generate_payment_dates():

@@ -170,11 +170,18 @@ async def mark_planned_expense_unpaid(
             PlannedExpensePayment.due_date == due_d,
         )
     )
-    # Погашений за период может быть несколько — снимаем их все.
     payments = r.scalars().all()
     if not payments:
         raise HTTPException(404, "Оплата не найдена")
-    for payment in payments:
+    # Подтверждения реальных выплат и покупок отсюда не снимаем: они держатся на
+    # самих записях, и убрать их можно только отвязав выплату от работника.
+    manual = [payment for payment in payments if payment.worker_payout_id is None]
+    if not manual:
+        raise HTTPException(
+            400,
+            "Этот платёж закрыт выплатами работнику. Отвяжите выплату от работника, чтобы открыть его снова.",
+        )
+    for payment in manual:
         await db.delete(payment)
     await db.commit()
     return {"ok": True}

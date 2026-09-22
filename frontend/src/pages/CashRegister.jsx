@@ -191,6 +191,7 @@ export default function CashRegister() {
   })
   const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
+  const [salaryRemainder, setSalaryRemainder] = useState(null)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -850,6 +851,7 @@ export default function CashRegister() {
 
   const openWorkerPayoutCreate = () => {
     setArchivedPayoutWorker(null)
+    setSalaryRemainder(null)
     setWorkerPayoutForm({
       ...emptyWorkerPayoutForm,
       date: todayIso(),
@@ -963,6 +965,34 @@ export default function CashRegister() {
     }
   }
 
+  // Часть зарплаты могли уже закрыть покупкой в её счёт — тогда деньгами
+  // причитается только остаток, иначе работник получит больше положенного.
+  const loadSalaryRemainder = async (workerId, payoutDate) => {
+    setSalaryRemainder(null)
+    if (!workerId) return
+    try {
+      const items = await api.plannedExpenses.upcoming(365)
+      const target = payoutDate || todayIso()
+      const open = (items || [])
+        .filter(
+          (item) =>
+            Number(item.worker_id) === Number(workerId) &&
+            !item.is_paid &&
+            Number(item.paid_amount) > 0 &&
+            Number(item.remaining_amount) > 0
+        )
+        .sort(
+          (left, right) =>
+            Math.abs(new Date(left.due_date) - new Date(target)) -
+            Math.abs(new Date(right.due_date) - new Date(target))
+        )
+      if (open.length) setSalaryRemainder(open[0])
+    } catch {
+      // Напоминание — подсказка, а не условие сохранения выплаты.
+      setSalaryRemainder(null)
+    }
+  }
+
   const updateWorkerPayoutWorker = (workerId) => {
     const worker = workers.find((item) => Number(item.id) === Number(workerId))
     setWorkerPayoutForm((previous) => ({
@@ -974,6 +1004,9 @@ export default function CashRegister() {
     }))
     if (workerPayoutForm.payout_type === 'trip_final') {
       prefillTripFinalFromAdvance(workerId)
+    }
+    if (!workerPayoutModal?.payoutId) {
+      loadSalaryRemainder(workerId, workerPayoutForm.date)
     }
   }
 
@@ -1892,7 +1925,12 @@ export default function CashRegister() {
               <label className="form-label">{tr('date')}</label>
               <DatePicker
                 value={workerPayoutForm.date}
-                onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, date: value }))}
+                onChange={(value) => {
+                  setWorkerPayoutForm((previous) => ({ ...previous, date: value }))
+                  if (!workerPayoutModal?.payoutId) {
+                    loadSalaryRemainder(workerPayoutForm.worker_id, value)
+                  }
+                }}
                 required
               />
             </div>
@@ -1965,12 +2003,25 @@ export default function CashRegister() {
             ) : null}
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPayNow')}</label>
+              {salaryRemainder && !workerPayoutModal?.payoutId ? (
+                <div className="record-field-text">
+                  {tr('workerPayoutSalaryRemainder', {
+                    month: salaryRemainder.due_date.slice(0, 7),
+                    paid: fmtAmount(salaryRemainder.paid_amount),
+                    remaining: fmtAmount(salaryRemainder.remaining_amount),
+                  })}
+                </div>
+              ) : null}
               <input
                 className="form-input"
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder={String(workerPayoutPreview.cash)}
+                placeholder={String(
+                  salaryRemainder && !workerPayoutModal?.payoutId
+                    ? salaryRemainder.remaining_amount
+                    : workerPayoutPreview.cash
+                )}
                 value={workerPayoutForm.cash_paid_amount}
                 onChange={(event) =>
                   setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))

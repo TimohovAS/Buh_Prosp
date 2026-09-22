@@ -38,6 +38,7 @@ async def get_open_trip_settlement_summary(
         select(final_payout.id).where(
             final_payout.worker_id == WorkerPayout.worker_id,
             final_payout.payout_type == "trip_final",
+            final_payout.cancelled_at.is_(None),
             final_payout.period_start.is_not_distinct_from(WorkerPayout.period_start),
             final_payout.period_end.is_not_distinct_from(WorkerPayout.period_end),
         )
@@ -55,6 +56,8 @@ async def get_open_trip_settlement_summary(
         .where(
             WorkerPayout.payout_type == "trip_advance",
             WorkerPayout.remaining_amount > ZERO_DECIMAL,
+            # Погашенная сторно выплата долгом работника больше не является.
+            WorkerPayout.cancelled_at.is_(None),
             ~matching_final_exists,
         )
         .order_by(due_date.asc(), Worker.name.asc(), WorkerPayout.id.asc())

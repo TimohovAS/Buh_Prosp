@@ -20,7 +20,10 @@ from backend.models import (
     PlannedExpensePayment,
     WorkerPayout,
 )
-from backend.planned_expenses_service import sync_worker_payout_planned_payment
+from backend.planned_expenses_service import (
+    resync_worker_salary_settlements,
+    sync_worker_payout_planned_payment,
+)
 from backend.schemas import ExpenseDuplicateGroup, ExpenseDuplicateItem
 from backend.state_machine import mark_expense_paid
 
@@ -419,8 +422,9 @@ async def cancel_worker_payout_for_expense(db: AsyncSession, expense_id: int) ->
     if not payout:
         return False
     payout.cancelled_at = datetime.utcnow()
-    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
     await db.flush()
+    # Зарплата за период снова недоплачена: пересобираем раскладку целиком.
+    await resync_worker_salary_settlements(db, payout.worker_id)
     return True
 
 
@@ -437,9 +441,11 @@ async def restore_worker_payout_for_expense(db: AsyncSession, expense_id: int) -
 
 async def unlink_worker_payout(db: AsyncSession, payout: WorkerPayout) -> None:
     """Убрать выплату, оставив сам расход: связь с работником была ошибочной или отменена."""
+    worker_id = payout.worker_id
     await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
     await db.delete(payout)
     await db.flush()
+    await resync_worker_salary_settlements(db, worker_id)
 
 
 async def unlink_worker_payout_from_expense(db: AsyncSession, expense_id: int) -> bool:
