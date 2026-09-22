@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     backup_manual_retention_count: int = 30
     backup_pre_restore_retention_count: int = 20
     backup_scheduler_check_minutes: int = 5
+    company_registry_cache_path: str = "./cache/company_registry.db"
+    company_registry_cache_ttl_hours: int = 24 * 7
+    company_registry_request_timeout_seconds: int = 120
     # В dev допустим предсказуемый ключ, но в prod обязателен внешний безопасный SECRET_KEY.
     secret_key: str = DEFAULT_DEV_SECRET_KEY
     algorithm: str = "HS256"

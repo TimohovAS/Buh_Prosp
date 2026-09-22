@@ -58,6 +58,7 @@ class Client(Base):
     address = Column(String(500))
     pib = Column(String(20))  # PIB/ИНН
     maticni_broj = Column(String(20))  # MB / maticni broj
+    jbkjs = Column(String(20))  # Јединствени број корисника јавних средстава
     contact = Column(String(200))  # контактное лицо
     phone = Column(String(100))
     email = Column(String(120))

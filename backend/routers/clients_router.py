@@ -1,14 +1,27 @@
 """Clients router."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.bank_account_utils import normalize_serbian_bank_account
+from backend.company_registry_service import (
+    CompanyRegistryUnavailableError,
+    lookup_company_registry,
+    normalize_registry_identifier,
+)
 from backend.database import get_db
 from backend.models import Client, ClientBankAccount, User
-from backend.schemas import ClientCreate, ClientUpdate, ClientResponse, ClientBrief
+from backend.schemas import (
+    ClientBrief,
+    ClientCreate,
+    ClientResponse,
+    ClientUpdate,
+    CompanyRegistryLookupResponse,
+)
 from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/clients", tags=["clients"])
@@ -77,6 +90,7 @@ async def list_clients(
             Client.name.ilike(f"%{search}%"),
             Client.pib.ilike(f"%{search}%"),
             Client.maticni_broj.ilike(f"%{search}%"),
+            Client.jbkjs.ilike(f"%{search}%"),
             Client.bank_account_records.any(ClientBankAccount.account_number.ilike(f"%{search}%")),
         ]
         account_digits = "".join(char for char in search if char.isdigit())
@@ -103,11 +117,126 @@ async def list_clients_brief(
                 Client.name.ilike(f"%{search}%"),
                 Client.pib.ilike(f"%{search}%"),
                 Client.maticni_broj.ilike(f"%{search}%"),
+                Client.jbkjs.ilike(f"%{search}%"),
             )
         )
     q = q.order_by(Client.name).limit(50)
     result = await db.execute(q)
     return [ClientBrief(id=client.id, name=client.name) for client in result.scalars().all()]
+
+
+def _try_normalize_identifier(value: str | None, identifier_type: Literal["pib", "maticni_broj"]) -> str | None:
+    if not value:
+        return None
+    try:
+        return normalize_registry_identifier(value, identifier_type)
+    except ValueError:
+        return None
+
+
+def _try_normalize_jbkjs(value: str | None) -> str | None:
+    normalized = "".join(character for character in str(value or "") if character.isdigit())
+    return normalized if len(normalized) == 5 else None
+
+
+async def _ensure_client_identifiers_available(
+    db: AsyncSession,
+    *,
+    pib: str | None,
+    maticni_broj: str | None,
+    jbkjs: str | None,
+    exclude_client_id: int | None = None,
+    check_pib: bool = True,
+    check_maticni_broj: bool = True,
+    check_jbkjs: bool = True,
+) -> None:
+    """Reject identifiers already assigned to the same legal or budget entity."""
+
+    normalized_pib = _try_normalize_identifier(pib, "pib")
+    normalized_maticni = _try_normalize_identifier(maticni_broj, "maticni_broj") if check_maticni_broj else None
+    normalized_jbkjs = _try_normalize_jbkjs(jbkjs)
+    if not (check_pib and normalized_pib) and not normalized_maticni and not (check_jbkjs and normalized_jbkjs):
+        return
+
+    clients_result = await db.execute(select(Client.id, Client.name, Client.pib, Client.maticni_broj, Client.jbkjs))
+    for client_id, client_name, client_pib, client_maticni, client_jbkjs in clients_result.all():
+        if exclude_client_id is not None and client_id == exclude_client_id:
+            continue
+        existing_pib = _try_normalize_identifier(client_pib, "pib")
+        existing_jbkjs = _try_normalize_jbkjs(client_jbkjs)
+        if normalized_jbkjs and normalized_jbkjs == existing_jbkjs and (check_jbkjs or check_pib or check_maticni_broj):
+            raise HTTPException(409, f"JBKJS already belongs to client {client_name}")
+
+        distinct_budget_units = bool(normalized_jbkjs and existing_jbkjs and normalized_jbkjs != existing_jbkjs)
+        if check_pib and normalized_pib and normalized_pib == existing_pib and not distinct_budget_units:
+            raise HTTPException(409, f"PIB already belongs to client {client_name}")
+        if normalized_maticni and normalized_maticni == _try_normalize_identifier(client_maticni, "maticni_broj"):
+            # Budget units can legitimately share one registration number while
+            # being distinguished by their own PIB/JBKJS. When both valid PIBs
+            # are present and differ, the shared registration number is not a
+            # duplicate company identity.
+            if distinct_budget_units or (normalized_pib and existing_pib and normalized_pib != existing_pib):
+                continue
+            raise HTTPException(409, f"Matični broj already belongs to client {client_name}")
+
+
+@router.get("/company-registry", response_model=CompanyRegistryLookupResponse)
+async def lookup_client_company_registry(
+    identifier_type: Literal["pib", "maticni_broj"] = Query(...),
+    value: str = Query(..., max_length=64),
+    exclude_client_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    try:
+        normalized_value = normalize_registry_identifier(value, identifier_type)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    try:
+        result = await lookup_company_registry(identifier_type, normalized_value)
+    except CompanyRegistryUnavailableError as exc:
+        return CompanyRegistryLookupResponse(
+            query_type=identifier_type,
+            query_value=normalized_value,
+            available=False,
+            warning=str(exc),
+        )
+
+    clients_result = await db.execute(select(Client.id, Client.name, Client.pib, Client.maticni_broj, Client.jbkjs))
+    clients = clients_result.all()
+    for match in result["matches"]:
+        match_pib = _try_normalize_identifier(match.get("pib"), "pib")
+        match_maticni = _try_normalize_identifier(match.get("maticni_broj"), "maticni_broj")
+        match_jbkjs = _try_normalize_jbkjs(match.get("jbkjs"))
+        eligible_clients = [client for client in clients if exclude_client_id is None or client[0] != exclude_client_id]
+        if match_jbkjs:
+            exact_budget_client = next(
+                (client for client in eligible_clients if _try_normalize_jbkjs(client[4]) == match_jbkjs),
+                None,
+            )
+            if exact_budget_client:
+                match["existing_client_id"] = exact_budget_client[0]
+                match["existing_client_name"] = exact_budget_client[1]
+                continue
+
+        for client_id, client_name, client_pib, client_maticni, client_jbkjs in eligible_clients:
+            client_jbkjs_normalized = _try_normalize_jbkjs(client_jbkjs)
+            if match_jbkjs and client_jbkjs_normalized:
+                continue
+
+            same_pib = bool(match_pib and match_pib == _try_normalize_identifier(client_pib, "pib"))
+            same_maticni = (
+                not match_pib
+                and match_maticni
+                and match_maticni == _try_normalize_identifier(client_maticni, "maticni_broj")
+            )
+            if same_pib or same_maticni:
+                match["existing_client_id"] = client_id
+                match["existing_client_name"] = client_name
+                break
+
+    return CompanyRegistryLookupResponse(**result)
 
 
 @router.post("", response_model=ClientResponse)
@@ -117,6 +246,12 @@ async def create_client(
     current_user: User = Depends(require_edit_access),
 ):
     payload = data.model_dump(exclude={"bank_accounts"})
+    await _ensure_client_identifiers_available(
+        db,
+        pib=data.pib,
+        maticni_broj=data.maticni_broj,
+        jbkjs=data.jbkjs,
+    )
     client = Client(**payload)
     db.add(client)
     try:
@@ -154,6 +289,27 @@ async def update_client(
         raise HTTPException(404, "Client not found")
     payload = data.model_dump(exclude_unset=True)
     bank_accounts = payload.pop("bank_accounts", None)
+    current_pib = _try_normalize_identifier(client.pib, "pib")
+    current_maticni = _try_normalize_identifier(client.maticni_broj, "maticni_broj")
+    current_jbkjs = _try_normalize_jbkjs(client.jbkjs)
+    next_pib = payload.get("pib", client.pib)
+    next_maticni = payload.get("maticni_broj", client.maticni_broj)
+    next_jbkjs = payload.get("jbkjs", client.jbkjs)
+    check_pib = "pib" in payload and _try_normalize_identifier(next_pib, "pib") != current_pib
+    check_maticni = (
+        "maticni_broj" in payload and _try_normalize_identifier(next_maticni, "maticni_broj") != current_maticni
+    )
+    check_jbkjs = "jbkjs" in payload and _try_normalize_jbkjs(next_jbkjs) != current_jbkjs
+    await _ensure_client_identifiers_available(
+        db,
+        pib=next_pib,
+        maticni_broj=next_maticni,
+        jbkjs=next_jbkjs,
+        exclude_client_id=client.id,
+        check_pib=check_pib,
+        check_maticni_broj=check_maticni,
+        check_jbkjs=check_jbkjs,
+    )
     for key, value in payload.items():
         setattr(client, key, value)
     try:

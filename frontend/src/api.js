@@ -443,6 +443,11 @@ export const api = {
     },
     listBrief: (search) => request(`/clients/brief?search=${encodeURIComponent(search || '')}`),
     get: (id) => request(`/clients/${id}`),
+    lookupCompanyRegistry: (identifierType, value, excludeClientId = null) => {
+      const params = new URLSearchParams({ identifier_type: identifierType, value })
+      if (excludeClientId != null) params.set('exclude_client_id', String(excludeClientId))
+      return request(`/clients/company-registry?${params}`)
+    },
     create: (data) => request('/clients', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => request(`/clients/${id}`, { method: 'DELETE' }),

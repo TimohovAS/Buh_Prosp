@@ -70,6 +70,7 @@ class ClientBase(BaseModel):
     address: Optional[str] = None
     pib: Optional[str] = None
     maticni_broj: Optional[str] = None
+    jbkjs: Optional[str] = None
     bank_accounts: list[str] = Field(default_factory=list)
     contact: Optional[str] = None
     phone: Optional[str] = None
@@ -88,6 +89,7 @@ class ClientUpdate(BaseModel):
     address: Optional[str] = None
     pib: Optional[str] = None
     maticni_broj: Optional[str] = None
+    jbkjs: Optional[str] = None
     bank_accounts: Optional[list[str]] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
@@ -111,6 +113,41 @@ class ClientBrief(BaseModel):
     name: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompanyRegistrySource(BaseModel):
+    code: str
+    label: str
+    url: str
+
+
+class CompanyRegistryMatch(BaseModel):
+    name: str
+    registered_name: Optional[str] = None
+    sef_name: Optional[str] = None
+    pib: Optional[str] = None
+    maticni_broj: Optional[str] = None
+    jbkjs: Optional[str] = None
+    municipality: Optional[str] = None
+    status: Optional[str] = None
+    founded_on: Optional[str] = None
+    legal_form: Optional[str] = None
+    activity_code: Optional[str] = None
+    sef_deleted_on: Optional[str] = None
+    sources: list[CompanyRegistrySource] = Field(default_factory=list)
+    existing_client_id: Optional[int] = None
+    existing_client_name: Optional[str] = None
+
+
+class CompanyRegistryLookupResponse(BaseModel):
+    query_type: Literal["pib", "maticni_broj"]
+    query_value: str
+    matches: list[CompanyRegistryMatch] = Field(default_factory=list)
+    refreshed_at: Optional[str] = None
+    apr_snapshot_date: Optional[str] = None
+    stale: bool = False
+    available: bool = True
+    warning: Optional[str] = None
 
 
 # --- Project ---

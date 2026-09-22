@@ -15,6 +15,7 @@ htmlcov/
 *.db
 prospel.db
 backups/
+cache/
 
 # Frontend
 frontend/node_modules/

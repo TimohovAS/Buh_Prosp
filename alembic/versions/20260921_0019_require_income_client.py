@@ -80,9 +80,7 @@ def _fail(row: sa.RowMapping, reason: str) -> None:
     raise RuntimeError(f"Cannot assign a client to income {_income_label(row)}: {reason}")
 
 
-def _load_import_identity(
-    import_rows: list[sa.RowMapping], income_row: sa.RowMapping
-) -> tuple[str | None, str | None]:
+def _load_import_identity(import_rows: list[sa.RowMapping], income_row: sa.RowMapping) -> tuple[str | None, str | None]:
     pib_values: dict[str, str] = {}
     name_values: dict[str, str] = {}
 
@@ -106,11 +104,7 @@ def _load_import_identity(
         source_name = _compact(income_row["client_name"])
     elif source_pib:
         source_name = next(
-            (
-                _compact(row["customer_name"])
-                for row in reversed(import_rows)
-                if _compact(row["customer_name"])
-            ),
+            (_compact(row["customer_name"]) for row in reversed(import_rows) if _compact(row["customer_name"])),
             None,
         )
     else:
@@ -183,8 +177,7 @@ def _backfill_clients(connection: sa.Connection) -> None:
         imports_by_income[row["imported_record_id"]].append(row)
 
     client_rows = [
-        dict(row)
-        for row in connection.execute(sa.select(clients.c.id, clients.c.name, clients.c.pib)).mappings()
+        dict(row) for row in connection.execute(sa.select(clients.c.id, clients.c.name, clients.c.pib)).mappings()
     ]
 
     for income_row in null_incomes:
@@ -211,9 +204,7 @@ def _backfill_clients(connection: sa.Connection) -> None:
             matched_client = {"id": client_id, "name": source_name, "pib": source_pib}
             client_rows.append(matched_client)
         elif source_pib and not _normalize_pib(matched_client["pib"]):
-            connection.execute(
-                clients.update().where(clients.c.id == matched_client["id"]).values(pib=source_pib)
-            )
+            connection.execute(clients.update().where(clients.c.id == matched_client["id"]).values(pib=source_pib))
             matched_client["pib"] = source_pib
 
         connection.execute(

@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
+  AlertCircle,
   Building2,
+  Check,
   ContactRound,
+  Database,
   Globe2,
   Landmark,
   Mail,
@@ -27,12 +30,24 @@ const EMPTY_CLIENT_FORM = {
   address: '',
   pib: '',
   maticni_broj: '',
+  jbkjs: '',
   bank_accounts: '',
   contact: '',
   phone: '',
   email: '',
   website: '',
   client_type: 'legal',
+}
+
+const EMPTY_REGISTRY_LOOKUP = {
+  status: 'idle',
+  matches: [],
+  data: null,
+  error: '',
+}
+
+function registryDigits(value) {
+  return String(value || '').replace(/\D/g, '')
 }
 
 function splitContactValues(value) {
@@ -118,6 +133,8 @@ export default function Clients() {
     initialSortAsc: true,
   })
   const [form, setForm] = useState(EMPTY_CLIENT_FORM)
+  const [registryLookupField, setRegistryLookupField] = useState(null)
+  const [registryLookup, setRegistryLookup] = useState(EMPTY_REGISTRY_LOOKUP)
 
   const load = () => {
     setLoading(true)
@@ -135,6 +152,8 @@ export default function Clients() {
 
   const openAdd = () => {
     setForm(EMPTY_CLIENT_FORM)
+    setRegistryLookupField(null)
+    setRegistryLookup(EMPTY_REGISTRY_LOOKUP)
     setModal('add')
   }
 
@@ -144,6 +163,7 @@ export default function Clients() {
       address: item.address || '',
       pib: item.pib || '',
       maticni_broj: item.maticni_broj || '',
+      jbkjs: item.jbkjs || '',
       bank_accounts: (item.bank_accounts || []).join('\n'),
       contact: item.contact || '',
       phone: item.phone || '',
@@ -151,7 +171,87 @@ export default function Clients() {
       website: item.website || '',
       client_type: item.client_type || 'legal',
     })
+    setRegistryLookupField(null)
+    setRegistryLookup(EMPTY_REGISTRY_LOOKUP)
     setModal({ type: 'edit', id: item.id })
+  }
+
+  useEffect(() => {
+    if (!modal || form.client_type !== 'legal' || !registryLookupField) return undefined
+
+    const rawValue = registryLookupField === 'pib' ? form.pib : form.maticni_broj
+    const value = registryDigits(rawValue)
+    const requiredLength = registryLookupField === 'pib' ? 9 : 8
+    if (value.length !== requiredLength) {
+      setRegistryLookup(EMPTY_REGISTRY_LOOKUP)
+      return undefined
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setRegistryLookup({ status: 'loading', matches: [], data: null, error: '' })
+      const excludeClientId = modal?.type === 'edit' ? modal.id : null
+      api.clients
+        .lookupCompanyRegistry(registryLookupField, value, excludeClientId)
+        .then((data) => {
+          if (cancelled) return
+          if (!data.available) {
+            setRegistryLookup({
+              status: 'unavailable',
+              matches: [],
+              data,
+              error: tr('companyRegistryUnavailable'),
+            })
+            return
+          }
+          setRegistryLookup({
+            status: data.matches?.length ? 'found' : 'empty',
+            matches: data.matches || [],
+            data,
+            error: '',
+          })
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setRegistryLookup({
+              status: 'unavailable',
+              matches: [],
+              data: null,
+              error: tr('companyRegistryUnavailable'),
+            })
+          }
+        })
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [form.client_type, form.maticni_broj, form.pib, modal, registryLookupField])
+
+  const applyRegistryMatch = (match) => {
+    if (match.existing_client_id) return
+    setForm((current) => ({
+      ...current,
+      name: String(match.name || current.name).slice(0, 200),
+      pib: match.pib || current.pib,
+      maticni_broj: match.maticni_broj || current.maticni_broj,
+      jbkjs: match.jbkjs || current.jbkjs,
+      client_type: 'legal',
+    }))
+    setRegistryLookupField(null)
+    setRegistryLookup((current) => ({ ...current, status: 'applied' }))
+  }
+
+  const openExistingRegistryClient = async (match) => {
+    try {
+      const existing = items.find((item) => item.id === match.existing_client_id)
+      const client = existing || (await api.clients.get(match.existing_client_id))
+      setModal(null)
+      setDetailModal(client)
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const openDetail = (item) => {
@@ -349,6 +449,10 @@ export default function Clients() {
                       <strong>{detailModal.maticni_broj || UI_DASH}</strong>
                     </div>
                     <div className="record-profile-fact">
+                      <span>{tr('jbkjs')}</span>
+                      <strong>{detailModal.jbkjs || UI_DASH}</strong>
+                    </div>
+                    <div className="record-profile-fact">
                       <span>{tr('type')}</span>
                       <strong>{getClientTypeLabel(detailModal)}</strong>
                     </div>
@@ -425,10 +529,14 @@ export default function Clients() {
                     type="text"
                     className="form-input"
                     value={form.pib}
-                    onChange={(event) => setForm({ ...form, pib: event.target.value })}
+                    onChange={(event) => {
+                      setForm({ ...form, pib: event.target.value })
+                      setRegistryLookupField('pib')
+                    }}
                     inputMode="numeric"
                     maxLength={20}
                   />
+                  <small className="client-form-hint">{tr('companyRegistryPibHint')}</small>
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="client-form-maticni">
@@ -439,12 +547,167 @@ export default function Clients() {
                     type="text"
                     className="form-input"
                     value={form.maticni_broj}
-                    onChange={(event) => setForm({ ...form, maticni_broj: event.target.value })}
+                    onChange={(event) => {
+                      setForm({ ...form, maticni_broj: event.target.value })
+                      setRegistryLookupField('maticni_broj')
+                    }}
                     inputMode="numeric"
                     maxLength={20}
                   />
+                  <small className="client-form-hint">{tr('companyRegistryMbHint')}</small>
                 </div>
-                <div className="form-group client-form-field--span-3">
+                {registryLookup.status !== 'idle' ? (
+                  <div className="client-form-field--span-4 client-registry-lookup" aria-live="polite">
+                    {registryLookup.status === 'loading' ? (
+                      <div className="client-registry-state">
+                        <Database aria-hidden="true" size={17} />
+                        <span>{tr('companyRegistrySearching')}</span>
+                      </div>
+                    ) : null}
+
+                    {registryLookup.status === 'empty' ? (
+                      <div className="client-registry-state client-registry-state--muted">
+                        <AlertCircle aria-hidden="true" size={17} />
+                        <span>{tr('companyRegistryNotFound')}</span>
+                      </div>
+                    ) : null}
+
+                    {registryLookup.status === 'empty' && registryLookup.data?.warning ? (
+                      <div className="client-registry-state client-registry-state--warning">
+                        <AlertCircle aria-hidden="true" size={17} />
+                        <span>
+                          {tr(
+                            registryLookup.data.stale ? 'companyRegistryStale' : 'companyRegistryIncomplete'
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {registryLookup.status === 'unavailable' ? (
+                      <div className="client-registry-state client-registry-state--warning">
+                        <AlertCircle aria-hidden="true" size={17} />
+                        <span>{registryLookup.error || tr('companyRegistryUnavailable')}</span>
+                      </div>
+                    ) : null}
+
+                    {['found', 'applied'].includes(registryLookup.status) ? (
+                      <div className="client-registry-results">
+                        <div className="client-registry-heading">
+                          <span>
+                            <Database aria-hidden="true" size={17} />
+                            {tr('companyRegistrySuggestion')}
+                          </span>
+                          {registryLookup.status === 'applied' ? (
+                            <span className="client-registry-applied">
+                              <Check aria-hidden="true" size={15} /> {tr('companyRegistryApplied')}
+                            </span>
+                          ) : null}
+                        </div>
+                        {registryLookup.matches.map((match, index) => (
+                          <div
+                            className={`client-registry-match${match.existing_client_id ? ' has-conflict' : ''}`}
+                            key={`${match.pib || ''}-${match.maticni_broj || ''}-${match.jbkjs || ''}-${index}`}
+                          >
+                            <div className="client-registry-match-main">
+                              <strong>{match.name}</strong>
+                              <span>
+                                {match.pib ? `PIB ${match.pib}` : null}
+                                {match.pib && match.maticni_broj ? ' · ' : null}
+                                {match.maticni_broj ? `${tr('maticniBroj')} ${match.maticni_broj}` : null}
+                                {match.jbkjs ? ` · JBKJS ${match.jbkjs}` : null}
+                              </span>
+                              <div className="client-registry-meta">
+                                {match.municipality ? (
+                                  <span>{`${tr('companyRegistryMunicipality')}: ${match.municipality}`}</span>
+                                ) : null}
+                                {match.status ? (
+                                  <span>{`${tr('companyRegistryStatus')}: ${match.status}`}</span>
+                                ) : null}
+                                {match.legal_form ? <span>{match.legal_form}</span> : null}
+                                {match.founded_on ? (
+                                  <span>{`${tr('companyRegistryFounded')}: ${match.founded_on}`}</span>
+                                ) : null}
+                                {match.activity_code ? (
+                                  <span>{`${tr('companyRegistryActivity')}: ${match.activity_code}`}</span>
+                                ) : null}
+                              </div>
+                              {match.existing_client_id ? (
+                                <span className="client-registry-conflict">
+                                  {tr('companyRegistryExistingClient', {
+                                    name: match.existing_client_name,
+                                  })}
+                                </span>
+                              ) : null}
+                            </div>
+                            {match.existing_client_id ? (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => openExistingRegistryClient(match)}
+                              >
+                                {tr('companyRegistryOpenClient')}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => applyRegistryMatch(match)}
+                              >
+                                {tr('companyRegistryApply')}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <div className="client-registry-source">
+                          <span>{tr('companyRegistryAddressNotice')}</span>
+                          <span className="client-registry-attribution">
+                            {tr('companyRegistryProcessed')}
+                          </span>
+                          <span>
+                            {registryLookup.data?.matches?.[0]?.sources?.map((source, index) => {
+                              const labelKey =
+                                source.code === 'apr_open_data'
+                                  ? 'companyRegistrySourceApr'
+                                  : source.code === 'sef_company_list'
+                                    ? 'companyRegistrySourceSef'
+                                    : null
+                              return (
+                                <span key={source.code}>
+                                  {index ? ' · ' : ''}
+                                  <a href={source.url} target="_blank" rel="noreferrer">
+                                    {labelKey ? tr(labelKey) : source.label}
+                                  </a>
+                                </span>
+                              )
+                            })}
+                            {registryLookup.data?.matches?.[0]?.sources?.some(
+                              (source) => source.code === 'apr_open_data'
+                            ) && registryLookup.data?.apr_snapshot_date
+                              ? ` · ${tr('companyRegistrySnapshot', {
+                                  date: registryLookup.data.apr_snapshot_date,
+                                })}`
+                              : null}
+                            {registryLookup.data?.refreshed_at
+                              ? ` · ${tr('companyRegistryDownloaded', {
+                                  date: registryLookup.data.refreshed_at.slice(0, 10),
+                                })}`
+                              : null}
+                          </span>
+                          {registryLookup.data?.warning ? (
+                            <span>
+                              {tr(
+                                registryLookup.data.stale
+                                  ? 'companyRegistryStale'
+                                  : 'companyRegistryIncomplete'
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="form-group client-form-field--span-2">
                   <label className="form-label" htmlFor="client-form-address">
                     {tr('address')}
                   </label>
@@ -458,6 +721,20 @@ export default function Clients() {
                   />
                 </div>
                 <div className="form-group">
+                  <label className="form-label" htmlFor="client-form-jbkjs">
+                    {tr('jbkjs')}
+                  </label>
+                  <input
+                    id="client-form-jbkjs"
+                    type="text"
+                    className="form-input"
+                    value={form.jbkjs}
+                    onChange={(event) => setForm({ ...form, jbkjs: event.target.value })}
+                    inputMode="numeric"
+                    maxLength={20}
+                  />
+                </div>
+                <div className="form-group">
                   <label className="form-label" htmlFor="client-form-type">
                     {tr('type')}
                   </label>
@@ -465,7 +742,14 @@ export default function Clients() {
                     id="client-form-type"
                     className="form-input"
                     value={form.client_type}
-                    onChange={(event) => setForm({ ...form, client_type: event.target.value })}
+                    onChange={(event) => {
+                      const clientType = event.target.value
+                      setForm({ ...form, client_type: clientType })
+                      if (clientType !== 'legal') {
+                        setRegistryLookupField(null)
+                        setRegistryLookup(EMPTY_REGISTRY_LOOKUP)
+                      }
+                    }}
                   >
                     <option value="legal">{tr('legalEntity')}</option>
                     <option value="individual">{tr('individualEntity')}</option>
