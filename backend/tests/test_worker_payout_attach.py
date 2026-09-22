@@ -739,3 +739,29 @@ async def test_purchase_needs_the_salary_period_it_belongs_to(attach_client, db_
     # Без периода трата 30 сентября закрыла бы октябрьскую зарплату.
     assert response.status_code == 400
     assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def test_admin_delete_removes_a_cancelled_payout_too(attach_client, db_session):
+    """После снятия банковского сопоставления выплата погашена, но ссылка на расход жива."""
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session)
+    await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    payout.cancelled_at = date(2026, 9, 20)
+    await db_session.flush()
+
+    removed = await unlink_worker_payout_from_expense(db_session, expense.id)
+
+    assert removed is True
+    assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []

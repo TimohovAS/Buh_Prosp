@@ -67,6 +67,20 @@ const emptyWorkerPayoutForm = {
   note: '',
 }
 
+// Покупка закрывает зарплату за конкретный месяц: без периода она ушла бы в
+// ближайший открытый, поэтому подставляем месяц самой выплаты.
+function withSalaryMonth(form, isoDate) {
+  if (form.period_start && form.period_end) return form
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || ''))) return form
+  const [year, month] = isoDate.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return {
+    ...form,
+    period_start: `${isoDate.slice(0, 7)}-01`,
+    period_end: `${isoDate.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
 const toNumber = (value) => Number(value || 0)
 const toFormValue = (value) => (value === null || value === undefined ? '' : String(value))
 const isGeneratedWorkerPayoutNote = (value) => /^days=\d/.test(String(value || '').trim())
@@ -358,6 +372,11 @@ export default function CashRegister() {
     () => (archivedPayoutWorker ? [...workers, archivedPayoutWorker] : workers),
     [workers, archivedPayoutWorker]
   )
+
+  // Покупке в счёт зарплаты нужен её месяц, иначе сервер откажет.
+  const needsSalaryMonth = workerPayoutForm.payout_type === 'purchase'
+  const missingSalaryMonth =
+    needsSalaryMonth && !(workerPayoutForm.period_start && workerPayoutForm.period_end)
 
   const selectedWorker = useMemo(
     () =>
@@ -986,7 +1005,13 @@ export default function CashRegister() {
             Math.abs(new Date(left.due_date) - new Date(target)) -
             Math.abs(new Date(right.due_date) - new Date(target))
         )
-      if (open.length) setSalaryRemainder(open[0])
+      if (open.length) {
+        setSalaryRemainder(open[0])
+        setWorkerPayoutForm((previous) => ({
+          ...previous,
+          cash_paid_amount: String(open[0].remaining_amount),
+        }))
+      }
     } catch {
       // Напоминание — подсказка, а не условие сохранения выплаты.
       setSalaryRemainder(null)
@@ -1021,6 +1046,7 @@ export default function CashRegister() {
   const updateWorkerPayoutType = (payoutType) => {
     setWorkerPayoutForm((previous) => {
       const next = { ...previous, payout_type: payoutType }
+      if (payoutType === 'purchase') return withSalaryMonth(next, next.date)
       return ['regular', 'trip_advance', 'trip_final'].includes(payoutType) ? applyPayoutDuration(next) : next
     })
     if (payoutType === 'trip_final' && workerPayoutForm.worker_id) {
@@ -1942,6 +1968,7 @@ export default function CashRegister() {
               <DatePicker
                 value={workerPayoutForm.period_start}
                 onChange={(value) => updateWorkerPayoutPeriod('period_start', value)}
+                required={needsSalaryMonth}
               />
             </div>
             <div className="form-group">
@@ -1949,8 +1976,10 @@ export default function CashRegister() {
               <DatePicker
                 value={workerPayoutForm.period_end}
                 onChange={(value) => updateWorkerPayoutPeriod('period_end', value)}
+                required={needsSalaryMonth}
               />
             </div>
+            {needsSalaryMonth ? <p className="text-muted">{tr('workerPayoutPurchasePeriodHint')}</p> : null}
             {workerPayoutForm.payout_type === 'regular' ? (
               <div className="record-field">
                 <span className="record-field-label">{tr('workerPayoutWorkDays')}</span>
@@ -2119,7 +2148,11 @@ export default function CashRegister() {
             <button type="button" className="btn btn-secondary" onClick={() => setWorkerPayoutModal(null)}>
               {tr('cancel')}
             </button>
-            <button type="submit" className="btn btn-primary" disabled={saving || !selectedWorker}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving || !selectedWorker || missingSalaryMonth}
+            >
               {saving ? tr('loading') : tr('save')}
             </button>
           </div>

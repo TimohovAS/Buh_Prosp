@@ -320,11 +320,17 @@ def planned_expenses_sum_until_including_overdue(
 async def settled_amounts_by_occurrence(
     db: AsyncSession,
     planned_expense_ids: set[int],
+    *,
+    exclude_payout_id: int | None = None,
 ) -> dict[tuple[int, date], Decimal]:
-    """Сколько уже погашено по каждому плановому платежу."""
+    """Сколько уже погашено по каждому плановому платежу.
+
+    exclude_payout_id нужен, когда выплату правят: её собственное погашение
+    считать «уже закрытым» нельзя, иначе она ограничит сама себя.
+    """
     if not planned_expense_ids:
         return {}
-    result = await db.execute(
+    query = (
         select(
             PlannedExpensePayment.planned_expense_id,
             PlannedExpensePayment.due_date,
@@ -333,6 +339,12 @@ async def settled_amounts_by_occurrence(
         .where(PlannedExpensePayment.planned_expense_id.in_(planned_expense_ids))
         .group_by(PlannedExpensePayment.planned_expense_id, PlannedExpensePayment.due_date)
     )
+    if exclude_payout_id is not None:
+        query = query.where(
+            (PlannedExpensePayment.worker_payout_id.is_(None))
+            | (PlannedExpensePayment.worker_payout_id != exclude_payout_id)
+        )
+    result = await db.execute(query)
     return {(row[0], row[1]): to_decimal(row[2] or ZERO_DECIMAL) for row in result.fetchall()}
 
 
@@ -342,26 +354,33 @@ def occurrence_remaining(planned: PlannedExpense, settled: Decimal) -> Decimal:
     return remaining if remaining > ZERO_DECIMAL else ZERO_DECIMAL
 
 
-def _settling_occurrence(
-    planned_items: list[PlannedExpense],
-    payout: WorkerPayout,
-    settled: dict[tuple[int, date], Decimal],
-) -> tuple[PlannedExpense, date] | None:
-    """Какой плановый платёж закрывает эта выплата."""
+def payout_settlement_window(payout: WorkerPayout) -> tuple[date, date]:
+    """Период, за который засчитывается выплата."""
     range_start = payout.period_start or (payout.date - timedelta(days=45))
     range_end = payout.period_end or (payout.date + timedelta(days=14))
     if range_end < range_start:
         range_start = range_end = payout.date
+    return range_start, range_end
 
+
+def _settling_occurrences(
+    planned_items: list[PlannedExpense],
+    payout: WorkerPayout,
+    settled: dict[tuple[int, date], Decimal],
+) -> list[tuple[PlannedExpense, date]]:
+    """Открытые плановые платежи в окне выплаты, ближайший к её дате первым.
+
+    Одна выплата может закрыть несколько периодов: при недельной ставке покупка
+    на три недели вперёд гасит три платежа, а не один.
+    """
+    range_start, range_end = payout_settlement_window(payout)
     open_pairs = [
         (planned, due_date)
         for planned in planned_items
         for due_date in payment_dates_in_range(planned, range_start, range_end, limit=24)
         if occurrence_remaining(planned, settled.get((planned.id, due_date), ZERO_DECIMAL)) > ZERO_DECIMAL
     ]
-    if not open_pairs:
-        return None
-    return min(
+    return sorted(
         open_pairs,
         key=lambda pair: (
             abs((pair[1] - payout.date).days),
@@ -369,6 +388,52 @@ def _settling_occurrence(
             pair[1],
             pair[0].id,
         ),
+    )
+
+
+async def salary_remaining_for_payout(
+    db: AsyncSession,
+    *,
+    worker_id: int | None,
+    payout_date: date,
+    period_start: date | None,
+    period_end: date | None,
+    exclude_payout_id: int | None = None,
+) -> Decimal | None:
+    """Сколько ещё причитается работнику по плану за этот период.
+
+    None — плана нет или в окне нет открытых платежей, тогда ограничивать
+    выплату нечем.
+    """
+    if not worker_id:
+        return None
+    result = await db.execute(
+        select(PlannedExpense).where(PlannedExpense.is_active == True).where(PlannedExpense.worker_id == worker_id)
+    )
+    planned_items = list(result.scalars().all())
+    if not planned_items:
+        return None
+
+    settled = await settled_amounts_by_occurrence(
+        db, {item.id for item in planned_items}, exclude_payout_id=exclude_payout_id
+    )
+    probe = WorkerPayout(
+        worker_id=worker_id,
+        date=payout_date,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    open_pairs = _settling_occurrences(planned_items, probe, settled)
+    if not (period_start and period_end):
+        open_pairs = open_pairs[:1]
+    if not open_pairs:
+        return None
+    return sum(
+        (
+            occurrence_remaining(planned, settled.get((planned.id, due_date), ZERO_DECIMAL))
+            for planned, due_date in open_pairs
+        ),
+        ZERO_DECIMAL,
     )
 
 
@@ -408,24 +473,33 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
         paid_amount = to_decimal(payout.cash_paid_amount or ZERO_DECIMAL)
         if paid_amount <= ZERO_DECIMAL or not payout.date:
             continue
-        pair = _settling_occurrence(planned_items, payout, settled)
-        if not pair:
-            continue
-        planned, due_date = pair
-        key = (planned.id, due_date)
-        # Больше остатка не засчитываем: лишнее к этому периоду отношения не имеет.
-        amount = min(paid_amount, occurrence_remaining(planned, settled.get(key, ZERO_DECIMAL)))
-        db.add(
-            PlannedExpensePayment(
-                planned_expense_id=planned.id,
-                due_date=due_date,
-                paid_date=payout.date,
-                amount=amount,
-                worker_payout_id=payout.id,
-                note=f"auto_worker_payout:{payout.id}",
+        left = paid_amount
+        # Разносить по нескольким периодам вправе только выплата, назвавшая свой
+        # период. Без него неизвестно, что она покрывает, и трогать соседние
+        # месяцы нельзя: деньги молча закрыли бы старые долги.
+        occurrences = _settling_occurrences(planned_items, payout, settled)
+        if not (payout.period_start and payout.period_end):
+            occurrences = occurrences[:1]
+        for planned, due_date in occurrences:
+            if left <= ZERO_DECIMAL:
+                break
+            key = (planned.id, due_date)
+            # Больше остатка периода не засчитываем, лишнее переходит на следующий.
+            amount = min(left, occurrence_remaining(planned, settled.get(key, ZERO_DECIMAL)))
+            if amount <= ZERO_DECIMAL:
+                continue
+            db.add(
+                PlannedExpensePayment(
+                    planned_expense_id=planned.id,
+                    due_date=due_date,
+                    paid_date=payout.date,
+                    amount=amount,
+                    worker_payout_id=payout.id,
+                    note=f"auto_worker_payout:{payout.id}",
+                )
             )
-        )
-        settled[key] = settled.get(key, ZERO_DECIMAL) + amount
+            settled[key] = settled.get(key, ZERO_DECIMAL) + amount
+            left -= amount
     await db.flush()
 
 

@@ -362,3 +362,108 @@ async def test_the_same_split_whichever_was_entered_first(client, db_session):
     }
     assert sorted(marks.values()) == [PURCHASE, Decimal("80000.00")]
     assert await settled_total(db_session) == SALARY
+
+
+async def test_saving_the_payout_form_after_a_purchase_pays_only_the_rest(client, db_session):
+    """Главный пользовательский путь: форма отправляет cash_paid_amount = null."""
+    worker = await make_worker_with_salary_plan(db_session)
+    purchase_expense = await make_expense(db_session, PURCHASE)
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": purchase_expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+
+    saved = await client.post(
+        "/api/workers/payouts",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "monthly",
+            "date": DUE_DATE.isoformat(),
+            "cash_paid_amount": None,
+        },
+    )
+
+    assert saved.status_code == 200
+    payout = saved.json()["payout"]
+    # Ставка 100 000, но 20 000 уже выданы покупкой — деньгами причитается 80 000.
+    assert Decimal(str(payout["cash_paid_amount"])) == MONEY
+    assert Decimal(str(payout["gross_amount"])) == SALARY
+    assert Decimal(str(payout["remaining_amount"])) == Decimal("0")
+
+    report = (await client.get("/api/workers/payouts/report")).json()
+    row = report["workers"][0]
+    assert Decimal(str(row["money_paid"])) + Decimal(str(row["purchase_paid"])) == SALARY
+    assert (await occurrence(client))["is_paid"] is True
+
+
+async def test_a_purchase_covering_several_weeks_closes_them_all(client, db_session):
+    worker = Worker(name="Denis Čistjakov", weekly_rate=Decimal("20000.00"))
+    db_session.add(worker)
+    await db_session.flush()
+    db_session.add(
+        PlannedExpense(
+            name="Denis Čistjakov",
+            amount=Decimal("20000.00"),
+            currency="RSD",
+            period="weekly",
+            payment_day_of_week=0,
+            start_date=date(2026, 9, 7),
+            is_active=True,
+            worker_id=worker.id,
+        )
+    )
+    await db_session.flush()
+    expense = await make_expense(db_session, Decimal("50000.00"), entry_date=date(2026, 9, 7))
+
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-07",
+            "period_end": "2026-09-27",
+        },
+    )
+
+    marks = (await db_session.execute(select(PlannedExpensePayment))).scalars().all()
+    # 20 000 + 20 000 + 10 000: покупка закрывает три недели, а не одну.
+    assert sorted(Decimal(mark.amount) for mark in marks) == [
+        Decimal("10000.00"),
+        Decimal("20000.00"),
+        Decimal("20000.00"),
+    ]
+    assert await settled_total(db_session) == Decimal("50000.00")
+
+
+async def test_removing_a_manual_mark_redistributes_the_purchase(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    plan = (await db_session.execute(select(PlannedExpense))).scalar_one()
+    body = {"planned_expense_id": plan.id, "due_date": DUE_DATE.isoformat()}
+    # Сначала зарплату закрыли вручную целиком.
+    await client.post("/api/planned-expenses/mark-paid", json={**body, "paid_date": DUE_DATE.isoformat()})
+    purchase_expense = await make_expense(db_session, PURCHASE)
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": purchase_expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+    assert await settled_total(db_session) == SALARY
+
+    removed = await client.post("/api/planned-expenses/mark-unpaid", json=body)
+
+    assert removed.status_code == 200
+    # Место освободилось — покупка должна занять его, а не остаться ни при чём.
+    assert await settled_total(db_session) == PURCHASE
+    assert Decimal(str((await occurrence(client))["remaining_amount"])) == Decimal("80000.00")

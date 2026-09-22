@@ -14,6 +14,7 @@ from backend.models import PlannedExpense, PlannedExpensePayment, User, Worker
 from backend.planned_expenses_service import (
     occurrence_remaining,
     payment_dates_in_range,
+    resync_worker_salary_settlements,
     settled_amounts_by_occurrence,
 )
 from backend.schemas import (
@@ -183,6 +184,13 @@ async def mark_planned_expense_unpaid(
         )
     for payment in manual:
         await db.delete(payment)
+    await db.flush()
+    # Место освободилось: выплаты и покупки работника надо разложить заново.
+    plan = (
+        await db.execute(select(PlannedExpense).where(PlannedExpense.id == data.planned_expense_id))
+    ).scalar_one_or_none()
+    if plan and plan.worker_id:
+        await resync_worker_salary_settlements(db, plan.worker_id)
     await db.commit()
     return {"ok": True}
 

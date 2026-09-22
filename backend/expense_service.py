@@ -449,8 +449,12 @@ async def unlink_worker_payout(db: AsyncSession, payout: WorkerPayout) -> None:
 
 
 async def unlink_worker_payout_from_expense(db: AsyncSession, expense_id: int) -> bool:
-    """Снять трату с дохода работника: при сторно и при удалении расхода."""
-    payout = await get_expense_worker_payout(db, expense_id)
+    """Снять трату с дохода работника: при сторно и при удалении расхода.
+
+    Погашенную выплату тоже убираем: расход удаляют насовсем, и ссылка на него
+    иначе останется висеть.
+    """
+    payout = await get_expense_worker_payout(db, expense_id, include_cancelled=True)
     if not payout:
         return False
     await unlink_worker_payout(db, payout)

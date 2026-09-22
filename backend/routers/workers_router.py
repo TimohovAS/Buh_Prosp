@@ -24,7 +24,9 @@ from backend.expense_service import (
 )
 from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
 from backend.planned_expenses_service import (
+    SALARY_SETTLING_PAYOUT_TYPES,
     resync_worker_salary_settlements,
+    salary_remaining_for_payout,
     sync_worker_payout_planned_payment,
     sync_worker_salary_plan,
 )
@@ -135,7 +137,11 @@ def _inclusive_period_days(data: WorkerPayoutCreate) -> Decimal | None:
     return Decimal((data.period_end - data.period_start).days + 1)
 
 
-def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Decimal]:
+def _calculate_payout(
+    worker: Worker,
+    data: WorkerPayoutCreate,
+    salary_remaining: Decimal | None = None,
+) -> dict[str, Decimal]:
     payout_type = data.payout_type or "regular"
     work_days = _dec(data.work_days)
     trip_days = _dec(data.trip_days)
@@ -197,10 +203,21 @@ def _calculate_payout(worker: Worker, data: WorkerPayoutCreate) -> dict[str, Dec
         cash_paid_amount = trip_days * trip_advance_day_rate + lodging_amount
     elif payout_type == "trip_final":
         cash_paid_amount = max(gross_amount - _dec(data.advance_paid), ZERO_DECIMAL)
+    elif salary_remaining is not None:
+        # Часть зарплаты за период могли уже закрыть покупкой в её счёт: выдать
+        # сверх этого полную ставку значило бы заплатить работнику дважды.
+        cash_paid_amount = min(gross_amount, max(salary_remaining, ZERO_DECIMAL))
     else:
         cash_paid_amount = gross_amount
 
-    remaining_amount = max(gross_amount - _dec(data.advance_paid) - cash_paid_amount, ZERO_DECIMAL)
+    if salary_remaining is not None:
+        # Закрытое покупкой работнику уже выдано: долгом по этой выплате оно не является.
+        remaining_amount = max(
+            min(gross_amount, max(salary_remaining, ZERO_DECIMAL)) - _dec(data.advance_paid) - cash_paid_amount,
+            ZERO_DECIMAL,
+        )
+    else:
+        remaining_amount = max(gross_amount - _dec(data.advance_paid) - cash_paid_amount, ZERO_DECIMAL)
     return {
         "work_days": work_days,
         "trip_days": trip_days,
@@ -248,6 +265,26 @@ async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> 
     if not is_payout_currency(expense.currency) or (entry and not is_payout_currency(entry.currency)):
         raise HTTPException(400, "Worker payouts are kept in RSD only")
     return entry, expense
+
+
+async def _salary_remaining(
+    db: AsyncSession,
+    worker_id: int,
+    data: WorkerPayoutCreate,
+    *,
+    exclude_payout_id: int | None = None,
+) -> Decimal | None:
+    """Непогашенный остаток плановой зарплаты работника за период выплаты."""
+    if data.payout_type not in SALARY_SETTLING_PAYOUT_TYPES:
+        return None
+    return await salary_remaining_for_payout(
+        db,
+        worker_id=worker_id,
+        payout_date=data.date,
+        period_start=data.period_start,
+        period_end=data.period_end,
+        exclude_payout_id=exclude_payout_id,
+    )
 
 
 def _validate_payout_period(payout_type: str, period_start, period_end) -> None:
@@ -541,7 +578,7 @@ async def create_worker_payout(
     _validate_payout_period(data.payout_type, data.period_start, data.period_end)
 
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
-    calc = _calculate_payout(worker, data)
+    calc = _calculate_payout(worker, data, await _salary_remaining(db, worker.id, data))
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
@@ -792,7 +829,7 @@ async def update_worker_payout(
     _validate_payout_period(data.payout_type, data.period_start, data.period_end)
     previous_worker_id = payout.worker_id
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
-    calc = _calculate_payout(worker, data)
+    calc = _calculate_payout(worker, data, await _salary_remaining(db, worker.id, data, exclude_payout_id=payout.id))
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
