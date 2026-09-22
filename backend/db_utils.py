@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import Contract, Project, TransactionCategory
 
 UNASSIGNED_PROJECT_CODE = "INT-UNASSIGNED"
+SALARY_PROJECT_CODE = "INT-SALARY"
 
 
 def _raise(exc_cls: type[Exception], message: str, status: int) -> None:
@@ -23,6 +24,13 @@ def _raise(exc_cls: type[Exception], message: str, status: int) -> None:
 async def get_unassigned_project_id(db: AsyncSession) -> int | None:
     """Return id of the INT-UNASSIGNED project or None."""
     result = await db.execute(select(Project).where(Project.code == UNASSIGNED_PROJECT_CODE))
+    project = result.scalar_one_or_none()
+    return project.id if project else None
+
+
+async def get_salary_project_id(db: AsyncSession) -> int | None:
+    """Return id of the INT-SALARY project or None."""
+    result = await db.execute(select(Project).where(Project.code == SALARY_PROJECT_CODE))
     project = result.scalar_one_or_none()
     return project.id if project else None
 

@@ -13,6 +13,7 @@ from backend.database import get_db
 from backend.db_utils import (
     get_contract_or_404,
     get_project_or_404,
+    get_salary_project_id,
     get_unassigned_project_id,
     resolve_category_expense_links,
 )
@@ -236,6 +237,44 @@ def _calculate_payout(
         "cash_paid_amount": cash_paid_amount,
         "remaining_amount": remaining_amount,
     }
+
+
+async def _apply_salary_links(db: AsyncSession, worker: Worker, expense: Expense, payout_type: str) -> None:
+    """Перевести расход в зарплатные категорию и проект.
+
+    Учтённая как выплата трата — это зарплата работника, где бы её ни записали:
+    покупка по чеку или с карты лежит в «Прочем», а место ей в «Зарплате» и на
+    проекте _Zarade/ Izvodjaci. Командировочные не трогаем: у них свой проект
+    объекта, и переносить их в зарплатный было бы неверно.
+    """
+    if payout_type not in SALARY_SETTLING_PAYOUT_TYPES:
+        return
+
+    category_id = worker.default_category_id or await _get_salary_category_id(db)
+    project_id = worker.default_project_id or await get_salary_project_id(db) or expense.project_id
+    if category_id is None and project_id is None:
+        return
+
+    project_id, contract_id, is_tax_related = await resolve_category_expense_links(
+        db, category_id, project_id, expense.contract_id
+    )
+    if project_id is not None and project_id != expense.project_id:
+        # Договор относился к прежнему проекту, на зарплатном он не к месту.
+        contract_id = None
+        await get_project_or_404(db, project_id, allow_completed=True)
+
+    if category_id is not None:
+        category = (
+            await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
+        ).scalar_one_or_none()
+        if category:
+            expense.category_id = category.id
+            expense.category = category.name_ru
+            expense.is_tax_related = is_tax_related
+    if project_id is not None:
+        expense.project_id = project_id
+    expense.contract_id = contract_id
+    await db.flush()
 
 
 async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> tuple[CashEntry | None, Expense]:
@@ -693,6 +732,8 @@ async def attach_worker_payout(
     if amount <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
+    await _apply_salary_links(db, worker, expense, data.payout_type)
+
     source_note = entry.note if entry else expense.note
     note = data.note.strip() if data.note and data.note.strip() else source_note
     payout = WorkerPayout(
@@ -711,8 +752,8 @@ async def attach_worker_payout(
         origin=PAYOUT_ORIGIN_EXPENSE_LINK,
         description=((entry.description if entry else None) or expense.description or worker.name)[:500],
         note=note,
-        # Проект, договор и категорию берём из расхода: перепривязка сместила бы
-        # историю по проектам.
+        # Проект, договор и категорию берём из расхода — они уже приведены к
+        # зарплатным, если выплата зарплатная.
         project_id=expense.project_id,
         contract_id=expense.contract_id,
         category_id=expense.category_id,
@@ -762,6 +803,13 @@ async def update_worker_payout_link(
     payout.payout_type = data.payout_type
     payout.period_start = data.period_start
     payout.period_end = data.period_end
+    if payout.expense_id:
+        expense = (await db.execute(select(Expense).where(Expense.id == payout.expense_id))).scalar_one_or_none()
+        if expense:
+            await _apply_salary_links(db, worker, expense, data.payout_type)
+            payout.project_id = expense.project_id
+            payout.contract_id = expense.contract_id
+            payout.category_id = expense.category_id
     await db.flush()
     # Погашения плановой зарплаты пересобираем: у прежнего работника освободился
     # остаток, у нового — закрылся.

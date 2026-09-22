@@ -25,6 +25,7 @@ WATCHED_IMPORTS: dict[str, set[str]] = {
         "get_category_or_404",
         "get_contract_or_404",
         "get_project_or_404",
+        "get_salary_project_id",
         "get_unassigned_project_id",
         "resolve_category_expense_links",
     },

@@ -18,7 +18,15 @@ from backend.expense_service import (
     sync_worker_payout_from_expense,
     unlink_worker_payout_from_expense,
 )
-from backend.models import CashEntry, Expense, PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
+from backend.models import (
+    CashEntry,
+    Expense,
+    PlannedExpense,
+    PlannedExpensePayment,
+    TransactionCategory,
+    Worker,
+    WorkerPayout,
+)
 from backend.routers.workers_router import router
 from backend.services import create_expense_reversal
 
@@ -765,3 +773,111 @@ async def test_admin_delete_removes_a_cancelled_payout_too(attach_client, db_ses
 
     assert removed is True
     assert (await db_session.execute(select(WorkerPayout))).scalars().all() == []
+
+
+async def make_salary_references(db, make_project):
+    """Зарплатная категория и проект _Zarade/ Izvodjaci."""
+    category = TransactionCategory(
+        name_ru="Зарплата",
+        name_sr="Zarade",
+        category_type="expense",
+    )
+    db.add(category)
+    project = await make_project(db, code="INT-SALARY", name="_Zarade/ Izvodjaci", is_internal=True)
+    await db.flush()
+    return category, project
+
+
+async def test_attaching_a_purchase_moves_the_expense_to_salary(attach_client, db_session, make_project):
+    category, salary_project = await make_salary_references(db_session, make_project)
+    other_project = await make_project(db_session, code="RAZNO", name="Razno")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    # Покупка по чеку: категории нет, проект случайный.
+    expense = await make_card_expense(db_session, project_id=other_project.id)
+    expense.source = "receipt"
+    expense.category = None
+    expense.category_id = None
+    await db_session.flush()
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+
+    assert response.status_code == 200
+    assert expense.category_id == category.id
+    assert expense.category == "Зарплата"
+    assert expense.project_id == salary_project.id
+    payout = (await db_session.execute(select(WorkerPayout))).scalar_one()
+    assert payout.category_id == category.id
+    assert payout.project_id == salary_project.id
+    # Деньги и описание расхода при этом не трогаем.
+    assert Decimal(expense.amount) == Decimal("5260.00")
+    assert expense.description == "Kartica 4025480007356295 : SALAS RUSTIK"
+
+
+async def test_attaching_a_trip_payout_keeps_the_site_project(attach_client, db_session, make_project):
+    await make_salary_references(db_session, make_project)
+    site_project = await make_project(db_session, code="SLANKAMEN", name="Slankamen")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=site_project.id)
+
+    response = await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "trip_final",
+            "period_start": "2026-09-15",
+            "period_end": "2026-09-18",
+        },
+    )
+
+    assert response.status_code == 200
+    # У командировки свой проект объекта, в зарплатный её переносить нельзя.
+    assert expense.project_id == site_project.id
+
+
+async def test_changing_the_type_to_a_purchase_moves_the_expense_too(attach_client, db_session, make_project):
+    category, salary_project = await make_salary_references(db_session, make_project)
+    site_project = await make_project(db_session, code="SLANKAMEN", name="Slankamen")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=site_project.id)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={
+                "expense_id": expense.id,
+                "worker_id": worker.id,
+                "payout_type": "trip_final",
+                "period_start": "2026-09-15",
+                "period_end": "2026-09-18",
+            },
+        )
+    ).json()["payout"]
+
+    changed = await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+
+    assert changed.status_code == 200
+    assert expense.project_id == salary_project.id
+    assert expense.category_id == category.id
