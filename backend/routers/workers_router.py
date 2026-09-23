@@ -1,5 +1,6 @@
 """Workers and cash payout helpers."""
 
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -21,13 +22,16 @@ from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.expense_service import (
     PAYOUT_ORIGIN_EXPENSE_LINK,
     is_payout_currency,
+    sync_bank_transactions_from_expense,
     unlink_worker_payout,
 )
-from backend.models import CashEntry, Expense, TransactionCategory, User, Worker, WorkerPayout
+from backend.receipt_service import sync_receipt_project_from_expense
+from backend.models import CashEntry, Expense, Project, TransactionCategory, User, Worker, WorkerPayout
 from backend.planned_expenses_service import (
     SALARY_SETTLING_PAYOUT_TYPES,
     resync_worker_salary_settlements,
     salary_remaining_for_payout,
+    salary_window_balance,
     sync_worker_payout_planned_payment,
     sync_worker_salary_plan,
 )
@@ -43,6 +47,7 @@ from backend.schemas import (
     WorkerPayoutResponse,
     WorkerPayoutSummary,
     WorkerResponse,
+    WorkerSalaryRemaining,
     WorkerUpdate,
 )
 from backend.state_machine import initialize_expense_status
@@ -239,42 +244,112 @@ def _calculate_payout(
     }
 
 
-async def _apply_salary_links(db: AsyncSession, worker: Worker, expense: Expense, payout_type: str) -> None:
-    """Перевести расход в зарплатные категорию и проект.
-
-    Учтённая как выплата трата — это зарплата работника, где бы её ни записали:
-    покупка по чеку или с карты лежит в «Прочем», а место ей в «Зарплате» и на
-    проекте _Zarade/ Izvodjaci. Командировочные не трогаем: у них свой проект
-    объекта, и переносить их в зарплатный было бы неверно.
-    """
-    if payout_type not in SALARY_SETTLING_PAYOUT_TYPES:
-        return
-
+async def _salary_links_for(db: AsyncSession, worker: Worker, expense: Expense) -> tuple[int | None, int | None]:
+    """Зарплатные категория и проект для расхода этого работника."""
     category_id = worker.default_category_id or await _get_salary_category_id(db)
     project_id = worker.default_project_id or await get_salary_project_id(db) or expense.project_id
-    if category_id is None and project_id is None:
-        return
-
-    project_id, contract_id, is_tax_related = await resolve_category_expense_links(
-        db, category_id, project_id, expense.contract_id
-    )
     if project_id is not None and project_id != expense.project_id:
-        # Договор относился к прежнему проекту, на зарплатном он не к месту.
-        contract_id = None
-        await get_project_or_404(db, project_id, allow_completed=True)
+        project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        # В завершённый проект новые записи не переносим — остаёмся на прежнем.
+        if project is None or project.status == "completed":
+            project_id = expense.project_id
+    return category_id, project_id
 
+
+async def _set_expense_links(
+    db: AsyncSession,
+    expense: Expense,
+    *,
+    category_id: int | None,
+    project_id: int | None,
+    contract_id: int | None,
+) -> None:
+    """Сменить категорию и проект расхода вместе со всем, что от них зависит."""
+    category = None
     if category_id is not None:
         category = (
             await db.execute(select(TransactionCategory).where(TransactionCategory.id == category_id))
         ).scalar_one_or_none()
-        if category:
-            expense.category_id = category.id
-            expense.category = category.name_ru
-            expense.is_tax_related = is_tax_related
-    if project_id is not None:
-        expense.project_id = project_id
+    _, _, is_tax_related = await resolve_category_expense_links(db, category_id, project_id, contract_id)
+    expense.category_id = category.id if category else None
+    expense.category = category.name_ru if category else None
+    expense.is_tax_related = is_tax_related
+    expense.project_id = project_id
     expense.contract_id = contract_id
     await db.flush()
+    # Проект расхода повторяют сопоставленная банковская операция и чек: без этого
+    # они остались бы на старом проекте, как при обычной правке расхода не бывает.
+    await sync_bank_transactions_from_expense(db, expense)
+    await sync_receipt_project_from_expense(db, expense)
+
+
+async def _apply_salary_links(
+    db: AsyncSession,
+    worker: Worker,
+    expense: Expense,
+    payout: WorkerPayout,
+    payout_type: str,
+) -> None:
+    """Перевести расход в зарплатные категорию и проект.
+
+    Учтённая как зарплата трата — это зарплата работника, где бы её ни записали:
+    покупка по чеку или с карты лежит в «Прочем», а место ей в «Зарплате» и на
+    проекте _Zarade/ Izvodjaci. Командировочные не трогаем: у них свой проект
+    объекта. Прежние значения запоминаем, чтобы отвязка могла их вернуть.
+    """
+    if payout_type not in SALARY_SETTLING_PAYOUT_TYPES:
+        return
+    category_id, project_id = await _salary_links_for(db, worker, expense)
+    if category_id is None:
+        category_id = expense.category_id
+    if category_id == expense.category_id and project_id == expense.project_id:
+        return
+
+    if payout.expense_links_before is None:
+        payout.expense_links_before = json.dumps(
+            {
+                "category_id": expense.category_id,
+                "project_id": expense.project_id,
+                "contract_id": expense.contract_id,
+                "applied_category_id": category_id,
+                "applied_project_id": project_id,
+            }
+        )
+    else:
+        before = json.loads(payout.expense_links_before)
+        before.update(applied_category_id=category_id, applied_project_id=project_id)
+        payout.expense_links_before = json.dumps(before)
+
+    # Договор относился к прежнему проекту, на зарплатном он не к месту.
+    contract_id = expense.contract_id if project_id == expense.project_id else None
+    await _set_expense_links(db, expense, category_id=category_id, project_id=project_id, contract_id=contract_id)
+
+
+async def _restore_expense_links(db: AsyncSession, payout: WorkerPayout, expense: Expense | None) -> None:
+    """Вернуть расходу категорию и проект, какие были до привязки.
+
+    Возвращаем, только если расход так и лежит там, куда его перенесла привязка:
+    если после этого его переложили руками, решение человека важнее.
+    """
+    if not payout.expense_links_before or expense is None:
+        return
+    before = json.loads(payout.expense_links_before)
+    payout.expense_links_before = None
+    if expense.category_id != before.get("applied_category_id") or expense.project_id != before.get(
+        "applied_project_id"
+    ):
+        return
+
+    project_id = before.get("project_id")
+    if project_id is not None:
+        project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        # Завершённый проект новых записей не принимает: оставляем зарплатный.
+        if project is None or project.status == "completed":
+            project_id = expense.project_id
+    contract_id = before.get("contract_id") if project_id == before.get("project_id") else None
+    await _set_expense_links(
+        db, expense, category_id=before.get("category_id"), project_id=project_id, contract_id=contract_id
+    )
 
 
 async def _resolve_payout_target(db: AsyncSession, data: WorkerPayoutAttach) -> tuple[CashEntry | None, Expense]:
@@ -324,6 +399,15 @@ async def _salary_remaining(
         period_end=data.period_end,
         exclude_payout_id=exclude_payout_id,
     )
+
+
+def _refuse_fully_settled(data: WorkerPayoutCreate, salary_remaining: Decimal | None) -> None:
+    """Не выдавать полную ставку за период, который уже закрыт целиком."""
+    if data.cash_paid_amount is None and salary_remaining is not None and salary_remaining <= ZERO_DECIMAL:
+        raise HTTPException(
+            400,
+            "Salary for this period is already fully settled. Enter the amount explicitly if it is paid on top.",
+        )
 
 
 def _validate_payout_period(payout_type: str, period_start, period_end) -> None:
@@ -411,6 +495,40 @@ async def list_workers(
     return [WorkerResponse.model_validate(worker) for worker in result.scalars().all()]
 
 
+@router.get("/{worker_id}/salary-remaining", response_model=WorkerSalaryRemaining)
+async def get_worker_salary_remaining(
+    worker_id: int,
+    payout_date: date = Query(..., alias="date"),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
+    payout_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Сколько по плану причитается за период выплаты.
+
+    Форма берёт число отсюда, а не ищет период сама: иначе она могла подставить
+    остаток соседнего месяца, а явную сумму сервер уже не пересчитывает.
+    """
+    await _get_worker_or_404(db, worker_id)
+    balance = await salary_window_balance(
+        db,
+        worker_id=worker_id,
+        payout_date=payout_date,
+        period_start=period_start,
+        period_end=period_end,
+        exclude_payout_id=payout_id,
+    )
+    if balance is None:
+        return WorkerSalaryRemaining(has_plan=False)
+    return WorkerSalaryRemaining(
+        has_plan=True,
+        remaining=balance.remaining,
+        settled=balance.settled,
+        due_dates=list(balance.due_dates),
+    )
+
+
 @router.post("", response_model=WorkerResponse)
 async def create_worker(
     data: WorkerCreate,
@@ -443,6 +561,8 @@ async def update_worker(
     if not worker.name:
         raise HTTPException(400, "Name is required")
     await _sync_salary_plan(db, worker)
+    # Смена ставки разрезает план: погашения должны лечь на нужную часть.
+    await resync_worker_salary_settlements(db, worker.id)
     await db.commit()
     await db.refresh(worker)
     return WorkerResponse.model_validate(worker)
@@ -617,7 +737,9 @@ async def create_worker_payout(
     _validate_payout_period(data.payout_type, data.period_start, data.period_end)
 
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
-    calc = _calculate_payout(worker, data, await _salary_remaining(db, worker.id, data))
+    salary_remaining = await _salary_remaining(db, worker.id, data)
+    _refuse_fully_settled(data, salary_remaining)
+    calc = _calculate_payout(worker, data, salary_remaining)
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
@@ -732,8 +854,6 @@ async def attach_worker_payout(
     if amount <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 
-    await _apply_salary_links(db, worker, expense, data.payout_type)
-
     source_note = entry.note if entry else expense.note
     note = data.note.strip() if data.note and data.note.strip() else source_note
     payout = WorkerPayout(
@@ -760,6 +880,11 @@ async def attach_worker_payout(
         created_by=current_user.id,
     )
     db.add(payout)
+    await db.flush()
+    await _apply_salary_links(db, worker, expense, payout, data.payout_type)
+    payout.project_id = expense.project_id
+    payout.contract_id = expense.contract_id
+    payout.category_id = expense.category_id
     await db.flush()
     await sync_worker_payout_planned_payment(db, payout)
 
@@ -806,7 +931,11 @@ async def update_worker_payout_link(
     if payout.expense_id:
         expense = (await db.execute(select(Expense).where(Expense.id == payout.expense_id))).scalar_one_or_none()
         if expense:
-            await _apply_salary_links(db, worker, expense, data.payout_type)
+            if data.payout_type in SALARY_SETTLING_PAYOUT_TYPES:
+                await _apply_salary_links(db, worker, expense, payout, data.payout_type)
+            else:
+                # Стала командировочной — расходу место там, где он был до привязки.
+                await _restore_expense_links(db, payout, expense)
             payout.project_id = expense.project_id
             payout.contract_id = expense.contract_id
             payout.category_id = expense.category_id
@@ -846,6 +975,9 @@ async def delete_worker_payout_link(
     expense_id = payout.expense_id
     cash_entry_id = payout.cash_entry_id
     worker_id = payout.worker_id
+    if expense_id:
+        expense = (await db.execute(select(Expense).where(Expense.id == expense_id))).scalar_one_or_none()
+        await _restore_expense_links(db, payout, expense)
     await unlink_worker_payout(db, payout)
     # Освободившийся остаток зарплаты должен вернуться и перераспределиться.
     await resync_worker_salary_settlements(db, worker_id)
@@ -877,7 +1009,9 @@ async def update_worker_payout(
     _validate_payout_period(data.payout_type, data.period_start, data.period_end)
     previous_worker_id = payout.worker_id
     project_id, contract_id, category_id, category_name, is_tax_related = await _resolve_payout_links(db, worker, data)
-    calc = _calculate_payout(worker, data, await _salary_remaining(db, worker.id, data, exclude_payout_id=payout.id))
+    salary_remaining = await _salary_remaining(db, worker.id, data, exclude_payout_id=payout.id)
+    _refuse_fully_settled(data, salary_remaining)
+    calc = _calculate_payout(worker, data, salary_remaining)
     if calc["cash_paid_amount"] <= ZERO_DECIMAL:
         raise HTTPException(400, "Cash paid amount must be greater than zero")
 

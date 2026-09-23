@@ -467,3 +467,157 @@ async def test_removing_a_manual_mark_redistributes_the_purchase(client, db_sess
     # Место освободилось — покупка должна занять его, а не остаться ни при чём.
     assert await settled_total(db_session) == PURCHASE
     assert Decimal(str((await occurrence(client))["remaining_amount"])) == Decimal("80000.00")
+
+
+async def attach_purchase(client, worker, expense, *, start="2026-09-01", end="2026-09-30"):
+    response = await client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": start,
+            "period_end": end,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["payout"]
+
+
+async def test_a_month_closed_by_a_purchase_is_not_paid_again_by_rate(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    # Август выплачен как обычно, сентябрь целиком закрыт покупкой.
+    await add_money_payout(db_session, worker, SALARY, payout_date=date(2026, 8, 5))
+    await attach_purchase(client, worker, await make_expense(db_session, SALARY))
+
+    saved = await client.post(
+        "/api/workers/payouts",
+        json={"worker_id": worker.id, "payout_type": "monthly", "date": DUE_DATE.isoformat(), "cash_paid_amount": None},
+    )
+
+    # Покупка закрыла всю зарплату — полная ставка сверху была бы переплатой.
+    assert saved.status_code == 400
+    assert "fully settled" in saved.json()["detail"]
+    monthly = (await db_session.execute(select(WorkerPayout).where(WorkerPayout.payout_type == "monthly"))).scalars()
+    assert [payout.date for payout in monthly] == [date(2026, 8, 5)]
+
+    # С явным периодом сентября — тот же отказ.
+    with_period = await client.post(
+        "/api/workers/payouts",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "monthly",
+            "date": DUE_DATE.isoformat(),
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+            "cash_paid_amount": None,
+        },
+    )
+    assert with_period.status_code == 400
+
+    # Явно названная сумма (премия сверху) по-прежнему проходит.
+    bonus = await client.post(
+        "/api/workers/payouts",
+        json={"worker_id": worker.id, "payout_type": "monthly", "date": DUE_DATE.isoformat(), "cash_paid_amount": 5000},
+    )
+    assert bonus.status_code == 200
+
+
+async def test_the_form_gets_the_remainder_of_the_month_it_is_paying(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    # Сентябрь недоплачен: закрыто 20 000 покупкой.
+    await attach_purchase(client, worker, await make_expense(db_session, PURCHASE))
+
+    september = (await client.get(f"/api/workers/{worker.id}/salary-remaining", params={"date": "2026-09-05"})).json()
+    october = (
+        await client.get(
+            f"/api/workers/{worker.id}/salary-remaining",
+            params={"date": "2026-10-05", "period_start": "2026-10-01", "period_end": "2026-10-31"},
+        )
+    ).json()
+
+    assert september["due_dates"] == ["2026-09-05"]
+    assert Decimal(str(september["remaining"])) == MONEY
+    assert Decimal(str(september["settled"])) == PURCHASE
+    # Октябрьская зарплата — своя, не сентябрьский остаток.
+    assert october["due_dates"] == ["2026-10-05"]
+    assert Decimal(str(october["remaining"])) == SALARY
+    assert Decimal(str(october["settled"])) == Decimal("0")
+
+
+async def test_salary_remaining_reports_no_plan(client, db_session):
+    worker = Worker(name="Without plan")
+    db_session.add(worker)
+    await db_session.flush()
+
+    balance = (await client.get(f"/api/workers/{worker.id}/salary-remaining", params={"date": "2026-09-05"})).json()
+
+    assert balance["has_plan"] is False
+
+
+async def test_raising_the_rate_does_not_reopen_months_already_closed(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    worker.pay_scheme = "monthly"
+    await db_session.flush()
+    await add_money_payout(db_session, worker, SALARY)
+    assert (await occurrence(client))["is_paid"] is True
+
+    from backend.planned_expenses_service import sync_worker_salary_plan, resync_worker_salary_settlements
+
+    worker.monthly_rate = Decimal("120000.00")
+    await sync_worker_salary_plan(db_session, worker, today=date(2026, 9, 23))
+    await resync_worker_salary_settlements(db_session, worker.id)
+
+    september = await occurrence(client)
+    # Сентябрь заработан и выплачен по старой ставке — он остаётся закрытым.
+    assert Decimal(str(september["amount"])) == SALARY
+    assert september["is_paid"] is True
+    items = (await client.get("/api/planned-expenses/upcoming", params={"days": 365})).json()
+    october = next(item for item in items if item["due_date"] == "2026-10-05")
+    assert Decimal(str(october["amount"])) == Decimal("120000.00")
+
+
+async def test_resync_keeps_settlements_of_a_switched_off_plan(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    old_plan = PlannedExpense(
+        name="Old plan",
+        amount=Decimal("40000.00"),
+        currency="RSD",
+        period="monthly",
+        payment_day=5,
+        start_date=date(2026, 1, 5),
+        is_active=False,
+        worker_id=worker.id,
+    )
+    db_session.add(old_plan)
+    await db_session.flush()
+    payout = await add_money_payout(db_session, worker, MONEY, payout_date=date(2026, 7, 5))
+    db_session.add(
+        PlannedExpensePayment(
+            planned_expense_id=old_plan.id,
+            due_date=date(2026, 7, 5),
+            paid_date=date(2026, 7, 5),
+            amount=Decimal("40000.00"),
+            worker_payout_id=payout.id,
+        )
+    )
+    await db_session.flush()
+
+    await sync_worker_payout_planned_payment(db_session, payout)
+
+    kept = (
+        await db_session.execute(
+            select(PlannedExpensePayment).where(PlannedExpensePayment.planned_expense_id == old_plan.id)
+        )
+    ).scalar_one()
+    assert Decimal(kept.amount) == Decimal("40000.00")
+    # Уже засчитанное в выключенный план второй раз не раскладывается.
+    active_total = sum(
+        Decimal(mark.amount)
+        for mark in (
+            await db_session.execute(
+                select(PlannedExpensePayment).where(PlannedExpensePayment.planned_expense_id != old_plan.id)
+            )
+        ).scalars()
+    )
+    assert active_total == MONEY - Decimal("40000.00")

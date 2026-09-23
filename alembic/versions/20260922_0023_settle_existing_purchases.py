@@ -62,17 +62,20 @@ def upgrade() -> None:
     connection = op.get_bind()
 
     plans_by_worker: dict[int, list[SimpleNamespace]] = {}
+    # Булев параметр, а не «= 1»: на PostgreSQL столбец логический.
     for row in connection.execute(
         sa.text(
             "SELECT id, worker_id, amount, period, payment_day, payment_day_of_week,"
             " start_date, end_date, is_active"
-            " FROM planned_expenses WHERE is_active = 1 AND worker_id IS NOT NULL"
-        )
+            " FROM planned_expenses WHERE is_active = :active AND worker_id IS NOT NULL"
+        ),
+        {"active": True},
     ):
         plan = _plan_stub(row)
         plans_by_worker.setdefault(plan.worker_id, []).append(plan)
     if not plans_by_worker:
         return
+    active_plan_ids = [plan.id for plans in plans_by_worker.values() for plan in plans]
 
     # Покупка без периода попадёт в ближайший открытый месяц, а это может быть
     # соседний: проставляем ей месяц самой траты, чтобы пересчёт был устойчивым.
@@ -91,7 +94,24 @@ def upgrade() -> None:
             {"start": period_start.isoformat(), "end": period_end.isoformat(), "id": int(row.id)},
         )
 
-    connection.execute(sa.text("DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"))
+    # Пересобираем только погашения активных планов. Отметки выключенных планов —
+    # история (например, архивный период): их оставляем, а засчитанные туда
+    # деньги второй раз не раскладываем.
+    active_placeholders = ", ".join(str(plan_id) for plan_id in active_plan_ids)
+    connection.execute(
+        sa.text(
+            "DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"
+            f" AND planned_expense_id IN ({active_placeholders})"
+        )
+    )
+    booked_elsewhere: dict[int, Decimal] = {}
+    for row in connection.execute(
+        sa.text(
+            "SELECT worker_payout_id, SUM(amount) AS amount FROM planned_expense_payments"
+            " WHERE worker_payout_id IS NOT NULL GROUP BY worker_payout_id"
+        )
+    ):
+        booked_elsewhere[int(row.worker_payout_id)] = Decimal(str(row.amount or 0))
 
     settled: dict[tuple[int, date], Decimal] = {}
     for row in connection.execute(sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")):
@@ -110,7 +130,7 @@ def upgrade() -> None:
     created = 0
     for payout in payouts:
         plans = plans_by_worker.get(int(payout.worker_id or 0)) or []
-        left = Decimal(str(payout.cash_paid_amount or 0))
+        left = Decimal(str(payout.cash_paid_amount or 0)) - booked_elsewhere.get(int(payout.id), ZERO)
         payout_date = _as_date(payout.date)
         if not plans or left <= ZERO or payout_date is None:
             continue
@@ -167,6 +187,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Автоматические погашения — производные данные: приложение собирает их заново
-    # при любом изменении выплаты. Ручные отметки не трогаем, они внесены руками.
-    op.execute("DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL")
+    # Период, проставленный покупкам, и пересобранные погашения — производные
+    # данные: приложение собирает погашения заново при любом изменении выплаты.
+    # Сносим автоматические погашения активных планов, ручные и историю не трогаем.
+    op.execute(
+        sa.text(
+            "DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"
+            " AND planned_expense_id IN (SELECT id FROM planned_expenses WHERE is_active = :active)"
+        ).bindparams(active=True)
+    )

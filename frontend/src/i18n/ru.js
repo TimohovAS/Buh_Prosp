@@ -1270,6 +1270,8 @@ const ru = {
   workerPayoutPurchasePeriodHint:
     'Укажите зарплатный месяц, за который сделана покупка: на него и уменьшится остаток.',
   workerPayoutSalaryRemainder: 'За {month} уже закрыто {paid}, осталось выдать {remaining}',
+  workerPayoutSalarySettled:
+    'Зарплата за {month} уже закрыта полностью ({paid}). Если выдаёте сверх, укажите сумму явно.',
   workerPayoutRegular: 'Выходы',
   workerPayoutRemaining: 'Остаток',
   workerPayoutTripAdvance: 'Аванс за командировку',

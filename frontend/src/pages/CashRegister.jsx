@@ -81,6 +81,13 @@ function withSalaryMonth(form, isoDate) {
   }
 }
 
+// Месяц или диапазон месяцев, за которые считается остаток зарплаты.
+function salaryMonthLabel(dueDates) {
+  const months = [...new Set((dueDates || []).map((value) => String(value).slice(0, 7)))]
+  if (!months.length) return ''
+  return months.length === 1 ? months[0] : `${months[0]} – ${months[months.length - 1]}`
+}
+
 const toNumber = (value) => Number(value || 0)
 const toFormValue = (value) => (value === null || value === undefined ? '' : String(value))
 const isGeneratedWorkerPayoutNote = (value) => /^days=\d/.test(String(value || '').trim())
@@ -206,6 +213,7 @@ export default function CashRegister() {
   const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
   const [salaryRemainder, setSalaryRemainder] = useState(null)
+  const autoFilledCashRef = useRef(null)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -871,6 +879,7 @@ export default function CashRegister() {
   const openWorkerPayoutCreate = () => {
     setArchivedPayoutWorker(null)
     setSalaryRemainder(null)
+    autoFilledCashRef.current = null
     setWorkerPayoutForm({
       ...emptyWorkerPayoutForm,
       date: todayIso(),
@@ -984,39 +993,54 @@ export default function CashRegister() {
     }
   }
 
-  // Часть зарплаты могли уже закрыть покупкой в её счёт — тогда деньгами
-  // причитается только остаток, иначе работник получит больше положенного.
-  const loadSalaryRemainder = async (workerId, payoutDate) => {
-    setSalaryRemainder(null)
-    if (!workerId) return
-    try {
-      const items = await api.plannedExpenses.upcoming(365)
-      const target = payoutDate || todayIso()
-      const open = (items || [])
-        .filter(
-          (item) =>
-            Number(item.worker_id) === Number(workerId) &&
-            !item.is_paid &&
-            Number(item.paid_amount) > 0 &&
-            Number(item.remaining_amount) > 0
-        )
-        .sort(
-          (left, right) =>
-            Math.abs(new Date(left.due_date) - new Date(target)) -
-            Math.abs(new Date(right.due_date) - new Date(target))
-        )
-      if (open.length) {
-        setSalaryRemainder(open[0])
-        setWorkerPayoutForm((previous) => ({
-          ...previous,
-          cash_paid_amount: String(open[0].remaining_amount),
-        }))
-      }
-    } catch {
-      // Напоминание — подсказка, а не условие сохранения выплаты.
+  // Остаток плановой зарплаты берём с сервера тем же расчётом, по которому он
+  // раскладывает выплату: форма не должна сама угадывать месяц, иначе подставит
+  // остаток соседнего, а явную сумму сервер уже не пересчитывает.
+  const salaryPayoutType = ['regular', 'weekly', 'monthly'].includes(workerPayoutForm.payout_type)
+  useEffect(() => {
+    const creating = !!workerPayoutModal && !workerPayoutModal.payoutId
+    if (!creating || !salaryPayoutType || !workerPayoutForm.worker_id || !workerPayoutForm.date) {
       setSalaryRemainder(null)
+      return undefined
     }
-  }
+    let cancelled = false
+    api.workers
+      .salaryRemaining(workerPayoutForm.worker_id, {
+        date: workerPayoutForm.date,
+        period_start: workerPayoutForm.period_start,
+        period_end: workerPayoutForm.period_end,
+      })
+      .then((balance) => {
+        if (cancelled) return
+        const settled = Number(balance?.settled || 0)
+        const remaining = Number(balance?.remaining || 0)
+        const partlyClosed = balance?.has_plan && settled > 0
+        setSalaryRemainder(partlyClosed ? balance : null)
+        setWorkerPayoutForm((previous) => {
+          // Своё число, введённое руками, не перетираем — только то, что ставили сами.
+          const untouched =
+            previous.cash_paid_amount === '' || previous.cash_paid_amount === autoFilledCashRef.current
+          if (!untouched) return previous
+          const next = partlyClosed && remaining > 0 ? String(remaining) : ''
+          autoFilledCashRef.current = next || null
+          return previous.cash_paid_amount === next ? previous : { ...previous, cash_paid_amount: next }
+        })
+      })
+      .catch(() => {
+        // Остаток — подсказка, а не условие сохранения выплаты.
+        if (!cancelled) setSalaryRemainder(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    workerPayoutModal,
+    salaryPayoutType,
+    workerPayoutForm.worker_id,
+    workerPayoutForm.date,
+    workerPayoutForm.period_start,
+    workerPayoutForm.period_end,
+  ])
 
   const updateWorkerPayoutWorker = (workerId) => {
     const worker = workers.find((item) => Number(item.id) === Number(workerId))
@@ -1029,9 +1053,6 @@ export default function CashRegister() {
     }))
     if (workerPayoutForm.payout_type === 'trip_final') {
       prefillTripFinalFromAdvance(workerId)
-    }
-    if (!workerPayoutModal?.payoutId) {
-      loadSalaryRemainder(workerId, workerPayoutForm.date)
     }
   }
 
@@ -1951,12 +1972,7 @@ export default function CashRegister() {
               <label className="form-label">{tr('date')}</label>
               <DatePicker
                 value={workerPayoutForm.date}
-                onChange={(value) => {
-                  setWorkerPayoutForm((previous) => ({ ...previous, date: value }))
-                  if (!workerPayoutModal?.payoutId) {
-                    loadSalaryRemainder(workerPayoutForm.worker_id, value)
-                  }
-                }}
+                onChange={(value) => setWorkerPayoutForm((previous) => ({ ...previous, date: value }))}
                 required
               />
             </div>
@@ -2034,11 +2050,16 @@ export default function CashRegister() {
               <label className="form-label">{tr('workerPayoutPayNow')}</label>
               {salaryRemainder && !workerPayoutModal?.payoutId ? (
                 <div className="record-field-text">
-                  {tr('workerPayoutSalaryRemainder', {
-                    month: salaryRemainder.due_date.slice(0, 7),
-                    paid: fmtAmount(salaryRemainder.paid_amount),
-                    remaining: fmtAmount(salaryRemainder.remaining_amount),
-                  })}
+                  {tr(
+                    Number(salaryRemainder.remaining) > 0
+                      ? 'workerPayoutSalaryRemainder'
+                      : 'workerPayoutSalarySettled',
+                    {
+                      month: salaryMonthLabel(salaryRemainder.due_dates),
+                      paid: fmtAmount(salaryRemainder.settled),
+                      remaining: fmtAmount(salaryRemainder.remaining),
+                    }
+                  )}
                 </div>
               ) : null}
               <input
@@ -2046,11 +2067,7 @@ export default function CashRegister() {
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder={String(
-                  salaryRemainder && !workerPayoutModal?.payoutId
-                    ? salaryRemainder.remaining_amount
-                    : workerPayoutPreview.cash
-                )}
+                placeholder={String(workerPayoutPreview.cash)}
                 value={workerPayoutForm.cash_paid_amount}
                 onChange={(event) =>
                   setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))

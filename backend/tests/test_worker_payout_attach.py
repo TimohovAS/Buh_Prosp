@@ -19,10 +19,12 @@ from backend.expense_service import (
     unlink_worker_payout_from_expense,
 )
 from backend.models import (
+    BankTransaction,
     CashEntry,
     Expense,
     PlannedExpense,
     PlannedExpensePayment,
+    PurchaseReceipt,
     TransactionCategory,
     Worker,
     WorkerPayout,
@@ -881,3 +883,147 @@ async def test_changing_the_type_to_a_purchase_moves_the_expense_too(attach_clie
     assert changed.status_code == 200
     assert expense.project_id == salary_project.id
     assert expense.category_id == category.id
+
+
+async def link_receipt_and_bank(db, expense):
+    """Чек и банковская операция, сопоставленные с расходом, — на его проекте."""
+    receipt = PurchaseReceipt(
+        verification_url="https://suf.purs.gov.rs/v/?vl=test",
+        qr_hash="a" * 64,
+        total_amount=expense.amount,
+        project_id=expense.project_id,
+        expense_id=expense.id,
+    )
+    transaction = BankTransaction(
+        date=expense.date,
+        amount=expense.amount,
+        direction="out",
+        currency="RSD",
+        status="matched",
+        matched_type="expense",
+        matched_id=expense.id,
+        project_id=expense.project_id,
+    )
+    db.add_all([receipt, transaction])
+    await db.flush()
+    return receipt, transaction
+
+
+async def test_moving_to_salary_carries_the_receipt_and_bank_operation(attach_client, db_session, make_project):
+    _, salary_project = await make_salary_references(db_session, make_project)
+    other_project = await make_project(db_session, code="RAZNO", name="Razno")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=other_project.id)
+    receipt, transaction = await link_receipt_and_bank(db_session, expense)
+
+    await attach_client.post(
+        "/api/workers/payouts/attach",
+        json={
+            "expense_id": expense.id,
+            "worker_id": worker.id,
+            "payout_type": "purchase",
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        },
+    )
+
+    assert expense.project_id == salary_project.id
+    assert receipt.project_id == salary_project.id
+    assert transaction.project_id == salary_project.id
+
+
+async def test_unlinking_puts_the_expense_back_where_it_was(attach_client, db_session, make_project):
+    await make_salary_references(db_session, make_project)
+    other_project = await make_project(db_session, code="RAZNO", name="Razno")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=other_project.id)
+    expense.category = None
+    expense.category_id = None
+    await db_session.flush()
+    receipt, transaction = await link_receipt_and_bank(db_session, expense)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={
+                "expense_id": expense.id,
+                "worker_id": worker.id,
+                "payout_type": "purchase",
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+            },
+        )
+    ).json()["payout"]
+
+    await attach_client.delete(f"/api/workers/payouts/{attached['id']}/link")
+
+    assert expense.project_id == other_project.id
+    assert expense.category_id is None
+    assert expense.category is None
+    assert receipt.project_id == other_project.id
+    assert transaction.project_id == other_project.id
+
+
+async def test_unlinking_keeps_a_later_manual_choice(attach_client, db_session, make_project):
+    await make_salary_references(db_session, make_project)
+    other_project = await make_project(db_session, code="RAZNO", name="Razno")
+    chosen_project = await make_project(db_session, code="CHOSEN", name="Chosen by hand")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=other_project.id)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={
+                "expense_id": expense.id,
+                "worker_id": worker.id,
+                "payout_type": "purchase",
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+            },
+        )
+    ).json()["payout"]
+    # После привязки человек сам переложил расход в другой проект.
+    expense.project_id = chosen_project.id
+    await db_session.flush()
+
+    await attach_client.delete(f"/api/workers/payouts/{attached['id']}/link")
+
+    assert expense.project_id == chosen_project.id
+
+
+async def test_turning_a_purchase_into_a_trip_puts_the_expense_back(attach_client, db_session, make_project):
+    await make_salary_references(db_session, make_project)
+    site_project = await make_project(db_session, code="SLANKAMEN", name="Slankamen")
+    worker = Worker(name="Andrei Timokhov")
+    db_session.add(worker)
+    await db_session.flush()
+    expense = await make_card_expense(db_session, project_id=site_project.id)
+    attached = (
+        await attach_client.post(
+            "/api/workers/payouts/attach",
+            json={
+                "expense_id": expense.id,
+                "worker_id": worker.id,
+                "payout_type": "purchase",
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+            },
+        )
+    ).json()["payout"]
+
+    await attach_client.patch(
+        f"/api/workers/payouts/{attached['id']}/link",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "trip_final",
+            "period_start": "2026-09-15",
+            "period_end": "2026-09-18",
+        },
+    )
+
+    assert expense.project_id == site_project.id

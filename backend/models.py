@@ -171,6 +171,9 @@ class WorkerPayout(Base):
     origin = Column(String(20), nullable=False, default="calculated")
     # Сторно расхода не удаляет выплату, а гасит её: отмена сторно возвращает запись.
     cancelled_at = Column(DateTime, nullable=True)
+    # Привязка переносит расход в зарплатные категорию и проект. Прежние значения
+    # (JSON) хранятся здесь, чтобы отвязка вернула расход туда, где он был.
+    expense_links_before = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 

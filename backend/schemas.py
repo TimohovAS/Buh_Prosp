@@ -2161,6 +2161,15 @@ class WorkerPayoutReport(BaseModel):
     items: list[WorkerPayoutResponse]
 
 
+class WorkerSalaryRemaining(BaseModel):
+    """Остаток плановой зарплаты за период выплаты."""
+
+    has_plan: bool
+    remaining: Decimal = Decimal("0")
+    settled: Decimal = Decimal("0")
+    due_dates: list[DateType] = Field(default_factory=list)
+
+
 class WorkerPayoutCreateResponse(BaseModel):
     payout: WorkerPayoutResponse
     # У покупки в счёт зарплаты записи в кассе нет: деньги ушли с карты или по чеку.
