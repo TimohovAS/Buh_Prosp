@@ -25,7 +25,6 @@ from backend.models import (
     User,
 )
 from backend.decimal_utils import ZERO_DECIMAL, decimal_sum, to_decimal
-from backend.payments_service import get_or_create_obligations
 from backend.planned_expenses_service import (
     occurrence_remaining,
     payment_dates_in_range,
@@ -176,10 +175,10 @@ async def get_dashboard(
     )
     planned_expenses_until_month_end = planned_expenses_only_until_month_end
 
-    await get_or_create_obligations(db, selected_year)
     obligations_result = await db.execute(
         select(MonthlyObligation).where(
             MonthlyObligation.year == selected_year,
+            MonthlyObligation.is_active == True,
             MonthlyObligation.status.in_(["unpaid", "overdue"]),
         )
     )

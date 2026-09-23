@@ -1224,19 +1224,75 @@ class PaymentTypeResponse(BaseModel):
     name_sr: str
     name_ru: Optional[str] = None
     sort_order: int
+    is_archived: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaymentTypeCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    name_sr: str = Field(min_length=1, max_length=100)
+    name_ru: Optional[str] = Field(default=None, max_length=100)
+    sort_order: int = 0
+
+
+class PaymentTypeUpdate(BaseModel):
+    code: Optional[str] = Field(default=None, min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    name_sr: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    name_ru: Optional[str] = Field(default=None, max_length=100)
+    sort_order: Optional[int] = None
+    is_archived: Optional[bool] = None
+
+
+class TaxSchemePeriodResponse(BaseModel):
+    id: int
+    tax_scheme_id: int
+    period_start: DateType
+    period_end: Optional[DateType] = None
+    closing_deadline: Optional[DateType] = None
+    note: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaxSchemeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+class TaxSchemeUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    is_archived: Optional[bool] = None
+
+
+class TaxSchemeActivate(BaseModel):
+    effective_from: DateType
+    closing_deadline: Optional[DateType] = None
+    note: Optional[str] = Field(default=None, max_length=300)
+
+
+class TaxSchemeResponse(BaseModel):
+    id: int
+    code: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    is_archived: bool = False
+    periods: list[TaxSchemePeriodResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class YearDecisionBase(BaseModel):
     year: int
+    tax_scheme_id: Optional[int] = None
     payment_type_id: int
     period_start: DateType
     period_end: DateType
     monthly_amount: Decimal
     base_amount: Optional[Decimal] = None
     rate_percent: Optional[float] = None
-    recipient_name: str = "Пореска управа Републике Србије"
+    recipient_name: str = Field(min_length=1, max_length=200)
     recipient_account: str
     sifra_placanja: str = "253"
     model: str = "97"
@@ -1244,6 +1300,9 @@ class YearDecisionBase(BaseModel):
     poziv_na_broj_next: Optional[str] = None
     payment_purpose: str
     currency: str = "RSD"
+    due_day: int = Field(default=15, ge=1, le=31)
+    due_month_offset: int = Field(default=1, ge=0, le=24)
+    prorate_partial_month: bool = True
     is_provisional: bool = False
 
 
@@ -1252,6 +1311,7 @@ class YearDecisionCreate(YearDecisionBase):
 
 
 class YearDecisionUpdate(BaseModel):
+    tax_scheme_id: Optional[int] = None
     period_start: Optional[DateType] = None
     period_end: Optional[DateType] = None
     monthly_amount: Optional[Decimal] = None
@@ -1264,6 +1324,10 @@ class YearDecisionUpdate(BaseModel):
     poziv_na_broj: Optional[str] = None
     poziv_na_broj_next: Optional[str] = None
     payment_purpose: Optional[str] = None
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=5)
+    due_day: Optional[int] = Field(default=None, ge=1, le=31)
+    due_month_offset: Optional[int] = Field(default=None, ge=0, le=24)
+    prorate_partial_month: Optional[bool] = None
     is_provisional: Optional[bool] = None
     is_active: Optional[bool] = None
 
@@ -1273,6 +1337,7 @@ class YearDecisionResponse(YearDecisionBase):
     is_active: bool = True
     payment_type_code: Optional[str] = None
     payment_type_name: Optional[str] = None
+    tax_scheme_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1281,10 +1346,15 @@ class MonthlyObligationResponse(BaseModel):
     id: int
     year: int
     month: int
+    tax_scheme_id: Optional[int] = None
+    tax_scheme_period_id: Optional[int] = None
+    tax_scheme_name: Optional[str] = None
     payment_type_id: int
     payment_type_code: Optional[str] = None
     payment_type_name: Optional[str] = None
     amount: Decimal
+    accrual_period_start: Optional[DateType] = None
+    accrual_period_end: Optional[DateType] = None
     deadline: str
     status: str
     paid_date: Optional[DateType] = None

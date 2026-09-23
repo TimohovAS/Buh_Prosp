@@ -94,9 +94,7 @@ def upgrade() -> None:
     connection.execute(sa.text("DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"))
 
     settled: dict[tuple[int, date], Decimal] = {}
-    for row in connection.execute(
-        sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")
-    ):
+    for row in connection.execute(sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")):
         key = (int(row.planned_expense_id), _as_date(row.due_date))
         settled[key] = settled.get(key, ZERO) + Decimal(str(row.amount or 0))
 

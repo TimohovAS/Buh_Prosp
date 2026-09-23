@@ -247,12 +247,19 @@ def mark_obligation_paid_status(obligation: Any, *, paid_date: date) -> None:
     obligation.paid_date = paid_date
 
 
-def refresh_obligation_due_status(obligation: Any, *, today: date | None = None) -> str:
+def obligation_status_for_date(obligation: Any, *, today: date | None = None) -> str:
+    """Return the effective status without mutating an obligation or database session."""
     current = _ensure_known_status("MonthlyObligation", getattr(obligation, "status", None), OBLIGATION_STATUSES)
     if current == "paid":
         return current
     resolved_today = today or date.today()
-    target = "overdue" if getattr(obligation, "deadline", None) and obligation.deadline < resolved_today else "unpaid"
+    return "overdue" if getattr(obligation, "deadline", None) and obligation.deadline < resolved_today else "unpaid"
+
+
+def refresh_obligation_due_status(obligation: Any, *, today: date | None = None) -> str:
+    target = obligation_status_for_date(obligation, today=today)
+    if target == "paid":
+        return target
     obligation.status = target
     obligation.paid_date = None
     return target

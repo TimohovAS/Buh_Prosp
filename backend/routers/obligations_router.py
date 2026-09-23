@@ -5,32 +5,113 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from backend.database import get_db
 from backend.obligation_payment_service import (
     mark_obligation_paid as apply_obligation_payment,
     reset_obligation_payment,
 )
-from backend.models import PaymentType, YearDecision, MonthlyObligation, Enterprise, User
-from backend.state_machine import InvalidStatusTransition
+from backend.models import Enterprise, MonthlyObligation, PaymentType, TaxScheme, TaxSchemePeriod, User, YearDecision
+from backend.state_machine import InvalidStatusTransition, obligation_status_for_date
 from backend.schemas import (
+    PaymentTypeCreate,
     PaymentTypeResponse,
+    PaymentTypeUpdate,
     YearDecisionCreate,
     YearDecisionUpdate,
     YearDecisionResponse,
     MonthlyObligationResponse,
     ObligationMarkPaid,
     IPSQRData,
+    TaxSchemeActivate,
+    TaxSchemeCreate,
+    TaxSchemeResponse,
+    TaxSchemeUpdate,
 )
 from backend.auth import get_current_user_required, require_edit_access
 from backend.payment_qr_service import build_ips_payload, normalize_ips_payment_purpose, render_qr_png_data_url
 from backend.payments_service import (
-    ensure_payment_types,
     get_or_create_obligations,
+    payment_reference_for_year,
     payment_purpose_with_year,
-    presets_2026,
 )
+from backend.tax_scheme_service import activate_tax_scheme, ensure_default_tax_scheme
 
 router = APIRouter(prefix="/obligations", tags=["obligations"])
+
+
+async def _scheme_response(db: AsyncSession, scheme_id: int) -> TaxSchemeResponse:
+    result = await db.execute(
+        select(TaxScheme).options(selectinload(TaxScheme.periods)).where(TaxScheme.id == scheme_id)
+    )
+    return TaxSchemeResponse.model_validate(result.scalar_one())
+
+
+async def _decision_response(db: AsyncSession, decision: YearDecision) -> YearDecisionResponse:
+    payment_type = await db.get(PaymentType, decision.payment_type_id) if decision.payment_type_id else None
+    tax_scheme = await db.get(TaxScheme, decision.tax_scheme_id) if decision.tax_scheme_id else None
+    return YearDecisionResponse(
+        **{
+            key: getattr(decision, key)
+            for key in [
+                "id",
+                "year",
+                "tax_scheme_id",
+                "payment_type_id",
+                "period_start",
+                "period_end",
+                "monthly_amount",
+                "base_amount",
+                "rate_percent",
+                "recipient_name",
+                "recipient_account",
+                "sifra_placanja",
+                "model",
+                "poziv_na_broj",
+                "poziv_na_broj_next",
+                "payment_purpose",
+                "currency",
+                "due_day",
+                "due_month_offset",
+                "prorate_partial_month",
+                "is_provisional",
+                "is_active",
+            ]
+        },
+        payment_type_code=payment_type.code if payment_type else None,
+        payment_type_name=payment_type.name_sr if payment_type else None,
+        tax_scheme_name=tax_scheme.name if tax_scheme else None,
+    )
+
+
+async def _validate_decision_period(
+    db: AsyncSession,
+    *,
+    year: int,
+    scheme_id: int,
+    payment_type_id: int,
+    period_start: date,
+    period_end: date,
+    is_provisional: bool,
+    exclude_id: int | None = None,
+) -> None:
+    if period_start > period_end:
+        raise HTTPException(400, "Начало периода должно быть раньше его окончания")
+    if period_start.year != year or period_end.year != year:
+        raise HTTPException(400, "Период правила должен находиться внутри выбранного года")
+    query = select(YearDecision).where(
+        YearDecision.year == year,
+        YearDecision.tax_scheme_id == scheme_id,
+        YearDecision.payment_type_id == payment_type_id,
+        YearDecision.is_provisional == is_provisional,
+        YearDecision.is_active == True,
+    )
+    if exclude_id is not None:
+        query = query.where(YearDecision.id != exclude_id)
+    result = await db.execute(query)
+    for existing in result.scalars().all():
+        if existing.period_start <= period_end and existing.period_end >= period_start:
+            raise HTTPException(400, "Период пересекается с другим активным правилом этой схемы")
 
 
 @router.post("/generate")
@@ -44,7 +125,6 @@ async def generate_obligations(
     Берёт YearDecision где year=YYYY и is_active=true.
     Не создаёт дубликаты и не изменяет оплаченные обязательства.
     """
-    await ensure_payment_types(db)
     obligations = await get_or_create_obligations(db, year, None)
     await db.commit()
     return {"ok": True, "count": len(obligations)}
@@ -56,9 +136,156 @@ async def list_payment_types(
     current_user: User = Depends(get_current_user_required),
 ):
     """Список типов платежей."""
-    await ensure_payment_types(db)
-    r = await db.execute(select(PaymentType).order_by(PaymentType.sort_order))
+    r = await db.execute(select(PaymentType).order_by(PaymentType.is_archived, PaymentType.sort_order, PaymentType.id))
     return [PaymentTypeResponse.model_validate(t) for t in r.scalars().all()]
+
+
+@router.post("/types", response_model=PaymentTypeResponse)
+async def create_payment_type(
+    data: PaymentTypeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Create a custom payment type for this installation."""
+    code = data.code.strip().lower()
+    if await db.scalar(select(PaymentType.id).where(PaymentType.code == code)) is not None:
+        raise HTTPException(400, "Тип платежа с таким кодом уже существует")
+    payment_type = PaymentType(
+        code=code,
+        name_sr=data.name_sr.strip(),
+        name_ru=(data.name_ru or "").strip() or None,
+        sort_order=data.sort_order,
+    )
+    db.add(payment_type)
+    await db.commit()
+    await db.refresh(payment_type)
+    return PaymentTypeResponse.model_validate(payment_type)
+
+
+@router.patch("/types/{type_id}", response_model=PaymentTypeResponse)
+async def update_payment_type(
+    type_id: int,
+    data: PaymentTypeUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Rename, reorder or archive a user-configurable payment type."""
+    payment_type = await db.get(PaymentType, type_id)
+    if payment_type is None:
+        raise HTTPException(404, "Тип платежа не найден")
+    values = data.model_dump(exclude_unset=True)
+    if "code" in values and values["code"] is not None:
+        code = values["code"].strip().lower()
+        duplicate_id = await db.scalar(
+            select(PaymentType.id).where(PaymentType.code == code, PaymentType.id != payment_type.id)
+        )
+        if duplicate_id is not None:
+            raise HTTPException(400, "Тип платежа с таким кодом уже существует")
+        values["code"] = code
+    if "name_sr" in values:
+        values["name_sr"] = (values["name_sr"] or "").strip()
+        if not values["name_sr"]:
+            raise HTTPException(400, "Название типа платежа не может быть пустым")
+    if "name_ru" in values and isinstance(values["name_ru"], str):
+        values["name_ru"] = values["name_ru"].strip() or None
+    for key, value in values.items():
+        setattr(payment_type, key, value)
+    await db.commit()
+    await db.refresh(payment_type)
+    return PaymentTypeResponse.model_validate(payment_type)
+
+
+@router.get("/schemes", response_model=list[TaxSchemeResponse])
+async def list_tax_schemes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Схемы налогообложения и полная история периодов их применения."""
+    result = await db.execute(
+        select(TaxScheme).options(selectinload(TaxScheme.periods)).order_by(TaxScheme.is_archived, TaxScheme.id)
+    )
+    return [TaxSchemeResponse.model_validate(item) for item in result.scalars().all()]
+
+
+@router.post("/schemes", response_model=TaxSchemeResponse)
+async def create_tax_scheme(
+    data: TaxSchemeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    scheme = TaxScheme(name=data.name.strip(), description=(data.description or "").strip() or None)
+    db.add(scheme)
+    await db.commit()
+    return await _scheme_response(db, scheme.id)
+
+
+@router.patch("/schemes/{scheme_id}", response_model=TaxSchemeResponse)
+async def update_tax_scheme(
+    scheme_id: int,
+    data: TaxSchemeUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    scheme = await db.get(TaxScheme, scheme_id)
+    if scheme is None:
+        raise HTTPException(404, "Налоговая схема не найдена")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        if key == "name" and value is None:
+            raise HTTPException(400, "Название налоговой схемы не может быть пустым")
+        if key == "is_archived" and value:
+            open_period_id = await db.scalar(
+                select(TaxSchemePeriod.id)
+                .where(TaxSchemePeriod.tax_scheme_id == scheme.id, TaxSchemePeriod.period_end.is_(None))
+                .limit(1)
+            )
+            if open_period_id is not None:
+                raise HTTPException(400, "Сначала примените другую схему, затем архивируйте эту")
+        setattr(scheme, key, value)
+    await db.commit()
+    return await _scheme_response(db, scheme.id)
+
+
+@router.post("/schemes/{scheme_id}/activate", response_model=TaxSchemeResponse)
+async def activate_scheme(
+    scheme_id: int,
+    data: TaxSchemeActivate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    scheme = await db.get(TaxScheme, scheme_id)
+    if scheme is None or scheme.is_archived:
+        raise HTTPException(404, "Активная налоговая схема не найдена")
+    rule_id = await db.scalar(
+        select(YearDecision.id)
+        .where(
+            YearDecision.tax_scheme_id == scheme.id,
+            YearDecision.is_active == True,
+            (YearDecision.year == data.effective_from.year)
+            | (
+                (YearDecision.year == data.effective_from.year - 1)
+                & ((YearDecision.is_provisional == True) | (YearDecision.poziv_na_broj_next.is_not(None)))
+            ),
+        )
+        .limit(1)
+    )
+    if rule_id is None:
+        raise HTTPException(400, "Сначала добавьте для схемы хотя бы одно налоговое решение")
+    try:
+        await activate_tax_scheme(
+            db,
+            scheme,
+            data.effective_from,
+            closing_deadline=data.closing_deadline,
+            note=data.note,
+        )
+        await get_or_create_obligations(db, data.effective_from.year, None)
+        await get_or_create_obligations(db, data.effective_from.year + 1, None)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    return await _scheme_response(db, scheme.id)
 
 
 @router.get("/years", response_model=list[int])
@@ -67,9 +294,15 @@ async def list_obligation_years(
     current_user: User = Depends(get_current_user_required),
 ):
     """Доступные годы для календаря обязательств."""
-    decision_result = await db.execute(select(YearDecision.year))
+    decision_result = await db.execute(
+        select(YearDecision.year, YearDecision.is_provisional, YearDecision.poziv_na_broj_next)
+    )
     obligation_result = await db.execute(select(MonthlyObligation.year))
-    years = {value for (value,) in [*decision_result.all(), *obligation_result.all()] if value is not None}
+    years = {value for (value,) in obligation_result.all() if value is not None}
+    for decision_year, is_provisional, next_year_reference in decision_result.all():
+        years.add(decision_year)
+        if is_provisional or next_year_reference:
+            years.add(decision_year + 1)
     years.add(date.today().year)
     return sorted(years, reverse=True)
 
@@ -77,19 +310,37 @@ async def list_obligation_years(
 @router.get("/calendar", response_model=list[MonthlyObligationResponse])
 async def list_obligations(
     year: int = Query(..., description="Год"),
-    payment_type: Optional[str] = Query(None, description="Код типа: tax, pio, health, unemployment"),
+    payment_type: Optional[str] = Query(None, description="Пользовательский код типа платежа"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Календарь обязательств за год. Создаёт обязательства если их нет (по решениям)."""
-    await ensure_payment_types(db)
-    obligations = await get_or_create_obligations(db, year, payment_type)
+    """Read-only calendar. Recalculation is performed only by explicit edit operations."""
+    query = select(MonthlyObligation).where(
+        MonthlyObligation.year == year,
+        MonthlyObligation.is_active == True,
+    )
+    if payment_type:
+        query = query.join(PaymentType).where(PaymentType.code == payment_type)
+    obligations_result = await db.execute(
+        query.order_by(
+            MonthlyObligation.month,
+            MonthlyObligation.accrual_period_start,
+            MonthlyObligation.payment_type_id,
+            MonthlyObligation.id,
+        )
+    )
+    obligations = list(obligations_result.scalars().all())
     pt_ids = list({ob.payment_type_id for ob in obligations})
+    scheme_ids = list({ob.tax_scheme_id for ob in obligations if ob.tax_scheme_id})
     type_map = {}
+    scheme_map = {}
     if pt_ids:
         r_pt = await db.execute(select(PaymentType).where(PaymentType.id.in_(pt_ids)))
         for t in r_pt.scalars().all():
             type_map[t.id] = t
+    if scheme_ids:
+        r_scheme = await db.execute(select(TaxScheme).where(TaxScheme.id.in_(scheme_ids)))
+        scheme_map = {scheme.id: scheme for scheme in r_scheme.scalars().all()}
     result = []
     for ob in obligations:
         pt = type_map.get(ob.payment_type_id)
@@ -97,12 +348,17 @@ async def list_obligations(
             id=ob.id,
             year=ob.year,
             month=ob.month,
+            tax_scheme_id=ob.tax_scheme_id,
+            tax_scheme_period_id=ob.tax_scheme_period_id,
+            tax_scheme_name=scheme_map.get(ob.tax_scheme_id).name if scheme_map.get(ob.tax_scheme_id) else None,
             payment_type_id=ob.payment_type_id,
             payment_type_code=pt.code if pt else None,
             payment_type_name=pt.name_sr if pt else None,
             amount=ob.amount,
+            accrual_period_start=ob.accrual_period_start,
+            accrual_period_end=ob.accrual_period_end,
             deadline=ob.deadline.isoformat(),
-            status=ob.status,
+            status=obligation_status_for_date(ob),
             paid_date=ob.paid_date,
             payment_reference=ob.payment_reference,
         )
@@ -122,46 +378,7 @@ async def list_decisions(
         q = q.where(YearDecision.year == year)
     r = await db.execute(q)
     items = r.scalars().all()
-    pt_ids = list({d.payment_type_id for d in items})
-    type_map = {}
-    if pt_ids:
-        r_pt = await db.execute(select(PaymentType).where(PaymentType.id.in_(pt_ids)))
-        for t in r_pt.scalars().all():
-            type_map[t.id] = t
-    out = []
-    for d in items:
-        t = type_map.get(d.payment_type_id)
-        out.append(
-            YearDecisionResponse(
-                **{
-                    k: getattr(d, k)
-                    for k in [
-                        "id",
-                        "year",
-                        "payment_type_id",
-                        "period_start",
-                        "period_end",
-                        "monthly_amount",
-                        "base_amount",
-                        "rate_percent",
-                        "recipient_name",
-                        "recipient_account",
-                        "sifra_placanja",
-                        "model",
-                        "poziv_na_broj",
-                        "poziv_na_broj_next",
-                        "payment_purpose",
-                        "currency",
-                        "is_provisional",
-                        "is_active",
-                    ]
-                    if hasattr(d, k)
-                },
-                payment_type_code=t.code if t else None,
-                payment_type_name=t.name_sr if t else None,
-            )
-        )
-    return out
+    return [await _decision_response(db, decision) for decision in items]
 
 
 @router.get("/decisions/{dec_id}", response_model=YearDecisionResponse)
@@ -174,34 +391,7 @@ async def get_decision(
     dec = await db.get(YearDecision, dec_id)
     if not dec:
         raise HTTPException(404, "Решение не найдено")
-    pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
-    return YearDecisionResponse(
-        **{
-            k: getattr(dec, k)
-            for k in [
-                "id",
-                "year",
-                "payment_type_id",
-                "period_start",
-                "period_end",
-                "monthly_amount",
-                "base_amount",
-                "rate_percent",
-                "recipient_name",
-                "recipient_account",
-                "sifra_placanja",
-                "model",
-                "poziv_na_broj",
-                "poziv_na_broj_next",
-                "payment_purpose",
-                "currency",
-                "is_provisional",
-                "is_active",
-            ]
-        },
-        payment_type_code=pt.code if pt else None,
-        payment_type_name=pt.name_sr if pt else None,
-    )
+    return await _decision_response(db, dec)
 
 
 @router.post("/decisions", response_model=YearDecisionResponse)
@@ -211,47 +401,33 @@ async def create_decision(
     current_user: User = Depends(require_edit_access),
 ):
     """Добавить решение на год."""
-    r = await db.execute(
-        select(YearDecision).where(
-            YearDecision.year == data.year,
-            YearDecision.payment_type_id == data.payment_type_id,
-            YearDecision.is_provisional == data.is_provisional,
-        )
+    default_scheme = await ensure_default_tax_scheme(db, initial_date=data.period_start)
+    scheme_id = data.tax_scheme_id or default_scheme.id
+    if await db.get(TaxScheme, scheme_id) is None:
+        raise HTTPException(400, "Налоговая схема не найдена")
+    payment_type = await db.get(PaymentType, data.payment_type_id)
+    if payment_type is None or payment_type.is_archived:
+        raise HTTPException(400, "Активный тип платежа не найден")
+    await _validate_decision_period(
+        db,
+        year=data.year,
+        scheme_id=scheme_id,
+        payment_type_id=data.payment_type_id,
+        period_start=data.period_start,
+        period_end=data.period_end,
+        is_provisional=data.is_provisional,
     )
-    if r.scalar_one_or_none():
-        raise HTTPException(400, "Решение на этот год и тип уже существует")
-    dec = YearDecision(**data.model_dump())
+    payload = data.model_dump()
+    payload["tax_scheme_id"] = scheme_id
+    dec = YearDecision(**payload)
     db.add(dec)
+    await db.flush()
+    await get_or_create_obligations(db, dec.year, None)
+    if dec.poziv_na_broj_next:
+        await get_or_create_obligations(db, dec.year + 1, None)
     await db.commit()
     await db.refresh(dec)
-    pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
-    return YearDecisionResponse(
-        **{
-            k: getattr(dec, k)
-            for k in [
-                "id",
-                "year",
-                "payment_type_id",
-                "period_start",
-                "period_end",
-                "monthly_amount",
-                "base_amount",
-                "rate_percent",
-                "recipient_name",
-                "recipient_account",
-                "sifra_placanja",
-                "model",
-                "poziv_na_broj",
-                "poziv_na_broj_next",
-                "payment_purpose",
-                "currency",
-                "is_provisional",
-                "is_active",
-            ]
-        },
-        payment_type_code=pt.code if pt else None,
-        payment_type_name=pt.name_sr if pt else None,
-    )
+    return await _decision_response(db, dec)
 
 
 @router.patch("/decisions/{dec_id}", response_model=YearDecisionResponse)
@@ -265,78 +441,33 @@ async def update_decision(
     dec = await db.get(YearDecision, dec_id)
     if not dec:
         raise HTTPException(404, "Решение не найдено")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True)
+    period_start = values.get("period_start", dec.period_start)
+    period_end = values.get("period_end", dec.period_end)
+    scheme_id = values.get("tax_scheme_id", dec.tax_scheme_id)
+    if scheme_id is None:
+        scheme_id = (await ensure_default_tax_scheme(db, initial_date=period_start)).id
+    is_provisional = values.get("is_provisional", dec.is_provisional)
+    await _validate_decision_period(
+        db,
+        year=dec.year,
+        scheme_id=scheme_id,
+        payment_type_id=dec.payment_type_id,
+        period_start=period_start,
+        period_end=period_end,
+        is_provisional=is_provisional,
+        exclude_id=dec.id,
+    )
+    for k, v in values.items():
+        if k == "tax_scheme_id" and v is not None and await db.get(TaxScheme, v) is None:
+            raise HTTPException(400, "Налоговая схема не найдена")
         setattr(dec, k, v)
+    await db.flush()
+    await get_or_create_obligations(db, dec.year, None)
+    await get_or_create_obligations(db, dec.year + 1, None)
     await db.commit()
     await db.refresh(dec)
-    pt = await db.get(PaymentType, dec.payment_type_id) if dec.payment_type_id else None
-    return YearDecisionResponse(
-        **{
-            k: getattr(dec, k)
-            for k in [
-                "id",
-                "year",
-                "payment_type_id",
-                "period_start",
-                "period_end",
-                "monthly_amount",
-                "base_amount",
-                "rate_percent",
-                "recipient_name",
-                "recipient_account",
-                "sifra_placanja",
-                "model",
-                "poziv_na_broj",
-                "poziv_na_broj_next",
-                "payment_purpose",
-                "currency",
-                "is_provisional",
-                "is_active",
-            ]
-        },
-        payment_type_code=pt.code if pt else None,
-        payment_type_name=pt.name_sr if pt else None,
-    )
-
-
-@router.post("/decisions/apply-preset-2026")
-async def apply_preset_2026(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_edit_access),
-):
-    """Применить пресет 2026 из ТЗ (Порез + PIO)."""
-    await ensure_payment_types(db)
-    r_pt = await db.execute(select(PaymentType).where(PaymentType.code.in_(["tax", "pio"])))
-    types = {t.code: t for t in r_pt.scalars().all()}
-    created = 0
-    for p in presets_2026():
-        pt = types.get(p["payment_type_code"])
-        if not pt:
-            continue
-        r = await db.execute(
-            select(YearDecision).where(
-                YearDecision.year == p["year"],
-                YearDecision.payment_type_id == pt.id,
-                YearDecision.is_provisional == False,
-            )
-        )
-        if r.scalar_one_or_none():
-            continue
-        dec = YearDecision(
-            year=p["year"],
-            payment_type_id=pt.id,
-            period_start=date(p["year"], 1, 1),
-            period_end=date(p["year"], 12, 31),
-            monthly_amount=p["monthly_amount"],
-            recipient_account=p["recipient_account"],
-            poziv_na_broj=p["poziv_na_broj"],
-            poziv_na_broj_next=p.get("poziv_na_broj_next"),
-            payment_purpose=p["payment_purpose"],
-        )
-        db.add(dec)
-        created += 1
-    await db.commit()
-    return {"ok": True, "created": created}
+    return await _decision_response(db, dec)
 
 
 @router.patch("/obligations/{ob_id}/mark-paid", response_model=MonthlyObligationResponse)
@@ -416,6 +547,7 @@ async def get_ips_qr(
     if e and e.address:
         payer += f", {e.address}"
     purpose = normalize_ips_payment_purpose(payment_purpose_with_year(dec.payment_purpose, ob.year))
+    payment_reference = payment_reference_for_year(dec, ob.year)
     try:
         payload = build_ips_payload(
             recipient_account=dec.recipient_account,
@@ -424,7 +556,7 @@ async def get_ips_qr(
             sifra_placanja=dec.sifra_placanja,
             payment_purpose=purpose,
             model=dec.model,
-            poziv_na_broj=dec.poziv_na_broj,
+            poziv_na_broj=payment_reference,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -436,7 +568,7 @@ async def get_ips_qr(
         currency=dec.currency,
         purpose=purpose,
         model=dec.model,
-        reference=dec.poziv_na_broj,
+        reference=payment_reference,
         payload=payload,
         qr_png=render_qr_png_data_url(payload),
     )
@@ -450,16 +582,22 @@ async def get_obligations_summary(
 ):
     """Сводка: к оплате, просрочено (для дашборда)."""
     y = year or date.today().year
-    r = await db.execute(select(MonthlyObligation).where(MonthlyObligation.year == y))
+    r = await db.execute(
+        select(MonthlyObligation).where(
+            MonthlyObligation.year == y,
+            MonthlyObligation.is_active == True,
+        )
+    )
     items = r.scalars().all()
     today = date.today()
-    unpaid_count = sum(1 for i in items if i.status in ("unpaid", "overdue"))
-    overdue_count = sum(1 for i in items if i.status == "overdue")
-    overdue_sum = sum(i.amount for i in items if i.status == "overdue")
+    statuses = {item.id: obligation_status_for_date(item, today=today) for item in items}
+    unpaid_count = sum(1 for item in items if statuses[item.id] in ("unpaid", "overdue"))
+    overdue_count = sum(1 for item in items if statuses[item.id] == "overdue")
+    overdue_sum = sum(item.amount for item in items if statuses[item.id] == "overdue")
     next_deadline = None
-    for i in sorted(items, key=lambda x: x.deadline):
-        if i.status in ("unpaid", "overdue") and i.deadline >= today:
-            next_deadline = i.deadline.isoformat()
+    for item in sorted(items, key=lambda value: value.deadline):
+        if statuses[item.id] in ("unpaid", "overdue") and item.deadline >= today:
+            next_deadline = item.deadline.isoformat()
             break
     return {
         "unpaid_count": unpaid_count,

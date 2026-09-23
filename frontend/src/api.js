@@ -495,6 +495,18 @@ export const api = {
 
   obligations: {
     types: () => request('/obligations/types'),
+    createType: (data) => request('/obligations/types', { method: 'POST', body: JSON.stringify(data) }),
+    updateType: (id, data) =>
+      request(`/obligations/types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    schemes: () => request('/obligations/schemes'),
+    createScheme: (data) => request('/obligations/schemes', { method: 'POST', body: JSON.stringify(data) }),
+    updateScheme: (id, data) =>
+      request(`/obligations/schemes/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    activateScheme: (id, data) =>
+      request(`/obligations/schemes/${id}/activate`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     years: () => request('/obligations/years'),
     calendar: (year, paymentType) => {
       let url = `/obligations/calendar?year=${year}`
@@ -507,7 +519,6 @@ export const api = {
       request('/obligations/decisions', { method: 'POST', body: JSON.stringify(data) }),
     updateDecision: (id, data) =>
       request(`/obligations/decisions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    applyPreset2026: () => request('/obligations/decisions/apply-preset-2026', { method: 'POST' }),
     generate: (year) => request(`/obligations/generate?year=${year}`, { method: 'POST' }),
     markPaid: (id, data) =>
       request(`/obligations/obligations/${id}/mark-paid`, { method: 'PATCH', body: JSON.stringify(data) }),

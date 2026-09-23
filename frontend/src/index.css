@@ -6721,6 +6721,180 @@ tr:hover td {
   gap: 0.45rem;
 }
 
+.tax-scheme-heading,
+.tax-decision-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.tax-decision-heading {
+  margin-top: 1.5rem;
+}
+
+.tax-scheme-heading h3,
+.tax-decision-heading h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.tax-scheme-heading p,
+.tax-decision-heading p,
+.tax-scheme-card p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.tax-scheme-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.tax-scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.tax-scheme-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.tax-scheme-card--active {
+  border-color: rgba(34, 197, 94, 0.36);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.tax-scheme-card-main {
+  min-width: 0;
+}
+
+.tax-scheme-card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.tax-scheme-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-settings-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.tax-settings-guide span,
+.form-hint {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.tax-payment-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.tax-payment-type-chip {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  color: var(--color-text);
+  background: rgba(15, 23, 42, 0.36);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tax-payment-type-chip span,
+.tax-payment-type-chip small {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.tax-payment-type-chip small {
+  grid-column: 1 / -1;
+}
+
+.tax-payment-type-chip--archived,
+.tax-scheme-card--archived {
+  opacity: 0.62;
+}
+
+.tax-scheme-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.form-grid-2,
+.tax-rule-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.tax-rule-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tax-setting-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.tax-setting-checkbox--panel {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.tax-setting-checkbox span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tax-setting-checkbox small {
+  color: var(--color-text-muted);
+}
+
 .obligations-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7221,6 +7395,24 @@ tr:hover td {
 }
 
 @media (max-width: 760px) {
+  .form-grid-2,
+  .tax-rule-options {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-scheme-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-scheme-heading,
+  .tax-decision-heading {
+    flex-direction: column;
+  }
+
+  .tax-scheme-heading-actions {
+    justify-content: flex-start;
+  }
+
   .obligations-toolbar.card {
     grid-template-columns: minmax(100px, 0.7fr) minmax(180px, 1.3fr);
   }

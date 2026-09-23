@@ -334,16 +334,58 @@ class ContributionRates(Base):
 
 
 # --- Обязательные платежи (ТЗ: решения Пореске управе) ---
+class TaxScheme(Base):
+    """Переиспользуемая схема налогообложения (набор решений и история применения)."""
+
+    __tablename__ = "tax_schemes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    periods = relationship(
+        "TaxSchemePeriod",
+        back_populates="tax_scheme",
+        cascade="all, delete-orphan",
+        order_by="TaxSchemePeriod.period_start",
+    )
+    decisions = relationship("YearDecision", back_populates="tax_scheme")
+    obligations = relationship("MonthlyObligation", back_populates="tax_scheme")
+
+
+class TaxSchemePeriod(Base):
+    """Интервал, в течение которого предприниматель применяет налоговую схему."""
+
+    __tablename__ = "tax_scheme_periods"
+    __table_args__ = (UniqueConstraint("tax_scheme_id", "period_start", name="uq_tax_scheme_period_start"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tax_scheme_id = Column(Integer, ForeignKey("tax_schemes.id"), nullable=False, index=True)
+    period_start = Column(Date, nullable=False, index=True)
+    period_end = Column(Date)
+    closing_deadline = Column(Date)
+    note = Column(String(300))
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tax_scheme = relationship("TaxScheme", back_populates="periods")
+    obligations = relationship("MonthlyObligation", back_populates="tax_scheme_period")
+
+
 class PaymentType(Base):
-    """Тип обязательного платежа: Порез, PIO, Здравство, Безработица."""
+    """User-configurable type of recurring statutory or company payment."""
 
     __tablename__ = "payment_types"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(20), unique=True, nullable=False)  # tax, pio, health, unemployment
+    code = Column(String(50), unique=True, nullable=False)
     name_sr = Column(String(100), nullable=False)
     name_ru = Column(String(100))
     sort_order = Column(Integer, default=0)
+    is_archived = Column(Boolean, default=False, nullable=False)
 
     decisions = relationship("YearDecision", back_populates="payment_type")
     obligations = relationship("MonthlyObligation", back_populates="payment_type")
@@ -356,6 +398,7 @@ class YearDecision(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     year = Column(Integer, nullable=False)
+    tax_scheme_id = Column(Integer, ForeignKey("tax_schemes.id"), index=True)
     payment_type_id = Column(Integer, ForeignKey("payment_types.id"), nullable=False)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
@@ -370,12 +413,16 @@ class YearDecision(Base):
     poziv_na_broj_next = Column(String(50))  # Позив для привремене аконтације след. года
     payment_purpose = Column(String(200), nullable=False)  # Сврха уплате (шаблон с YYYY)
     currency = Column(String(5), default="RSD")
+    due_day = Column(Integer, default=15, nullable=False)
+    due_month_offset = Column(Integer, default=1, nullable=False)
+    prorate_partial_month = Column(Boolean, default=True, nullable=False)
     is_provisional = Column(Boolean, default=False)  # Привремене аконтације
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     payment_type = relationship("PaymentType", back_populates="decisions")
+    tax_scheme = relationship("TaxScheme", back_populates="decisions")
     obligations = relationship("MonthlyObligation", back_populates="decision", cascade="all, delete-orphan")
 
 
@@ -387,10 +434,15 @@ class MonthlyObligation(Base):
     id = Column(Integer, primary_key=True, index=True)
     year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
+    tax_scheme_id = Column(Integer, ForeignKey("tax_schemes.id"), index=True)
+    tax_scheme_period_id = Column(Integer, ForeignKey("tax_scheme_periods.id"), index=True)
     payment_type_id = Column(Integer, ForeignKey("payment_types.id"), nullable=False)
     decision_id = Column(Integer, ForeignKey("year_decisions.id"))
     amount = Column(Numeric(14, 2), nullable=False)
+    accrual_period_start = Column(Date)
+    accrual_period_end = Column(Date)
     deadline = Column(Date, nullable=False)  # 15-е число месяца, следующего за отчётным
+    is_active = Column(Boolean, default=True, nullable=False)
     status = Column(String(20), default="unpaid")  # unpaid, paid, overdue
     paid_date = Column(Date)
     payment_reference = Column(String(100))
@@ -400,6 +452,8 @@ class MonthlyObligation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     payment_type = relationship("PaymentType", back_populates="obligations")
+    tax_scheme = relationship("TaxScheme", back_populates="obligations")
+    tax_scheme_period = relationship("TaxSchemePeriod", back_populates="obligations")
     decision = relationship("YearDecision", back_populates="obligations")
 
 

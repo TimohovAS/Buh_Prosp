@@ -40,9 +40,10 @@ settings = get_settings()
 logger = logging.getLogger("prospel")
 
 
-async def _bootstrap_users_and_payments() -> None:
-    """Подготовить dev-bootstrap и базовые справочники при старте."""
+async def _bootstrap_installation() -> None:
+    """Create a dev user and reconcile obligations implied by configured rules."""
     from backend.database import AsyncSessionLocal
+    from backend.payments_service import regenerate_configured_obligations
     from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
@@ -62,17 +63,22 @@ async def _bootstrap_users_and_payments() -> None:
         elif not has_any_user and settings.is_prod:
             print("[startup] No users found. Admin auto-bootstrap is disabled in prod.")
 
-        from backend.payments_service import ensure_payment_types
-
-        await ensure_payment_types(db)
-        await db.commit()
+    async with AsyncSessionLocal() as db:
+        try:
+            generated_years = await regenerate_configured_obligations(db)
+            await db.commit()
+            if generated_years:
+                logger.info("Reconciled statutory-payment obligations for years: %s", generated_years)
+        except Exception:
+            await db.rollback()
+            logger.exception("Failed to reconcile statutory-payment obligations during startup")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Инициализация при запуске."""
     backup_task = None
-    await _bootstrap_users_and_payments()
+    await _bootstrap_installation()
     backup_task = asyncio.create_task(backup_scheduler_loop())
     try:
         yield

@@ -325,7 +325,10 @@ def _normalize_digits(value: str | None) -> str:
 def _build_obligation_description(obligation: MonthlyObligation) -> str:
     payment_type = getattr(obligation, "payment_type", None)
     payment_type_name = getattr(payment_type, "name_sr", None) or "Плаћање"
-    return f"{payment_type_name} {obligation.month:02d}/{obligation.year}"
+    description = f"{payment_type_name} {obligation.month:02d}/{obligation.year}"
+    if obligation.accrual_period_start and obligation.accrual_period_end:
+        description += f" ({obligation.accrual_period_start:%d.%m}-{obligation.accrual_period_end:%d.%m})"
+    return description
 
 
 def _obligation_terms(obligation: MonthlyObligation) -> list[str]:
@@ -353,6 +356,7 @@ async def _suggest_outgoing_matches(db: AsyncSession, tx: BankTransaction) -> li
         )
         .outerjoin(Expense, Expense.id == MonthlyObligation.expense_id)
         .where(
+            MonthlyObligation.is_active == True,
             ~obligation_has_bank_link(),
             or_(
                 MonthlyObligation.status.in_(["unpaid", "overdue"]),

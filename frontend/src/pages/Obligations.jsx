@@ -20,11 +20,6 @@ import useAvailableYears from '../hooks/useAvailableYears'
 import { formatDateSr as formatDate, todayIso } from '../utils/formatters'
 import { amountSearchHay } from '../utils/searchUtils'
 
-function defaultRecipientName() {
-  const translated = tr('taxAuthority')
-  return translated && translated !== 'taxAuthority' ? translated : ''
-}
-
 const DUE_SOON_DAYS = 7
 
 function formatRsd(value) {
@@ -40,6 +35,12 @@ function daysUntil(value) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return Math.round((deadline.getTime() - today.getTime()) / 86400000)
+}
+
+function isSchemeActive(scheme, day = todayIso()) {
+  return (scheme.periods || []).some(
+    (period) => period.period_start <= day && (!period.period_end || period.period_end >= day)
+  )
 }
 
 function groupByMonth(obligations, descending = false) {
@@ -88,6 +89,7 @@ export default function Obligations() {
   const [search, setSearch] = useState('')
   const [items, setItems] = useState([])
   const [types, setTypes] = useState([])
+  const [schemes, setSchemes] = useState([])
   const [decisions, setDecisions] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -101,23 +103,45 @@ export default function Obligations() {
   const [confirmingQrPayment, setConfirmingQrPayment] = useState(false)
   const [qrPaymentError, setQrPaymentError] = useState('')
   const [settingsModal, setSettingsModal] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
+  const [typeFormModal, setTypeFormModal] = useState(null)
+  const [typeForm, setTypeForm] = useState({
+    code: '',
+    name_sr: '',
+    name_ru: '',
+    sort_order: 0,
+    is_archived: false,
+  })
+  const [schemeFormModal, setSchemeFormModal] = useState(null)
+  const [schemeForm, setSchemeForm] = useState({ name: '', description: '', is_archived: false })
+  const [activationModal, setActivationModal] = useState(null)
+  const [activationForm, setActivationForm] = useState({
+    effective_from: todayIso(),
+    closing_deadline: '',
+    note: '',
+  })
   const [decisionFormModal, setDecisionFormModal] = useState(null)
   const [decisionForm, setDecisionForm] = useState({
     year: new Date().getFullYear(),
+    tax_scheme_id: '',
     payment_type_id: '',
     period_start: '',
     period_end: '',
     monthly_amount: '',
     base_amount: '',
     rate_percent: '',
-    recipient_name: defaultRecipientName(),
+    recipient_name: '',
     recipient_account: '',
     sifra_placanja: '253',
     model: '97',
     poziv_na_broj: '',
     poziv_na_broj_next: '',
     payment_purpose: '',
+    due_day: 15,
+    due_month_offset: 1,
+    prorate_partial_month: true,
     is_provisional: false,
+    is_active: true,
   })
 
   const load = () => {
@@ -128,8 +152,10 @@ export default function Obligations() {
       api.obligations.decisions(year),
       api.obligations.years(),
     ])
-      .then(([paymentTypes, calendarItems, decisionItems, years]) => {
+      .then(async ([paymentTypes, calendarItems, decisionItems, years]) => {
+        const taxSchemes = await api.obligations.schemes()
         setTypes(paymentTypes)
+        setSchemes(taxSchemes)
         setItems(calendarItems)
         setDecisions(decisionItems)
         applyAvailableYears(years)
@@ -137,6 +163,7 @@ export default function Obligations() {
       .catch(() => {
         setItems([])
         setTypes([])
+        setSchemes([])
         setDecisions([])
         resetAvailableYears()
       })
@@ -182,6 +209,9 @@ export default function Obligations() {
       obligation.paid_date,
       obligation.payment_reference,
       obligation.note,
+      obligation.tax_scheme_name,
+      obligation.accrual_period_start,
+      obligation.accrual_period_end,
       typeName,
     ]
       .filter(Boolean)
@@ -302,20 +332,25 @@ export default function Obligations() {
       const selectedYear = year
       setDecisionForm({
         year: selectedYear,
+        tax_scheme_id: schemes.find((scheme) => isSchemeActive(scheme))?.id || schemes[0]?.id || '',
         payment_type_id: types[0]?.id || '',
         period_start: `${selectedYear}-01-01`,
         period_end: `${selectedYear}-12-31`,
         monthly_amount: '',
         base_amount: '',
         rate_percent: '',
-        recipient_name: defaultRecipientName(),
+        recipient_name: '',
         recipient_account: '',
         sifra_placanja: '253',
         model: '97',
         poziv_na_broj: '',
         poziv_na_broj_next: '',
         payment_purpose: '',
+        due_day: 15,
+        due_month_offset: 1,
+        prorate_partial_month: true,
         is_provisional: false,
+        is_active: true,
       })
       setDecisionFormModal('add')
       return
@@ -324,6 +359,7 @@ export default function Obligations() {
     setDecisionFormModal({ type: 'edit', id: mode.id })
     setDecisionForm({
       year: mode.year,
+      tax_scheme_id: mode.tax_scheme_id || '',
       payment_type_id: mode.payment_type_id,
       period_start:
         typeof mode.period_start === 'string' ? mode.period_start : mode.period_start?.slice(0, 10) || '',
@@ -331,14 +367,18 @@ export default function Obligations() {
       monthly_amount: mode.monthly_amount ?? '',
       base_amount: mode.base_amount ?? '',
       rate_percent: mode.rate_percent ?? '',
-      recipient_name: mode.recipient_name || defaultRecipientName(),
+      recipient_name: mode.recipient_name || '',
       recipient_account: mode.recipient_account || '',
       sifra_placanja: mode.sifra_placanja || '253',
       model: mode.model || '97',
       poziv_na_broj: mode.poziv_na_broj || '',
       poziv_na_broj_next: mode.poziv_na_broj_next || '',
       payment_purpose: mode.payment_purpose || '',
+      due_day: mode.due_day ?? 15,
+      due_month_offset: mode.due_month_offset ?? 1,
+      prorate_partial_month: mode.prorate_partial_month ?? true,
       is_provisional: mode.is_provisional ?? false,
+      is_active: mode.is_active ?? true,
     })
   }
 
@@ -347,21 +387,27 @@ export default function Obligations() {
     try {
       const payload = {
         year: parseInt(decisionForm.year, 10),
+        tax_scheme_id: parseInt(decisionForm.tax_scheme_id, 10),
         payment_type_id: parseInt(decisionForm.payment_type_id, 10),
         period_start: decisionForm.period_start,
         period_end: decisionForm.period_end,
         monthly_amount: parseFloat(decisionForm.monthly_amount) || 0,
         base_amount: decisionForm.base_amount ? parseFloat(decisionForm.base_amount) : null,
         rate_percent: decisionForm.rate_percent ? parseFloat(decisionForm.rate_percent) : null,
-        recipient_name: decisionForm.recipient_name || defaultRecipientName(),
+        recipient_name: decisionForm.recipient_name.trim(),
         recipient_account: decisionForm.recipient_account.trim(),
         sifra_placanja: decisionForm.sifra_placanja || '253',
         model: decisionForm.model || '97',
         poziv_na_broj: decisionForm.poziv_na_broj.trim(),
         poziv_na_broj_next: decisionForm.poziv_na_broj_next?.trim() || null,
         payment_purpose: decisionForm.payment_purpose.trim(),
+        due_day: parseInt(decisionForm.due_day, 10),
+        due_month_offset: parseInt(decisionForm.due_month_offset, 10),
+        prorate_partial_month: decisionForm.prorate_partial_month,
         is_provisional: decisionForm.is_provisional,
+        is_active: decisionForm.is_active,
       }
+      if (decisionFormModal === 'add') delete payload.is_active
       if (decisionFormModal === 'add') {
         await api.obligations.createDecision(payload)
       } else {
@@ -374,13 +420,97 @@ export default function Obligations() {
     }
   }
 
-  const applyPreset2026 = async () => {
-    if (!confirm(tr('confirmApplyPreset'))) return
+  const openTypeForm = (paymentType = null) => {
+    setSettingsError('')
+    setTypeForm({
+      code: paymentType?.code || '',
+      name_sr: paymentType?.name_sr || '',
+      name_ru: paymentType?.name_ru || '',
+      sort_order: paymentType?.sort_order ?? types.length + 1,
+      is_archived: paymentType?.is_archived ?? false,
+    })
+    setTypeFormModal(paymentType || 'add')
+  }
+
+  const handleTypeFormSubmit = async (event) => {
+    event.preventDefault()
+    setSettingsError('')
+    const payload = {
+      code: typeForm.code.trim().toLowerCase(),
+      name_sr: typeForm.name_sr.trim(),
+      name_ru: typeForm.name_ru.trim() || null,
+      sort_order: parseInt(typeForm.sort_order, 10) || 0,
+    }
     try {
-      await api.obligations.applyPreset2026()
+      if (typeFormModal === 'add') {
+        await api.obligations.createType(payload)
+      } else {
+        await api.obligations.updateType(typeFormModal.id, {
+          ...payload,
+          is_archived: typeForm.is_archived,
+        })
+      }
+      setTypeFormModal(null)
       load()
     } catch (error) {
-      console.error(error)
+      setSettingsError(error.message || tr('saveError'))
+    }
+  }
+
+  const openSchemeForm = (scheme = null) => {
+    setSettingsError('')
+    setSchemeForm({
+      name: scheme?.name || '',
+      description: scheme?.description || '',
+      is_archived: scheme?.is_archived ?? false,
+    })
+    setSchemeFormModal(scheme || 'add')
+  }
+
+  const handleSchemeFormSubmit = async (event) => {
+    event.preventDefault()
+    setSettingsError('')
+    try {
+      const payload = {
+        name: schemeForm.name.trim(),
+        description: schemeForm.description.trim() || null,
+      }
+      if (schemeFormModal === 'add') {
+        await api.obligations.createScheme(payload)
+      } else {
+        await api.obligations.updateScheme(schemeFormModal.id, {
+          ...payload,
+          is_archived: schemeForm.is_archived,
+        })
+      }
+      setSchemeFormModal(null)
+      setSchemeForm({ name: '', description: '', is_archived: false })
+      load()
+    } catch (error) {
+      setSettingsError(error.message || tr('saveError'))
+    }
+  }
+
+  const openActivationModal = (scheme) => {
+    setSettingsError('')
+    setActivationForm({ effective_from: todayIso(), closing_deadline: '', note: '' })
+    setActivationModal(scheme)
+  }
+
+  const handleActivationSubmit = async (event) => {
+    event.preventDefault()
+    if (!activationModal) return
+    setSettingsError('')
+    try {
+      await api.obligations.activateScheme(activationModal.id, {
+        effective_from: activationForm.effective_from,
+        closing_deadline: activationForm.closing_deadline || null,
+        note: activationForm.note.trim() || null,
+      })
+      setActivationModal(null)
+      load()
+    } catch (error) {
+      setSettingsError(error.message || tr('saveError'))
     }
   }
 
@@ -440,6 +570,21 @@ export default function Obligations() {
                 ) : null}
               </>
             )}
+            {obligation.tax_scheme_name ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{obligation.tax_scheme_name}</span>
+              </>
+            ) : null}
+            {obligation.accrual_period_start && obligation.accrual_period_end ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {tr('accrualPeriod')}: {formatDate(obligation.accrual_period_start)} —{' '}
+                  {formatDate(obligation.accrual_period_end)}
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -673,28 +818,112 @@ export default function Obligations() {
       >
         {settingsModal ? (
           <>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '1rem',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-              }}
-            >
-              <button className="btn btn-primary" onClick={() => openDecisionForm('add')}>
-                {tr('add')}
+            {settingsError ? <div className="alert alert-danger">{settingsError}</div> : null}
+            <div className="tax-settings-guide">
+              <strong>{tr('taxSetupGuideTitle')}</strong>
+              <span>{tr('taxSetupGuideHint')}</span>
+            </div>
+
+            <div className="tax-decision-heading">
+              <div>
+                <h3>{tr('paymentTypesTitle')}</h3>
+                <p>{tr('paymentTypesHint')}</p>
+              </div>
+              <button className="btn btn-secondary" onClick={() => openTypeForm()}>
+                {tr('paymentTypeAdd')}
               </button>
-              <button className="btn btn-secondary" onClick={applyPreset2026}>
-                {tr('preset2026')}
-              </button>
+            </div>
+            <div className="tax-payment-type-list">
+              {types.map((type) => (
+                <button
+                  type="button"
+                  className={`tax-payment-type-chip ${type.is_archived ? 'tax-payment-type-chip--archived' : ''}`}
+                  key={type.id}
+                  onClick={() => openTypeForm(type)}
+                >
+                  <strong>{getLang() === 'ru' ? type.name_ru || type.name_sr : type.name_sr}</strong>
+                  <span>{type.code}</span>
+                  {type.is_archived ? <small>{tr('taxItemArchived')}</small> : null}
+                </button>
+              ))}
+            </div>
+
+            <div className="tax-scheme-heading">
+              <div>
+                <h3>{tr('taxSchemesTitle')}</h3>
+                <p>{tr('taxSchemesHint')}</p>
+              </div>
+              <div className="tax-scheme-heading-actions">
+                <button className="btn btn-secondary" onClick={() => openSchemeForm()}>
+                  {tr('taxSchemeAdd')}
+                </button>
+              </div>
+            </div>
+
+            <div className="tax-scheme-grid">
+              {schemes.map((scheme) => {
+                const active = isSchemeActive(scheme)
+                return (
+                  <article
+                    className={`tax-scheme-card ${active ? 'tax-scheme-card--active' : ''} ${scheme.is_archived ? 'tax-scheme-card--archived' : ''}`}
+                    key={scheme.id}
+                  >
+                    <div className="tax-scheme-card-main">
+                      <div className="tax-scheme-card-title">
+                        <strong>{scheme.name}</strong>
+                        {active ? (
+                          <span className="badge badge-success">{tr('taxSchemeCurrent')}</span>
+                        ) : null}
+                        {scheme.is_archived ? <span className="badge">{tr('taxItemArchived')}</span> : null}
+                      </div>
+                      {scheme.description ? <p>{scheme.description}</p> : null}
+                      <div className="tax-scheme-periods">
+                        {(scheme.periods || []).map((period) => (
+                          <span key={period.id}>
+                            {formatDate(period.period_start)} —{' '}
+                            {period.period_end ? formatDate(period.period_end) : tr('taxSchemeNoEndDate')}
+                            {period.closing_deadline
+                              ? ` · ${tr('deadline')}: ${formatDate(period.closing_deadline)}`
+                              : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="tax-scheme-card-actions">
+                      <button className="btn btn-sm btn-secondary" onClick={() => openSchemeForm(scheme)}>
+                        {tr('edit')}
+                      </button>
+                      {!scheme.is_archived && !active ? (
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => openActivationModal(scheme)}
+                        >
+                          {tr('taxSchemeActivate')}
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+
+            <div className="tax-decision-heading">
+              <div>
+                <h3>{tr('taxDecisionRules')}</h3>
+                <p>{tr('taxDecisionRulesHint')}</p>
+              </div>
+              <div className="tax-scheme-heading-actions">
+                <button className="btn btn-primary" onClick={() => openDecisionForm('add')}>
+                  {tr('taxDecisionAdd')}
+                </button>
+              </div>
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>{tr('yearLabel')}</th>
+                    <th>{tr('taxScheme')}</th>
                     <th>{tr('paymentTypeLabel')}</th>
                     <th>{tr('monthlySum')}</th>
                     <th>{tr('recipientAccount')}</th>
@@ -705,7 +934,7 @@ export default function Obligations() {
                 <tbody>
                   {decisions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ color: 'var(--color-text-muted)' }}>
+                      <td colSpan={7} style={{ color: 'var(--color-text-muted)' }}>
                         {tr('noDecisions')}
                       </td>
                     </tr>
@@ -713,6 +942,7 @@ export default function Obligations() {
                     decisions.map((decision) => (
                       <tr key={decision.id}>
                         <td>{decision.year}</td>
+                        <td>{decision.tax_scheme_name || '—'}</td>
                         <td>{decision.payment_type_name || decision.payment_type_code}</td>
                         <td>{decision.monthly_amount?.toLocaleString('sr-RS')} RSD</td>
                         <td style={{ fontSize: '0.85rem' }}>{decision.recipient_account}</td>
@@ -758,6 +988,173 @@ export default function Obligations() {
               </button>
             </div>
           </>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={!!typeFormModal}
+        onClose={() => setTypeFormModal(null)}
+        title={typeFormModal === 'add' ? tr('paymentTypeAdd') : tr('paymentTypeEdit')}
+        maxWidth="520px"
+      >
+        {typeFormModal ? (
+          <form onSubmit={handleTypeFormSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('paymentTypeCode')} *</label>
+              <input
+                className="form-input"
+                value={typeForm.code}
+                onChange={(event) =>
+                  setTypeForm({ ...typeForm, code: event.target.value.toLowerCase().replace(/\s+/g, '_') })
+                }
+                pattern="[a-z0-9][a-z0-9_-]*"
+                placeholder="property_tax"
+                required
+              />
+              <small className="form-hint">{tr('paymentTypeCodeHint')}</small>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">{tr('paymentTypeNameSr')} *</label>
+                <input
+                  className="form-input"
+                  value={typeForm.name_sr}
+                  onChange={(event) => setTypeForm({ ...typeForm, name_sr: event.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('paymentTypeNameRu')}</label>
+                <input
+                  className="form-input"
+                  value={typeForm.name_ru}
+                  onChange={(event) => setTypeForm({ ...typeForm, name_ru: event.target.value })}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('sortOrder')}</label>
+              <input
+                type="number"
+                className="form-input"
+                value={typeForm.sort_order}
+                onChange={(event) => setTypeForm({ ...typeForm, sort_order: event.target.value })}
+              />
+            </div>
+            {typeFormModal !== 'add' ? (
+              <label className="tax-setting-checkbox">
+                <input
+                  type="checkbox"
+                  checked={typeForm.is_archived}
+                  onChange={(event) => setTypeForm({ ...typeForm, is_archived: event.target.checked })}
+                />
+                <span>{tr('taxArchiveItem')}</span>
+              </label>
+            ) : null}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setTypeFormModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={!!schemeFormModal}
+        onClose={() => setSchemeFormModal(null)}
+        title={schemeFormModal === 'add' ? tr('taxSchemeAdd') : tr('taxSchemeEdit')}
+        maxWidth="460px"
+      >
+        {schemeFormModal ? (
+          <form onSubmit={handleSchemeFormSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('name')} *</label>
+              <input
+                className="form-input"
+                value={schemeForm.name}
+                onChange={(event) => setSchemeForm({ ...schemeForm, name: event.target.value })}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('description')}</label>
+              <textarea
+                className="form-input"
+                rows={3}
+                value={schemeForm.description}
+                onChange={(event) => setSchemeForm({ ...schemeForm, description: event.target.value })}
+              />
+            </div>
+            {schemeFormModal !== 'add' ? (
+              <label className="tax-setting-checkbox">
+                <input
+                  type="checkbox"
+                  checked={schemeForm.is_archived}
+                  onChange={(event) => setSchemeForm({ ...schemeForm, is_archived: event.target.checked })}
+                />
+                <span>{tr('taxArchiveItem')}</span>
+              </label>
+            ) : null}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setSchemeFormModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('save')}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={!!activationModal}
+        onClose={() => setActivationModal(null)}
+        title={
+          activationModal ? `${tr('taxSchemeActivate')} — ${activationModal.name}` : tr('taxSchemeActivate')
+        }
+        maxWidth="460px"
+      >
+        {activationModal ? (
+          <form onSubmit={handleActivationSubmit}>
+            <div className="alert alert-info">{tr('taxSchemeActivationHint')}</div>
+            <div className="form-group">
+              <label className="form-label">{tr('effectiveFrom')} *</label>
+              <DatePicker
+                value={activationForm.effective_from}
+                onChange={(value) => setActivationForm({ ...activationForm, effective_from: value })}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('closingDeadline')}</label>
+              <DatePicker
+                value={activationForm.closing_deadline}
+                onChange={(value) => setActivationForm({ ...activationForm, closing_deadline: value })}
+              />
+              <small className="form-hint">{tr('closingDeadlineHint')}</small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{tr('note')}</label>
+              <input
+                className="form-input"
+                value={activationForm.note}
+                onChange={(event) => setActivationForm({ ...activationForm, note: event.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setActivationModal(null)}>
+                {tr('cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {tr('taxSchemeActivate')}
+              </button>
+            </div>
+          </form>
         ) : null}
       </Modal>
 
@@ -893,6 +1290,23 @@ export default function Obligations() {
       >
         {decisionFormModal ? (
           <form onSubmit={handleDecisionFormSubmit}>
+            <div className="form-group">
+              <label className="form-label">{tr('taxScheme')} *</label>
+              <select
+                className="form-input"
+                value={decisionForm.tax_scheme_id}
+                onChange={(event) => setDecisionForm({ ...decisionForm, tax_scheme_id: event.target.value })}
+                required
+              >
+                {schemes
+                  .filter((scheme) => !scheme.is_archived || scheme.id === Number(decisionForm.tax_scheme_id))
+                  .map((scheme) => (
+                    <option key={scheme.id} value={scheme.id}>
+                      {scheme.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">{tr('yearLabel')} *</label>
@@ -902,8 +1316,8 @@ export default function Obligations() {
                   value={decisionForm.year}
                   onChange={(event) => setDecisionForm({ ...decisionForm, year: event.target.value })}
                   required
-                  min={2020}
-                  max={2035}
+                  min={1900}
+                  max={2100}
                 />
               </div>
               <div className="form-group">
@@ -917,11 +1331,13 @@ export default function Obligations() {
                   required
                   disabled={decisionFormModal !== 'add'}
                 >
-                  {types.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name_sr}
-                    </option>
-                  ))}
+                  {types
+                    .filter((type) => !type.is_archived || type.id === Number(decisionForm.payment_type_id))
+                    .map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {getLang() === 'ru' ? type.name_ru || type.name_sr : type.name_sr}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -978,14 +1394,56 @@ export default function Obligations() {
                 />
               </div>
             </div>
+            <div className="tax-rule-options">
+              <div className="form-group">
+                <label className="form-label">{tr('paymentDueDay')} *</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  className="form-input"
+                  value={decisionForm.due_day}
+                  onChange={(event) => setDecisionForm({ ...decisionForm, due_day: event.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{tr('paymentDueMonthOffset')} *</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  className="form-input"
+                  value={decisionForm.due_month_offset}
+                  onChange={(event) =>
+                    setDecisionForm({ ...decisionForm, due_month_offset: event.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <label className="tax-setting-checkbox tax-setting-checkbox--panel">
+              <input
+                type="checkbox"
+                checked={decisionForm.prorate_partial_month}
+                onChange={(event) =>
+                  setDecisionForm({ ...decisionForm, prorate_partial_month: event.target.checked })
+                }
+              />
+              <span>
+                <strong>{tr('proratePartialMonth')}</strong>
+                <small>{tr('proratePartialMonthHint')}</small>
+              </span>
+            </label>
             <div className="form-group">
-              <label className="form-label">{tr('recipient')}</label>
+              <label className="form-label">{tr('recipient')} *</label>
               <input
                 type="text"
                 className="form-input"
                 value={decisionForm.recipient_name}
                 onChange={(event) => setDecisionForm({ ...decisionForm, recipient_name: event.target.value })}
-                placeholder={tr('taxAuthority')}
+                placeholder={tr('recipientNamePlaceholder')}
+                required
               />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -999,7 +1457,7 @@ export default function Obligations() {
                     setDecisionForm({ ...decisionForm, recipient_account: event.target.value })
                   }
                   required
-                  placeholder="840-71122843-32"
+                  placeholder={tr('recipientAccountPlaceholder')}
                 />
               </div>
               <div className="form-group">
@@ -1036,7 +1494,7 @@ export default function Obligations() {
                     setDecisionForm({ ...decisionForm, poziv_na_broj: event.target.value })
                   }
                   required
-                  placeholder="2624190000007887475"
+                  placeholder={tr('paymentReferencePlaceholder')}
                 />
               </div>
             </div>
@@ -1049,7 +1507,7 @@ export default function Obligations() {
                 onChange={(event) =>
                   setDecisionForm({ ...decisionForm, poziv_na_broj_next: event.target.value })
                 }
-                placeholder="2024190000008031910"
+                placeholder={tr('paymentReferenceNextPlaceholder')}
               />
             </div>
             <div className="form-group">
@@ -1069,7 +1527,7 @@ export default function Obligations() {
               </div>
             </div>
             <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <label className="tax-setting-checkbox">
                 <input
                   type="checkbox"
                   checked={decisionForm.is_provisional}
@@ -1080,6 +1538,20 @@ export default function Obligations() {
                 {tr('provisional')}
               </label>
             </div>
+            {decisionFormModal !== 'add' ? (
+              <div className="form-group">
+                <label className="tax-setting-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={decisionForm.is_active}
+                    onChange={(event) =>
+                      setDecisionForm({ ...decisionForm, is_active: event.target.checked })
+                    }
+                  />
+                  {tr('taxRuleActive')}
+                </label>
+              </div>
+            ) : null}
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setDecisionFormModal(null)}>
                 {tr('cancel')}

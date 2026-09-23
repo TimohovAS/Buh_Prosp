@@ -1,21 +1,24 @@
 """Сервис обязательных платежей — по ТЗ решений Пореске управе."""
 
+import calendar
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import PaymentType, YearDecision, MonthlyObligation
+from backend.models import MonthlyObligation, PaymentType, TaxSchemePeriod, YearDecision
 from backend.state_machine import initialize_obligation_status, refresh_obligation_due_status
+from backend.tax_scheme_service import ensure_default_tax_scheme
 
 
-def deadline_for_month(year: int, month: int) -> date:
-    """Дедлайн = 15-е число месяца, следующего за отчётным."""
-    next_m = month + 1
-    next_y = year
-    if next_m > 12:
-        next_m = 1
-        next_y = year + 1
-    return date(next_y, next_m, 15)
+def deadline_for_month(year: int, month: int, due_day: int = 15, month_offset: int = 1) -> date:
+    """Calculate a configurable due date and clamp it to the target month's last day."""
+    target_index = year * 12 + (month - 1) + month_offset
+    target_year, target_month_index = divmod(target_index, 12)
+    target_month = target_month_index + 1
+    target_day = min(due_day, calendar.monthrange(target_year, target_month)[1])
+    return date(target_year, target_month, target_day)
 
 
 def payment_purpose_with_year(template: str, year: int) -> str:
@@ -23,99 +26,194 @@ def payment_purpose_with_year(template: str, year: int) -> str:
     return template.replace("YYYY", str(year))
 
 
-async def ensure_payment_types(db: AsyncSession) -> None:
-    """Создать типы платежей если их нет."""
-    r = await db.execute(select(PaymentType).limit(1))
-    if r.scalar_one_or_none():
-        return
-    types = [
-        PaymentType(code="tax", name_sr="Порез на приход", name_ru="Налог на доход", sort_order=1),
-        PaymentType(code="pio", name_sr="Допринос за ПИО", name_ru="Взнос ПИО", sort_order=2),
-        PaymentType(code="health", name_sr="Здравствено осигурање", name_ru="Медстрах", sort_order=3),
-        PaymentType(code="unemployment", name_sr="Незапосленост", name_ru="Безработица", sort_order=4),
-    ]
-    for t in types:
-        db.add(t)
-    await db.flush()
+def payment_reference_for_year(decision: YearDecision, year: int) -> str:
+    """Use the next-year reference while a previous year's rule is carried forward."""
+    if year == decision.year + 1 and decision.poziv_na_broj_next:
+        return decision.poziv_na_broj_next
+    return decision.poziv_na_broj
+
+
+async def configured_obligation_years(db: AsyncSession) -> list[int]:
+    """Return years that can be generated from the configured active rules."""
+    result = await db.execute(
+        select(YearDecision.year, YearDecision.is_provisional, YearDecision.poziv_na_broj_next).where(
+            YearDecision.is_active == True
+        )
+    )
+    years: set[int] = set()
+    for rule_year, is_provisional, next_year_reference in result.all():
+        years.add(rule_year)
+        if is_provisional or next_year_reference:
+            years.add(rule_year + 1)
+    return sorted(years)
+
+
+async def regenerate_configured_obligations(db: AsyncSession) -> list[int]:
+    """Reconcile every year implied by active rules without seeding a clean install."""
+    years = await configured_obligation_years(db)
+    for year in years:
+        await get_or_create_obligations(db, year)
+    return years
 
 
 async def get_or_create_obligations(
     db: AsyncSession, year: int, payment_type_code: str | None = None
 ) -> list[MonthlyObligation]:
-    """Получить или создать месячные обязательства за год. Обновить overdue."""
+    """Rebuild unpaid obligations from every effective scheme segment in the year."""
     today = date.today()
-    # Решения на год: приоритет текущего года, fallback — provisional с прошлого года.
-    q = (
-        select(YearDecision)
-        .where(
-            YearDecision.is_active == True,
-            ((YearDecision.year == year) | ((YearDecision.year == (year - 1)) & (YearDecision.is_provisional == True))),
-        )
-        .join(PaymentType)
-    )
+    await ensure_default_tax_scheme(db, initial_date=date(year, 1, 1))
+    filter_payment_type_id = None
     if payment_type_code:
-        q = q.where(PaymentType.code == payment_type_code)
-    q = q.order_by(YearDecision.payment_type_id, YearDecision.is_provisional.asc())
-    r = await db.execute(q)
-    decisions = r.scalars().all()
-    # Группируем по payment_type_id, берём первое (не provisional предпочтительнее)
-    by_type = {}
-    for d in decisions:
-        if d.payment_type_id not in by_type or not d.is_provisional:
-            by_type[d.payment_type_id] = d
+        filter_payment_type_id = await db.scalar(select(PaymentType.id).where(PaymentType.code == payment_type_code))
 
-    result = []
-    for pt_id, dec in by_type.items():
-        for month in range(1, 13):
-            r2 = await db.execute(
-                select(MonthlyObligation).where(
-                    MonthlyObligation.year == year,
-                    MonthlyObligation.month == month,
-                    MonthlyObligation.payment_type_id == pt_id,
-                )
+    # Always generate every payment type. A UI filter must never deactivate hidden rows.
+    q = select(YearDecision).where(
+        YearDecision.is_active == True,
+        (
+            (YearDecision.year == year)
+            | (
+                (YearDecision.year == (year - 1))
+                & ((YearDecision.is_provisional == True) | (YearDecision.poziv_na_broj_next.is_not(None)))
             )
-            ob = r2.scalar_one_or_none()
-            if not ob:
-                dl = deadline_for_month(year, month)
-                ob = MonthlyObligation(
-                    year=year,
-                    month=month,
-                    payment_type_id=pt_id,
-                    decision_id=dec.id,
-                    amount=dec.monthly_amount,
-                    deadline=dl,
+        ),
+    )
+    q = q.order_by(YearDecision.payment_type_id, YearDecision.is_provisional.asc(), YearDecision.period_start.desc())
+    r = await db.execute(q)
+    decisions = list(r.scalars().all())
+
+    period_result = await db.execute(
+        select(TaxSchemePeriod)
+        .where(
+            TaxSchemePeriod.period_start <= date(year, 12, 31),
+            (TaxSchemePeriod.period_end.is_(None)) | (TaxSchemePeriod.period_end >= date(year, 1, 1)),
+        )
+        .order_by(TaxSchemePeriod.period_start)
+    )
+    scheme_periods = list(period_result.scalars().all())
+    existing_result = await db.execute(select(MonthlyObligation).where(MonthlyObligation.year == year))
+    existing = list(existing_result.scalars().all())
+    existing_by_key = {
+        (item.month, item.payment_type_id, item.tax_scheme_period_id): item
+        for item in existing
+        if item.tax_scheme_period_id is not None
+    }
+
+    desired_ids: set[int] = set()
+    claimed_legacy_ids: set[int] = set()
+    generated: list[MonthlyObligation] = []
+    for month in range(1, 13):
+        month_start = date(year, month, 1)
+        month_end = date(year, month, calendar.monthrange(year, month)[1])
+        active_periods = [
+            period
+            for period in scheme_periods
+            if period.period_start <= month_end and (period.period_end is None or period.period_end >= month_start)
+        ]
+        for scheme_period in active_periods:
+            segment_start = max(month_start, scheme_period.period_start)
+            segment_end = min(month_end, scheme_period.period_end or month_end)
+            candidates = [decision for decision in decisions if decision.tax_scheme_id == scheme_period.tax_scheme_id]
+            candidates_by_type: dict[int, tuple[int, YearDecision]] = {}
+            for decision in candidates:
+                if (
+                    decision.year == year
+                    and decision.period_start <= segment_end
+                    and decision.period_end >= segment_start
+                ):
+                    priority = 1
+                elif decision.year == year - 1 and (decision.is_provisional or decision.poziv_na_broj_next):
+                    priority = 0
+                else:
+                    continue
+
+                existing_candidate = candidates_by_type.get(decision.payment_type_id)
+                if existing_candidate is None or (priority, decision.period_start) > (
+                    existing_candidate[0],
+                    existing_candidate[1].period_start,
+                ):
+                    candidates_by_type[decision.payment_type_id] = (priority, decision)
+            by_type = {payment_type_id: candidate for payment_type_id, (_, candidate) in candidates_by_type.items()}
+
+            for payment_type_id, decision in by_type.items():
+                if decision.year == year:
+                    accrual_start = max(segment_start, decision.period_start)
+                    accrual_end = min(segment_end, decision.period_end)
+                    if accrual_start > accrual_end:
+                        continue
+                else:
+                    accrual_start, accrual_end = segment_start, segment_end
+                active_days = (accrual_end - accrual_start).days + 1
+                month_days = (month_end - month_start).days + 1
+                if decision.prorate_partial_month:
+                    amount = (Decimal(decision.monthly_amount) * Decimal(active_days) / Decimal(month_days)).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                else:
+                    amount = Decimal(decision.monthly_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+                key = (month, payment_type_id, scheme_period.id)
+                obligation = existing_by_key.get(key)
+                if obligation is None:
+                    obligation = next(
+                        (
+                            item
+                            for item in existing
+                            if item.id not in claimed_legacy_ids
+                            and item.month == month
+                            and item.payment_type_id == payment_type_id
+                            and item.tax_scheme_period_id is None
+                            and item.tax_scheme_id in (None, scheme_period.tax_scheme_id)
+                            and item.status != "paid"
+                        ),
+                        None,
+                    )
+                    if obligation is not None:
+                        claimed_legacy_ids.add(obligation.id)
+                deadline = (
+                    scheme_period.closing_deadline
+                    if scheme_period.period_end == accrual_end and scheme_period.closing_deadline
+                    else deadline_for_month(year, month, decision.due_day, decision.due_month_offset)
                 )
-                initialize_obligation_status(ob, "unpaid" if dl >= today else "overdue")
-                db.add(ob)
-                await db.flush()
-            elif ob.status != "paid":
-                # Обновляем только неоплаченные: overdue и amount
-                refresh_obligation_due_status(ob, today=today)
-                ob.amount = dec.monthly_amount
-            result.append(ob)
-    result.sort(key=lambda x: (x.month, x.payment_type_id))
-    return result
+                if obligation is None:
+                    obligation = MonthlyObligation(
+                        year=year,
+                        month=month,
+                        tax_scheme_id=scheme_period.tax_scheme_id,
+                        tax_scheme_period_id=scheme_period.id,
+                        payment_type_id=payment_type_id,
+                        decision_id=decision.id,
+                        amount=amount,
+                        accrual_period_start=accrual_start,
+                        accrual_period_end=accrual_end,
+                        deadline=deadline,
+                        is_active=True,
+                    )
+                    initialize_obligation_status(obligation, "unpaid" if deadline >= today else "overdue")
+                    db.add(obligation)
+                    await db.flush()
+                    existing.append(obligation)
+                elif obligation.status != "paid":
+                    obligation.tax_scheme_id = scheme_period.tax_scheme_id
+                    obligation.tax_scheme_period_id = scheme_period.id
+                    obligation.decision_id = decision.id
+                    obligation.amount = amount
+                    obligation.accrual_period_start = accrual_start
+                    obligation.accrual_period_end = accrual_end
+                    obligation.deadline = deadline
+                    obligation.is_active = True
+                    refresh_obligation_due_status(obligation, today=today)
+                desired_ids.add(obligation.id)
+                generated.append(obligation)
 
+    for obligation in existing:
+        if obligation.id not in desired_ids and obligation.status != "paid":
+            obligation.is_active = False
+        elif obligation.status == "paid" and obligation not in generated:
+            generated.append(obligation)
 
-def presets_2026() -> list[dict]:
-    """Пресеты из ТЗ для 2026 года."""
-    return [
-        {
-            "payment_type_code": "tax",
-            "year": 2026,
-            "monthly_amount": 5122.16,
-            "recipient_account": "840-711122843-32",
-            "poziv_na_broj": "2624190000007887475",
-            "poziv_na_broj_next": "2024190000008031910",
-            "payment_purpose": "Porez na paušalni prihod za YYYY.",
-        },
-        {
-            "payment_type_code": "pio",
-            "year": 2026,
-            "monthly_amount": 12311.28,
-            "recipient_account": "840-721419843-40",
-            "poziv_na_broj": "2624190000007887475",
-            "poziv_na_broj_next": "2024190000008031910",
-            "payment_purpose": "Doprinos za PIO za YYYY. godinu",
-        },
-    ]
+    generated.sort(key=lambda item: (item.month, item.accrual_period_start or date.min, item.payment_type_id, item.id))
+    if filter_payment_type_id is not None:
+        return [item for item in generated if item.payment_type_id == filter_payment_type_id]
+    if payment_type_code and filter_payment_type_id is None:
+        return []
+    return generated
