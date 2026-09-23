@@ -61,24 +61,9 @@ def _month_bounds(day: date) -> tuple[date, date]:
 def upgrade() -> None:
     connection = op.get_bind()
 
-    plans_by_worker: dict[int, list[SimpleNamespace]] = {}
-    # Булев параметр, а не «= 1»: на PostgreSQL столбец логический.
-    for row in connection.execute(
-        sa.text(
-            "SELECT id, worker_id, amount, period, payment_day, payment_day_of_week,"
-            " start_date, end_date, is_active"
-            " FROM planned_expenses WHERE is_active = :active AND worker_id IS NOT NULL"
-        ),
-        {"active": True},
-    ):
-        plan = _plan_stub(row)
-        plans_by_worker.setdefault(plan.worker_id, []).append(plan)
-    if not plans_by_worker:
-        return
-    active_plan_ids = [plan.id for plans in plans_by_worker.values() for plan in plans]
-
-    # Покупка без периода попадёт в ближайший открытый месяц, а это может быть
-    # соседний: проставляем ей месяц самой траты, чтобы пересчёт был устойчивым.
+    # Покупка без периода попала бы в соседний месяц: проставляем ей месяц самой
+    # траты. Делаем это до всего остального — даже если зарплатных планов нет,
+    # период должен быть записан, чтобы будущий пересчёт был устойчивым.
     for row in connection.execute(
         sa.text(
             "SELECT id, date FROM worker_payouts"
@@ -94,16 +79,42 @@ def upgrade() -> None:
             {"start": period_start.isoformat(), "end": period_end.isoformat(), "id": int(row.id)},
         )
 
-    # Пересобираем только погашения активных планов. Отметки выключенных планов —
-    # история (например, архивный период): их оставляем, а засчитанные туда
-    # деньги второй раз не раскладываем.
-    active_placeholders = ", ".join(str(plan_id) for plan_id in active_plan_ids)
+    plans_by_worker: dict[int, list[SimpleNamespace]] = {}
+    # Булев параметр, а не «= 1»: на PostgreSQL столбец логический.
+    for row in connection.execute(
+        sa.text(
+            "SELECT id, worker_id, amount, period, payment_day, payment_day_of_week,"
+            " start_date, end_date, is_active"
+            " FROM planned_expenses WHERE is_active = :active AND worker_id IS NOT NULL"
+        ),
+        {"active": True},
+    ):
+        plan = _plan_stub(row)
+        plans_by_worker.setdefault(plan.worker_id, []).append(plan)
+    active_plan_ids = [plan.id for plans in plans_by_worker.values() for plan in plans]
+
+    # Пересобираем погашения активных планов. Отметки своих выключенных планов —
+    # история (например, архивный период): их оставляем, а засчитанные туда деньги
+    # второй раз не раскладываем. Отметка на плане другого работника осталась от
+    # перенесённой выплаты, а у погашенной сторно выплаты денег нет — такие
+    # снимаем всегда, даже если активных планов нет вовсе.
+    stale_conditions = [
+        "worker_payout_id IN (SELECT id FROM worker_payouts WHERE cancelled_at IS NOT NULL)",
+        "EXISTS (SELECT 1 FROM planned_expenses pe, worker_payouts wp"
+        " WHERE pe.id = planned_expense_payments.planned_expense_id"
+        " AND wp.id = planned_expense_payments.worker_payout_id"
+        " AND (pe.worker_id IS NULL OR pe.worker_id <> wp.worker_id))",
+    ]
+    if active_plan_ids:
+        stale_conditions.append(f"planned_expense_id IN ({', '.join(str(item) for item in active_plan_ids)})")
     connection.execute(
         sa.text(
             "DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"
-            f" AND planned_expense_id IN ({active_placeholders})"
+            f" AND ({' OR '.join(stale_conditions)})"
         )
     )
+    if not plans_by_worker:
+        return
     booked_elsewhere: dict[int, Decimal] = {}
     for row in connection.execute(
         sa.text(
@@ -143,18 +154,19 @@ def upgrade() -> None:
         if window_end < window_start:
             window_start = window_end = payout_date
 
-        open_pairs = sorted(
+        pairs = sorted(
             (
                 (plan, due_date)
                 for plan in plans
                 for due_date in payment_dates_in_range(plan, window_start, window_end, limit=24)
-                if plan.amount - settled.get((plan.id, due_date), ZERO) > ZERO
             ),
             key=lambda pair: (abs((pair[1] - payout_date).days), pair[1] > payout_date, pair[1], pair[0].id),
         )
-        # Разносить по нескольким периодам вправе только выплата со своим периодом.
+        # Без периода — только ближайший платёж, даже закрытый: в соседний месяц
+        # выплата не перекатывается. С периодом — всё открытое внутри него.
         if not has_period:
-            open_pairs = open_pairs[:1]
+            pairs = pairs[:1]
+        open_pairs = [pair for pair in pairs if pair[0].amount - settled.get((pair[0].id, pair[1]), ZERO) > ZERO]
 
         for plan, due_date in open_pairs:
             if left <= ZERO:

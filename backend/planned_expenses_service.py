@@ -6,7 +6,7 @@ import calendar
 from decimal import Decimal
 
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
@@ -123,6 +123,15 @@ async def sync_worker_salary_plan(
         return None
 
     amount, period = settings
+    # Архивирование выключает все части плана; вернувшемуся работнику нужны и
+    # прошлые периоды по прежним ставкам, иначе их долги и погашения пропадут.
+    # Прошлую часть узнаём по тому, что сразу за ней начинается следующая:
+    # по заметке не выйдет — у разрезанного ручного плана она своя.
+    next_starts = {plan.start_date for plan in existing_plans}
+    for plan in existing_plans:
+        continued = plan.end_date is not None and plan.end_date + timedelta(days=1) in next_starts
+        if plan.note == AUTO_WORKER_SALARY_HISTORY_NOTE or continued:
+            plan.is_active = True
     split_from_history = False
     if target is not None and _salary_terms_changed(target, amount, period):
         successor = await _close_salary_plan_before(db, target, _salary_plan_boundary(period, current_date))
@@ -439,20 +448,33 @@ def _settling_occurrences(
     payout: WorkerPayout,
     settled: dict[tuple[int, date], Decimal],
 ) -> list[tuple[PlannedExpense, date]]:
-    """Открытые плановые платежи в окне выплаты, ближайший к её дате первым.
+    """Открытые плановые платежи, которые закрывает выплата, ближайший первым.
 
-    Одна выплата может закрыть несколько периодов: при недельной ставке покупка
-    на три недели вперёд гасит три платежа, а не один.
+    Выплата со своим периодом закрывает всё открытое внутри него: при недельной
+    ставке покупка на три недели гасит три платежа. Без периода выплата относится
+    только к ближайшему платежу — и если он уже закрыт, в соседний не
+    перекатывается: иначе повторная выплата за оплаченный месяц молча ушла бы
+    в счёт следующего.
     """
-    range_start, range_end = payout_settlement_window(payout)
-    open_pairs = [
+    pairs = _window_occurrences(planned_items, payout)
+    if not (payout.period_start and payout.period_end):
+        pairs = pairs[:1]
+    return [
         (planned, due_date)
-        for planned in planned_items
-        for due_date in payment_dates_in_range(planned, range_start, range_end, limit=24)
+        for planned, due_date in pairs
         if occurrence_remaining(planned, settled.get((planned.id, due_date), ZERO_DECIMAL)) > ZERO_DECIMAL
     ]
+
+
+def _window_occurrences(planned_items: list[PlannedExpense], payout: WorkerPayout) -> list[tuple[PlannedExpense, date]]:
+    """Все плановые платежи в окне выплаты, ближайший к её дате первым."""
+    range_start, range_end = payout_settlement_window(payout)
     return sorted(
-        open_pairs,
+        (
+            (planned, due_date)
+            for planned in planned_items
+            for due_date in payment_dates_in_range(planned, range_start, range_end, limit=24)
+        ),
         key=lambda pair: (
             abs((pair[1] - payout.date).days),
             pair[1] > payout.date,
@@ -500,26 +522,12 @@ async def salary_window_balance(
         db, {item.id for item in planned_items}, exclude_payout_id=exclude_payout_id
     )
     probe = WorkerPayout(worker_id=worker_id, date=payout_date, period_start=period_start, period_end=period_end)
-    window_start, window_end = payout_settlement_window(probe)
-    all_pairs = sorted(
-        (
-            (planned, due_date)
-            for planned in planned_items
-            for due_date in payment_dates_in_range(planned, window_start, window_end, limit=24)
-        ),
-        key=lambda pair: (abs((pair[1] - payout_date).days), pair[1] > payout_date, pair[1], pair[0].id),
-    )
+    all_pairs = _window_occurrences(planned_items, probe)
     if not all_pairs:
         return None
-
-    if period_start and period_end:
-        # Выплата со своим периодом закрывает все платежи внутри него.
-        considered = all_pairs
-    else:
-        # Без периода — один платёж: ближайший открытый, а если открытых нет,
-        # ближайший вообще, чтобы показать, что он уже закрыт.
-        open_pairs = _settling_occurrences(planned_items, probe, settled)
-        considered = open_pairs[:1] or all_pairs[:1]
+    # Выплата со своим периодом закрывает все платежи внутри него, без периода —
+    # только ближайший, даже если он уже закрыт: так же она и разложится.
+    considered = all_pairs if (period_start and period_end) else all_pairs[:1]
 
     return SalaryWindowBalance(
         remaining=sum(
@@ -574,13 +582,23 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
     planned_items = list(result.scalars().all())
     active_plan_ids = {item.id for item in planned_items}
 
-    # Пересобираем только то, что умеем пересобрать: погашения активных планов.
-    # Отметки на выключенных планах — история (например, архивный период), их
-    # сохраняем, а деньги, уже засчитанные туда, второй раз не раскладываем.
+    # Пересобираем погашения активных планов. Отметки выключенных планов этого
+    # работника — история (например, архивный период): их сохраняем, а деньги,
+    # уже засчитанные туда, второй раз не раскладываем. Но история — только своя:
+    # отметка на плане другого работника осталась от выплаты, которую перенесли,
+    # а у погашенной сторно выплаты денег нет — такие снимаем в любом случае.
     payout_ids = select(WorkerPayout.id).where(WorkerPayout.worker_id == worker_id)
-    auto_marks = delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id.in_(payout_ids))
+    cancelled_ids = select(WorkerPayout.id).where(
+        WorkerPayout.worker_id == worker_id, WorkerPayout.cancelled_at.is_not(None)
+    )
+    own_plan_ids = select(PlannedExpense.id).where(PlannedExpense.worker_id == worker_id)
+    stale = or_(
+        PlannedExpensePayment.planned_expense_id.not_in(own_plan_ids),
+        PlannedExpensePayment.worker_payout_id.in_(cancelled_ids),
+    )
     if active_plan_ids:
-        await db.execute(auto_marks.where(PlannedExpensePayment.planned_expense_id.in_(active_plan_ids)))
+        stale = or_(stale, PlannedExpensePayment.planned_expense_id.in_(active_plan_ids))
+    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id.in_(payout_ids), stale))
     await db.flush()
     if not planned_items:
         return
@@ -605,13 +623,7 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
         if paid_amount <= ZERO_DECIMAL or not payout.date:
             continue
         left = paid_amount - booked_elsewhere.get(payout.id, ZERO_DECIMAL)
-        # Разносить по нескольким периодам вправе только выплата, назвавшая свой
-        # период. Без него неизвестно, что она покрывает, и трогать соседние
-        # месяцы нельзя: деньги молча закрыли бы старые долги.
-        occurrences = _settling_occurrences(planned_items, payout, settled)
-        if not (payout.period_start and payout.period_end):
-            occurrences = occurrences[:1]
-        for planned, due_date in occurrences:
+        for planned, due_date in _settling_occurrences(planned_items, payout, settled):
             if left <= ZERO_DECIMAL:
                 break
             key = (planned.id, due_date)

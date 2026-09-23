@@ -1260,9 +1260,11 @@ const sr = {
   workerPayoutPurchase: 'Куповина на рачун плате',
   workerPayoutPurchaseShort: 'Куповина',
   workerPayoutPurchasePeriodHint: 'Наведите месец плате за који је куповина: на њега ће се умањити остатак.',
-  workerPayoutSalaryRemainder: 'За {month} већ измирено {paid}, остало за исплату {remaining}',
+  workerPayoutSalaryRemainder:
+    'Рачуна се за плаћање {due}: већ измирено {paid}, остало за исплату {remaining}',
   workerPayoutSalarySettled:
-    'Плата за {month} је већ у потпуности измирена ({paid}). Ако исплаћујете преко тога, унесите износ.',
+    'Плаћање {due} је већ у потпуности измирено ({paid}). Ако исплаћујете преко тога, унесите износ.',
+  workerPayoutSalaryTarget: 'Рачуна се за плаћање {due}: по плану {remaining}',
   workerPayoutRegular: 'Радни дани',
   workerPayoutRemaining: 'Остатак',
   workerPayoutTripAdvance: 'Аванс за службени пут',

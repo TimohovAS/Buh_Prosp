@@ -621,3 +621,125 @@ async def test_resync_keeps_settlements_of_a_switched_off_plan(client, db_sessio
         ).scalars()
     )
     assert active_total == MONEY - Decimal("40000.00")
+
+
+async def test_a_closed_month_is_not_rolled_into_the_next_one(client, db_session):
+    """Сентябрь закрыт; выплата 7 сентября без периода не уходит в октябрь."""
+    worker = await make_worker_with_salary_plan(db_session)
+    await attach_purchase(client, worker, await make_expense(db_session, SALARY))
+
+    balance = (await client.get(f"/api/workers/{worker.id}/salary-remaining", params={"date": "2026-09-07"})).json()
+    saved = await client.post(
+        "/api/workers/payouts",
+        json={"worker_id": worker.id, "payout_type": "monthly", "date": "2026-09-07", "cash_paid_amount": None},
+    )
+
+    # Ближайший платёж — 5 сентября, он закрыт: не 100 000 «за октябрь», а отказ.
+    assert balance["due_dates"] == ["2026-09-05"]
+    assert Decimal(str(balance["remaining"])) == Decimal("0")
+    assert saved.status_code == 400
+
+
+async def test_the_form_names_the_payday_a_late_september_payout_counts_for(client, db_session):
+    """23 сентября ближе к 5 октября: форма должна это показать, а не молчать."""
+    worker = await make_worker_with_salary_plan(db_session)
+    await attach_purchase(client, worker, await make_expense(db_session, SALARY))
+
+    balance = (await client.get(f"/api/workers/{worker.id}/salary-remaining", params={"date": "2026-09-23"})).json()
+
+    assert balance["has_plan"] is True
+    assert balance["due_dates"] == ["2026-10-05"]
+    assert Decimal(str(balance["remaining"])) == SALARY
+    assert Decimal(str(balance["settled"])) == Decimal("0")
+
+
+async def test_moving_a_payout_to_another_worker_takes_its_whole_amount(client, db_session):
+    first = await make_worker_with_salary_plan(db_session)
+    # План первого работника выключен и хранит погашение от этой выплаты.
+    old_plan = (await db_session.execute(select(PlannedExpense))).scalar_one()
+    second = Worker(name="Denis Čistjakov", monthly_rate=SALARY)
+    db_session.add(second)
+    await db_session.flush()
+    db_session.add(
+        PlannedExpense(
+            name="Denis Čistjakov",
+            amount=SALARY,
+            currency="RSD",
+            period="monthly",
+            payment_day=DUE_DATE.day,
+            start_date=date(2026, 1, 5),
+            is_active=True,
+            worker_id=second.id,
+        )
+    )
+    await db_session.flush()
+    expense = await make_expense(db_session, MONEY, entry_date=DUE_DATE)
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": first.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+    old_plan.is_active = False
+    await db_session.flush()
+
+    moved = await client.patch(
+        f"/api/workers/payouts/{payout['id']}/link",
+        json={"worker_id": second.id, "payout_type": "monthly"},
+    )
+
+    assert moved.status_code == 200
+    marks = (
+        (
+            await db_session.execute(
+                select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout["id"])
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # Всё засчитано второму работнику, у первого не осталось ничего.
+    assert [mark.planned_expense_id for mark in marks] != [old_plan.id]
+    assert sum((Decimal(mark.amount) for mark in marks), Decimal("0")) == MONEY
+    assert all(mark.planned_expense_id != old_plan.id for mark in marks)
+
+
+async def test_a_reversed_payout_leaves_no_settlement_on_a_switched_off_plan(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    plan = (await db_session.execute(select(PlannedExpense))).scalar_one()
+    expense = await make_expense(db_session, MONEY, entry_date=DUE_DATE)
+    await client.post(
+        "/api/workers/payouts/attach",
+        json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+    )
+    plan.is_active = False
+    await db_session.flush()
+
+    await create_expense_reversal(db_session, expense)
+
+    # Деньги вернулись — погашение не должно пережить сторно даже как история.
+    assert (await db_session.execute(select(PlannedExpensePayment))).scalars().all() == []
+
+
+async def test_bringing_a_worker_back_restores_earlier_rate_periods(client, db_session):
+    from backend.planned_expenses_service import sync_worker_salary_plan
+
+    worker = await make_worker_with_salary_plan(db_session)
+    worker.pay_scheme = "monthly"
+    await db_session.flush()
+    await add_money_payout(db_session, worker, SALARY)
+    worker.monthly_rate = Decimal("120000.00")
+    await sync_worker_salary_plan(db_session, worker, today=date(2026, 9, 23))
+    assert len((await db_session.execute(select(PlannedExpense))).scalars().all()) == 2
+
+    worker.is_active = False
+    await sync_worker_salary_plan(db_session, worker, today=date(2026, 9, 24))
+    worker.is_active = True
+    await sync_worker_salary_plan(db_session, worker, today=date(2026, 9, 25))
+
+    plans = (await db_session.execute(select(PlannedExpense).order_by(PlannedExpense.id))).scalars().all()
+    # Обе части — прошлая со старой ставкой и текущая — снова в расчёте.
+    assert [plan.is_active for plan in plans] == [True, True]
+    september = await occurrence(client)
+    assert Decimal(str(september["amount"])) == SALARY
+    assert september["is_paid"] is True

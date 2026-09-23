@@ -19,7 +19,7 @@ import {
   findUnassignedProject,
   getContractLabelById,
 } from '../utils/entityLabels'
-import { UI_DASH, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { UI_DASH, formatDateSr, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
 import { payoutTypeLabel } from '../utils/workerPayouts'
 import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
@@ -81,11 +81,14 @@ function withSalaryMonth(form, isoDate) {
   }
 }
 
-// Месяц или диапазон месяцев, за которые считается остаток зарплаты.
-function salaryMonthLabel(dueDates) {
-  const months = [...new Set((dueDates || []).map((value) => String(value).slice(0, 7)))]
-  if (!months.length) return ''
-  return months.length === 1 ? months[0] : `${months[0]} – ${months[months.length - 1]}`
+// Платёж (или диапазон платежей) по плану, за который засчитается выплата.
+// Показываем точную дату: «сентябрь» и «5 октября» легко перепутать, если
+// выплату оформляют между ними.
+function salaryDueLabel(dueDates) {
+  const dates = [...new Set((dueDates || []).map((value) => String(value).slice(0, 10)))].sort()
+  if (!dates.length) return ''
+  const first = formatDateSr(dates[0])
+  return dates.length === 1 ? first : `${first} – ${formatDateSr(dates[dates.length - 1])}`
 }
 
 const toNumber = (value) => Number(value || 0)
@@ -1015,7 +1018,9 @@ export default function CashRegister() {
         const settled = Number(balance?.settled || 0)
         const remaining = Number(balance?.remaining || 0)
         const partlyClosed = balance?.has_plan && settled > 0
-        setSalaryRemainder(partlyClosed ? balance : null)
+        // Подсказку показываем всегда, когда план есть: пользователь должен видеть,
+        // за какой платёж пойдёт выплата, даже если по нему ещё ничего не выдано.
+        setSalaryRemainder(balance?.has_plan ? balance : null)
         setWorkerPayoutForm((previous) => {
           // Своё число, введённое руками, не перетираем — только то, что ставили сами.
           const untouched =
@@ -2051,11 +2056,13 @@ export default function CashRegister() {
               {salaryRemainder && !workerPayoutModal?.payoutId ? (
                 <div className="record-field-text">
                   {tr(
-                    Number(salaryRemainder.remaining) > 0
-                      ? 'workerPayoutSalaryRemainder'
-                      : 'workerPayoutSalarySettled',
+                    Number(salaryRemainder.remaining) <= 0
+                      ? 'workerPayoutSalarySettled'
+                      : Number(salaryRemainder.settled) > 0
+                        ? 'workerPayoutSalaryRemainder'
+                        : 'workerPayoutSalaryTarget',
                     {
-                      month: salaryMonthLabel(salaryRemainder.due_dates),
+                      due: salaryDueLabel(salaryRemainder.due_dates),
                       paid: fmtAmount(salaryRemainder.settled),
                       remaining: fmtAmount(salaryRemainder.remaining),
                     }
