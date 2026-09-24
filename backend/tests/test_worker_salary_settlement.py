@@ -743,3 +743,93 @@ async def test_bringing_a_worker_back_restores_earlier_rate_periods(client, db_s
     september = await occurrence(client)
     assert Decimal(str(september["amount"])) == SALARY
     assert september["is_paid"] is True
+
+
+async def history_mark_on_switched_off_plan(db, worker, *, amount):
+    """Выплата, погашение которой лежит на выключенном плане работника."""
+    old_plan = PlannedExpense(
+        name="Old plan",
+        amount=Decimal("40000.00"),
+        currency="RSD",
+        period="monthly",
+        payment_day=5,
+        start_date=date(2026, 1, 5),
+        is_active=False,
+        worker_id=worker.id,
+    )
+    db.add(old_plan)
+    await db.flush()
+    expense = await make_expense(db, amount, entry_date=date(2026, 7, 5))
+    payout = WorkerPayout(
+        worker_id=worker.id,
+        expense_id=expense.id,
+        payout_type="monthly",
+        date=date(2026, 7, 5),
+        gross_amount=Decimal(amount),
+        cash_paid_amount=Decimal(amount),
+        remaining_amount=Decimal("0"),
+        description="Andrei Timokhov",
+        origin="expense_link",
+    )
+    db.add(payout)
+    await db.flush()
+    db.add(
+        PlannedExpensePayment(
+            planned_expense_id=old_plan.id,
+            due_date=date(2026, 7, 5),
+            paid_date=date(2026, 7, 5),
+            amount=Decimal(amount),
+            worker_payout_id=payout.id,
+        )
+    )
+    await db.flush()
+    return old_plan, expense, payout
+
+
+async def test_reducing_a_payout_trims_its_settlement_on_a_switched_off_plan(client, db_session):
+    from backend.expense_service import sync_worker_payout_from_expense
+
+    worker = await make_worker_with_salary_plan(db_session)
+    old_plan, expense, payout = await history_mark_on_switched_off_plan(db_session, worker, amount="40000.00")
+
+    # Выплату исправили: на самом деле выдали 20 000.
+    expense.amount = Decimal("20000.00")
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    marks = (
+        (
+            await db_session.execute(
+                select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert Decimal(payout.cash_paid_amount) == Decimal("20000.00")
+    # Погашение не может остаться больше выданного.
+    assert sum((Decimal(mark.amount) for mark in marks), Decimal("0")) == Decimal("20000.00")
+    assert all(mark.planned_expense_id == old_plan.id for mark in marks)
+
+
+async def test_turning_a_payout_into_a_trip_clears_its_settlement_history(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    _, _, payout = await history_mark_on_switched_off_plan(db_session, worker, amount="40000.00")
+
+    changed = await client.patch(
+        f"/api/workers/payouts/{payout.id}/link",
+        json={
+            "worker_id": worker.id,
+            "payout_type": "trip_final",
+            "period_start": "2026-07-01",
+            "period_end": "2026-07-03",
+        },
+    )
+
+    assert changed.status_code == 200
+    # Командировочные зарплату не закрывают — и в истории тоже.
+    assert (
+        await db_session.execute(
+            select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
+        )
+    ).scalars().all() == []

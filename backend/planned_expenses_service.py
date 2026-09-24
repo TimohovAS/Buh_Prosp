@@ -563,6 +563,42 @@ async def salary_remaining_for_payout(
     return balance.remaining if balance else None
 
 
+async def _fit_history_to_payouts(db: AsyncSession, worker_id: int) -> dict[int, Decimal]:
+    """Урезать сохранённые отметки выключенных планов до суммы самих выплат.
+
+    Отметка-история записана, когда выплата была другой. Если выплату потом
+    уменьшили, погашение не может остаться больше выданного: выдали 20 000 —
+    закрыто не больше 20 000. Возвращает, сколько у каждой выплаты уже лежит в
+    истории, чтобы при раскладке не засчитать эти деньги второй раз.
+    """
+    payouts = {
+        payout.id: to_decimal(payout.cash_paid_amount or ZERO_DECIMAL)
+        for payout in (await db.execute(select(WorkerPayout).where(WorkerPayout.worker_id == worker_id))).scalars()
+    }
+    if not payouts:
+        return {}
+    marks = (
+        await db.execute(
+            select(PlannedExpensePayment)
+            .where(PlannedExpensePayment.worker_payout_id.in_(payouts.keys()))
+            .order_by(PlannedExpensePayment.due_date.asc(), PlannedExpensePayment.id.asc())
+        )
+    ).scalars()
+    booked: dict[int, Decimal] = {}
+    for mark in marks:
+        budget = payouts[mark.worker_payout_id] - booked.get(mark.worker_payout_id, ZERO_DECIMAL)
+        amount = to_decimal(mark.amount or ZERO_DECIMAL)
+        if budget <= ZERO_DECIMAL:
+            await db.delete(mark)
+            continue
+        if amount > budget:
+            mark.amount = budget
+            amount = budget
+        booked[mark.worker_payout_id] = booked.get(mark.worker_payout_id, ZERO_DECIMAL) + amount
+    await db.flush()
+    return booked
+
+
 async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | None) -> None:
     """Пересобрать погашения плановой зарплаты работника целиком.
 
@@ -588,27 +624,27 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
     # отметка на плане другого работника осталась от выплаты, которую перенесли,
     # а у погашенной сторно выплаты денег нет — такие снимаем в любом случае.
     payout_ids = select(WorkerPayout.id).where(WorkerPayout.worker_id == worker_id)
-    cancelled_ids = select(WorkerPayout.id).where(
-        WorkerPayout.worker_id == worker_id, WorkerPayout.cancelled_at.is_not(None)
+    # Денег на погашение зарплаты нет у погашенной сторно выплаты и у выплаты,
+    # которая зарплатой больше не является (стала командировочной).
+    moneyless_ids = select(WorkerPayout.id).where(
+        WorkerPayout.worker_id == worker_id,
+        or_(
+            WorkerPayout.cancelled_at.is_not(None),
+            WorkerPayout.payout_type.not_in(SALARY_SETTLING_PAYOUT_TYPES),
+        ),
     )
     own_plan_ids = select(PlannedExpense.id).where(PlannedExpense.worker_id == worker_id)
     stale = or_(
         PlannedExpensePayment.planned_expense_id.not_in(own_plan_ids),
-        PlannedExpensePayment.worker_payout_id.in_(cancelled_ids),
+        PlannedExpensePayment.worker_payout_id.in_(moneyless_ids),
     )
     if active_plan_ids:
         stale = or_(stale, PlannedExpensePayment.planned_expense_id.in_(active_plan_ids))
     await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id.in_(payout_ids), stale))
     await db.flush()
+    booked_elsewhere = await _fit_history_to_payouts(db, worker_id)
     if not planned_items:
         return
-
-    kept_result = await db.execute(
-        select(PlannedExpensePayment.worker_payout_id, func.sum(PlannedExpensePayment.amount))
-        .where(PlannedExpensePayment.worker_payout_id.in_(payout_ids))
-        .group_by(PlannedExpensePayment.worker_payout_id)
-    )
-    booked_elsewhere = {row[0]: to_decimal(row[1] or ZERO_DECIMAL) for row in kept_result.fetchall()}
 
     settled = await settled_amounts_by_occurrence(db, active_plan_ids)
     result = await db.execute(

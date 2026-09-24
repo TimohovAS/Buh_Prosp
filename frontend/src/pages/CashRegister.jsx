@@ -20,6 +20,7 @@ import {
   getContractLabelById,
 } from '../utils/entityLabels'
 import { UI_DASH, formatDateSr, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
+import { payoutCashForSubmit } from '../utils/payoutCash'
 import { payoutTypeLabel } from '../utils/workerPayouts'
 import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
@@ -217,6 +218,7 @@ export default function CashRegister() {
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
   const [salaryRemainder, setSalaryRemainder] = useState(null)
   const autoFilledCashRef = useRef(null)
+  const [salaryBalanceLoading, setSalaryBalanceLoading] = useState(false)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -1004,9 +1006,17 @@ export default function CashRegister() {
     const creating = !!workerPayoutModal && !workerPayoutModal.payoutId
     if (!creating || !salaryPayoutType || !workerPayoutForm.worker_id || !workerPayoutForm.date) {
       setSalaryRemainder(null)
+      setSalaryBalanceLoading(false)
       return undefined
     }
     let cancelled = false
+    setSalaryBalanceLoading(true)
+    setWorkerPayoutForm((previous) =>
+      autoFilledCashRef.current && previous.cash_paid_amount === autoFilledCashRef.current
+        ? { ...previous, cash_paid_amount: '' }
+        : previous
+    )
+    autoFilledCashRef.current = null
     api.workers
       .salaryRemaining(workerPayoutForm.worker_id, {
         date: workerPayoutForm.date,
@@ -1034,6 +1044,9 @@ export default function CashRegister() {
       .catch(() => {
         // Остаток — подсказка, а не условие сохранения выплаты.
         if (!cancelled) setSalaryRemainder(null)
+      })
+      .finally(() => {
+        if (!cancelled) setSalaryBalanceLoading(false)
       })
     return () => {
       cancelled = true
@@ -1105,8 +1118,7 @@ export default function CashRegister() {
           workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
         lodging_amount: workerPayoutPreview.lodgingAmount,
         advance_paid: toNumber(workerPayoutForm.advance_paid),
-        cash_paid_amount:
-          workerPayoutForm.cash_paid_amount === '' ? null : toNumber(workerPayoutForm.cash_paid_amount),
+        cash_paid_amount: payoutCashForSubmit(workerPayoutForm.cash_paid_amount, autoFilledCashRef.current),
         trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
         category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
         project_id: workerPayoutProjectId
@@ -2175,7 +2187,7 @@ export default function CashRegister() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={saving || !selectedWorker || missingSalaryMonth}
+              disabled={saving || !selectedWorker || missingSalaryMonth || salaryBalanceLoading}
             >
               {saving ? tr('loading') : tr('save')}
             </button>

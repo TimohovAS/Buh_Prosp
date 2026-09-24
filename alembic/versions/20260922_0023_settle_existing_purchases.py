@@ -98,8 +98,11 @@ def upgrade() -> None:
     # второй раз не раскладываем. Отметка на плане другого работника осталась от
     # перенесённой выплаты, а у погашенной сторно выплаты денег нет — такие
     # снимаем всегда, даже если активных планов нет вовсе.
+    settling_list = ", ".join(f"'{item}'" for item in SETTLING_TYPES)
     stale_conditions = [
-        "worker_payout_id IN (SELECT id FROM worker_payouts WHERE cancelled_at IS NOT NULL)",
+        # У погашенной сторно и у незарплатной выплаты денег на погашение нет.
+        "worker_payout_id IN (SELECT id FROM worker_payouts WHERE cancelled_at IS NOT NULL"
+        f" OR payout_type NOT IN ({settling_list}))",
         "EXISTS (SELECT 1 FROM planned_expenses pe, worker_payouts wp"
         " WHERE pe.id = planned_expense_payments.planned_expense_id"
         " AND wp.id = planned_expense_payments.worker_payout_id"
@@ -113,16 +116,35 @@ def upgrade() -> None:
             f" AND ({' OR '.join(stale_conditions)})"
         )
     )
-    if not plans_by_worker:
-        return
+    # Оставшиеся отметки — история выключенных планов. Погашение не может быть
+    # больше самой выплаты: если её потом уменьшили, урезаем историю до суммы.
+    paid_by_payout = {
+        int(row.id): Decimal(str(row.cash_paid_amount or 0))
+        for row in connection.execute(sa.text("SELECT id, cash_paid_amount FROM worker_payouts"))
+    }
     booked_elsewhere: dict[int, Decimal] = {}
     for row in connection.execute(
         sa.text(
-            "SELECT worker_payout_id, SUM(amount) AS amount FROM planned_expense_payments"
-            " WHERE worker_payout_id IS NOT NULL GROUP BY worker_payout_id"
+            "SELECT id, worker_payout_id, amount FROM planned_expense_payments"
+            " WHERE worker_payout_id IS NOT NULL ORDER BY due_date ASC, id ASC"
         )
-    ):
-        booked_elsewhere[int(row.worker_payout_id)] = Decimal(str(row.amount or 0))
+    ).fetchall():
+        payout_id = int(row.worker_payout_id)
+        budget = paid_by_payout.get(payout_id, ZERO) - booked_elsewhere.get(payout_id, ZERO)
+        amount = Decimal(str(row.amount or 0))
+        if budget <= ZERO:
+            connection.execute(sa.text("DELETE FROM planned_expense_payments WHERE id = :id"), {"id": int(row.id)})
+            continue
+        if amount > budget:
+            connection.execute(
+                sa.text("UPDATE planned_expense_payments SET amount = :amount WHERE id = :id"),
+                {"amount": str(budget), "id": int(row.id)},
+            )
+            amount = budget
+        booked_elsewhere[payout_id] = booked_elsewhere.get(payout_id, ZERO) + amount
+
+    if not plans_by_worker:
+        return
 
     settled: dict[tuple[int, date], Decimal] = {}
     for row in connection.execute(sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")):

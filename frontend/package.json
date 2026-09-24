@@ -16,7 +16,8 @@
     "test:items": "node --test scripts/test-reorder-items.mjs",
     "i18n:check": "node scripts/check-i18n-keys.mjs",
     "format": "prettier --write src scripts",
-    "format:check": "prettier --check src scripts"
+    "format:check": "prettier --check src scripts",
+    "test:payouts": "node --test scripts/test-payout-cash.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.576.0",
