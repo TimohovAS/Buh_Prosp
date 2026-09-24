@@ -956,7 +956,7 @@ const sr = {
   projectProfit: 'Профит',
   projectRequired: 'Изаберите пројекат',
   projectSearchNoResults: 'Пројекти нису пронађени',
-  projectSearchPlaceholder: 'Унесите назив или шифру пројекта...',
+  projectSearchPlaceholder: 'Унесите назив пројекта или клијента...',
   projectPurchases: 'Куповине по чековима',
   projectPurchasesExportError: 'Извоз није успео',
   projectPurchasesExportXlsx: 'Извези у XLSX',

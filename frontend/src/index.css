@@ -4815,10 +4815,26 @@ tr:hover td {
 }
 
 .searchable-select-option > span,
-.searchable-select-option-copy {
+.searchable-select-option-copy > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.searchable-select-option > .searchable-select-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+/* Юридическое название клиента длинное, а отличается обычно концом —
+   переносим его, а не обрезаем */
+.searchable-select-option-copy > .searchable-select-option-description {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  white-space: normal;
 }
 
 .searchable-select-option svg {

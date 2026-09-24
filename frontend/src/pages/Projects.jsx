@@ -13,7 +13,7 @@ import StatusBadge from '../components/StatusBadge'
 import useListPageState from '../hooks/useListPageState'
 import { UI_DASH, UI_CLOSE, formatInteger as fmt, formatMoney2, todayIso } from '../utils/formatters'
 import { getPeriodRange } from '../utils/periods'
-import { amountSearchHay } from '../utils/searchUtils'
+import { amountSearchHay, matchesSearch } from '../utils/searchUtils'
 import { MODAL_CHAIN_CLOSE_EVENT } from '../utils/modalNavigation'
 
 const PROJECT_STATUS_ACTIONS = {
@@ -530,20 +530,20 @@ export default function Projects() {
   }
 
   const filteredProjects = useMemo(() => {
-    const normalizedSearch = (search || '').trim().toLowerCase()
     let rows = projects
     if (projectFilter === 'internal') rows = rows.filter((project) => project.is_internal)
     if (projectFilter === 'commercial') rows = rows.filter((project) => !project.is_internal)
-    if (normalizedSearch) {
+    if ((search || '').trim()) {
       rows = rows.filter((project) => {
         const row = getRowData(project)
-        return (
-          (project.name || '').toLowerCase().includes(normalizedSearch) ||
-          (project.code || '').toLowerCase().includes(normalizedSearch) ||
-          (project.client_name || '').toLowerCase().includes(normalizedSearch) ||
-          amountSearchHay(row.revenue).includes(normalizedSearch) ||
-          amountSearchHay(row.expenses).includes(normalizedSearch) ||
-          amountSearchHay(row.profit).includes(normalizedSearch)
+        return matchesSearch(
+          search,
+          project.name,
+          project.code,
+          project.client_name,
+          amountSearchHay(row.revenue),
+          amountSearchHay(row.expenses),
+          amountSearchHay(row.profit)
         )
       })
     }

@@ -51,6 +51,8 @@ jobs:
         run: npm run test:finance
       - name: Item reordering tests
         run: npm run test:items
+      - name: Search normalization tests
+        run: npm run test:search
       - name: Format check (prettier)
         run: npm run format:check
       - name: Build

@@ -3,7 +3,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,6 +22,7 @@ from backend.schemas import (
     ClientUpdate,
     CompanyRegistryLookupResponse,
 )
+from backend.text_utils import matches_search
 from backend.auth import get_current_user_required, require_edit_access
 
 router = APIRouter(prefix="/clients", tags=["clients"])
@@ -68,6 +69,10 @@ async def _sync_bank_accounts(
     await db.flush()
 
 
+def _client_search_fields(client: Client) -> tuple[str | None, ...]:
+    return client.name, client.pib, client.maticni_broj, client.jbkjs
+
+
 async def _load_client(db: AsyncSession, client_id: int) -> Client | None:
     result = await db.execute(
         select(Client).options(selectinload(Client.bank_account_records)).where(Client.id == client_id)
@@ -85,23 +90,22 @@ async def list_clients(
     q = select(Client).options(selectinload(Client.bank_account_records))
     if not archived:
         q = q.where(Client.is_archived == False)
-    if search:
-        search_conditions = [
-            Client.name.ilike(f"%{search}%"),
-            Client.pib.ilike(f"%{search}%"),
-            Client.maticni_broj.ilike(f"%{search}%"),
-            Client.jbkjs.ilike(f"%{search}%"),
-            Client.bank_account_records.any(ClientBankAccount.account_number.ilike(f"%{search}%")),
-        ]
-        account_digits = "".join(char for char in search if char.isdigit())
-        if len(account_digits) >= 3:
-            search_conditions.append(
-                Client.bank_account_records.any(ClientBankAccount.account_number.ilike(f"%{account_digits}%"))
-            )
-        q = q.where(or_(*search_conditions))
     q = q.order_by(Client.name)
     result = await db.execute(q)
-    return [ClientResponse.model_validate(client) for client in result.scalars().all()]
+    clients = result.scalars().all()
+    if search:
+        # Фильтр в Python: LIKE в SQLite не сравнивает кириллицу с латиницей и даже
+        # не приводит кириллицу к одному регистру, а клиентов немного.
+        account_digits = "".join(char for char in search if char.isdigit())
+
+        def client_matches(client: Client) -> bool:
+            accounts = [record.account_number for record in client.bank_account_records]
+            if matches_search(search, *_client_search_fields(client), *accounts):
+                return True
+            return len(account_digits) >= 3 and any(account_digits in account for account in accounts)
+
+        clients = [client for client in clients if client_matches(client)]
+    return [ClientResponse.model_validate(client) for client in clients]
 
 
 @router.get("/brief", response_model=list[ClientBrief])
@@ -110,19 +114,13 @@ async def list_clients_brief(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    q = select(Client).where(Client.is_archived == False)
-    if search:
-        q = q.where(
-            or_(
-                Client.name.ilike(f"%{search}%"),
-                Client.pib.ilike(f"%{search}%"),
-                Client.maticni_broj.ilike(f"%{search}%"),
-                Client.jbkjs.ilike(f"%{search}%"),
-            )
-        )
-    q = q.order_by(Client.name).limit(50)
-    result = await db.execute(q)
-    return [ClientBrief(id=client.id, name=client.name) for client in result.scalars().all()]
+    result = await db.execute(select(Client).where(Client.is_archived == False).order_by(Client.name))
+    clients = [
+        client
+        for client in result.scalars().all()
+        if not search or matches_search(search, *_client_search_fields(client))
+    ]
+    return [ClientBrief(id=client.id, name=client.name) for client in clients[:50]]
 
 
 def _try_normalize_identifier(value: str | None, identifier_type: Literal["pib", "maticni_broj"]) -> str | None:

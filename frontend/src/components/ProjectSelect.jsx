@@ -3,13 +3,9 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import { matchesSearch } from '../utils/searchUtils'
 
 const UI_DASH = '\u2014'
-
-function buildProjectLabel(project) {
-  if (!project) return ''
-  return project.code ? `${project.name} ${UI_DASH} ${project.code}` : project.name
-}
 
 export default function ProjectSelect({
   projects,
@@ -54,20 +50,15 @@ export default function ProjectSelect({
   )
 
   const filteredOptions = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase()
+    // Код проекта в выборе не нужен: проект узнают по названию и клиенту
     const items = liveProjects
       .filter((project) => project.status === 'active')
-      .filter((project) => {
-        if (!normalizedSearch) return true
-        return (
-          project.name?.toLocaleLowerCase().includes(normalizedSearch) ||
-          project.code?.toLocaleLowerCase().includes(normalizedSearch)
-        )
-      })
+      .filter((project) => matchesSearch(search, project.name, project.client_name))
       .map((project) => ({
         key: `project-${project.id}`,
         value: String(project.id),
-        label: buildProjectLabel(project),
+        label: project.name,
+        description: project.client_name,
         group: project.is_internal ? tr('internalProject') : tr('commercialProject'),
       }))
 
@@ -210,7 +201,7 @@ export default function ProjectSelect({
     }
   }
 
-  const selectedLabel = selectedProject ? buildProjectLabel(selectedProject) : allowEmpty ? emptyLabel : ''
+  const selectedLabel = selectedProject ? selectedProject.name : allowEmpty ? emptyLabel : ''
   const inputValue = isOpen ? search : selectedLabel
 
   return (
@@ -304,7 +295,14 @@ export default function ProjectSelect({
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => commitValue(option.value)}
                       >
-                        <span>{option.label}</span>
+                        {option.description ? (
+                          <span className="searchable-select-option-copy">
+                            <span>{option.label}</span>
+                            <span className="searchable-select-option-description">{option.description}</span>
+                          </span>
+                        ) : (
+                          <span>{option.label}</span>
+                        )}
                         {isSelected ? <Check aria-hidden="true" size={16} /> : null}
                       </button>
                     </div>

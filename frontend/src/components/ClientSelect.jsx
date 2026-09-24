@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { tr } from '../i18n'
+import { matchesSearch } from '../utils/searchUtils'
 
 const SEARCH_DELAY_MS = 220
 
@@ -75,8 +76,7 @@ export default function ClientSelect({ clients, value, onChange, onSelect, requi
 
     const requestId = searchRequestRef.current + 1
     searchRequestRef.current = requestId
-    const normalizedQuery = query.toLocaleLowerCase()
-    setOptions(clients.filter((client) => client.name?.toLocaleLowerCase().includes(normalizedQuery)))
+    setOptions(clients.filter((client) => matchesSearch(query, client.name)))
     setIsLoading(true)
     const timeoutId = window.setTimeout(() => {
       api.clients

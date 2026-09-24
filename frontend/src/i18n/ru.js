@@ -960,7 +960,7 @@ const ru = {
   projectProfit: 'Прибыль',
   projectRequired: 'Выберите проект',
   projectSearchNoResults: 'Проекты не найдены',
-  projectSearchPlaceholder: 'Введите название или код проекта...',
+  projectSearchPlaceholder: 'Введите название проекта или клиента...',
   projectPurchases: 'Покупки по чекам',
   projectPurchasesExportError: 'Не удалось экспортировать',
   projectPurchasesExportXlsx: 'Экспорт в XLSX',
