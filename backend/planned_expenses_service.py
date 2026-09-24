@@ -646,6 +646,63 @@ async def _history_plans_by_payout(
     return inactive, membership
 
 
+async def delete_planned_expense_with_settlements(db: AsyncSession, plan: PlannedExpense) -> None:
+    """Удалить план вместе со всем, что на него ссылается.
+
+    SQLite может выдать ID удалённого последним плана новому. Тогда оставшиеся
+    отметки погашения и запомненные на выплатах ID незаметно перешли бы к чужому
+    плану — поэтому убираем их вместе с планом, а выплаты раскладываем заново.
+    """
+    affected_workers = {plan.worker_id} if plan.worker_id else set()
+    rows = await db.execute(
+        select(WorkerPayout.worker_id)
+        .join(PlannedExpensePayment, PlannedExpensePayment.worker_payout_id == WorkerPayout.id)
+        .where(PlannedExpensePayment.planned_expense_id == plan.id)
+        .distinct()
+    )
+    affected_workers.update(worker_id for (worker_id,) in rows.fetchall() if worker_id)
+
+    await db.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.planned_expense_id == plan.id))
+    remembering = await db.execute(select(WorkerPayout).where(WorkerPayout.settled_plan_ids.is_not(None)))
+    for payout in remembering.scalars():
+        known = payout_settled_plan_ids(payout)
+        if plan.id in known:
+            payout.settled_plan_ids = json.dumps(sorted(known - {plan.id})) if len(known) > 1 else None
+            affected_workers.add(payout.worker_id)
+    await db.delete(plan)
+    await db.flush()
+
+    for worker_id in sorted(affected_workers):
+        await resync_worker_salary_settlements(db, worker_id)
+
+
+async def set_payout_settled_plans(db: AsyncSession, payout: WorkerPayout, plan_ids: list[int]) -> None:
+    """Вручную указать, к каким планам зарплаты относится выплата.
+
+    Нужно для старых выплат, у которых отметки погашения пропали до того, как
+    принадлежность стали хранить на самой выплате, и по датам планов её не
+    определить однозначно. Принимаются только планы того же работника.
+    """
+    requested = set(plan_ids)
+    if requested:
+        own = {
+            plan_id
+            for (plan_id,) in (
+                await db.execute(
+                    select(PlannedExpense.id).where(
+                        PlannedExpense.id.in_(requested), PlannedExpense.worker_id == payout.worker_id
+                    )
+                )
+            ).fetchall()
+        }
+        foreign = requested - own
+        if foreign:
+            raise ValueError(f"Plans {sorted(foreign)} do not belong to this worker")
+    payout.settled_plan_ids = json.dumps(sorted(requested)) if requested else None
+    await db.flush()
+    await resync_worker_salary_settlements(db, payout.worker_id)
+
+
 async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | None) -> None:
     """Пересобрать погашения плановой зарплаты работника целиком.
 

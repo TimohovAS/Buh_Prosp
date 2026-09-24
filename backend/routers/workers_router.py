@@ -29,9 +29,11 @@ from backend.receipt_service import sync_receipt_project_from_expense
 from backend.models import CashEntry, Expense, Project, TransactionCategory, User, Worker, WorkerPayout
 from backend.planned_expenses_service import (
     SALARY_SETTLING_PAYOUT_TYPES,
+    payout_settled_plan_ids,
     resync_worker_salary_settlements,
     salary_remaining_for_payout,
     salary_window_balance,
+    set_payout_settled_plans,
     sync_worker_payout_planned_payment,
     sync_worker_salary_plan,
 )
@@ -46,6 +48,7 @@ from backend.schemas import (
     WorkerPayoutPreview,
     WorkerPayoutReport,
     WorkerPayoutResponse,
+    WorkerPayoutSettledPlans,
     WorkerPayoutSummary,
     WorkerResponse,
     WorkerSalaryRemaining,
@@ -435,6 +438,7 @@ def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
         expense_id=payout.expense_id,
         payout_type=payout.payout_type,
         origin=payout.origin or "calculated",
+        settled_plan_ids=sorted(payout_settled_plan_ids(payout)),
         date=payout.date,
         period_start=payout.period_start,
         period_end=payout.period_end,
@@ -999,6 +1003,33 @@ async def update_worker_payout_link(
         payout=_serialize_worker_payout(payout),
         cash_entry=_serialize_cash_entry(entry, payout) if entry else None,
     )
+
+
+@router.put("/payouts/{payout_id}/settled-plans", response_model=WorkerPayoutResponse)
+async def update_worker_payout_settled_plans(
+    payout_id: int,
+    data: WorkerPayoutSettledPlans,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Указать вручную, к каким планам зарплаты относится выплата.
+
+    Для старых записей, у которых по датам планов принадлежность не определить
+    однозначно: миграция перечисляет такие выплаты, а здесь её можно задать.
+    """
+    result = await db.execute(
+        select(WorkerPayout).options(selectinload(WorkerPayout.worker)).where(WorkerPayout.id == payout_id)
+    )
+    payout = result.scalar_one_or_none()
+    if not payout:
+        raise HTTPException(404, "Worker payout not found")
+    try:
+        await set_payout_settled_plans(db, payout, data.plan_ids)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await db.commit()
+    await db.refresh(payout, ["worker"])
+    return _serialize_worker_payout(payout)
 
 
 @router.delete("/payouts/{payout_id}/link")

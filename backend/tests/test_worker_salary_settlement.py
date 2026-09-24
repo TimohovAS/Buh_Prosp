@@ -1,5 +1,6 @@
 """Зарплата за месяц закрывается частями: деньгами и покупками в её счёт."""
 
+import json
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
@@ -1055,3 +1056,103 @@ async def test_a_round_trip_through_a_trip_type_keeps_the_payout_on_its_plan(cli
         assert changed.status_code == 200, changed.text
 
     assert await marks_of(db_session, payout["id"]) == [(first_plan.id, DUE_DATE)]
+
+
+async def test_a_deleted_plan_id_reused_by_a_new_plan_does_not_inherit_the_payout(client, db_session):
+    worker, first_plan, expense = await two_plans_on_the_same_payday(db_session)
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+    stored = (await db_session.execute(select(WorkerPayout).where(WorkerPayout.id == payout["id"]))).scalar_one()
+    assert first_plan.id in json.loads(stored.settled_plan_ids)
+    deleted_id = first_plan.id
+
+    removed = await client.delete(f"/api/planned-expenses/{deleted_id}")
+    assert removed.status_code == 200
+    # SQLite выдаёт ID удалённого последним плана новому — повторяем это явно.
+    reused = PlannedExpense(
+        id=deleted_id,
+        name="Someone else's plan",
+        amount=Decimal("5000.00"),
+        currency="RSD",
+        period="monthly",
+        payment_day=DUE_DATE.day,
+        start_date=date(2026, 1, 5),
+        is_active=False,
+        worker_id=worker.id,
+    )
+    db_session.add(reused)
+    await db_session.flush()
+    await sync_worker_payout_planned_payment(db_session, stored)
+
+    assert stored.settled_plan_ids is None
+    assert await marks_of(db_session, payout["id"]) == []
+
+
+async def test_the_plan_of_an_old_payout_can_be_set_by_hand(client, db_session):
+    worker, first_plan, expense = await two_plans_on_the_same_payday(db_session)
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+    first_plan.is_active = False
+    second_plan = PlannedExpense(
+        name="Andrei Timokhov",
+        amount=SALARY,
+        currency="RSD",
+        period="monthly",
+        payment_day=DUE_DATE.day,
+        start_date=date(2026, 1, 5),
+        is_active=True,
+        worker_id=worker.id,
+    )
+    db_session.add(second_plan)
+    await db_session.flush()
+    stored = (await db_session.execute(select(WorkerPayout).where(WorkerPayout.id == payout["id"]))).scalar_one()
+    # Как у старой выплаты: ни отметки, ни списка планов — связь потеряна.
+    stored.settled_plan_ids = None
+    await db_session.execute(
+        delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout["id"])
+    )
+    await sync_worker_payout_planned_payment(db_session, stored)
+    assert await marks_of(db_session, payout["id"]) == [(second_plan.id, DUE_DATE)]
+
+    fixed = await client.put(f"/api/workers/payouts/{payout['id']}/settled-plans", json={"plan_ids": [first_plan.id]})
+
+    assert fixed.status_code == 200
+    assert fixed.json()["settled_plan_ids"] == [first_plan.id]
+    assert await marks_of(db_session, payout["id"]) == [(first_plan.id, DUE_DATE)]
+
+
+async def test_a_plan_of_another_worker_cannot_be_set_by_hand(client, db_session):
+    worker, _, expense = await two_plans_on_the_same_payday(db_session)
+    other = Worker(name="Other")
+    db_session.add(other)
+    await db_session.flush()
+    foreign = PlannedExpense(
+        name="Other",
+        amount=SALARY,
+        currency="RSD",
+        period="monthly",
+        payment_day=5,
+        start_date=date(2026, 1, 5),
+        is_active=True,
+        worker_id=other.id,
+    )
+    db_session.add(foreign)
+    await db_session.flush()
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+
+    refused = await client.put(f"/api/workers/payouts/{payout['id']}/settled-plans", json={"plan_ids": [foreign.id]})
+
+    assert refused.status_code == 400

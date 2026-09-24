@@ -2098,6 +2098,7 @@ class WorkerPayoutResponse(BaseModel):
     payout_type: str
     # calculated — посчитана по ставкам; expense_link — привязанный расход.
     origin: str = "calculated"
+    settled_plan_ids: list[int] = Field(default_factory=list)
     date: DateType
     period_start: Optional[DateType] = None
     period_end: Optional[DateType] = None
@@ -2168,6 +2169,12 @@ class WorkerSalaryRemaining(BaseModel):
     remaining: Decimal = Decimal("0")
     settled: Decimal = Decimal("0")
     due_dates: list[DateType] = Field(default_factory=list)
+
+
+class WorkerPayoutSettledPlans(BaseModel):
+    """Планы зарплаты, к которым относится выплата."""
+
+    plan_ids: list[int] = Field(default_factory=list)
 
 
 class WorkerPayoutPreview(BaseModel):

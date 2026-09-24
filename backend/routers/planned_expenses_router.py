@@ -12,6 +12,7 @@ from backend.db_utils import get_category_or_none, get_unassigned_project_id
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from backend.models import PlannedExpense, PlannedExpensePayment, User, Worker
 from backend.planned_expenses_service import (
+    delete_planned_expense_with_settlements,
     occurrence_remaining,
     payment_dates_in_range,
     resync_worker_salary_settlements,
@@ -300,6 +301,6 @@ async def delete_planned_expense(
     pe = r.scalar_one_or_none()
     if not pe:
         raise HTTPException(404, "Планируемый расход не найден")
-    await db.delete(pe)
+    await delete_planned_expense_with_settlements(db, pe)
     await db.commit()
     return {"ok": True}
