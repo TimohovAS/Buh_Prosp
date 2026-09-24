@@ -10,6 +10,7 @@ from decimal import Decimal
 from backend.decimal_utils import ZERO_DECIMAL, to_decimal
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.models import PlannedExpense, PlannedExpensePayment, Worker, WorkerPayout
 
@@ -596,8 +597,117 @@ def _settlement_view(plan: PlannedExpense) -> SimpleNamespace:
     )
 
 
+def plans_for_payout_day(plans: list, payout) -> list:
+    """Планы, чей платёж закрыла бы выплата: ближайший, а с периодом — все в нём.
+
+    Считает по датам планов без учёта выключенности; нужна, чтобы найти старые
+    выплаты, которые могли относиться к выключенному плану. Используется и
+    приложением, и миграцией.
+    """
+    payout_date = _to_date(payout.date)
+    period_start, period_end = _to_date(payout.period_start), _to_date(payout.period_end)
+    window_start = period_start or (payout_date - timedelta(days=45))
+    window_end = period_end or (payout_date + timedelta(days=14))
+    if window_end < window_start:
+        window_start = window_end = payout_date
+    pairs = [
+        (plan, due_date)
+        for plan in plans
+        for due_date in payment_dates_in_range(
+            SimpleNamespace(**{**_plan_fields(plan), "is_active": True}), window_start, window_end, limit=24
+        )
+    ]
+    if not pairs:
+        return []
+    if period_start and period_end:
+        return list({plan.id: plan for plan, _ in pairs}.values())
+    nearest = min(abs((due_date - payout_date).days) for _, due_date in pairs)
+    closest = [(plan, due_date) for plan, due_date in pairs if abs((due_date - payout_date).days) == nearest]
+    first_date = min(due_date for _, due_date in closest)
+    return list({plan.id: plan for plan, due_date in closest if due_date == first_date}.values())
+
+
+def _to_date(value) -> date | None:
+    """Дата из ORM-объекта или из строки базы (в миграции)."""
+    if value is None or isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+def _plan_fields(plan) -> dict:
+    return {
+        "id": plan.id,
+        "amount": plan.amount,
+        "period": plan.period,
+        "payment_day": plan.payment_day,
+        "payment_day_of_week": plan.payment_day_of_week,
+        "start_date": plan.start_date,
+        "end_date": plan.end_date,
+    }
+
+
+@dataclass(frozen=True)
+class PayoutPlanReview:
+    """Старая выплата, чья принадлежность к выключенному плану не подтверждена."""
+
+    payout_id: int
+    worker_id: int
+    worker_name: str
+    payout_type: str
+    date: date
+    cancelled: bool
+    candidate_plan_ids: tuple[int, ...]
+
+
+async def payouts_awaiting_plan_review(db: AsyncSession) -> list[PayoutPlanReview]:
+    """Выплаты, которым нужно вручную указать план зарплаты.
+
+    Это старые записи без подтверждающей отметки (список планов — NULL), чей
+    день выплаты приходится на выключенный план. По одной дате принадлежность не
+    доказать, поэтому решение за человеком: PUT /workers/payouts/{id}/settled-plans.
+    """
+    payouts = (
+        await db.execute(
+            select(WorkerPayout)
+            .options(selectinload(WorkerPayout.worker))
+            .where(WorkerPayout.settled_plan_ids.is_(None))
+            .order_by(WorkerPayout.date.asc(), WorkerPayout.id.asc())
+        )
+    ).scalars()
+    plans_by_worker: dict[int, list[PlannedExpense]] = {}
+    for plan in (
+        await db.execute(
+            select(PlannedExpense).where(PlannedExpense.worker_id.is_not(None)).order_by(PlannedExpense.id)
+        )
+    ).scalars():
+        plans_by_worker.setdefault(plan.worker_id, []).append(plan)
+
+    review = []
+    for payout in payouts:
+        plans = plans_by_worker.get(payout.worker_id) or []
+        candidates = plans_for_payout_day(plans, payout) if payout.date else []
+        if any(not plan.is_active for plan in candidates):
+            review.append(
+                PayoutPlanReview(
+                    payout_id=payout.id,
+                    worker_id=payout.worker_id,
+                    worker_name=getattr(payout.worker, "name", "") or "",
+                    payout_type=payout.payout_type,
+                    date=payout.date,
+                    cancelled=payout.cancelled_at is not None,
+                    candidate_plan_ids=tuple(sorted(plan.id for plan in candidates)),
+                )
+            )
+    return review
+
+
 def payout_settled_plan_ids(payout: WorkerPayout) -> set[int]:
-    """Планы зарплаты, которые выплата когда-либо закрывала."""
+    """Планы зарплаты, которые выплата когда-либо закрывала.
+
+    Пустой список — принадлежность известна: ни к какому плану. NULL бывает
+    только у старых выплат, чья связь с планом не подтверждена отметкой: их
+    перечисляет проверка payouts_awaiting_plan_review.
+    """
     try:
         return {int(plan_id) for plan_id in json.loads(payout.settled_plan_ids or "[]")}
     except (TypeError, ValueError):
@@ -615,10 +725,10 @@ async def _history_plans_by_payout(
 ) -> tuple[dict[int, SimpleNamespace], dict[int, set[int]]]:
     """Какие выключенные планы работника уже закрывала каждая из его выплат.
 
-    Берём из списка на самой выплате: отметки погашения при сторно или смене
-    типа исчезают, а принадлежность к плану должна их пережить, иначе после
-    отмены сторно выплата ушла бы на другой план. Отметки учитываем тоже — на
-    случай записей, сделанных до появления списка.
+    Единственный источник — список на самой выплате: отметки погашения при
+    сторно или смене типа исчезают, а принадлежность должна их пережить. Отметки
+    тут не читаем: иначе старая отметка возвращала бы план, который человек
+    вручную убрал из списка.
     """
     inactive = {
         plan.id: _settlement_view(plan)
@@ -635,14 +745,6 @@ async def _history_plans_by_payout(
         remembered = payout_settled_plan_ids(payout) & inactive.keys()
         if remembered:
             membership.setdefault(payout.id, set()).update(remembered)
-    rows = await db.execute(
-        select(PlannedExpensePayment.worker_payout_id, PlannedExpensePayment.planned_expense_id)
-        .where(PlannedExpensePayment.worker_payout_id.in_([payout.id for payout in payouts]))
-        .where(PlannedExpensePayment.planned_expense_id.in_(inactive.keys()))
-        .distinct()
-    )
-    for payout_id, plan_id in rows.fetchall():
-        membership.setdefault(payout_id, set()).add(plan_id)
     return inactive, membership
 
 
@@ -667,7 +769,7 @@ async def delete_planned_expense_with_settlements(db: AsyncSession, plan: Planne
     for payout in remembering.scalars():
         known = payout_settled_plan_ids(payout)
         if plan.id in known:
-            payout.settled_plan_ids = json.dumps(sorted(known - {plan.id})) if len(known) > 1 else None
+            payout.settled_plan_ids = json.dumps(sorted(known - {plan.id}))
             affected_workers.add(payout.worker_id)
     await db.delete(plan)
     await db.flush()
@@ -698,7 +800,9 @@ async def set_payout_settled_plans(db: AsyncSession, payout: WorkerPayout, plan_
         foreign = requested - own
         if foreign:
             raise ValueError(f"Plans {sorted(foreign)} do not belong to this worker")
-    payout.settled_plan_ids = json.dumps(sorted(requested)) if requested else None
+    # Указанный список — решение человека, он и есть источник: пустой означает
+    # «ни к какому плану» и снимает выплату с проверки.
+    payout.settled_plan_ids = json.dumps(sorted(requested))
     await db.flush()
     await resync_worker_salary_settlements(db, payout.worker_id)
 

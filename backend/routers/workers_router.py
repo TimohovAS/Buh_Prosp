@@ -30,6 +30,7 @@ from backend.models import CashEntry, Expense, Project, TransactionCategory, Use
 from backend.planned_expenses_service import (
     SALARY_SETTLING_PAYOUT_TYPES,
     payout_settled_plan_ids,
+    payouts_awaiting_plan_review,
     resync_worker_salary_settlements,
     salary_remaining_for_payout,
     salary_window_balance,
@@ -45,6 +46,7 @@ from backend.schemas import (
     WorkerPayoutCreateResponse,
     WorkerPayoutLinkUpdate,
     WorkerPayoutMonthlySummary,
+    WorkerPayoutPlanReview,
     WorkerPayoutPreview,
     WorkerPayoutReport,
     WorkerPayoutResponse,
@@ -757,6 +759,32 @@ async def get_worker_payout_report(
         months=months,
         items=[_serialize_worker_payout(item) for item in result.scalars().all()],
     )
+
+
+@router.get("/payouts/plan-review", response_model=list[WorkerPayoutPlanReview])
+async def list_payouts_for_plan_review(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Старые выплаты, чья принадлежность к выключенному плану не подтверждена.
+
+    По одной дате её не доказать, поэтому миграция ничего не угадывает, а
+    оставляет такие выплаты здесь. План задаётся вручную через
+    PUT /workers/payouts/{id}/settled-plans — пустой список тоже снимает выплату
+    с проверки. Список можно смотреть сколько угодно раз.
+    """
+    return [
+        WorkerPayoutPlanReview(
+            payout_id=item.payout_id,
+            worker_id=item.worker_id,
+            worker_name=item.worker_name,
+            payout_type=item.payout_type,
+            date=item.date,
+            cancelled=item.cancelled,
+            candidate_plan_ids=list(item.candidate_plan_ids),
+        )
+        for item in await payouts_awaiting_plan_review(db)
+    ]
 
 
 @router.get("/payouts/{payout_id}", response_model=WorkerPayoutResponse)

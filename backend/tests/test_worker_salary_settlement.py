@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from backend.auth import get_current_user_required, require_edit_access
 from backend.database import get_db
@@ -593,6 +593,7 @@ async def test_resync_keeps_settlements_of_a_switched_off_plan(client, db_sessio
     db_session.add(old_plan)
     await db_session.flush()
     payout = await add_money_payout(db_session, worker, MONEY, payout_date=date(2026, 7, 5))
+    payout.settled_plan_ids = json.dumps([old_plan.id])
     db_session.add(
         PlannedExpensePayment(
             planned_expense_id=old_plan.id,
@@ -772,6 +773,7 @@ async def history_mark_on_switched_off_plan(db, worker, *, amount):
         remaining_amount=Decimal("0"),
         description="Andrei Timokhov",
         origin="expense_link",
+        settled_plan_ids=json.dumps([old_plan.id]),
     )
     db.add(payout)
     await db.flush()
@@ -1088,7 +1090,8 @@ async def test_a_deleted_plan_id_reused_by_a_new_plan_does_not_inherit_the_payou
     await db_session.flush()
     await sync_worker_payout_planned_payment(db_session, stored)
 
-    assert stored.settled_plan_ids is None
+    # Связь с удалённым планом забыта: новый план под тем же ID ей не наследник.
+    assert json.loads(stored.settled_plan_ids) == []
     assert await marks_of(db_session, payout["id"]) == []
 
 
@@ -1156,3 +1159,108 @@ async def test_a_plan_of_another_worker_cannot_be_set_by_hand(client, db_session
     refused = await client.put(f"/api/workers/payouts/{payout['id']}/settled-plans", json={"plan_ids": [foreign.id]})
 
     assert refused.status_code == 400
+
+
+async def payout_marked_on_plan_five(client, db_session):
+    """Выплата уже отмечена на выключенном плане, рядом ещё два плана на тот же день."""
+    worker = await make_worker_with_salary_plan(db_session)
+    plan_one = (await db_session.execute(select(PlannedExpense))).scalar_one()
+
+    def same_day_plan(active):
+        return PlannedExpense(
+            name="Andrei Timokhov",
+            amount=SALARY,
+            currency="RSD",
+            period="monthly",
+            payment_day=DUE_DATE.day,
+            start_date=date(2026, 1, 5),
+            is_active=active,
+            worker_id=worker.id,
+        )
+
+    plan_five, plan_six = same_day_plan(False), same_day_plan(False)
+    db_session.add_all([plan_five, plan_six])
+    await db_session.flush()
+    _, _, payout = await history_mark_on_switched_off_plan(db_session, worker, amount="40000.00")
+    # Переносим историю выплаты на «план №5» с днём платежа на её дату.
+    await db_session.execute(delete(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id))
+    payout.date = DUE_DATE
+    payout.settled_plan_ids = json.dumps([plan_five.id])
+    await sync_worker_payout_planned_payment(db_session, payout)
+    assert await marks_of(db_session, payout.id) == [(plan_five.id, DUE_DATE)]
+    return worker, payout, plan_one, plan_five, plan_six
+
+
+async def test_setting_plans_by_hand_overrides_an_existing_mark(client, db_session):
+    _, payout, _, plan_five, plan_six = await payout_marked_on_plan_five(client, db_session)
+
+    moved = await client.put(f"/api/workers/payouts/{payout.id}/settled-plans", json={"plan_ids": [plan_six.id]})
+
+    assert moved.status_code == 200
+    # Старая отметка на №5 не возвращает его в список: решение человека главнее.
+    assert moved.json()["settled_plan_ids"] == [plan_six.id]
+    assert await marks_of(db_session, payout.id) == [(plan_six.id, DUE_DATE)]
+
+
+async def test_an_empty_list_by_hand_removes_the_switched_off_plan(client, db_session):
+    _, payout, plan_one, plan_five, _ = await payout_marked_on_plan_five(client, db_session)
+
+    cleared = await client.put(f"/api/workers/payouts/{payout.id}/settled-plans", json={"plan_ids": []})
+
+    assert cleared.status_code == 200
+    # Связь с выключенным планом снята — выплата ложится на действующий, и в
+    # списке теперь он, а не №5.
+    assert cleared.json()["settled_plan_ids"] == [plan_one.id]
+    assert await marks_of(db_session, payout.id) == [(plan_one.id, DUE_DATE)]
+
+
+async def test_old_payouts_without_a_confirmed_plan_wait_for_review(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    plan = (await db_session.execute(select(PlannedExpense))).scalar_one()
+    plan.is_active = False
+    await db_session.flush()
+
+    def legacy(payout_type, cancelled):
+        return WorkerPayout(
+            worker_id=worker.id,
+            payout_type=payout_type,
+            date=DUE_DATE,
+            gross_amount=MONEY,
+            cash_paid_amount=MONEY,
+            remaining_amount=Decimal("0"),
+            description="legacy",
+            cancelled_at=date(2026, 9, 10) if cancelled else None,
+        )
+
+    reversed_salary, former_salary_now_trip = legacy("monthly", True), legacy("trip_final", False)
+    fresh_trip = WorkerPayout(
+        worker_id=worker.id,
+        payout_type="trip_final",
+        date=DUE_DATE,
+        gross_amount=MONEY,
+        cash_paid_amount=MONEY,
+        remaining_amount=Decimal("0"),
+        description="new",
+    )
+    db_session.add_all([reversed_salary, former_salary_now_trip, fresh_trip])
+    await db_session.flush()
+    # NULL бывает только у строк, что были до миграции: так их и получаем.
+    await db_session.execute(
+        update(WorkerPayout)
+        .where(WorkerPayout.id.in_([reversed_salary.id, former_salary_now_trip.id]))
+        .values(settled_plan_ids=None)
+    )
+    await db_session.flush()
+
+    review = (await client.get("/api/workers/payouts/plan-review")).json()
+
+    # Ни сторнированную, ни ставшую командировочной не угадываем — обе на проверку.
+    assert [item["payout_id"] for item in review] == [reversed_salary.id, former_salary_now_trip.id]
+    assert review[0]["candidate_plan_ids"] == [plan.id]
+    # Новая выплата создаётся с «[]» и на проверку не попадает.
+    assert fresh_trip.settled_plan_ids == "[]"
+
+    await client.put(f"/api/workers/payouts/{reversed_salary.id}/settled-plans", json={"plan_ids": [plan.id]})
+    await client.put(f"/api/workers/payouts/{former_salary_now_trip.id}/settled-plans", json={"plan_ids": []})
+
+    assert (await client.get("/api/workers/payouts/plan-review")).json() == []

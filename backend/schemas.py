@@ -2171,6 +2171,18 @@ class WorkerSalaryRemaining(BaseModel):
     due_dates: list[DateType] = Field(default_factory=list)
 
 
+class WorkerPayoutPlanReview(BaseModel):
+    """Старая выплата, которой нужно вручную указать план зарплаты."""
+
+    payout_id: int
+    worker_id: int
+    worker_name: str
+    payout_type: str
+    date: DateType
+    cancelled: bool
+    candidate_plan_ids: list[int]
+
+
 class WorkerPayoutSettledPlans(BaseModel):
     """Планы зарплаты, к которым относится выплата."""
 

@@ -177,7 +177,9 @@ class WorkerPayout(Base):
     # Планы зарплаты, которые выплата когда-либо закрывала (JSON-список id). Отметки
     # погашения пересчитываются и при сторно или смене типа исчезают, а по этому
     # списку выплата после отмены сторно возвращается на свой прежний план.
-    settled_plan_ids = Column(Text, nullable=True)
+    # "[]" — не относится ни к какому плану; NULL — старая выплата, чью связь
+    # не подтвердила ни одна отметка: её нужно проверить вручную.
+    settled_plan_ids = Column(Text, nullable=True, default="[]")
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
