@@ -43,6 +43,7 @@ from backend.schemas import (
     WorkerPayoutCreateResponse,
     WorkerPayoutLinkUpdate,
     WorkerPayoutMonthlySummary,
+    WorkerPayoutPreview,
     WorkerPayoutReport,
     WorkerPayoutResponse,
     WorkerPayoutSummary,
@@ -593,6 +594,50 @@ async def list_worker_payouts(
         query = query.where(WorkerPayout.worker_id == worker_id)
     result = await db.execute(query.order_by(WorkerPayout.date.desc(), WorkerPayout.id.desc()).limit(limit))
     return [_serialize_worker_payout(item) for item in result.scalars().all()]
+
+
+@router.post("/payouts/preview", response_model=WorkerPayoutPreview)
+async def preview_worker_payout(
+    data: WorkerPayoutCreate,
+    payout_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Посчитать выплату так, как её сохранит сервер, ничего не сохраняя.
+
+    Форма показывает отсюда начислено, к выдаче и остаток: у пустого поля суммы
+    сервер сам решает, сколько выдать, и видимое число обязано совпасть с
+    сохранённым, при любом типе, ставке и периоде.
+    """
+    worker = await _get_worker_or_404(db, data.worker_id)
+    salary_remaining = await _salary_remaining(db, worker.id, data, exclude_payout_id=payout_id)
+    calc = _calculate_payout(worker, data, salary_remaining)
+    balance = None
+    if data.payout_type in SALARY_SETTLING_PAYOUT_TYPES:
+        window = await salary_window_balance(
+            db,
+            worker_id=worker.id,
+            payout_date=data.date,
+            period_start=data.period_start,
+            period_end=data.period_end,
+            exclude_payout_id=payout_id,
+        )
+        if window is not None:
+            balance = WorkerSalaryRemaining(
+                has_plan=True,
+                remaining=window.remaining,
+                settled=window.settled,
+                due_dates=list(window.due_dates),
+            )
+    return WorkerPayoutPreview(
+        gross_amount=calc["gross_amount"],
+        cash_paid_amount=calc["cash_paid_amount"],
+        remaining_amount=calc["remaining_amount"],
+        fully_settled=(
+            data.cash_paid_amount is None and salary_remaining is not None and salary_remaining <= ZERO_DECIMAL
+        ),
+        salary=balance,
+    )
 
 
 @router.get("/payouts/report", response_model=WorkerPayoutReport)

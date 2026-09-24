@@ -1,10 +1,10 @@
-// Сколько отправить в cash_paid_amount. Пустое поле и нетронутый остаток,
-// подставленный формой, уходят как null: сервер сам посчитает остаток по тем
-// дате, работнику и периоду, что уходят сейчас. Иначе число, оставшееся от
-// прежних дат, ушло бы как введённое явно, и сервер его уже не пересчитал бы.
-export const payoutCashForSubmit = (fieldValue, autoFilledValue) => {
+// Сколько отправить в cash_paid_amount. В поле — только то, что ввёл человек:
+// пустое поле уходит как null, и сумму считает сервер (форма показывает его же
+// расчёт для текущего черновика). Скрытых подставленных чисел нет, поэтому
+// видимое и сохранённое не могут разойтись.
+export const payoutCashForSubmit = (fieldValue) => {
   const value = String(fieldValue ?? '').trim()
-  if (value === '' || (autoFilledValue && value === String(autoFilledValue))) return null
+  if (value === '') return null
   const amount = Number(value)
   return Number.isFinite(amount) ? amount : null
 }

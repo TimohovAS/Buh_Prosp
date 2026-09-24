@@ -52,6 +52,11 @@ def _plan_stub(row) -> SimpleNamespace:
     )
 
 
+def _active_view(plan: SimpleNamespace) -> SimpleNamespace:
+    """Выключенный план глазами раскладки: действующим в его датах."""
+    return SimpleNamespace(**{**vars(plan), "is_active": True})
+
+
 def _month_bounds(day: date) -> tuple[date, date]:
     first = day.replace(day=1)
     next_month = (first + timedelta(days=32)).replace(day=1)
@@ -79,77 +84,21 @@ def upgrade() -> None:
             {"start": period_start.isoformat(), "end": period_end.isoformat(), "id": int(row.id)},
         )
 
-    plans_by_worker: dict[int, list[SimpleNamespace]] = {}
-    # Булев параметр, а не «= 1»: на PostgreSQL столбец логический.
+    # Все планы работников: выключенные тоже — выплата, которая уже закрывала
+    # такой план, продолжает к нему относиться. Новые выплаты на них не ложатся.
+    plans_by_id: dict[int, SimpleNamespace] = {}
+    active_by_worker: dict[int, list[SimpleNamespace]] = {}
     for row in connection.execute(
         sa.text(
             "SELECT id, worker_id, amount, period, payment_day, payment_day_of_week,"
             " start_date, end_date, is_active"
-            " FROM planned_expenses WHERE is_active = :active AND worker_id IS NOT NULL"
-        ),
-        {"active": True},
+            " FROM planned_expenses WHERE worker_id IS NOT NULL ORDER BY id"
+        )
     ):
         plan = _plan_stub(row)
-        plans_by_worker.setdefault(plan.worker_id, []).append(plan)
-    active_plan_ids = [plan.id for plans in plans_by_worker.values() for plan in plans]
-
-    # Пересобираем погашения активных планов. Отметки своих выключенных планов —
-    # история (например, архивный период): их оставляем, а засчитанные туда деньги
-    # второй раз не раскладываем. Отметка на плане другого работника осталась от
-    # перенесённой выплаты, а у погашенной сторно выплаты денег нет — такие
-    # снимаем всегда, даже если активных планов нет вовсе.
-    settling_list = ", ".join(f"'{item}'" for item in SETTLING_TYPES)
-    stale_conditions = [
-        # У погашенной сторно и у незарплатной выплаты денег на погашение нет.
-        "worker_payout_id IN (SELECT id FROM worker_payouts WHERE cancelled_at IS NOT NULL"
-        f" OR payout_type NOT IN ({settling_list}))",
-        "EXISTS (SELECT 1 FROM planned_expenses pe, worker_payouts wp"
-        " WHERE pe.id = planned_expense_payments.planned_expense_id"
-        " AND wp.id = planned_expense_payments.worker_payout_id"
-        " AND (pe.worker_id IS NULL OR pe.worker_id <> wp.worker_id))",
-    ]
-    if active_plan_ids:
-        stale_conditions.append(f"planned_expense_id IN ({', '.join(str(item) for item in active_plan_ids)})")
-    connection.execute(
-        sa.text(
-            "DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"
-            f" AND ({' OR '.join(stale_conditions)})"
-        )
-    )
-    # Оставшиеся отметки — история выключенных планов. Погашение не может быть
-    # больше самой выплаты: если её потом уменьшили, урезаем историю до суммы.
-    paid_by_payout = {
-        int(row.id): Decimal(str(row.cash_paid_amount or 0))
-        for row in connection.execute(sa.text("SELECT id, cash_paid_amount FROM worker_payouts"))
-    }
-    booked_elsewhere: dict[int, Decimal] = {}
-    for row in connection.execute(
-        sa.text(
-            "SELECT id, worker_payout_id, amount FROM planned_expense_payments"
-            " WHERE worker_payout_id IS NOT NULL ORDER BY due_date ASC, id ASC"
-        )
-    ).fetchall():
-        payout_id = int(row.worker_payout_id)
-        budget = paid_by_payout.get(payout_id, ZERO) - booked_elsewhere.get(payout_id, ZERO)
-        amount = Decimal(str(row.amount or 0))
-        if budget <= ZERO:
-            connection.execute(sa.text("DELETE FROM planned_expense_payments WHERE id = :id"), {"id": int(row.id)})
-            continue
-        if amount > budget:
-            connection.execute(
-                sa.text("UPDATE planned_expense_payments SET amount = :amount WHERE id = :id"),
-                {"amount": str(budget), "id": int(row.id)},
-            )
-            amount = budget
-        booked_elsewhere[payout_id] = booked_elsewhere.get(payout_id, ZERO) + amount
-
-    if not plans_by_worker:
-        return
-
-    settled: dict[tuple[int, date], Decimal] = {}
-    for row in connection.execute(sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")):
-        key = (int(row.planned_expense_id), _as_date(row.due_date))
-        settled[key] = settled.get(key, ZERO) + Decimal(str(row.amount or 0))
+        plans_by_id[plan.id] = plan
+        if plan.is_active:
+            active_by_worker.setdefault(plan.worker_id, []).append(plan)
 
     placeholders = ", ".join(f"'{item}'" for item in SETTLING_TYPES)
     payouts = connection.execute(
@@ -159,11 +108,38 @@ def upgrade() -> None:
             " ORDER BY date ASC, id ASC"
         )
     ).fetchall()
+    settling_worker = {int(row.id): int(row.worker_id or 0) for row in payouts}
+
+    # К какому своему выключенному плану выплата уже относилась.
+    history: dict[int, list[SimpleNamespace]] = {}
+    for row in connection.execute(
+        sa.text(
+            "SELECT DISTINCT worker_payout_id, planned_expense_id FROM planned_expense_payments"
+            " WHERE worker_payout_id IS NOT NULL ORDER BY planned_expense_id"
+        )
+    ):
+        plan = plans_by_id.get(int(row.planned_expense_id))
+        payout_id = int(row.worker_payout_id)
+        if plan and not plan.is_active and settling_worker.get(payout_id) == plan.worker_id:
+            history.setdefault(payout_id, []).append(plan)
+
+    # Все автоматические отметки — производные от выплат: сносим и собираем заново.
+    # Вместе с ними уходят отметки перенесённых, погашенных и незарплатных выплат.
+    connection.execute(sa.text("DELETE FROM planned_expense_payments WHERE worker_payout_id IS NOT NULL"))
+
+    settled: dict[tuple[int, date], Decimal] = {}
+    for row in connection.execute(sa.text("SELECT planned_expense_id, due_date, amount FROM planned_expense_payments")):
+        key = (int(row.planned_expense_id), _as_date(row.due_date))
+        settled[key] = settled.get(key, ZERO) + Decimal(str(row.amount or 0))
 
     created = 0
     for payout in payouts:
-        plans = plans_by_worker.get(int(payout.worker_id or 0)) or []
-        left = Decimal(str(payout.cash_paid_amount or 0)) - booked_elsewhere.get(int(payout.id), ZERO)
+        # Свой прежний план — первым: при равной дате выплата остаётся на нём.
+        plans = [
+            *(_active_view(plan) for plan in history.get(int(payout.id), [])),
+            *active_by_worker.get(int(payout.worker_id or 0), []),
+        ]
+        left = Decimal(str(payout.cash_paid_amount or 0))
         payout_date = _as_date(payout.date)
         if not plans or left <= ZERO or payout_date is None:
             continue
@@ -176,14 +152,15 @@ def upgrade() -> None:
         if window_end < window_start:
             window_start = window_end = payout_date
 
-        pairs = sorted(
+        ordered = sorted(
             (
-                (plan, due_date)
-                for plan in plans
+                (priority, plan, due_date)
+                for priority, plan in enumerate(plans)
                 for due_date in payment_dates_in_range(plan, window_start, window_end, limit=24)
             ),
-            key=lambda pair: (abs((pair[1] - payout_date).days), pair[1] > payout_date, pair[1], pair[0].id),
+            key=lambda item: (abs((item[2] - payout_date).days), item[2] > payout_date, item[2], item[0]),
         )
+        pairs = [(plan, due_date) for _, plan, due_date in ordered]
         # Без периода — только ближайший платёж, даже закрытый: в соседний месяц
         # выплата не перекатывается. С периодом — всё открытое внутри него.
         if not has_period:

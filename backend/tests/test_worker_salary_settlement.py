@@ -611,7 +611,8 @@ async def test_resync_keeps_settlements_of_a_switched_off_plan(client, db_sessio
         )
     ).scalar_one()
     assert Decimal(kept.amount) == Decimal("40000.00")
-    # Уже засчитанное в выключенный план второй раз не раскладывается.
+    # Выплата без периода закрывает один платёж — свой, на прежнем плане. На тот
+    # же день действующего плана она второй раз не засчитывается.
     active_total = sum(
         Decimal(mark.amount)
         for mark in (
@@ -620,7 +621,7 @@ async def test_resync_keeps_settlements_of_a_switched_off_plan(client, db_sessio
             )
         ).scalars()
     )
-    assert active_total == MONEY - Decimal("40000.00")
+    assert active_total == Decimal("0")
 
 
 async def test_a_closed_month_is_not_rolled_into_the_next_one(client, db_session):
@@ -833,3 +834,133 @@ async def test_turning_a_payout_into_a_trip_clears_its_settlement_history(client
             select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
         )
     ).scalars().all() == []
+
+
+async def test_settlement_history_follows_a_corrected_payout_date(client, db_session):
+    from backend.expense_service import sync_worker_payout_from_expense
+
+    worker = await make_worker_with_salary_plan(db_session)
+    old_plan, expense, payout = await history_mark_on_switched_off_plan(db_session, worker, amount="40000.00")
+
+    # Дату выплаты исправили: не 5 июля, а 5 августа.
+    expense.date = date(2026, 8, 5)
+    expense.paid_date = date(2026, 8, 5)
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    marks = (
+        (
+            await db_session.execute(
+                select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [(mark.planned_expense_id, mark.due_date) for mark in marks] == [(old_plan.id, date(2026, 8, 5))]
+
+
+async def test_restoring_a_payout_amount_restores_its_settlement(client, db_session):
+    from backend.expense_service import sync_worker_payout_from_expense
+
+    worker = await make_worker_with_salary_plan(db_session)
+    old_plan, expense, payout = await history_mark_on_switched_off_plan(db_session, worker, amount="40000.00")
+
+    expense.amount = Decimal("20000.00")
+    await sync_worker_payout_from_expense(db_session, expense)
+    expense.amount = Decimal("40000.00")
+    await sync_worker_payout_from_expense(db_session, expense)
+    await db_session.flush()
+
+    marks = (
+        (
+            await db_session.execute(
+                select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # Урезанная часть не потерялась и вернулась туда же, на свой план.
+    assert [(mark.planned_expense_id, Decimal(mark.amount)) for mark in marks] == [(old_plan.id, Decimal("40000.00"))]
+
+
+@pytest.mark.parametrize(
+    "draft",
+    [
+        # Зарплата после покупки на 20 000 — к выдаче 80 000.
+        {"payout_type": "monthly", "date": "2026-09-05"},
+        # Тип переключили на аванс за командировку — считается по своей формуле.
+        {
+            "payout_type": "trip_advance",
+            "date": "2026-09-14",
+            "period_start": "2026-09-14",
+            "period_end": "2026-09-16",
+            "trip_days": 3,
+        },
+        # Сумму назвали явно — она и сохраняется.
+        {"payout_type": "monthly", "date": "2026-09-05", "cash_paid_amount": 30000},
+    ],
+)
+async def test_the_preview_shows_exactly_what_saving_will_store(client, db_session, draft):
+    worker = await make_worker_with_salary_plan(db_session)
+    worker.trip_advance_day_rate = Decimal("3000.00")
+    worker.lodging_night_rate = Decimal("1500.00")
+    await db_session.flush()
+    await attach_purchase(client, worker, await make_expense(db_session, PURCHASE))
+    body = {"worker_id": worker.id, "cash_paid_amount": None, **draft}
+
+    preview = (await client.post("/api/workers/payouts/preview", json=body)).json()
+    saved = await client.post("/api/workers/payouts", json=body)
+
+    assert saved.status_code == 200, saved.text
+    stored = saved.json()["payout"]
+    for field in ("gross_amount", "cash_paid_amount", "remaining_amount"):
+        assert Decimal(str(preview[field])) == Decimal(str(stored[field])), field
+
+
+async def test_the_preview_of_a_monthly_payout_after_a_purchase(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    await attach_purchase(client, worker, await make_expense(db_session, PURCHASE))
+
+    preview = (
+        await client.post(
+            "/api/workers/payouts/preview",
+            json={"worker_id": worker.id, "payout_type": "monthly", "date": "2026-09-05", "cash_paid_amount": None},
+        )
+    ).json()
+
+    assert Decimal(str(preview["cash_paid_amount"])) == MONEY
+    assert preview["fully_settled"] is False
+    assert preview["salary"]["due_dates"] == ["2026-09-05"]
+    assert Decimal(str(preview["salary"]["settled"])) == PURCHASE
+
+
+async def test_the_preview_says_when_nothing_is_left_to_pay(client, db_session):
+    worker = await make_worker_with_salary_plan(db_session)
+    await attach_purchase(client, worker, await make_expense(db_session, SALARY))
+
+    closed = (
+        await client.post(
+            "/api/workers/payouts/preview",
+            json={"worker_id": worker.id, "payout_type": "monthly", "date": "2026-09-07", "cash_paid_amount": None},
+        )
+    ).json()
+    purchase_without_amount = (
+        await client.post(
+            "/api/workers/payouts/preview",
+            json={
+                "worker_id": worker.id,
+                "payout_type": "purchase",
+                "date": "2026-09-07",
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+                "cash_paid_amount": None,
+            },
+        )
+    ).json()
+
+    assert closed["fully_settled"] is True
+    assert Decimal(str(closed["cash_paid_amount"])) == Decimal("0")
+    # Покупку без суммы форма сохранить не даст: выдавать нечего.
+    assert Decimal(str(purchase_without_amount["cash_paid_amount"])) == Decimal("0")

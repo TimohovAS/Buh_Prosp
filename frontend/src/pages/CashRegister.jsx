@@ -216,9 +216,7 @@ export default function CashRegister() {
   })
   const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
-  const [salaryRemainder, setSalaryRemainder] = useState(null)
-  const autoFilledCashRef = useRef(null)
-  const [salaryBalanceLoading, setSalaryBalanceLoading] = useState(false)
+  const [payoutServerPreview, setPayoutServerPreview] = useState(null)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -494,42 +492,118 @@ export default function CashRegister() {
     }
   }, [selectedWorker, workerPayoutForm])
 
+  // Черновик — ровно то, что уйдёт на сервер при сохранении. По нему же сервер
+  // считает предпросмотр, поэтому видимые суммы и сохранённые не расходятся.
+  const workerPayoutDraft =
+    workerPayoutModal && workerPayoutForm.worker_id && workerPayoutForm.date
+      ? {
+          worker_id: parseInt(workerPayoutForm.worker_id, 10),
+          payout_type: workerPayoutForm.payout_type,
+          date: workerPayoutForm.date,
+          period_start: workerPayoutForm.period_start || null,
+          period_end: workerPayoutForm.period_end || null,
+          work_days: workerPayoutPreview.workDays,
+          trip_days: workerPayoutPreview.tripDays,
+          lodging_nights: workerPayoutPreview.lodgingNights,
+          lodging_night_rate:
+            workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
+          lodging_amount: workerPayoutPreview.lodgingAmount,
+          advance_paid: toNumber(workerPayoutForm.advance_paid),
+          cash_paid_amount: payoutCashForSubmit(workerPayoutForm.cash_paid_amount),
+          trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
+          category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
+          project_id: workerPayoutProjectId
+            ? parseInt(workerPayoutProjectId, 10)
+            : unassignedProject
+              ? unassignedProject.id
+              : null,
+          contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
+          note: workerPayoutForm.note?.trim() || null,
+        }
+      : null
+  const workerPayoutDraftKey = workerPayoutDraft
+    ? JSON.stringify({ payoutId: workerPayoutModal?.payoutId || null, draft: workerPayoutDraft })
+    : ''
+
+  useEffect(() => {
+    if (!workerPayoutDraftKey) {
+      setPayoutServerPreview(null)
+      return undefined
+    }
+    const { payoutId, draft } = JSON.parse(workerPayoutDraftKey)
+    let cancelled = false
+    const timer = setTimeout(() => {
+      api.workers
+        .previewPayout(draft, payoutId)
+        .then((data) => {
+          if (!cancelled) setPayoutServerPreview({ key: workerPayoutDraftKey, data })
+        })
+        .catch(() => {
+          // Сервер всё равно посчитает сам при сохранении; без ответа показываем
+          // местный расчёт и сохранять не мешаем.
+          if (!cancelled) setPayoutServerPreview({ key: workerPayoutDraftKey, data: null })
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [workerPayoutDraftKey])
+
+  // Ответ относится только к тому черновику, для которого его просили: пока он
+  // не пришёл, сохранение ждёт — иначе на экране было бы одно число, а в базе другое.
+  const payoutPreviewReady = !!payoutServerPreview && payoutServerPreview.key === workerPayoutDraftKey
+  const payoutPreviewData = payoutPreviewReady ? payoutServerPreview.data : null
+  const workerPayoutShown = useMemo(
+    () =>
+      payoutPreviewData
+        ? {
+            ...workerPayoutPreview,
+            gross: Number(payoutPreviewData.gross_amount),
+            cash: Number(payoutPreviewData.cash_paid_amount),
+            remaining: Number(payoutPreviewData.remaining_amount),
+          }
+        : workerPayoutPreview,
+    [payoutPreviewData, workerPayoutPreview]
+  )
+  const payoutNothingToPay = !!payoutPreviewData && Number(payoutPreviewData.cash_paid_amount) <= 0
+
   const workerPayoutMathLines = useMemo(() => {
     if (!selectedWorker) return []
     const lines = []
     if (workerPayoutForm.payout_type.startsWith('trip')) {
       lines.push(
-        `${tr('workerPayoutLodging')}: ${fmtAmount(workerPayoutPreview.lodgingNightRate)} * ${fmtAmount(workerPayoutPreview.lodgingNights)} = ${fmtAmount(workerPayoutPreview.lodgingAmount)} RSD`
+        `${tr('workerPayoutLodging')}: ${fmtAmount(workerPayoutShown.lodgingNightRate)} * ${fmtAmount(workerPayoutShown.lodgingNights)} = ${fmtAmount(workerPayoutShown.lodgingAmount)} RSD`
       )
       lines.push(
-        `${tr('workerPayoutDay')}: ${fmtAmount(workerPayoutPreview.tripWorkDayRate)} + ${fmtAmount(workerPayoutPreview.perDiemRate)} + ${fmtAmount(workerPayoutPreview.foodRate)} = ${fmtAmount(workerPayoutPreview.tripWorkDayRate + workerPayoutPreview.perDiemRate + workerPayoutPreview.foodRate)} RSD`
+        `${tr('workerPayoutDay')}: ${fmtAmount(workerPayoutShown.tripWorkDayRate)} + ${fmtAmount(workerPayoutShown.perDiemRate)} + ${fmtAmount(workerPayoutShown.foodRate)} = ${fmtAmount(workerPayoutShown.tripWorkDayRate + workerPayoutShown.perDiemRate + workerPayoutShown.foodRate)} RSD`
       )
       lines.push(
-        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.tripDays)} * (${fmtAmount(workerPayoutPreview.tripWorkDayRate)} + ${fmtAmount(workerPayoutPreview.perDiemRate)} + ${fmtAmount(workerPayoutPreview.foodRate)}) + ${fmtAmount(workerPayoutPreview.lodgingAmount)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`
+        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutShown.tripDays)} * (${fmtAmount(workerPayoutShown.tripWorkDayRate)} + ${fmtAmount(workerPayoutShown.perDiemRate)} + ${fmtAmount(workerPayoutShown.foodRate)}) + ${fmtAmount(workerPayoutShown.lodgingAmount)} = ${fmtAmount(workerPayoutShown.gross)} RSD`
       )
       if (workerPayoutForm.payout_type === 'trip_advance' && workerPayoutForm.cash_paid_amount === '') {
         lines.push(
-          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.tripDays)} * ${fmtAmount(workerPayoutPreview.advanceDayRate)} + ${fmtAmount(workerPayoutPreview.lodgingAmount)} = ${fmtAmount(workerPayoutPreview.cash)} RSD`
+          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutShown.tripDays)} * ${fmtAmount(workerPayoutShown.advanceDayRate)} + ${fmtAmount(workerPayoutShown.lodgingAmount)} = ${fmtAmount(workerPayoutShown.cash)} RSD`
         )
       } else if (workerPayoutForm.payout_type === 'trip_final' && workerPayoutForm.cash_paid_amount === '') {
         lines.push(
-          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} = ${fmtAmount(workerPayoutPreview.cash)} RSD`
+          `${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutShown.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} = ${fmtAmount(workerPayoutShown.cash)} RSD`
         )
       } else {
-        lines.push(`${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutPreview.cash)} RSD`)
+        lines.push(`${tr('workerPayoutCash')}: ${fmtAmount(workerPayoutShown.cash)} RSD`)
       }
       lines.push(
-        `${tr('workerPayoutRemaining')}: ${fmtAmount(workerPayoutPreview.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} - ${fmtAmount(workerPayoutPreview.cash)} = ${fmtAmount(workerPayoutPreview.remaining)} RSD`
+        `${tr('workerPayoutRemaining')}: ${fmtAmount(workerPayoutShown.gross)} - ${fmtAmount(toNumber(workerPayoutForm.advance_paid))} - ${fmtAmount(workerPayoutShown.cash)} = ${fmtAmount(workerPayoutShown.remaining)} RSD`
       )
       return lines
     }
     if (workerPayoutForm.payout_type === 'regular') {
       return [
-        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.workDays)} * ${fmtAmount(workerPayoutPreview.regularDayRate)} = ${fmtAmount(workerPayoutPreview.gross)} RSD`,
+        `${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutShown.workDays)} * ${fmtAmount(workerPayoutShown.regularDayRate)} = ${fmtAmount(workerPayoutShown.gross)} RSD`,
       ]
     }
-    return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutPreview.gross)} RSD`]
-  }, [selectedWorker, workerPayoutForm, workerPayoutPreview])
+    return [`${tr('workerPayoutGross')}: ${fmtAmount(workerPayoutShown.gross)} RSD`]
+  }, [selectedWorker, workerPayoutForm, workerPayoutShown])
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = (search || '').trim().toLowerCase()
@@ -883,8 +957,7 @@ export default function CashRegister() {
 
   const openWorkerPayoutCreate = () => {
     setArchivedPayoutWorker(null)
-    setSalaryRemainder(null)
-    autoFilledCashRef.current = null
+    setPayoutServerPreview(null)
     setWorkerPayoutForm({
       ...emptyWorkerPayoutForm,
       date: todayIso(),
@@ -998,68 +1071,6 @@ export default function CashRegister() {
     }
   }
 
-  // Остаток плановой зарплаты берём с сервера тем же расчётом, по которому он
-  // раскладывает выплату: форма не должна сама угадывать месяц, иначе подставит
-  // остаток соседнего, а явную сумму сервер уже не пересчитывает.
-  const salaryPayoutType = ['regular', 'weekly', 'monthly'].includes(workerPayoutForm.payout_type)
-  useEffect(() => {
-    const creating = !!workerPayoutModal && !workerPayoutModal.payoutId
-    if (!creating || !salaryPayoutType || !workerPayoutForm.worker_id || !workerPayoutForm.date) {
-      setSalaryRemainder(null)
-      setSalaryBalanceLoading(false)
-      return undefined
-    }
-    let cancelled = false
-    setSalaryBalanceLoading(true)
-    setWorkerPayoutForm((previous) =>
-      autoFilledCashRef.current && previous.cash_paid_amount === autoFilledCashRef.current
-        ? { ...previous, cash_paid_amount: '' }
-        : previous
-    )
-    autoFilledCashRef.current = null
-    api.workers
-      .salaryRemaining(workerPayoutForm.worker_id, {
-        date: workerPayoutForm.date,
-        period_start: workerPayoutForm.period_start,
-        period_end: workerPayoutForm.period_end,
-      })
-      .then((balance) => {
-        if (cancelled) return
-        const settled = Number(balance?.settled || 0)
-        const remaining = Number(balance?.remaining || 0)
-        const partlyClosed = balance?.has_plan && settled > 0
-        // Подсказку показываем всегда, когда план есть: пользователь должен видеть,
-        // за какой платёж пойдёт выплата, даже если по нему ещё ничего не выдано.
-        setSalaryRemainder(balance?.has_plan ? balance : null)
-        setWorkerPayoutForm((previous) => {
-          // Своё число, введённое руками, не перетираем — только то, что ставили сами.
-          const untouched =
-            previous.cash_paid_amount === '' || previous.cash_paid_amount === autoFilledCashRef.current
-          if (!untouched) return previous
-          const next = partlyClosed && remaining > 0 ? String(remaining) : ''
-          autoFilledCashRef.current = next || null
-          return previous.cash_paid_amount === next ? previous : { ...previous, cash_paid_amount: next }
-        })
-      })
-      .catch(() => {
-        // Остаток — подсказка, а не условие сохранения выплаты.
-        if (!cancelled) setSalaryRemainder(null)
-      })
-      .finally(() => {
-        if (!cancelled) setSalaryBalanceLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [
-    workerPayoutModal,
-    salaryPayoutType,
-    workerPayoutForm.worker_id,
-    workerPayoutForm.date,
-    workerPayoutForm.period_start,
-    workerPayoutForm.period_end,
-  ])
-
   const updateWorkerPayoutWorker = (workerId) => {
     const worker = workers.find((item) => Number(item.id) === Number(workerId))
     setWorkerPayoutForm((previous) => ({
@@ -1105,30 +1116,7 @@ export default function CashRegister() {
     setSaving(true)
     setPageError('')
     try {
-      const payload = {
-        worker_id: parseInt(workerPayoutForm.worker_id, 10),
-        payout_type: workerPayoutForm.payout_type,
-        date: workerPayoutForm.date,
-        period_start: workerPayoutForm.period_start || null,
-        period_end: workerPayoutForm.period_end || null,
-        work_days: workerPayoutPreview.workDays,
-        trip_days: workerPayoutPreview.tripDays,
-        lodging_nights: workerPayoutPreview.lodgingNights,
-        lodging_night_rate:
-          workerPayoutForm.lodging_night_rate === '' ? null : toNumber(workerPayoutForm.lodging_night_rate),
-        lodging_amount: workerPayoutPreview.lodgingAmount,
-        advance_paid: toNumber(workerPayoutForm.advance_paid),
-        cash_paid_amount: payoutCashForSubmit(workerPayoutForm.cash_paid_amount, autoFilledCashRef.current),
-        trip_pricing_mode: selectedWorker?.trip_pricing_mode || null,
-        category_id: workerPayoutCategoryId ? parseInt(workerPayoutCategoryId, 10) : null,
-        project_id: workerPayoutProjectId
-          ? parseInt(workerPayoutProjectId, 10)
-          : unassignedProject
-            ? unassignedProject.id
-            : null,
-        contract_id: workerPayoutForm.contract_id ? parseInt(workerPayoutForm.contract_id, 10) : null,
-        note: workerPayoutForm.note?.trim() || null,
-      }
+      const payload = workerPayoutDraft
       if (workerPayoutModal?.payoutId) {
         await api.workers.updatePayout(workerPayoutModal.payoutId, payload)
       } else {
@@ -2065,18 +2053,18 @@ export default function CashRegister() {
             ) : null}
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPayNow')}</label>
-              {salaryRemainder && !workerPayoutModal?.payoutId ? (
+              {payoutPreviewData?.salary ? (
                 <div className="record-field-text">
                   {tr(
-                    Number(salaryRemainder.remaining) <= 0
+                    Number(payoutPreviewData.salary.remaining) <= 0
                       ? 'workerPayoutSalarySettled'
-                      : Number(salaryRemainder.settled) > 0
+                      : Number(payoutPreviewData.salary.settled) > 0
                         ? 'workerPayoutSalaryRemainder'
                         : 'workerPayoutSalaryTarget',
                     {
-                      due: salaryDueLabel(salaryRemainder.due_dates),
-                      paid: fmtAmount(salaryRemainder.settled),
-                      remaining: fmtAmount(salaryRemainder.remaining),
+                      due: salaryDueLabel(payoutPreviewData.salary.due_dates),
+                      paid: fmtAmount(payoutPreviewData.salary.settled),
+                      remaining: fmtAmount(payoutPreviewData.salary.remaining),
                     }
                   )}
                 </div>
@@ -2086,7 +2074,8 @@ export default function CashRegister() {
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder={String(workerPayoutPreview.cash)}
+                placeholder={String(workerPayoutShown.cash)}
+                required={workerPayoutForm.payout_type === 'purchase'}
                 value={workerPayoutForm.cash_paid_amount}
                 onChange={(event) =>
                   setWorkerPayoutForm((previous) => ({ ...previous, cash_paid_amount: event.target.value }))
@@ -2098,15 +2087,15 @@ export default function CashRegister() {
           <div className="record-field-grid worker-payout-totals">
             <div className="record-field">
               <span className="record-field-label">{tr('workerPayoutGross')}</span>
-              <span className="record-field-value">{fmtAmount(workerPayoutPreview.gross)} RSD</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutShown.gross)} RSD</span>
             </div>
             <div className="record-field">
               <span className="record-field-label">{tr('workerPayoutCash')}</span>
-              <span className="record-field-value">{fmtAmount(workerPayoutPreview.cash)} RSD</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutShown.cash)} RSD</span>
             </div>
             <div className="record-field">
               <span className="record-field-label">{tr('workerPayoutRemaining')}</span>
-              <span className="record-field-value">{fmtAmount(workerPayoutPreview.remaining)} RSD</span>
+              <span className="record-field-value">{fmtAmount(workerPayoutShown.remaining)} RSD</span>
             </div>
           </div>
           {workerPayoutMathLines.length ? (
@@ -2187,7 +2176,9 @@ export default function CashRegister() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={saving || !selectedWorker || missingSalaryMonth || salaryBalanceLoading}
+              disabled={
+                saving || !selectedWorker || missingSalaryMonth || !payoutPreviewReady || payoutNothingToPay
+              }
             >
               {saving ? tr('loading') : tr('save')}
             </button>

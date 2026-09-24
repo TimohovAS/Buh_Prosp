@@ -2170,6 +2170,17 @@ class WorkerSalaryRemaining(BaseModel):
     due_dates: list[DateType] = Field(default_factory=list)
 
 
+class WorkerPayoutPreview(BaseModel):
+    """Что сервер сохранит для черновика выплаты — тем же расчётом."""
+
+    gross_amount: Decimal
+    cash_paid_amount: Decimal
+    remaining_amount: Decimal
+    # Период уже закрыт целиком, а сумма не названа: такую выплату сервер не примет.
+    fully_settled: bool = False
+    salary: Optional[WorkerSalaryRemaining] = None
+
+
 class WorkerPayoutCreateResponse(BaseModel):
     payout: WorkerPayoutResponse
     # У покупки в счёт зарплаты записи в кассе нет: деньги ушли с карты или по чеку.

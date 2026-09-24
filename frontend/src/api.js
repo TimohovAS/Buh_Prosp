@@ -606,12 +606,11 @@ export const api = {
       return request(`/workers/payouts${q ? `?${q}` : ''}`)
     },
     getPayout: (id) => request(`/workers/payouts/${id}`),
-    salaryRemaining: (workerId, params = {}) => {
-      const q = new URLSearchParams(
-        Object.entries(params).filter(([, value]) => value !== null && value !== undefined && value !== '')
-      ).toString()
-      return request(`/workers/${workerId}/salary-remaining${q ? `?${q}` : ''}`)
-    },
+    previewPayout: (data, payoutId) =>
+      request(`/workers/payouts/preview${payoutId ? `?payout_id=${payoutId}` : ''}`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     payoutReport: (params = {}) => {
       const q = new URLSearchParams(params).toString()
       return request(`/workers/payouts/report${q ? `?${q}` : ''}`)
