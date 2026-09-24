@@ -1,5 +1,6 @@
 """Сервис планируемых расходов — расчёт дат и сумм."""
 
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from types import SimpleNamespace
@@ -520,7 +521,10 @@ async def salary_window_balance(
     if exclude_payout_id is not None:
         # Правят выплату, которая относится к выключенному плану, — считаем по нему же
         # и, как при раскладке, ставим его первым.
-        inactive, membership = await _history_plans_by_payout(db, worker_id, {exclude_payout_id})
+        edited = (
+            await db.execute(select(WorkerPayout).where(WorkerPayout.id == exclude_payout_id))
+        ).scalar_one_or_none()
+        inactive, membership = await _history_plans_by_payout(db, worker_id, [edited] if edited else [])
         planned_items = [
             *(inactive[plan_id] for plan_id in sorted(membership.get(exclude_payout_id, ()))),
             *planned_items,
@@ -592,10 +596,30 @@ def _settlement_view(plan: PlannedExpense) -> SimpleNamespace:
     )
 
 
+def payout_settled_plan_ids(payout: WorkerPayout) -> set[int]:
+    """Планы зарплаты, которые выплата когда-либо закрывала."""
+    try:
+        return {int(plan_id) for plan_id in json.loads(payout.settled_plan_ids or "[]")}
+    except (TypeError, ValueError):
+        return set()
+
+
+def _remember_settled_plans(payout: WorkerPayout, plan_ids: set[int]) -> None:
+    known = payout_settled_plan_ids(payout)
+    if not plan_ids <= known:
+        payout.settled_plan_ids = json.dumps(sorted(known | plan_ids))
+
+
 async def _history_plans_by_payout(
-    db: AsyncSession, worker_id: int, payout_ids: set[int]
+    db: AsyncSession, worker_id: int, payouts: list[WorkerPayout]
 ) -> tuple[dict[int, SimpleNamespace], dict[int, set[int]]]:
-    """Какие выключенные планы работника уже закрывала каждая из его выплат."""
+    """Какие выключенные планы работника уже закрывала каждая из его выплат.
+
+    Берём из списка на самой выплате: отметки погашения при сторно или смене
+    типа исчезают, а принадлежность к плану должна их пережить, иначе после
+    отмены сторно выплата ушла бы на другой план. Отметки учитываем тоже — на
+    случай записей, сделанных до появления списка.
+    """
     inactive = {
         plan.id: _settlement_view(plan)
         for plan in (
@@ -605,15 +629,20 @@ async def _history_plans_by_payout(
         ).scalars()
     }
     membership: dict[int, set[int]] = {}
-    if inactive and payout_ids:
-        rows = await db.execute(
-            select(PlannedExpensePayment.worker_payout_id, PlannedExpensePayment.planned_expense_id)
-            .where(PlannedExpensePayment.worker_payout_id.in_(payout_ids))
-            .where(PlannedExpensePayment.planned_expense_id.in_(inactive.keys()))
-            .distinct()
-        )
-        for payout_id, plan_id in rows.fetchall():
-            membership.setdefault(payout_id, set()).add(plan_id)
+    if not inactive or not payouts:
+        return inactive, membership
+    for payout in payouts:
+        remembered = payout_settled_plan_ids(payout) & inactive.keys()
+        if remembered:
+            membership.setdefault(payout.id, set()).update(remembered)
+    rows = await db.execute(
+        select(PlannedExpensePayment.worker_payout_id, PlannedExpensePayment.planned_expense_id)
+        .where(PlannedExpensePayment.worker_payout_id.in_([payout.id for payout in payouts]))
+        .where(PlannedExpensePayment.planned_expense_id.in_(inactive.keys()))
+        .distinct()
+    )
+    for payout_id, plan_id in rows.fetchall():
+        membership.setdefault(payout_id, set()).add(plan_id)
     return inactive, membership
 
 
@@ -650,7 +679,7 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
         for payout in payouts
         if payout.cancelled_at is None and payout.payout_type in SALARY_SETTLING_PAYOUT_TYPES
     ]
-    inactive, membership = await _history_plans_by_payout(db, worker_id, {payout.id for payout in settling})
+    inactive, membership = await _history_plans_by_payout(db, worker_id, settling)
 
     # Отметки выплат работника на чужих планах (выплату перенесли) тоже уходят.
     if payout_ids:
@@ -695,6 +724,9 @@ async def resync_worker_salary_settlements(db: AsyncSession, worker_id: int | No
                     note=f"auto_worker_payout:{payout.id}",
                 )
             )
+            # Запоминаем план на самой выплате: если его потом выключат, а отметку
+            # снимет сторно, выплата всё равно вернётся именно сюда.
+            _remember_settled_plans(payout, {planned.id})
             settled[key] = settled.get(key, ZERO_DECIMAL) + amount
             left -= amount
     await db.flush()

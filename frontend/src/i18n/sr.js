@@ -1258,6 +1258,8 @@ const sr = {
   workerPayoutPeriodEnd: 'Период до',
   workerPayoutPeriodStart: 'Период од',
   workerPayoutPurchase: 'Куповина на рачун плате',
+  workerPayoutPreviewFailed: 'Обрачун са сервера није добијен — чување још није могуће.',
+  workerPayoutPreviewRetry: 'Понови',
   workerPayoutPurchaseShort: 'Куповина',
   workerPayoutPurchasePeriodHint: 'Наведите месец плате за који је куповина: на њега ће се умањити остатак.',
   workerPayoutSalaryRemainder:

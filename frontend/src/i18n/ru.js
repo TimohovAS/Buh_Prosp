@@ -1266,6 +1266,8 @@ const ru = {
   workerPayoutPeriodEnd: 'Период по',
   workerPayoutPeriodStart: 'Период с',
   workerPayoutPurchase: 'Покупка в счёт зарплаты',
+  workerPayoutPreviewFailed: 'Не удалось получить расчёт сервера — сохранить пока нельзя.',
+  workerPayoutPreviewRetry: 'Повторить',
   workerPayoutPurchaseShort: 'Покупка',
   workerPayoutPurchasePeriodHint:
     'Укажите зарплатный месяц, за который сделана покупка: на него и уменьшится остаток.',

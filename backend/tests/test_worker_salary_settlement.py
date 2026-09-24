@@ -964,3 +964,94 @@ async def test_the_preview_says_when_nothing_is_left_to_pay(client, db_session):
     assert Decimal(str(closed["cash_paid_amount"])) == Decimal("0")
     # Покупку без суммы форма сохранить не даст: выдавать нечего.
     assert Decimal(str(purchase_without_amount["cash_paid_amount"])) == Decimal("0")
+
+
+async def two_plans_on_the_same_payday(db):
+    """Выключенный план №1, которому уже принадлежит выплата, и действующий №2."""
+    worker = await make_worker_with_salary_plan(db)
+    first_plan = (await db.execute(select(PlannedExpense))).scalar_one()
+    expense = await make_expense(db, MONEY, entry_date=DUE_DATE)
+    await db.flush()
+    return worker, first_plan, expense
+
+
+async def marks_of(db, payout_id):
+    return [
+        (mark.planned_expense_id, mark.due_date)
+        for mark in (
+            await db.execute(select(PlannedExpensePayment).where(PlannedExpensePayment.worker_payout_id == payout_id))
+        ).scalars()
+    ]
+
+
+async def test_cancelling_a_reversal_returns_the_payout_to_its_switched_off_plan(client, db_session):
+    from backend.expense_service import restore_worker_payout_for_expense
+
+    worker, first_plan, expense = await two_plans_on_the_same_payday(db_session)
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+    # План №1 выключили и завели действующий №2 с тем же днём выплаты.
+    first_plan.is_active = False
+    second_plan = PlannedExpense(
+        name="Andrei Timokhov",
+        amount=SALARY,
+        currency="RSD",
+        period="monthly",
+        payment_day=DUE_DATE.day,
+        start_date=date(2026, 1, 5),
+        is_active=True,
+        worker_id=worker.id,
+    )
+    db_session.add(second_plan)
+    await db_session.flush()
+    assert await marks_of(db_session, payout["id"]) == [(first_plan.id, DUE_DATE)]
+
+    await create_expense_reversal(db_session, expense)
+    assert await marks_of(db_session, payout["id"]) == []
+    expense.reversed_expense_id = None
+    await restore_worker_payout_for_expense(db_session, expense.id)
+
+    # Выплата вернулась на свой план, а не ушла на действующий №2.
+    assert await marks_of(db_session, payout["id"]) == [(first_plan.id, DUE_DATE)]
+
+
+async def test_a_round_trip_through_a_trip_type_keeps_the_payout_on_its_plan(client, db_session):
+    worker, first_plan, expense = await two_plans_on_the_same_payday(db_session)
+    payout = (
+        await client.post(
+            "/api/workers/payouts/attach",
+            json={"expense_id": expense.id, "worker_id": worker.id, "payout_type": "monthly"},
+        )
+    ).json()["payout"]
+    first_plan.is_active = False
+    db_session.add(
+        PlannedExpense(
+            name="Andrei Timokhov",
+            amount=SALARY,
+            currency="RSD",
+            period="monthly",
+            payment_day=DUE_DATE.day,
+            start_date=date(2026, 1, 5),
+            is_active=True,
+            worker_id=worker.id,
+        )
+    )
+    await db_session.flush()
+
+    for payout_type, period in (("trip_final", ("2026-09-01", "2026-09-03")), ("monthly", (None, None))):
+        changed = await client.patch(
+            f"/api/workers/payouts/{payout['id']}/link",
+            json={
+                "worker_id": worker.id,
+                "payout_type": payout_type,
+                "period_start": period[0],
+                "period_end": period[1],
+            },
+        )
+        assert changed.status_code == 200, changed.text
+
+    assert await marks_of(db_session, payout["id"]) == [(first_plan.id, DUE_DATE)]

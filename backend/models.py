@@ -174,6 +174,10 @@ class WorkerPayout(Base):
     # Привязка переносит расход в зарплатные категорию и проект. Прежние значения
     # (JSON) хранятся здесь, чтобы отвязка вернула расход туда, где он был.
     expense_links_before = Column(Text, nullable=True)
+    # Планы зарплаты, которые выплата когда-либо закрывала (JSON-список id). Отметки
+    # погашения пересчитываются и при сторно или смене типа исчезают, а по этому
+    # списку выплата после отмены сторно возвращается на свой прежний план.
+    settled_plan_ids = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 

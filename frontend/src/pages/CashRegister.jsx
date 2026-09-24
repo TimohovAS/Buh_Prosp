@@ -20,7 +20,7 @@ import {
   getContractLabelById,
 } from '../utils/entityLabels'
 import { UI_DASH, formatDateSr, formatInteger as fmtAmount, todayIso } from '../utils/formatters'
-import { payoutCashForSubmit } from '../utils/payoutCash'
+import { payoutCashForSubmit, payoutPreviewState } from '../utils/payoutCash'
 import { payoutTypeLabel } from '../utils/workerPayouts'
 import { amountSearchHay } from '../utils/searchUtils'
 import { MONTHS } from '../utils/constants'
@@ -217,6 +217,7 @@ export default function CashRegister() {
   const [workerPayoutForm, setWorkerPayoutForm] = useState(emptyWorkerPayoutForm)
   const [archivedPayoutWorker, setArchivedPayoutWorker] = useState(null)
   const [payoutServerPreview, setPayoutServerPreview] = useState(null)
+  const [payoutPreviewAttempt, setPayoutPreviewAttempt] = useState(0)
 
   const lang = getLang()
   const unassignedProject = findUnassignedProject(projects)
@@ -539,21 +540,24 @@ export default function CashRegister() {
           if (!cancelled) setPayoutServerPreview({ key: workerPayoutDraftKey, data })
         })
         .catch(() => {
-          // Сервер всё равно посчитает сам при сохранении; без ответа показываем
-          // местный расчёт и сохранять не мешаем.
-          if (!cancelled) setPayoutServerPreview({ key: workerPayoutDraftKey, data: null })
+          // Без серверного расчёта сохранять нельзя: местный не знает, сколько уже
+          // закрыто покупками, и показал бы не то, что сохранит сервер.
+          if (!cancelled) setPayoutServerPreview({ key: workerPayoutDraftKey, data: null, failed: true })
         })
     }, 250)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [workerPayoutDraftKey])
+  }, [workerPayoutDraftKey, payoutPreviewAttempt])
 
   // Ответ относится только к тому черновику, для которого его просили: пока он
   // не пришёл, сохранение ждёт — иначе на экране было бы одно число, а в базе другое.
-  const payoutPreviewReady = !!payoutServerPreview && payoutServerPreview.key === workerPayoutDraftKey
-  const payoutPreviewData = payoutPreviewReady ? payoutServerPreview.data : null
+  const {
+    ready: payoutPreviewReady,
+    failed: payoutPreviewFailed,
+    data: payoutPreviewData,
+  } = payoutPreviewState(payoutServerPreview, workerPayoutDraftKey)
   const workerPayoutShown = useMemo(
     () =>
       payoutPreviewData
@@ -2053,6 +2057,18 @@ export default function CashRegister() {
             ) : null}
             <div className="form-group">
               <label className="form-label">{tr('workerPayoutPayNow')}</label>
+              {payoutPreviewFailed ? (
+                <div className="record-field-text">
+                  {tr('workerPayoutPreviewFailed')}{' '}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setPayoutPreviewAttempt((attempt) => attempt + 1)}
+                  >
+                    {tr('workerPayoutPreviewRetry')}
+                  </button>
+                </div>
+              ) : null}
               {payoutPreviewData?.salary ? (
                 <div className="record-field-text">
                   {tr(
