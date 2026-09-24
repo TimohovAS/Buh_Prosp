@@ -1,4 +1,6 @@
 import DatePickerLib from 'react-datepicker'
+import { ru, sr } from 'date-fns/locale'
+import { getLang } from '../i18n'
 
 /** value и onChange работают со строкой YYYY-MM-DD */
 export default function DatePicker({ value, onChange, required, className = '', placeholder, ...props }) {
@@ -20,10 +22,11 @@ export default function DatePicker({ value, onChange, required, className = '', 
       selected={date}
       onChange={handleChange}
       dateFormat="dd.MM.yyyy"
+      locale={getLang() === 'ru' ? ru : sr}
       calendarStartDay={1}
       showMonthDropdown
       showYearDropdown
-      dropdownMode="select"
+      dropdownMode="scroll"
       placeholderText={placeholder}
       className={`form-input ${className}`}
       isClearable={!required}

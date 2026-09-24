@@ -6111,6 +6111,14 @@ tr:hover td {
   border-color: var(--color-border) !important;
 }
 
+.react-datepicker__month-read-view,
+.react-datepicker__year-read-view {
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  padding: 2px 6px;
+}
+
 .react-datepicker__month-option,
 .react-datepicker__year-option {
   color: var(--color-text) !important;

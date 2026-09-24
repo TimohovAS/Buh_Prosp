@@ -20,6 +20,7 @@
     "test:payouts": "node --test scripts/test-payout-cash.mjs"
   },
   "dependencies": {
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.576.0",
     "react": "^18.2.0",
     "react-datepicker": "^9.1.0",
