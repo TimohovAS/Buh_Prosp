@@ -1149,6 +1149,7 @@ class PlannedExpensePayment(Base):
     """Погашение конкретного экземпляра планируемого расхода (planned_expense_id + due_date)."""
 
     __tablename__ = "planned_expense_payments"
+    __table_args__ = (Index("ix_planned_expense_payments_occurrence", "planned_expense_id", "due_date"),)
 
     id = Column(Integer, primary_key=True, index=True)
     planned_expense_id = Column(Integer, ForeignKey("planned_expenses.id"), nullable=False)
