@@ -310,6 +310,66 @@ async def test_unpaid_status_becomes_overdue_at_read_time_without_mutation(db_se
     assert obligation.status == "unpaid"
 
 
+@pytest.mark.parametrize("paid_has_scheme_period", [False, True])
+async def test_reconciliation_preserves_paid_obligation_and_disables_empty_duplicate(
+    db_session, paid_has_scheme_period
+):
+    scheme, types = await _setup_legacy_scheme(db_session)
+    period = await db_session.scalar(select(TaxSchemePeriod).where(TaxSchemePeriod.tax_scheme_id == scheme.id))
+    decision = await db_session.scalar(
+        select(YearDecision).where(
+            YearDecision.tax_scheme_id == scheme.id,
+            YearDecision.payment_type_id == types["tax"].id,
+        )
+    )
+    paid = MonthlyObligation(
+        year=2026,
+        month=1,
+        tax_scheme_id=scheme.id,
+        tax_scheme_period_id=period.id if paid_has_scheme_period else None,
+        payment_type_id=types["tax"].id,
+        decision_id=decision.id,
+        amount=Decimal("5122.16"),
+        deadline=date(2026, 2, 15),
+        status="paid",
+        paid_date=date(2026, 2, 10),
+        payment_reference="paid-transaction",
+        is_active=True,
+    )
+    duplicate = MonthlyObligation(
+        year=2026,
+        month=1,
+        tax_scheme_id=scheme.id,
+        tax_scheme_period_id=period.id,
+        payment_type_id=types["tax"].id,
+        decision_id=decision.id,
+        amount=Decimal("5122.16"),
+        deadline=date(2026, 2, 15),
+        status="overdue",
+        is_active=True,
+    )
+    db_session.add_all([paid, duplicate])
+    await db_session.flush()
+
+    await get_or_create_obligations(db_session, 2026)
+
+    assert paid.status == "paid"
+    assert paid.paid_date == date(2026, 2, 10)
+    assert paid.payment_reference == "paid-transaction"
+    assert paid.tax_scheme_period_id == period.id
+    assert paid.is_active is True
+    assert duplicate.is_active is False
+    active_rows = await db_session.scalars(
+        select(MonthlyObligation).where(
+            MonthlyObligation.year == 2026,
+            MonthlyObligation.month == 1,
+            MonthlyObligation.payment_type_id == types["tax"].id,
+            MonthlyObligation.is_active == True,
+        )
+    )
+    assert list(active_rows) == [paid]
+
+
 async def test_rule_can_use_custom_deadline_and_disable_proration(db_session):
     scheme, _ = await _setup_legacy_scheme(db_session)
     custom_type = PaymentType(code="license_fee", name_sr="License fee", sort_order=10)

@@ -92,14 +92,9 @@ async def get_or_create_obligations(
     scheme_periods = list(period_result.scalars().all())
     existing_result = await db.execute(select(MonthlyObligation).where(MonthlyObligation.year == year))
     existing = list(existing_result.scalars().all())
-    existing_by_key = {
-        (item.month, item.payment_type_id, item.tax_scheme_period_id): item
-        for item in existing
-        if item.tax_scheme_period_id is not None
-    }
 
     desired_ids: set[int] = set()
-    claimed_legacy_ids: set[int] = set()
+    claimed_existing_ids: set[int] = set()
     generated: list[MonthlyObligation] = []
     for month in range(1, 13):
         month_start = date(year, month, 1)
@@ -151,24 +146,32 @@ async def get_or_create_obligations(
                 else:
                     amount = Decimal(decision.monthly_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-                key = (month, payment_type_id, scheme_period.id)
-                obligation = existing_by_key.get(key)
-                if obligation is None:
-                    obligation = next(
-                        (
-                            item
-                            for item in existing
-                            if item.id not in claimed_legacy_ids
-                            and item.month == month
-                            and item.payment_type_id == payment_type_id
-                            and item.tax_scheme_period_id is None
+                matching_existing = [
+                    item
+                    for item in existing
+                    if item.id not in claimed_existing_ids
+                    and item.month == month
+                    and item.payment_type_id == payment_type_id
+                    and (
+                        item.tax_scheme_period_id == scheme_period.id
+                        or (
+                            item.tax_scheme_period_id is None
                             and item.tax_scheme_id in (None, scheme_period.tax_scheme_id)
-                            and item.status != "paid"
-                        ),
-                        None,
+                        )
                     )
-                    if obligation is not None:
-                        claimed_legacy_ids.add(obligation.id)
+                ]
+                obligation = max(
+                    matching_existing,
+                    key=lambda item: (
+                        item.status == "paid",
+                        item.tax_scheme_period_id == scheme_period.id,
+                        item.is_active,
+                        item.id,
+                    ),
+                    default=None,
+                )
+                if obligation is not None:
+                    claimed_existing_ids.add(obligation.id)
                 deadline = (
                     scheme_period.closing_deadline
                     if scheme_period.period_end == accrual_end and scheme_period.closing_deadline
@@ -192,16 +195,17 @@ async def get_or_create_obligations(
                     db.add(obligation)
                     await db.flush()
                     existing.append(obligation)
-                elif obligation.status != "paid":
+                else:
                     obligation.tax_scheme_id = scheme_period.tax_scheme_id
                     obligation.tax_scheme_period_id = scheme_period.id
                     obligation.decision_id = decision.id
-                    obligation.amount = amount
                     obligation.accrual_period_start = accrual_start
                     obligation.accrual_period_end = accrual_end
-                    obligation.deadline = deadline
                     obligation.is_active = True
-                    refresh_obligation_due_status(obligation, today=today)
+                    if obligation.status != "paid":
+                        obligation.amount = amount
+                        obligation.deadline = deadline
+                        refresh_obligation_due_status(obligation, today=today)
                 desired_ids.add(obligation.id)
                 generated.append(obligation)
 
