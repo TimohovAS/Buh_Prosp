@@ -4,6 +4,10 @@
 материалы живут в модуле Расходы. Строка материалов либо привязана к расходу проекта
 (source="expense", в затраты объекта повторно не входит), либо взята со склада
 (source="stock", стоимость — оценка, прибавляется к затратам объекта).
+
+Труд начисляется по режиму оплаты работника за дату (по часам, полный день, день
+командировки) — см. backend.work_diary_costing. Сумма заказчику от режима не зависит:
+часы на объекте × цена бригады + материалы × коэффициент + услуги.
 """
 
 from dataclasses import dataclass
@@ -12,7 +16,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -32,13 +36,16 @@ from backend.models import (
     PurchaseReceiptItem,
     User,
     WorkDiaryEntry,
+    WorkDiaryEntryWorker,
     WorkDiaryInvoiceAllocation,
     WorkDiaryMaterial,
     WorkDiaryProjectMeta,
+    WorkDiaryWorkerDay,
     Worker,
 )
 from backend.schemas import (
     WORK_DIARY_MATERIAL_UNITS,
+    WorkDiaryCostPayout,
     WorkDiaryEntryCreate,
     WorkDiaryEntryResponse,
     WorkDiaryEntryUpdate,
@@ -49,14 +56,32 @@ from backend.schemas import (
     WorkDiaryInvoiceLinkResponse,
     WorkDiaryMaterialCreate,
     WorkDiaryMaterialResponse,
+    WorkDiaryPayoutReconciliation,
+    WorkDiaryPayoutReconciliationUpdate,
     WorkDiaryProposalExportRequest,
     WorkDiaryProjectCostsResponse,
     WorkDiaryProjectMetaBase,
     WorkDiaryProjectMetaResponse,
     WorkDiarySummaryResponse,
+    WorkDiaryWorkerDayOtherEntry,
+    WorkDiaryWorkerDayState,
+    WorkDiaryWorkerPayResponse,
 )
 from backend.income_service import has_invoice_duplicate, invoice_year_from_number, to_number_year_format
 from backend.services import allocate_next_invoice_number
+from backend.work_diary_costing import (
+    DayContext,
+    EntryCost,
+    PayoutCost,
+    WorkerAccrual,
+    apply_worker_day_inputs,
+    delete_orphan_worker_days,
+    entry_cost,
+    load_day_context,
+    project_payouts,
+    set_payout_reconciliation,
+    worker_hourly_rate,
+)
 from backend.work_diary_export import build_work_diary_proposal_xlsx, proposal_filename
 
 router = APIRouter(prefix="/work-diaries", tags=["work-diaries"])
@@ -120,10 +145,7 @@ def _calculate_duration_hours(
 
 
 def _default_hourly_rate(worker: Worker | None) -> Decimal:
-    if not worker:
-        return Decimal("0")
-    day_rate = _dec(worker.regular_day_rate)
-    return (day_rate / REGULAR_DAY_HOURS).quantize(Decimal("0.01")) if day_rate > 0 else Decimal("0")
+    return worker_hourly_rate(worker)
 
 
 def _billing_hourly_rate(worker: Worker | None) -> Decimal:
@@ -171,6 +193,32 @@ async def _get_workers(db: AsyncSession, worker_ids: list[int]) -> list[Worker]:
 
 def _entry_workers(entry: WorkDiaryEntry) -> list[Worker]:
     return sorted(entry.workers, key=lambda worker: (worker.name or "").casefold())
+
+
+def _validate_worker_days(worker_days, workers: list[Worker]) -> None:
+    worker_ids = {worker.id for worker in workers}
+    unknown = [item.worker_id for item in worker_days or [] if item.worker_id not in worker_ids]
+    if unknown:
+        raise HTTPException(400, f"Worker {unknown[0]} is not assigned to this work diary entry")
+
+
+async def _store_hourly_rate_snapshots(
+    db: AsyncSession,
+    entry_id: int,
+    workers: list[Worker],
+    *,
+    only_missing: bool = False,
+) -> None:
+    """Запомнить себестоимость часа каждого работника записи на момент сохранения."""
+    for worker in workers:
+        statement = (
+            update(WorkDiaryEntryWorker)
+            .where(WorkDiaryEntryWorker.entry_id == entry_id, WorkDiaryEntryWorker.worker_id == worker.id)
+            .values(hourly_rate_snapshot=worker_hourly_rate(worker))
+        )
+        if only_missing:
+            statement = statement.where(WorkDiaryEntryWorker.hourly_rate_snapshot.is_(None))
+        await db.execute(statement)
 
 
 async def _get_entry(db: AsyncSession, entry_id: int) -> WorkDiaryEntry:
@@ -530,17 +578,8 @@ def _replace_materials(
     entry.materials = rows
 
 
-def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
-    worker_count = len(entry.workers)
-    rate = _dec(entry.team_hourly_rate_snapshot)
-    labor = _dec(entry.regular_duration_hours) * rate
-    labor += _dec(entry.overtime_duration_hours) * rate * _dec(entry.overtime_multiplier)
-    # Дневница и питание — на человека, проживание — на всю бригаду
-    allowances = _dec(entry.lodging_amount)
-    if entry.per_diem:
-        allowances += _dec(entry.per_diem_amount) * worker_count
-    if entry.food_allowance:
-        allowances += _dec(entry.food_amount) * worker_count
+def _entry_billing_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
+    """Материалы и сумма заказчику. От режима оплаты работников не зависят."""
     stock_materials = Decimal("0")
     linked_materials = Decimal("0")
     services = Decimal("0")
@@ -558,18 +597,33 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
     calculated_billable = _dec(entry.duration_hours) * billing_rate + billable_materials + services
     billable = calculated_billable if entry.billable_amount_override is None else _dec(entry.billable_amount_override)
     return {
-        "labor_amount": labor,
-        "payout_amount": labor + allowances,
-        "allowance_amount": allowances,
         "material_amount": materials,
         "billable_material_amount": billable_materials,
         "billable_service_amount": services,
         "stock_material_amount": stock_materials,
         "linked_material_amount": linked_materials,
-        "total_cost_amount": labor + allowances + materials,
         "calculated_billable_amount": calculated_billable,
         "billable_amount": billable,
     }
+
+
+def _entry_amounts(entry: WorkDiaryEntry, cost: EntryCost) -> dict[str, Decimal]:
+    amounts = _entry_billing_amounts(entry)
+    labor = cost.labor
+    allowances = cost.allowances
+    total_cost = labor + allowances + amounts["material_amount"]
+    amounts.update(
+        {
+            "labor_amount": labor,
+            "hourly_labor_amount": cost.hourly_labor,
+            "day_labor_amount": cost.day_labor,
+            "payout_amount": labor + allowances,
+            "allowance_amount": allowances,
+            "total_cost_amount": total_cost,
+            "margin_amount": amounts["billable_amount"] - total_cost,
+        }
+    )
+    return amounts
 
 
 def _active_invoice_allocations(entry: WorkDiaryEntry) -> list[WorkDiaryInvoiceAllocation]:
@@ -637,8 +691,33 @@ def _serialize_material(material: WorkDiaryMaterial) -> WorkDiaryMaterialRespons
     )
 
 
-def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
-    amounts = _entry_amounts(entry)
+def _serialize_worker_pay(cost: EntryCost) -> list[WorkDiaryWorkerPayResponse]:
+    return [
+        WorkDiaryWorkerPayResponse(
+            worker_id=share.worker_id,
+            worker_name=share.worker_name,
+            pay_mode=share.pay_mode,
+            hourly_rate_snapshot=_float(share.hourly_rate),
+            day_rate=_float(share.day_rate),
+            day_rate_manual=share.day_rate_manual,
+            rate_missing=share.rate_missing,
+            trip_pricing_mode=share.trip_pricing_mode,
+            per_diem_amount=_float(share.per_diem),
+            food_amount=_float(share.food),
+            lodging_amount=_float(share.lodging),
+            day_hours=_float(share.day_hours),
+            day_entries_count=share.day_entries,
+            share=_float(share.share),
+            labor_amount=_float(share.labor),
+            allowance_amount=_float(share.allowances),
+        )
+        for share in cost.workers
+    ]
+
+
+def _serialize_entry(entry: WorkDiaryEntry, context: DayContext) -> WorkDiaryEntryResponse:
+    cost = entry_cost(entry, context)
+    amounts = _entry_amounts(entry, cost)
     billing = _entry_billing(entry, amounts["billable_amount"])
     workers = _entry_workers(entry)
     worker_count = len(workers)
@@ -664,6 +743,8 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         ),
         overtime_multiplier=_float(entry.overtime_multiplier),
         labor_amount=_float(amounts["labor_amount"]),
+        hourly_labor_amount=_float(amounts["hourly_labor_amount"]),
+        day_labor_amount=_float(amounts["day_labor_amount"]),
         payout_amount=_float(amounts["payout_amount"]),
         allowance_amount=_float(amounts["allowance_amount"]),
         material_amount=_float(amounts["material_amount"]),
@@ -674,6 +755,7 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         total_cost_amount=_float(amounts["total_cost_amount"]),
         calculated_billable_amount=_float(amounts["calculated_billable_amount"]),
         billable_amount=_float(amounts["billable_amount"]),
+        margin_amount=_float(amounts["margin_amount"]),
         invoiced_amount=_float(billing["invoiced_amount"]),
         remaining_billable_amount=_float(billing["remaining_billable_amount"]),
         billing_status=billing["billing_status"],
@@ -683,6 +765,10 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         lodging_amount=_float(entry.lodging_amount),
         food_allowance=bool(entry.food_allowance),
         food_amount=_float(entry.food_amount),
+        is_trip=bool(entry.is_trip),
+        travel_hours=_float(entry.travel_hours) if entry.travel_hours is not None else None,
+        travel_km=_float(entry.travel_km) if entry.travel_km is not None else None,
+        worker_pay=_serialize_worker_pay(cost),
         weather=entry.weather,
         temperature=entry.temperature,
         note=entry.note,
@@ -710,15 +796,14 @@ def _serialize_meta(project: Project, meta: WorkDiaryProjectMeta | None) -> Work
     return WorkDiaryProjectMetaResponse(project_id=project.id, project_name=project.name)
 
 
-@router.get("/entries", response_model=list[WorkDiaryEntryResponse])
-async def list_entries(
-    project_id: int | None = Query(None),
-    worker_id: int | None = Query(None),
-    date_from: date | None = Query(None),
-    date_to: date | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user_required),
-):
+async def _load_entries(
+    db: AsyncSession,
+    *,
+    project_id: int | None = None,
+    worker_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> list[WorkDiaryEntry]:
     query = (
         select(WorkDiaryEntry)
         .options(
@@ -739,8 +824,36 @@ async def list_entries(
         query = query.where(WorkDiaryEntry.date <= date_to)
     query = query.order_by(WorkDiaryEntry.date.desc(), WorkDiaryEntry.id.desc())
     result = await db.execute(query)
-    entries = result.scalars().all()
-    return [_serialize_entry(entry) for entry in entries]
+    return list(result.scalars().all())
+
+
+async def _serialize_entries(db: AsyncSession, entries: list[WorkDiaryEntry]) -> list[WorkDiaryEntryResponse]:
+    context = await load_day_context(db, entries)
+    return [_serialize_entry(entry, context) for entry in entries]
+
+
+async def _serialize_one(db: AsyncSession, entry_id: int) -> WorkDiaryEntryResponse:
+    entry = await _get_entry(db, entry_id)
+    return (await _serialize_entries(db, [entry]))[0]
+
+
+@router.get("/entries", response_model=list[WorkDiaryEntryResponse])
+async def list_entries(
+    project_id: int | None = Query(None),
+    worker_id: int | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    entries = await _load_entries(
+        db,
+        project_id=project_id,
+        worker_id=worker_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return await _serialize_entries(db, entries)
 
 
 @router.post("/export-proposal.xlsx")
@@ -799,6 +912,7 @@ async def create_entry(
 ):
     await _get_active_project(db, data.project_id)
     workers = await _get_workers(db, data.worker_ids)
+    _validate_worker_days(data.worker_days, workers)
     material_context = await _load_material_expenses(db, data.project_id, data.materials)
     duration_hours = _calculate_duration_hours(data.start_time, data.end_time, data.duration_hours)
     team_hourly_rate = (
@@ -836,6 +950,9 @@ async def create_entry(
         billable_amount_override=(
             _dec(data.billable_amount_override) if data.billable_amount_override is not None else None
         ),
+        is_trip=data.is_trip,
+        travel_hours=_dec(data.travel_hours) if data.travel_hours is not None else None,
+        travel_km=_dec(data.travel_km) if data.travel_km is not None else None,
         weather=data.weather,
         temperature=data.temperature,
         note=data.note,
@@ -851,9 +968,12 @@ async def create_entry(
     )
     _replace_materials(entry, data.materials, material_context)
     db.add(entry)
+    await db.flush()
+    await _store_hourly_rate_snapshots(db, entry.id, workers)
+    if data.worker_days:
+        await apply_worker_day_inputs(db, day=entry.date, workers=workers, inputs=data.worker_days)
     await db.commit()
-    entry = await _get_entry(db, entry.id)
-    return _serialize_entry(entry)
+    return await _serialize_one(db, entry.id)
 
 
 @router.patch("/entries/{entry_id}", response_model=WorkDiaryEntryResponse)
@@ -866,6 +986,8 @@ async def update_entry(
     entry = await _get_entry(db, entry_id)
     _ensure_entry_not_invoiced(entry)
     dump = data.model_dump(exclude_unset=True)
+    # Начисления за прежнюю дату и прежним работникам могут остаться без записей.
+    previous_days = {(worker.id, entry.date) for worker in entry.workers}
     next_project_id = dump.get("project_id", entry.project_id)
     if next_project_id == entry.project_id:
         await _get_project(db, next_project_id)
@@ -882,11 +1004,10 @@ async def update_entry(
         material_context = None
         _validate_existing_material_links(entry, next_project_id)
     workers_changed = "worker_ids" in dump
+    workers = await _get_workers(db, dump["worker_ids"] or []) if workers_changed else _entry_workers(entry)
+    _validate_worker_days(data.worker_days, workers)
     if workers_changed:
-        workers = await _get_workers(db, dump["worker_ids"] or [])
         entry.workers = workers
-    else:
-        workers = _entry_workers(entry)
 
     for key in (
         "date",
@@ -907,6 +1028,11 @@ async def update_entry(
         entry.per_diem_amount = _dec(dump["per_diem_amount"])
     if "food_amount" in dump:
         entry.food_amount = _dec(dump["food_amount"])
+    if dump.get("is_trip") is not None:
+        entry.is_trip = dump["is_trip"]
+    for key in ("travel_hours", "travel_km"):
+        if key in dump:
+            setattr(entry, key, _dec(dump[key]) if dump[key] is not None else None)
     if "material_billing_multiplier" in dump and dump["material_billing_multiplier"] is not None:
         entry.material_billing_multiplier = _dec(dump["material_billing_multiplier"])
     if "billable_amount_override" in dump:
@@ -959,9 +1085,19 @@ async def update_entry(
     if data.materials is not None:
         _replace_materials(entry, data.materials, material_context)
 
+    await db.flush()
+    # Ставки работников перечитываются вместе со ставкой бригады: при смене состава
+    # или возврате к авто-ставке. Иначе остаются снимки на момент записи.
+    refresh_rates = workers_changed or (
+        "team_hourly_rate_snapshot" in dump and dump["team_hourly_rate_snapshot"] is None
+    )
+    await _store_hourly_rate_snapshots(db, entry.id, workers, only_missing=not refresh_rates)
+    if data.worker_days:
+        await apply_worker_day_inputs(db, day=entry.date, workers=workers, inputs=data.worker_days)
+    await db.flush()
+    await delete_orphan_worker_days(db, previous_days)
     await db.commit()
-    entry = await _get_entry(db, entry.id)
-    return _serialize_entry(entry)
+    return await _serialize_one(db, entry.id)
 
 
 @router.delete("/entries/{entry_id}")
@@ -972,7 +1108,12 @@ async def delete_entry(
 ):
     entry = await _get_entry(db, entry_id)
     _ensure_entry_not_invoiced(entry)
+    days = {(worker.id, entry.date) for worker in entry.workers}
     await db.delete(entry)
+    await db.flush()
+    # Дневная ставка работника переходит к оставшимся записям этого дня, а если их
+    # нет — начисление за день удаляется вместе с последней записью.
+    await delete_orphan_worker_days(db, days)
     await db.commit()
     return {"ok": True}
 
@@ -1048,7 +1189,7 @@ async def create_invoice_from_entries(
     normalized_lines: list[tuple[WorkDiaryEntry, str, Decimal, Decimal]] = []
     for line in data.lines:
         entry = entries_by_id[line.entry_id]
-        source_amount = _entry_amounts(entry)["billable_amount"].quantize(Decimal("0.01"))
+        source_amount = _entry_billing_amounts(entry)["billable_amount"].quantize(Decimal("0.01"))
         remaining_amount = _entry_billing(entry, source_amount)["remaining_billable_amount"].quantize(Decimal("0.01"))
         line_amount = _dec(line.amount).quantize(Decimal("0.01"))
         if remaining_amount <= 0:
@@ -1344,6 +1485,7 @@ async def get_summary(
         regular_person_hours=sum(entry.regular_person_hours for entry in entries),
         overtime_person_hours=sum(entry.overtime_person_hours for entry in entries),
         labor_amount=sum(entry.labor_amount for entry in entries),
+        day_labor_amount=sum(entry.day_labor_amount for entry in entries),
         payout_amount=sum(entry.payout_amount for entry in entries),
         allowance_amount=sum(entry.allowance_amount for entry in entries),
         material_amount=sum(entry.material_amount for entry in entries),
@@ -1358,6 +1500,26 @@ async def get_summary(
     )
 
 
+def _serialize_cost_payout(item: PayoutCost) -> WorkDiaryCostPayout:
+    payout = item.payout
+    return WorkDiaryCostPayout(
+        payout_id=payout.id,
+        worker_id=payout.worker_id,
+        worker_name=item.worker_name,
+        payout_type=payout.payout_type,
+        date=payout.date,
+        period_start=payout.period_start,
+        period_end=payout.period_end,
+        amount=_float(item.amount),
+        project_id=payout.project_id,
+        project_name=item.project_name,
+        diary_reconciled=item.reconciled,
+        can_reconcile=bool(payout.period_start and payout.period_end),
+        period_accrued_amount=_float(item.period_accrued) if item.period_accrued is not None else None,
+        excess_amount=_float(item.excess),
+    )
+
+
 @router.get("/project-costs", response_model=WorkDiaryProjectCostsResponse)
 async def get_project_costs(
     project_id: int = Query(...),
@@ -1368,12 +1530,30 @@ async def get_project_costs(
 ):
     """Затраты по объекту без двойного счета.
 
+    Начисления дневника (труд, командировочные) и материалы со склада — оценка.
     expenses_amount — все расходы проекта из модуля Расходы (включая материалы,
-    привязанные к записям дневника). Сверху добавляются только труд, надбавки и
-    материалы со склада, которых в расходах нет.
+    привязанные к записям дневника, и выплаты работникам). Выплаты, явно
+    сопоставленные с начислениями дневника, в итог повторно не входят — кроме части,
+    выплаченной сверх начислений. Несопоставленные выплаты входят в итог отдельной
+    строкой, чтобы их было видно.
     """
     project = await _get_project(db, project_id)
-    entries = await list_entries(project_id, None, date_from, date_to, db, current_user)
+    entries = await _load_entries(db, project_id=project_id, date_from=date_from, date_to=date_to)
+    context = await load_day_context(db, entries)
+    costs = [(entry, entry_cost(entry, context)) for entry in entries]
+    amounts = [_entry_amounts(entry, cost) for entry, cost in costs]
+    project_accruals = [
+        WorkerAccrual(
+            worker_id=share.worker_id,
+            day=entry.date,
+            entry_id=entry.id,
+            project_id=entry.project_id,
+            amount=share.accrued,
+        )
+        for entry, cost in costs
+        for share in cost.workers
+    ]
+
     expense_query = select(func.coalesce(func.sum(Expense.amount), 0)).where(
         Expense.project_id == project_id,
         Expense.source != CASH_TRANSFER_SOURCE,
@@ -1384,22 +1564,160 @@ async def get_project_costs(
     if date_to is not None:
         expense_query = expense_query.where(Expense.date <= date_to)
     result = await db.execute(expense_query)
-    expenses_amount = _float(result.scalar_one())
-    labor_amount = sum(entry.labor_amount for entry in entries)
-    allowance_amount = sum(entry.allowance_amount for entry in entries)
-    stock_material_amount = sum(entry.stock_material_amount for entry in entries)
-    linked_material_amount = sum(entry.linked_material_amount for entry in entries)
+    expenses_amount = _dec(result.scalar_one())
+    payouts = await project_payouts(
+        db,
+        project_id=project_id,
+        date_from=date_from,
+        date_to=date_to,
+        project_accruals=project_accruals,
+    )
+
+    def total(key: str) -> Decimal:
+        return sum((item[key] for item in amounts), Decimal("0"))
+
+    labor_amount = total("labor_amount")
+    allowance_amount = total("allowance_amount")
+    stock_material_amount = total("stock_material_amount")
+    billable_amount = total("billable_amount")
+    other_expenses_amount = expenses_amount - payouts.total
+    total_cost_amount = (
+        labor_amount
+        + allowance_amount
+        + stock_material_amount
+        + other_expenses_amount
+        + payouts.unmatched
+        + payouts.excess
+    )
     return WorkDiaryProjectCostsResponse(
         project_id=project.id,
         project_name=project.name,
         date_from=date_from,
         date_to=date_to,
         entries_count=len(entries),
-        expenses_amount=expenses_amount,
-        labor_amount=labor_amount,
-        allowance_amount=allowance_amount,
-        stock_material_amount=stock_material_amount,
-        linked_material_amount=linked_material_amount,
-        total_cost_amount=expenses_amount + labor_amount + allowance_amount + stock_material_amount,
-        billable_amount=sum(entry.billable_amount for entry in entries),
+        person_hours=_float(sum((_dec(entry.duration_hours) * len(entry.workers) for entry in entries), Decimal("0"))),
+        expenses_amount=_float(expenses_amount),
+        labor_amount=_float(labor_amount),
+        hourly_labor_amount=_float(total("hourly_labor_amount")),
+        day_labor_amount=_float(total("day_labor_amount")),
+        allowance_amount=_float(allowance_amount),
+        stock_material_amount=_float(stock_material_amount),
+        linked_material_amount=_float(total("linked_material_amount")),
+        other_expenses_amount=_float(other_expenses_amount),
+        unmatched_payout_amount=_float(payouts.unmatched),
+        matched_payout_amount=_float(payouts.matched),
+        payout_excess_amount=_float(payouts.excess),
+        total_cost_amount=_float(total_cost_amount),
+        billable_amount=_float(billable_amount),
+        margin_amount=_float(billable_amount - total_cost_amount),
+        payouts=[_serialize_cost_payout(item) for item in payouts.payouts],
+        reconciliations=[
+            WorkDiaryPayoutReconciliation(
+                worker_id=group.worker_id,
+                worker_name=group.worker_name,
+                period_start=group.period_start,
+                period_end=group.period_end,
+                accrued_amount=_float(group.accrued),
+                accrued_in_project_amount=_float(group.accrued_in_project),
+                paid_amount=_float(group.paid),
+                balance_amount=_float(group.accrued - group.paid),
+                payouts=[_serialize_cost_payout(item) for item in group.payouts],
+            )
+            for group in payouts.groups
+        ],
     )
+
+
+@router.put("/payouts/{payout_id}/reconciliation")
+async def update_payout_reconciliation(
+    payout_id: int,
+    data: WorkDiaryPayoutReconciliationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_edit_access),
+):
+    """Явно связать выплату работнику с начислениями дневника за её период или снять связь.
+
+    Связь идёт по работнику и периоду выплаты, а не по совпадению суммы или даты:
+    выплаты работника с одним периодом (аванс и окончательный расчёт) сверяются
+    вместе, пересекающиеся разные периоды не допускаются.
+    """
+    payout = await set_payout_reconciliation(db, payout_id, data.reconciled)
+    await db.commit()
+    return {"ok": True, "payout_id": payout.id, "diary_reconciled": bool(payout.diary_reconciled)}
+
+
+@router.get("/worker-days", response_model=list[WorkDiaryWorkerDayState])
+async def get_worker_days(
+    day: date = Query(..., alias="date"),
+    worker_ids: str = Query(""),
+    entry_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Режимы оплаты работников за дату и их другие записи в этот день.
+
+    Форма записи показывает отсюда, как дневная ставка делится между записями.
+    """
+    try:
+        ids = [int(value) for value in str(worker_ids or "").split(",") if value.strip()]
+    except ValueError as exc:
+        raise HTTPException(400, "worker_ids must be a comma-separated list of integers") from exc
+    if not isinstance(entry_id, int):
+        entry_id = None
+    workers = await _get_workers(db, ids)
+    if not workers:
+        return []
+    worker_ids_set = [worker.id for worker in workers]
+    result = await db.execute(
+        select(WorkDiaryWorkerDay).where(
+            WorkDiaryWorkerDay.date == day,
+            WorkDiaryWorkerDay.worker_id.in_(worker_ids_set),
+        )
+    )
+    worker_days = {row.worker_id: row for row in result.scalars().all()}
+    other_query = (
+        select(
+            WorkDiaryEntryWorker.worker_id,
+            WorkDiaryEntry.id,
+            WorkDiaryEntry.project_id,
+            Project.name,
+            WorkDiaryEntry.duration_hours,
+        )
+        .join(WorkDiaryEntry, WorkDiaryEntry.id == WorkDiaryEntryWorker.entry_id)
+        .outerjoin(Project, Project.id == WorkDiaryEntry.project_id)
+        .where(WorkDiaryEntry.date == day, WorkDiaryEntryWorker.worker_id.in_(worker_ids_set))
+        .order_by(WorkDiaryEntry.id)
+    )
+    if entry_id is not None:
+        other_query = other_query.where(WorkDiaryEntry.id != entry_id)
+    others: dict[int, list[WorkDiaryWorkerDayOtherEntry]] = {}
+    for worker_id, other_id, other_project_id, project_name, duration_hours in (await db.execute(other_query)).all():
+        others.setdefault(worker_id, []).append(
+            WorkDiaryWorkerDayOtherEntry(
+                id=other_id,
+                project_id=other_project_id,
+                project_name=project_name,
+                duration_hours=_float(duration_hours),
+            )
+        )
+    states = []
+    for worker in workers:
+        row = worker_days.get(worker.id)
+        other_entries = others.get(worker.id, [])
+        states.append(
+            WorkDiaryWorkerDayState(
+                worker_id=worker.id,
+                worker_name=worker.name,
+                exists=row is not None,
+                pay_mode=row.pay_mode if row is not None else "hourly",
+                day_rate=_float(row.day_rate) if row is not None else 0,
+                day_rate_manual=bool(row.day_rate_manual) if row is not None else False,
+                trip_pricing_mode=row.trip_pricing_mode if row is not None else None,
+                per_diem_amount=_float(row.per_diem_amount) if row is not None else 0,
+                food_amount=_float(row.food_amount) if row is not None else 0,
+                lodging_amount=_float(row.lodging_amount) if row is not None else 0,
+                other_entries=other_entries,
+                other_hours=sum(item.duration_hours for item in other_entries),
+            )
+        )
+    return states

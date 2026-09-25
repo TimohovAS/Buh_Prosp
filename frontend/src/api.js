@@ -413,6 +413,15 @@ export const api = {
       const q = new URLSearchParams(params).toString()
       return request(`/work-diaries/project-costs${q ? `?${q}` : ''}`)
     },
+    workerDays: (params = {}) => {
+      const q = new URLSearchParams(params).toString()
+      return request(`/work-diaries/worker-days${q ? `?${q}` : ''}`)
+    },
+    setPayoutReconciliation: (payoutId, reconciled) =>
+      request(`/work-diaries/payouts/${payoutId}/reconciliation`, {
+        method: 'PUT',
+        body: JSON.stringify({ reconciled }),
+      }),
   },
 
   categories: {

@@ -4006,6 +4006,50 @@ th {
   max-width: 100%;
 }
 
+.work-diaries-entry-form .work-diaries-entry-tabs {
+  margin-bottom: -0.25rem;
+}
+
+.work-diaries-entry-tabs .work-diaries-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.work-diaries-entry-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  background: var(--color-warning);
+  color: #111827;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Высота вкладок близка, чтобы окно не прыгало при переключении. */
+.work-diaries-entry-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  min-height: 320px;
+}
+
+.work-diaries-entry-panel[hidden] {
+  display: none;
+}
+
+.work-diaries-pay-block {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--color-border);
+}
+
 .work-diaries-allowances,
 .work-diaries-material-row {
   display: grid;
@@ -4167,14 +4211,20 @@ th {
 
 .work-diaries-live-calc {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.45rem;
   border: 1px solid var(--color-border);
   background: rgba(26, 35, 50, 0.8);
   border-radius: 8px;
   padding: 0.7rem 1rem;
   font-size: 0.85rem;
+}
+
+.work-diaries-live-calc-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  align-items: center;
 }
 
 .work-diaries-live-calc span {
@@ -4184,6 +4234,205 @@ th {
 
 .work-diaries-live-calc b {
   color: var(--color-text);
+}
+
+.work-diaries-live-calc .work-diaries-margin-negative b,
+.work-diaries-margin-negative strong {
+  color: var(--color-danger);
+}
+
+.work-diaries-trip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.work-diaries-trip {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.work-diaries-trip-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 280px));
+  gap: 0.75rem;
+}
+
+.work-diaries-trip-hint,
+.work-diaries-pay-hint {
+  margin: 0;
+  max-width: 860px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.work-diaries-trip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.work-diaries-trip-suggestion {
+  color: var(--color-text-muted);
+}
+
+.work-diaries-pay,
+.work-diaries-pay-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.work-diaries-pay-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.work-diaries-pay-all .form-input {
+  width: auto;
+  min-width: 190px;
+}
+
+.work-diaries-pay-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(160px, 1fr) minmax(150px, 1fr) minmax(150px, 1.2fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.work-diaries-pay-grid.with-allowances .work-diaries-pay-row {
+  grid-template-columns:
+    minmax(120px, 1fr) minmax(150px, 1fr) minmax(130px, 1fr) repeat(3, minmax(90px, 0.7fr))
+    minmax(150px, 1.1fr);
+}
+
+.work-diaries-pay-grid.with-lodging .work-diaries-pay-row {
+  grid-template-columns:
+    minmax(130px, 1.1fr) minmax(160px, 1fr) minmax(150px, 1fr) minmax(110px, 0.8fr)
+    minmax(150px, 1.2fr);
+}
+
+.work-diaries-pay-header {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.work-diaries-pay-row > * {
+  min-width: 0;
+}
+
+.work-diaries-pay-name {
+  padding-top: 0.6rem;
+  font-weight: 600;
+}
+
+.work-diaries-pay-field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.work-diaries-pay-label {
+  display: none;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.work-diaries-pay-muted {
+  padding-top: 0.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.work-diaries-pay-accrued {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.55rem;
+  text-align: right;
+}
+
+.work-diaries-pay-accrued small {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.work-diaries-pay-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.work-diaries-pay-fieldset:disabled {
+  opacity: 0.6;
+}
+
+.work-diaries-pay-alert,
+.work-diaries-costs-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  max-width: 860px;
+  margin: 0 0 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-warning);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+
+.work-diaries-pay-alert.is-error {
+  border-color: var(--color-danger);
+}
+
+.work-diaries-save-blocked {
+  margin-right: auto;
+  color: var(--color-danger);
+  font-size: 0.82rem;
+}
+
+.work-diaries-hours-cell .work-diaries-pay-tag {
+  display: inline-block;
+  margin: 0.2rem 0 0 0.25rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-warning);
+  font-size: 0.68rem;
+}
+
+@container work-diary-entry (max-width: 900px) {
+  .work-diaries-pay-row,
+  .work-diaries-pay-grid.with-allowances .work-diaries-pay-row,
+  .work-diaries-pay-grid.with-lodging .work-diaries-pay-row {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .work-diaries-pay-header {
+    display: none;
+  }
+
+  .work-diaries-pay-label {
+    display: block;
+  }
+
+  .work-diaries-pay-name {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+
+  .work-diaries-pay-accrued {
+    text-align: left;
+  }
 }
 
 @container work-diary-entry (max-width: 760px) {
@@ -4273,6 +4522,60 @@ th {
   font-size: 0.82rem;
   margin: 0.75rem 0 0;
   max-width: 640px;
+}
+
+.work-diaries-costs.is-loading {
+  opacity: 0.6;
+}
+
+.work-diaries-costs-group td {
+  padding-top: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.work-diaries-costs-result {
+  margin-top: 1rem;
+}
+
+.work-diaries-costs-section {
+  margin-top: 1.5rem;
+}
+
+.work-diaries-costs-section h4 {
+  margin: 0 0 0.35rem;
+}
+
+.work-diaries-costs-section .work-diaries-costs-hint {
+  margin: 0 0 0.75rem;
+  max-width: 860px;
+}
+
+.work-diaries-costs-section td {
+  vertical-align: top;
+}
+
+.work-diaries-costs-payout-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.work-diaries-costs-payout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.work-diaries-costs-balance-note {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
 }
 
 .work-diaries-print-surface {

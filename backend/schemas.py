@@ -240,7 +240,7 @@ class WorkDiaryProjectMetaResponse(WorkDiaryProjectMetaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-WORK_DIARY_MATERIAL_UNITS = ("kom", "m", "m2", "m3", "kg", "t", "l", "pak", "h", "usl")
+WORK_DIARY_MATERIAL_UNITS = ("kom", "m", "m2", "m3", "kg", "t", "l", "pak", "h", "km", "usl")
 
 
 class WorkDiaryMaterialBase(BaseModel):
@@ -300,6 +300,48 @@ class WorkDiaryMaterialCreate(WorkDiaryMaterialBase):
     pass
 
 
+WORK_DIARY_PAY_MODES = ("hourly", "full_day", "trip_day")
+
+
+class WorkDiaryWorkerDayInput(BaseModel):
+    """Режим оплаты работника за дату записи и его командировочные.
+
+    Действует на всю дату: во всех записях работника за этот день. Пустые суммы
+    означают «по карточке работника»: ставка дня — regular_day_rate или
+    trip_work_day_rate, суточные и питание — ставки командировки. Уже сохранённый
+    снимок того же режима при пустом поле сохраняется.
+    """
+
+    worker_id: int
+    pay_mode: Literal["hourly", "full_day", "trip_day"] = "hourly"
+    day_rate: Optional[float] = Field(default=None, ge=0)
+    per_diem_amount: Optional[float] = Field(default=None, ge=0)
+    food_amount: Optional[float] = Field(default=None, ge=0)
+    lodging_amount: Optional[float] = Field(default=None, ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_empty_values(cls, data):
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+        for key in ("day_rate", "per_diem_amount", "food_amount", "lodging_amount"):
+            if result.get(key) == "":
+                result[key] = None
+        return result
+
+
+def _unique_worker_days(value):
+    if value is None:
+        return None
+    worker_ids = [item.worker_id for item in value]
+    if len(worker_ids) != len(set(worker_ids)):
+        raise ValueError("Each worker can appear only once in worker_days")
+    return value
+
+
 class WorkDiaryMaterialResponse(BaseModel):
     id: int
     line_no: int
@@ -336,6 +378,11 @@ class WorkDiaryEntryBase(BaseModel):
     lodging_amount: float = Field(default=0, ge=0)
     food_allowance: bool = False
     food_amount: float = Field(default=0, ge=0)
+    is_trip: bool = False
+    travel_hours: Optional[float] = Field(default=None, ge=0)
+    travel_km: Optional[float] = Field(default=None, ge=0)
+    # None => режимы оплаты за дату не трогаем (по умолчанию работник оплачивается по часам)
+    worker_days: Optional[list[WorkDiaryWorkerDayInput]] = None
     weather: Optional[str] = None
     temperature: Optional[str] = None
     note: Optional[str] = None
@@ -350,6 +397,11 @@ class WorkDiaryEntryBase(BaseModel):
             return []
         return list(dict.fromkeys(value))
 
+    @field_validator("worker_days")
+    @classmethod
+    def validate_worker_days(cls, value):
+        return _unique_worker_days(value)
+
     @model_validator(mode="before")
     @classmethod
     def normalize_empty_values(cls, data):
@@ -363,6 +415,8 @@ class WorkDiaryEntryBase(BaseModel):
             "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
+            "travel_hours",
+            "travel_km",
             "start_time",
             "end_time",
             "weather",
@@ -396,6 +450,10 @@ class WorkDiaryEntryUpdate(BaseModel):
     lodging_amount: Optional[float] = Field(default=None, ge=0)
     food_allowance: Optional[bool] = None
     food_amount: Optional[float] = Field(default=None, ge=0)
+    is_trip: Optional[bool] = None
+    travel_hours: Optional[float] = Field(default=None, ge=0)
+    travel_km: Optional[float] = Field(default=None, ge=0)
+    worker_days: Optional[list[WorkDiaryWorkerDayInput]] = None
     weather: Optional[str] = None
     temperature: Optional[str] = None
     note: Optional[str] = None
@@ -412,6 +470,11 @@ class WorkDiaryEntryUpdate(BaseModel):
             return []
         return list(dict.fromkeys(value))
 
+    @field_validator("worker_days")
+    @classmethod
+    def validate_worker_days(cls, value):
+        return _unique_worker_days(value)
+
     @model_validator(mode="before")
     @classmethod
     def normalize_empty_values(cls, data):
@@ -426,6 +489,8 @@ class WorkDiaryEntryUpdate(BaseModel):
             "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
+            "travel_hours",
+            "travel_km",
             "start_time",
             "end_time",
             "weather",
@@ -442,6 +507,33 @@ class WorkDiaryInvoiceLinkResponse(BaseModel):
     invoice_number: str
     invoice_status: str
     amount: float
+
+
+class WorkDiaryWorkerPayResponse(BaseModel):
+    """Начисление одному работнику в записи: режим за дату и доля этой записи.
+
+    Дневные суммы (day_rate, per_diem_amount, food_amount, lodging_amount) — за
+    весь день работника; labor_amount и allowance_amount — часть, пришедшаяся на эту
+    запись по доле её часов (share) среди всех записей работника за дату.
+    """
+
+    worker_id: int
+    worker_name: str
+    pay_mode: Literal["hourly", "full_day", "trip_day"]
+    hourly_rate_snapshot: Optional[float] = None
+    day_rate: float = 0
+    day_rate_manual: bool = False
+    # Для режима за день ставка равна нулю и не введена вручную — нужно предупредить.
+    rate_missing: bool = False
+    trip_pricing_mode: Optional[str] = None
+    per_diem_amount: float = 0
+    food_amount: float = 0
+    lodging_amount: float = 0
+    day_hours: float = 0
+    day_entries_count: int = 1
+    share: float = 1
+    labor_amount: float = 0
+    allowance_amount: float = 0
 
 
 class WorkDiaryEntryResponse(BaseModel):
@@ -463,7 +555,11 @@ class WorkDiaryEntryResponse(BaseModel):
     material_billing_multiplier: float
     billable_amount_override: Optional[float] = None
     overtime_multiplier: float
+    # Начисленная себестоимость труда: почасовая часть + доли дневных ставок.
     labor_amount: float
+    hourly_labor_amount: float = 0
+    day_labor_amount: float = 0
+    # Начислено работникам (труд + командировочные) — оценка, а не выплата.
     payout_amount: float
     allowance_amount: float
     material_amount: float
@@ -474,6 +570,8 @@ class WorkDiaryEntryResponse(BaseModel):
     total_cost_amount: float
     calculated_billable_amount: float
     billable_amount: float
+    # Сумма заказчику минус затраты записи.
+    margin_amount: float = 0
     invoiced_amount: float
     remaining_billable_amount: float
     billing_status: Literal["not_invoiced", "partially_invoiced", "invoiced"]
@@ -483,6 +581,10 @@ class WorkDiaryEntryResponse(BaseModel):
     lodging_amount: float
     food_allowance: bool
     food_amount: float
+    is_trip: bool = False
+    travel_hours: Optional[float] = None
+    travel_km: Optional[float] = None
+    worker_pay: list[WorkDiaryWorkerPayResponse] = Field(default_factory=list)
     weather: Optional[str] = None
     temperature: Optional[str] = None
     note: Optional[str] = None
@@ -499,6 +601,7 @@ class WorkDiarySummaryResponse(BaseModel):
     regular_person_hours: float
     overtime_person_hours: float
     labor_amount: float
+    day_labor_amount: float = 0
     payout_amount: float
     allowance_amount: float
     material_amount: float
@@ -510,6 +613,30 @@ class WorkDiarySummaryResponse(BaseModel):
     billable_amount: float
     invoiced_amount: float
     remaining_billable_amount: float
+
+
+class WorkDiaryWorkerDayOtherEntry(BaseModel):
+    id: int
+    project_id: int
+    project_name: Optional[str] = None
+    duration_hours: float
+
+
+class WorkDiaryWorkerDayState(BaseModel):
+    """Сохранённый режим оплаты работника за дату и другие его записи этого дня."""
+
+    worker_id: int
+    worker_name: str
+    exists: bool = False
+    pay_mode: Literal["hourly", "full_day", "trip_day"] = "hourly"
+    day_rate: float = 0
+    day_rate_manual: bool = False
+    trip_pricing_mode: Optional[str] = None
+    per_diem_amount: float = 0
+    food_amount: float = 0
+    lodging_amount: float = 0
+    other_entries: list[WorkDiaryWorkerDayOtherEntry] = Field(default_factory=list)
+    other_hours: float = 0
 
 
 class WorkDiaryProposalExportRequest(BaseModel):
@@ -609,22 +736,85 @@ class WorkDiaryExpenseOptionResponse(BaseModel):
     items: list[WorkDiaryExpenseItemOption] = Field(default_factory=list)
 
 
+class WorkDiaryCostPayout(BaseModel):
+    """Выплата работнику, записанная расходом проекта."""
+
+    payout_id: int
+    worker_id: int
+    worker_name: Optional[str] = None
+    payout_type: str
+    date: DateType
+    period_start: Optional[DateType] = None
+    period_end: Optional[DateType] = None
+    amount: float
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    diary_reconciled: bool = False
+    # Сопоставить можно только выплату с периодом: связь идёт по работнику и периоду.
+    can_reconcile: bool = False
+    # Справочно: начислено этому работнику по дневнику за период выплаты (все проекты).
+    period_accrued_amount: Optional[float] = None
+    # Часть выплаты сверх начислений дневника — остаётся затратой проекта выплаты.
+    excess_amount: float = 0
+
+
+class WorkDiaryPayoutReconciliation(BaseModel):
+    """Сверка начислений дневника с выплатами работнику за один период."""
+
+    worker_id: int
+    worker_name: Optional[str] = None
+    period_start: DateType
+    period_end: DateType
+    accrued_amount: float
+    accrued_in_project_amount: float
+    paid_amount: float
+    # accrued - paid: > 0 — начислено, но ещё не выплачено; < 0 — выплачено сверх начислений.
+    balance_amount: float
+    payouts: list[WorkDiaryCostPayout] = Field(default_factory=list)
+
+
 class WorkDiaryProjectCostsResponse(BaseModel):
-    """Затраты по объекту: расходы из модуля Расходы + труд и складские материалы из дневника."""
+    """Затраты по объекту без двойного счёта выплат.
+
+    Начисления дневника (труд, командировочные) — оценка себестоимости. Выплаты
+    работникам, явно сопоставленные с этими начислениями, в итог повторно не входят
+    (кроме части сверх начислений); несопоставленные выплаты и прочие расходы
+    проекта входят в итог отдельными строками.
+    """
 
     project_id: int
     project_name: Optional[str] = None
     date_from: Optional[DateType] = None
     date_to: Optional[DateType] = None
     entries_count: int
+    # Человеко-часы на объекте по записям дневника.
+    person_hours: float = 0
+    # Справочно: все расходы проекта из модуля «Расходы», включая выплаты работникам.
     expenses_amount: float
     labor_amount: float
+    hourly_labor_amount: float = 0
+    day_labor_amount: float = 0
     allowance_amount: float
     stock_material_amount: float
     # Справочно: материалы дневника, уже учтенные внутри expenses_amount
     linked_material_amount: float
+    # Расходы проекта, не являющиеся выплатами работникам.
+    other_expenses_amount: float = 0
+    # Выплаты работникам без сопоставления с дневником — входят в итог.
+    unmatched_payout_amount: float = 0
+    # Выплаты, покрытые начислениями дневника, — справочно, в итог не входят.
+    matched_payout_amount: float = 0
+    # Выплачено сверх начислений дневника по сопоставленным выплатам — входит в итог.
+    payout_excess_amount: float = 0
     total_cost_amount: float
     billable_amount: float
+    margin_amount: float = 0
+    payouts: list[WorkDiaryCostPayout] = Field(default_factory=list)
+    reconciliations: list[WorkDiaryPayoutReconciliation] = Field(default_factory=list)
+
+
+class WorkDiaryPayoutReconciliationUpdate(BaseModel):
+    reconciled: bool
 
 
 # --- Income ---
@@ -2107,6 +2297,8 @@ class WorkerPayoutResponse(BaseModel):
     # calculated — посчитана по ставкам; expense_link — привязанный расход.
     origin: str = "calculated"
     settled_plan_ids: list[int] = Field(default_factory=list)
+    # Сопоставлена с начислениями дневника работ за свой период.
+    diary_reconciled: bool = False
     date: DateType
     period_start: Optional[DateType] = None
     period_end: Optional[DateType] = None

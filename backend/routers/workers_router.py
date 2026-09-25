@@ -431,6 +431,18 @@ def _validate_payout_link(data: WorkerPayoutLinkUpdate) -> None:
     _validate_payout_period(data.payout_type, data.period_start, data.period_end)
 
 
+def _reset_diary_reconciliation_if_moved(payout: WorkerPayout, worker_id: int, period_start, period_end) -> None:
+    """Сверка с дневником держится на работнике и периоде выплаты.
+
+    Сменились они — прежняя связь описывает уже другие начисления: снимаем её, и
+    выплата снова видна в затратах объекта как несопоставленная до нового решения.
+    """
+    if not payout.diary_reconciled:
+        return
+    if payout.worker_id != worker_id or payout.period_start != period_start or payout.period_end != period_end:
+        payout.diary_reconciled = False
+
+
 def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
     return WorkerPayoutResponse(
         id=payout.id,
@@ -441,6 +453,7 @@ def _serialize_worker_payout(payout: WorkerPayout) -> WorkerPayoutResponse:
         payout_type=payout.payout_type,
         origin=payout.origin or "calculated",
         settled_plan_ids=sorted(payout_settled_plan_ids(payout)),
+        diary_reconciled=bool(payout.diary_reconciled),
         date=payout.date,
         period_start=payout.period_start,
         period_end=payout.period_end,
@@ -1001,6 +1014,7 @@ async def update_worker_payout_link(
 
     worker = await _get_worker_or_404(db, data.worker_id)
     previous_worker_id = payout.worker_id
+    _reset_diary_reconciliation_if_moved(payout, worker.id, data.period_start, data.period_end)
     payout.worker_id = worker.id
     payout.payout_type = data.payout_type
     payout.period_start = data.period_start
@@ -1151,6 +1165,7 @@ async def update_worker_payout(
     entry.note = note
     entry.expense_id = expense.id
 
+    _reset_diary_reconciliation_if_moved(payout, worker.id, data.period_start, data.period_end)
     payout.worker_id = worker.id
     payout.cash_entry_id = entry.id
     payout.expense_id = expense.id

@@ -20,6 +20,7 @@ import {
   dateLabel,
   hours,
   money,
+  payModeLabel,
 } from '../components/work-diaries/workDiaryUtils'
 
 const emptyMeta = {
@@ -35,6 +36,15 @@ const emptyMeta = {
 
 function entryWorkerName(entry) {
   return entry.worker_names?.length ? entry.worker_names.join(', ') : tr('workDiariesNoWorker')
+}
+
+// Пометки строки: выезд и оплата за день (по часам — обычный случай, без пометки).
+function entryPayTags(entry) {
+  const tags = entry.is_trip ? [tr('workDiariesTripTag')] : []
+  const dayModes = [...new Set((entry.worker_pay || []).map((item) => item.pay_mode))].filter(
+    (mode) => mode !== 'hourly'
+  )
+  return [...tags, ...dayModes.map(payModeLabel)]
 }
 
 function groupByDate(entries) {
@@ -542,6 +552,11 @@ export default function WorkDiaries() {
                             <span>
                               {hours(entry.duration_hours)} × {entry.worker_ids.length}
                             </span>
+                            {entryPayTags(entry).map((tag) => (
+                              <span key={tag} className="work-diaries-pay-tag">
+                                {tag}
+                              </span>
+                            ))}
                           </td>
                           <td style={{ textAlign: 'right' }}>{money(entry.total_cost_amount)}</td>
                           <td style={{ textAlign: 'right' }}>{money(entry.material_amount)}</td>

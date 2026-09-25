@@ -180,6 +180,10 @@ class WorkerPayout(Base):
     # "[]" — не относится ни к какому плану; NULL — старая выплата, чью связь
     # не подтвердила ни одна отметка: её нужно проверить вручную.
     settled_plan_ids = Column(Text, nullable=True, default="[]")
+    # Выплата явно сопоставлена с начислениями дневника работ этого работника за
+    # свой период (period_start..period_end). Тогда в затратах объекта считается
+    # начисление, а расход выплаты повторно не прибавляется.
+    diary_reconciled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
@@ -567,6 +571,12 @@ class WorkDiaryEntry(Base):
     lodging_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на всю бригаду (жильё целиком)
     food_allowance = Column(Boolean, default=False)
     food_amount = Column(Numeric(14, 2), nullable=False, default=0)  # на одного работника в день
+    # Выезд на объект вне базы. Сам по себе оплату не меняет: режим оплаты работника
+    # за дату задаётся отдельно (WorkDiaryWorkerDay), время в пути и расстояние —
+    # справочно, для подстановки в услуги заказчику.
+    is_trip = Column(Boolean, nullable=False, default=False)
+    travel_hours = Column(Numeric(6, 2), nullable=True)
+    travel_km = Column(Numeric(8, 1), nullable=True)
     weather = Column(String(20))  # код: sunny | cloudy | rain | snow | wind | fog
     temperature = Column(String(30))
     note = Column(Text)
@@ -601,6 +611,43 @@ class WorkDiaryEntryWorker(Base):
 
     entry_id = Column(Integer, ForeignKey("work_diary_entries.id"), primary_key=True)
     worker_id = Column(Integer, ForeignKey("workers.id"), primary_key=True, index=True)
+    # Себестоимость часа этого работника на момент записи (дневная ставка ÷ 8). По ней
+    # почасовой труд бригады делится между работниками, когда часть бригады оплачивается
+    # за день, и для сверки начислений каждого работника с его выплатами.
+    hourly_rate_snapshot = Column(Numeric(14, 2), nullable=True)
+
+
+class WorkDiaryWorkerDay(Base):
+    """Начисление работнику за дату: режим оплаты, дневная ставка и командировочные.
+
+    Одна строка на работника и дату, общая для всех записей дневника этого дня:
+    дневная ставка и командировочные начисляются один раз и делятся между записями
+    пропорционально часам на объекте, в том числе между разными проектами. Ставки и
+    суммы — снимки: позднейшая правка карточки работника их не меняет. Нет строки —
+    работник в этот день оплачивается по часам без командировочных.
+    """
+
+    __tablename__ = "work_diary_worker_days"
+    __table_args__ = (UniqueConstraint("worker_id", "date", name="uq_work_diary_worker_day"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    pay_mode = Column(String(20), nullable=False, default="hourly")  # hourly | full_day | trip_day
+    # Дневная ставка для full_day (regular_day_rate) или trip_day (trip_work_day_rate);
+    # manual — введена вручную, а не взята из карточки.
+    day_rate = Column(Numeric(14, 2), nullable=False, default=0)
+    day_rate_manual = Column(Boolean, nullable=False, default=False)
+    # Снимок trip_pricing_mode работника для дня командировки: при fixed_plus_lodging
+    # суточные и питание входят в фиксированную ставку и отдельно не начисляются.
+    trip_pricing_mode = Column(String(30), nullable=True)
+    per_diem_amount = Column(Numeric(14, 2), nullable=False, default=0)  # суточные за день
+    food_amount = Column(Numeric(14, 2), nullable=False, default=0)  # питание за день
+    lodging_amount = Column(Numeric(14, 2), nullable=False, default=0)  # проживание за ночь
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    worker = relationship("Worker")
 
 
 class WorkDiaryMaterial(Base):
@@ -618,7 +665,7 @@ class WorkDiaryMaterial(Base):
     line_no = Column(Integer, nullable=False, default=1)
     description = Column(String(500), nullable=False)
     quantity = Column(Numeric(12, 3))
-    unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h | usl
+    unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h | km | usl
     source = Column(String(20), nullable=False, default="stock")  # stock | expense | service
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, index=True)
     source_item_type = Column(String(20), nullable=True)  # expense_item | receipt_item
