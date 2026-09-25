@@ -608,6 +608,7 @@ class WorkDiaryMaterial(Base):
 
     source="expense": стоимость уже учтена в расходах проекта (expense_id) и не
     прибавляется к затратам объекта повторно. source="stock": со склада, стоимость — оценка.
+    source="service": продажная стоимость услуги, без коэффициента материалов.
     """
 
     __tablename__ = "work_diary_materials"
@@ -617,8 +618,8 @@ class WorkDiaryMaterial(Base):
     line_no = Column(Integer, nullable=False, default=1)
     description = Column(String(500), nullable=False)
     quantity = Column(Numeric(12, 3))
-    unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h
-    source = Column(String(20), nullable=False, default="stock")  # stock | expense
+    unit = Column(String(20))  # код: kom | m | m2 | m3 | kg | t | l | pak | h | usl
+    source = Column(String(20), nullable=False, default="stock")  # stock | expense | service
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True, index=True)
     source_item_type = Column(String(20), nullable=True)  # expense_item | receipt_item
     source_item_id = Column(Integer, nullable=True)

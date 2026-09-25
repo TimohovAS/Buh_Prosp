@@ -26,7 +26,7 @@ const WEATHER_PRINT_LABELS = {
   fog: 'Магла',
 }
 
-export const MATERIAL_UNITS = ['kom', 'm', 'm2', 'm3', 'kg', 't', 'l', 'pak', 'h']
+export const MATERIAL_UNITS = ['kom', 'm', 'm2', 'm3', 'kg', 't', 'l', 'pak', 'h', 'usl']
 
 const UNIT_LABEL_KEYS = {
   kom: 'unitCodeKom',
@@ -38,6 +38,7 @@ const UNIT_LABEL_KEYS = {
   l: 'unitCodeL',
   pak: 'unitCodePak',
   h: 'unitCodeH',
+  usl: 'unitCodeUsl',
 }
 
 export function weatherLabel(code) {
@@ -119,12 +120,19 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
   let allowances = num(form.lodging_amount)
   if (form.per_diem) allowances += num(form.per_diem_amount) * workerCount
   if (form.food_allowance) allowances += num(form.food_amount) * workerCount
-  const materialsTotal = materials.reduce((sum, item) => sum + num(item.amount), 0)
+  const materialsTotal = materials.reduce(
+    (sum, item) => sum + (item.source === 'service' ? 0 : num(item.amount)),
+    0
+  )
+  const servicesTotal = materials.reduce(
+    (sum, item) => sum + (item.source === 'service' ? num(item.amount) : 0),
+    0
+  )
   const materialBillingMultiplier =
     num(form.material_billing_multiplier) || DEFAULT_MATERIAL_BILLING_MULTIPLIER
   const billableMaterials = materialsTotal * materialBillingMultiplier
   const personHours = duration * workerCount
-  const calculatedBillable = duration * teamBillingRate + billableMaterials
+  const calculatedBillable = duration * teamBillingRate + billableMaterials + servicesTotal
   const billableAdjusted = form.billable_amount_override !== '' && form.billable_amount_override != null
   const billable = billableAdjusted ? num(form.billable_amount_override) : calculatedBillable
   const billableLabor = duration * teamBillingRate
@@ -135,6 +143,7 @@ export function computeEntryTotals({ form, materials, teamRate, teamBillingRate,
     labor,
     allowances,
     materials: materialsTotal,
+    services: servicesTotal,
     payout: labor + allowances,
     totalCost: labor + allowances + materialsTotal,
     calculatedBillable,

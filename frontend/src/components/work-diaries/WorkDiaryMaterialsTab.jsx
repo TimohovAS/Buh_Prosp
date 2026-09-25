@@ -9,6 +9,7 @@ export default function WorkDiaryMaterialsTab({ entries, loading }) {
     const groups = new Map()
     entries.forEach((entry) => {
       ;(entry.materials || []).forEach((material) => {
+        if (material.source === 'service') return
         const description = (material.description || '').trim()
         if (!description) return
         const key = [description.toLowerCase(), material.unit || '', material.source].join('|')

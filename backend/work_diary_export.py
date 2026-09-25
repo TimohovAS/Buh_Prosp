@@ -72,7 +72,7 @@ def _client_language(project: Project) -> str:
 LABELS = {
     "sr": {
         "proposal": "PREDLOG ZA FAKTURISANJE",
-        "specification": "SPECIFIKACIJA RADOVA I MATERIJALA",
+        "specification": "SPECIFIKACIJA RADOVA, USLUGA I MATERIJALA",
         "customer": "NARUČILAC",
         "document": "PODACI O PREDLOGU",
         "document_date": "Datum dokumenta:",
@@ -88,12 +88,13 @@ LABELS = {
         "amount": "Ukupno",
         "work": "Radovi",
         "material": "Materijal",
+        "service": "Usluga",
         "adjustment": "Korekcija dogovorene cene",
         "piece": "stavka",
         "total": "UKUPNO PREDLOŽENO ZA FAKTURISANJE:",
         "payment": "Rok plaćanja: prema ugovoru ili dogovoru sa naručiocem.",
         "disclaimer": (
-            "Ovaj dokument je predlog za fakturisanje i specifikacija izvedenih radova i "
+            "Ovaj dokument je predlog za fakturisanje i specifikacija izvedenih radova, usluga i "
             "utrošenog materijala. Nije faktura niti zahtev za plaćanje. PDV i poreska "
             "kategorija biće iskazani u konačnoj elektronskoj fakturi."
         ),
@@ -104,7 +105,7 @@ LABELS = {
     },
     "ru": {
         "proposal": "ПРЕДЛОЖЕНИЕ К ФАКТУРИРОВАНИЮ",
-        "specification": "СПЕЦИФИКАЦИЯ РАБОТ И МАТЕРИАЛОВ",
+        "specification": "СПЕЦИФИКАЦИЯ РАБОТ, УСЛУГ И МАТЕРИАЛОВ",
         "customer": "ЗАКАЗЧИК",
         "document": "ДАННЫЕ ПРЕДЛОЖЕНИЯ",
         "document_date": "Дата документа:",
@@ -120,13 +121,14 @@ LABELS = {
         "amount": "Сумма",
         "work": "Работы",
         "material": "Материал",
+        "service": "Услуга",
         "adjustment": "Корректировка договорной цены",
         "piece": "позиция",
         "total": "ИТОГО ПРЕДЛОЖЕНО К ФАКТУРИРОВАНИЮ:",
         "payment": "Срок оплаты: согласно договору или договоренности с заказчиком.",
         "disclaimer": (
             "Этот документ является предложением к фактурированию и спецификацией выполненных "
-            "работ и использованных материалов. Он не является фактурой или требованием оплаты. "
+            "работ, услуг и использованных материалов. Он не является фактурой или требованием оплаты. "
             "НДС и налоговая категория будут указаны в окончательной электронной фактуре."
         ),
         "prepared_by": "Составил:",
@@ -157,7 +159,24 @@ def _proposal_lines(entries: list[WorkDiaryEntry], labels: dict[str, str]) -> li
 
         multiplier = _dec(entry.material_billing_multiplier) or DEFAULT_MATERIAL_MULTIPLIER
         material_amount = ZERO
+        service_amount = ZERO
         for material in entry.materials:
+            if material.source == "service":
+                billed_amount = _money(_dec(material.amount))
+                service_amount += billed_amount
+                quantity = _dec(material.quantity) or Decimal("1")
+                lines.append(
+                    ProposalLine(
+                        work_date=entry.date,
+                        description=f"{labels['service']}: {_clean(material.description)}",
+                        unit=_clean(material.unit) or labels["piece"],
+                        quantity=quantity,
+                        unit_price=_money(billed_amount / quantity),
+                        amount=billed_amount,
+                        line_type="service",
+                    )
+                )
+                continue
             billed_amount = _money(_dec(material.amount) * multiplier)
             material_amount += billed_amount
             quantity = _dec(material.quantity)
@@ -176,7 +195,7 @@ def _proposal_lines(entries: list[WorkDiaryEntry], labels: dict[str, str]) -> li
                 )
             )
 
-        calculated_amount = labor_amount + material_amount
+        calculated_amount = labor_amount + material_amount + service_amount
         if entry.billable_amount_override is not None:
             adjustment = _money(_dec(entry.billable_amount_override) - calculated_amount)
             if adjustment != ZERO:

@@ -38,6 +38,7 @@ const emptyForm = {
   end_time: '15:00',
   duration_hours: '',
   team_hourly_rate_snapshot: '',
+  team_billing_hourly_rate_snapshot: '',
   material_billing_multiplier: String(DEFAULT_MATERIAL_BILLING_MULTIPLIER),
   billable_amount_override: '',
   per_diem: false,
@@ -60,7 +61,13 @@ const emptyMaterial = {
   source_item_type: '',
   source_item_id: '',
   unit_price: '',
+  unit_price_derived: false,
   legacy_whole_expense: false,
+}
+
+function materialAmount(quantity, unitPrice) {
+  if (quantity === '' || unitPrice === '') return ''
+  return String(Math.round((num(quantity) * num(unitPrice) + Number.EPSILON) * 100) / 100)
 }
 
 function formatDuration(value) {
@@ -97,6 +104,8 @@ function formFromEntry(entry, defaultProjectId, materialBillingMultiplier) {
     duration_hours: hasTimeRange ? '' : String(entry.duration_hours ?? ''),
     team_hourly_rate_snapshot:
       entry.team_hourly_rate_snapshot == null ? '' : String(entry.team_hourly_rate_snapshot),
+    team_billing_hourly_rate_snapshot:
+      entry.team_billing_hourly_rate_snapshot == null ? '' : String(entry.team_billing_hourly_rate_snapshot),
     material_billing_multiplier:
       entry.material_billing_multiplier == null
         ? String(materialBillingMultiplier)
@@ -125,7 +134,13 @@ function materialsFromEntry(entry) {
     amount: material.amount ? String(material.amount) : '',
     source_item_type: material.source_item_type || '',
     source_item_id: material.source_item_id ? String(material.source_item_id) : '',
-    unit_price: material.unit_price_snapshot == null ? '' : String(material.unit_price_snapshot),
+    unit_price:
+      material.unit_price_snapshot != null
+        ? String(material.unit_price_snapshot)
+        : material.quantity && material.amount
+          ? String(Math.round((material.amount / material.quantity) * 100) / 100)
+          : '',
+    unit_price_derived: material.unit_price_snapshot == null && Boolean(material.quantity && material.amount),
     expense_description: material.expense_description || '',
     expense_date: material.expense_date || '',
     legacy_whole_expense:
@@ -161,8 +176,14 @@ export default function WorkDiaryEntryModal({
     disabled: !isOpen || readOnly || saving,
   })
 
-  const addMaterial = () => {
-    const material = { ...emptyMaterial, rowKey: createEditorRowKey() }
+  const addMaterial = (source = 'stock') => {
+    const material = {
+      ...emptyMaterial,
+      rowKey: createEditorRowKey(),
+      source,
+      quantity: source === 'service' ? '1' : '',
+      unit: source === 'service' ? 'usl' : '',
+    }
     materialEditor.focusNewItem(material.rowKey)
     setMaterials((previous) => [...previous, material])
   }
@@ -203,7 +224,7 @@ export default function WorkDiaryEntryModal({
   )
 
   const autoRate = useMemo(() => teamAutoRate(workers, form.worker_ids), [workers, form.worker_ids])
-  const teamBillingRate = useMemo(
+  const autoBillingRate = useMemo(
     () => teamBillingAutoRate(workers, form.worker_ids),
     [workers, form.worker_ids]
   )
@@ -214,21 +235,32 @@ export default function WorkDiaryEntryModal({
 
   const manualRate = form.team_hourly_rate_snapshot
   const effectiveRate = manualRate === '' ? autoRate : num(manualRate)
+  const manualBillingRate = form.team_billing_hourly_rate_snapshot
+  const teamBillingRate = manualBillingRate === '' ? autoBillingRate : num(manualBillingRate)
   const effectiveMultiplier = entry ? num(entry.overtime_multiplier) : num(overtimeMultiplier)
 
   // Для расчета материалов пустая сумма привязанной строки означает всю сумму расхода
   const materialsForCalc = useMemo(
     () =>
       materials.map((item) => {
-        if (item.source === 'expense' && item.amount === '' && item.expense_id) {
+        if (
+          item.source === 'expense' &&
+          item.amount === '' &&
+          item.expense_id &&
+          !item.source_item_id &&
+          item.quantity === '' &&
+          item.unit_price === ''
+        ) {
           const option = expenseOptions.find((o) => String(o.id) === String(item.expense_id))
+          if (!item.legacy_whole_expense && option?.items?.length) return { amount: 0 }
           return {
+            source: item.source,
             amount: option
               ? option.remaining_amount
               : num(item.expense_remaining_amount ?? item.expense_amount),
           }
         }
-        return { amount: num(item.amount) }
+        return { source: item.source, amount: num(item.amount) }
       }),
     [materials, expenseOptions]
   )
@@ -269,7 +301,12 @@ export default function WorkDiaryEntryModal({
           : String(item.quantity)
         : String(item.remaining_quantity),
     unit: item.unit || '',
-    unit_price: item.unit_price == null ? '' : String(item.unit_price),
+    unit_price:
+      item.unit_price != null
+        ? String(item.unit_price)
+        : item.quantity && item.total_amount
+          ? String(Math.round((item.total_amount / item.quantity) * 100) / 100)
+          : '',
     amount:
       item.remaining_amount == null
         ? item.total_amount
@@ -401,6 +438,7 @@ export default function WorkDiaryEntryModal({
         end_time: form.end_time || null,
         duration_hours: form.duration_hours === '' ? null : num(form.duration_hours),
         team_hourly_rate_snapshot: manualRate === '' ? null : num(manualRate),
+        team_billing_hourly_rate_snapshot: manualBillingRate === '' ? null : num(manualBillingRate),
         material_billing_multiplier: num(form.material_billing_multiplier) || materialBillingMultiplier,
         billable_amount_override:
           form.billable_amount_override === '' ? null : num(form.billable_amount_override),
@@ -410,7 +448,7 @@ export default function WorkDiaryEntryModal({
         materials: materials
           .filter(
             (item) =>
-              (item.source === 'stock' && item.description.trim()) ||
+              ((item.source === 'stock' || item.source === 'service') && item.description.trim()) ||
               (item.source === 'expense' && item.expense_id)
           )
           .map((item) => ({
@@ -423,7 +461,8 @@ export default function WorkDiaryEntryModal({
               item.source === 'expense' && item.source_item_type ? item.source_item_type : null,
             source_item_id:
               item.source === 'expense' && item.source_item_id ? Number(item.source_item_id) : null,
-            unit_price_snapshot: item.unit_price === '' ? null : num(item.unit_price),
+            unit_price_snapshot:
+              item.unit_price === '' || item.unit_price_derived ? null : num(item.unit_price),
             amount: num(item.amount),
           })),
       }
@@ -553,8 +592,27 @@ export default function WorkDiaryEntryModal({
               {tr('workDiariesTeamBillingRate')}
               <FieldTooltip text={tr('workDiariesTeamBillingRateTooltip')} align="right" />
             </span>
-            <input className="form-input" type="number" value={teamBillingRate} readOnly />
-            <small className="work-diaries-rate-hint">{tr('workDiariesTeamBillingRateHint')}</small>
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={manualBillingRate}
+              placeholder={autoBillingRate > 0 ? String(Math.round(autoBillingRate * 100) / 100) : ''}
+              onChange={(event) => setFormField('team_billing_hourly_rate_snapshot', event.target.value)}
+            />
+            <small className="work-diaries-rate-hint">
+              {tr('workDiariesTeamBillingRateHint')}: {money(autoBillingRate)}
+              {!readOnly && manualBillingRate !== '' && num(manualBillingRate) !== autoBillingRate ? (
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setFormField('team_billing_hourly_rate_snapshot', '')}
+                >
+                  {tr('workDiariesApplyAutoRate')}
+                </button>
+              ) : null}
+            </small>
             {teamBillingRate === 0 ? (
               <small className="work-diaries-rate-warning">{tr('workDiariesBillingRateZeroWarning')}</small>
             ) : null}
@@ -622,8 +680,19 @@ export default function WorkDiaryEntryModal({
 
         <div className="work-diaries-materials">
           <div className="work-diaries-section-row">
-            <strong>{tr('workDiariesMaterials')}</strong>
+            <strong>{tr('workDiariesMaterialsAndServices')}</strong>
           </div>
+          {materials.length > 0 ? (
+            <div className="work-diaries-material-row work-diaries-material-header" aria-hidden="true">
+              <span>{tr('workDiariesMaterialSource')}</span>
+              <span>{tr('description')}</span>
+              <span>{tr('quantity')}</span>
+              <span>{tr('unit')}</span>
+              <span>{tr('workDiariesMaterialUnitPrice')}</span>
+              <span>{tr('workDiariesMaterialTotal')}</span>
+              <span />
+            </div>
+          ) : null}
           {materials.map((material, index) => (
             <div
               key={material.rowKey}
@@ -646,15 +715,19 @@ export default function WorkDiaryEntryModal({
                       source: event.target.value,
                       expense_id: '',
                       amount: '',
+                      quantity: event.target.value === 'service' ? '1' : '',
+                      unit: event.target.value === 'service' ? 'usl' : '',
                       source_item_type: '',
                       source_item_id: '',
                       unit_price: '',
+                      unit_price_derived: false,
                       legacy_whole_expense: false,
                     })
                   }
                 >
                   <option value="stock">{tr('workDiariesMaterialSourceStock')}</option>
                   <option value="expense">{tr('workDiariesMaterialSourceExpense')}</option>
+                  <option value="service">{tr('workDiariesMaterialSourceService')}</option>
                 </select>
                 <input
                   ref={materialEditor.getInputRef(material)}
@@ -671,13 +744,22 @@ export default function WorkDiaryEntryModal({
                   step={['m', 'm2', 'm3', 'kg', 't', 'l', 'h'].includes(material.unit) ? '0.1' : '1'}
                   value={material.quantity}
                   placeholder={tr('quantity')}
+                  aria-label={tr('quantity')}
+                  required={Boolean(
+                    material.unit_price !== '' || sourceItemForMaterial(material)?.remaining_quantity != null
+                  )}
                   onChange={(event) => {
                     const value = event.target.value
-                    const patch = { quantity: value }
-                    // Строка из позиции чека: сумма пересчитывается по цене за единицу
-                    const unitPrice = num(material.unit_price)
-                    if (unitPrice > 0 && value !== '') {
-                      patch.amount = String(Math.round(num(value) * unitPrice * 100) / 100)
+                    const patch = { quantity: value, unit_price_derived: false }
+                    if (material.unit_price !== '') {
+                      const sourceItem = sourceItemForMaterial(material)
+                      patch.amount =
+                        sourceItem &&
+                        sourceItem.remaining_quantity != null &&
+                        value !== '' &&
+                        num(value) >= num(sourceItem.remaining_quantity)
+                          ? String(sourceItem.remaining_amount)
+                          : materialAmount(value, material.unit_price)
                     }
                     updateMaterial(index, patch)
                   }}
@@ -694,17 +776,38 @@ export default function WorkDiaryEntryModal({
                     </option>
                   ))}
                 </select>
-                <input
-                  className="form-input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={material.amount}
-                  placeholder={
-                    material.source === 'expense' ? tr('workDiariesMaterialExpenseAmountHint') : tr('amount')
-                  }
-                  onChange={(event) => updateMaterial(index, { amount: event.target.value })}
-                />
+                <label className="work-diaries-material-value-field">
+                  <span>{tr('workDiariesMaterialUnitPrice')}</span>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={material.unit_price}
+                    placeholder={tr('workDiariesMaterialUnitPrice')}
+                    title={tr('workDiariesMaterialUnitPrice')}
+                    required={Boolean(material.quantity !== '' && !materialItemKey(material))}
+                    readOnly={Boolean(materialItemKey(material))}
+                    onChange={(event) =>
+                      updateMaterial(index, {
+                        unit_price: event.target.value,
+                        unit_price_derived: false,
+                        amount: materialAmount(material.quantity, event.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className="work-diaries-material-value-field">
+                  <span>{tr('workDiariesMaterialTotal')}</span>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={material.amount}
+                    placeholder={tr('workDiariesMaterialTotal')}
+                    title={tr('workDiariesMaterialTotal')}
+                    readOnly
+                  />
+                </label>
                 {!readOnly ? (
                   <ItemRemoveButton
                     number={index + 1}
@@ -767,12 +870,19 @@ export default function WorkDiaryEntryModal({
                               updateMaterial(index, {
                                 expense_id: event.target.value,
                                 description: option?.description || '',
-                                quantity: '',
+                                quantity: option && !(option.items || []).length ? '1' : '',
                                 unit: '',
-                                amount: '',
+                                amount:
+                                  option && !(option.items || []).length
+                                    ? String(option.remaining_amount)
+                                    : '',
                                 source_item_type: '',
                                 source_item_id: '',
-                                unit_price: '',
+                                unit_price:
+                                  option && !(option.items || []).length
+                                    ? String(option.remaining_amount)
+                                    : '',
+                                unit_price_derived: false,
                                 legacy_whole_expense: false,
                               })
                             }}
@@ -847,10 +957,18 @@ export default function WorkDiaryEntryModal({
               <button
                 type="button"
                 className="btn btn-secondary item-editor-add"
-                onClick={addMaterial}
+                onClick={() => addMaterial('stock')}
                 disabled={saving}
               >
-                {tr('addItem')}
+                <Plus size={16} /> {tr('workDiariesAddMaterial')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary item-editor-add"
+                onClick={() => addMaterial('service')}
+                disabled={saving}
+              >
+                <Plus size={16} /> {tr('workDiariesAddService')}
               </button>
             </div>
           ) : null}
@@ -987,6 +1105,11 @@ export default function WorkDiaryEntryModal({
           {totals.materials > 0 ? (
             <span>
               {tr('workDiariesBillableMaterials')}: <b>{money(totals.billableMaterials)}</b>
+            </span>
+          ) : null}
+          {totals.services > 0 ? (
+            <span>
+              {tr('workDiariesServices')}: <b>{money(totals.services)}</b>
             </span>
           ) : null}
           <span>

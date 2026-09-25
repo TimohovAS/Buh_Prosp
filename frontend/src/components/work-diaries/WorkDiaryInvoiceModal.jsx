@@ -15,7 +15,10 @@ function todayIso() {
 }
 
 function defaultLineName(entry) {
-  return entry.description.slice(0, 500)
+  const services = (entry.materials || [])
+    .filter((item) => item.source === 'service' && item.description?.trim())
+    .map((item) => item.description.trim())
+  return [entry.description, ...services].filter(Boolean).join('; ').slice(0, 500)
 }
 
 function invoicePeriod(entries) {

@@ -4023,9 +4023,23 @@ th {
 
 .work-diaries-material-row {
   grid-template-columns:
-    minmax(120px, max-content) minmax(180px, 2fr) minmax(85px, 0.7fr) minmax(75px, 0.6fr)
-    minmax(120px, 1fr) auto;
+    minmax(110px, max-content) minmax(180px, 2fr) minmax(75px, 0.6fr) minmax(70px, 0.5fr)
+    minmax(105px, 0.8fr) minmax(105px, 0.8fr) auto;
   margin-top: 0.5rem;
+}
+
+.work-diaries-material-header {
+  padding-left: 3.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.work-diaries-material-value-field > span {
+  display: none;
+}
+
+.work-diaries-material-value-field > .form-input {
+  width: 100%;
 }
 
 .work-diaries-materials,
@@ -4082,6 +4096,7 @@ th {
 .work-diaries-material-add-row {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding-top: 0.5rem;
 }
 
@@ -4173,7 +4188,22 @@ th {
 
 @container work-diary-entry (max-width: 760px) {
   .work-diaries-material-row {
-    grid-template-columns: minmax(120px, 0.9fr) minmax(0, 2fr) minmax(90px, 0.7fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .work-diaries-material-header {
+    display: none;
+  }
+
+  .work-diaries-material-value-field > span {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .work-diaries-material-row > .btn {
+    grid-column: 2;
   }
 
   .work-diaries-material-expense-row {
@@ -4186,6 +4216,10 @@ th {
   .work-diaries-material-row,
   .work-diaries-material-expense-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .work-diaries-material-row > .btn {
+    grid-column: 1;
   }
 
   .work-diaries-material-expense-row > *,

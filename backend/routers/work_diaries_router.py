@@ -8,7 +8,7 @@
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -288,6 +288,12 @@ async def _allocated_source_item_totals(
     return allocations
 
 
+def _priced_line_amount(item: WorkDiaryMaterialCreate) -> Decimal:
+    if item.quantity is None or item.unit_price_snapshot is None:
+        return _dec(item.amount)
+    return (_dec(item.quantity) * _dec(item.unit_price_snapshot)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _source_item_balance(
     quantity: Decimal | None,
     total_amount: Decimal,
@@ -316,7 +322,7 @@ async def _load_material_expenses(
     if not expense_ids:
         return _MaterialExpenseContext(
             expenses_by_id={},
-            resolved_amounts=[_dec(item.amount) for item in materials],
+            resolved_amounts=[_priced_line_amount(item) for item in materials],
             resolved_quantities=[_dec(item.quantity) if item.quantity is not None else None for item in materials],
             unit_prices=[
                 _dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None for item in materials
@@ -406,7 +412,7 @@ async def _load_material_expenses(
     unit_prices: list[Decimal | None] = []
     for item in materials:
         if item.source != "expense" or not item.expense_id:
-            resolved_amounts.append(_dec(item.amount))
+            resolved_amounts.append(_priced_line_amount(item))
             resolved_quantities.append(_dec(item.quantity) if item.quantity is not None else None)
             unit_prices.append(_dec(item.unit_price_snapshot) if item.unit_price_snapshot is not None else None)
             continue
@@ -537,8 +543,11 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
         allowances += _dec(entry.food_amount) * worker_count
     stock_materials = Decimal("0")
     linked_materials = Decimal("0")
+    services = Decimal("0")
     for material in entry.materials:
-        if material.source == "expense":
+        if material.source == "service":
+            services += _dec(material.amount)
+        elif material.source == "expense":
             linked_materials += _dec(material.amount)
         else:
             stock_materials += _dec(material.amount)
@@ -546,7 +555,7 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
     billing_rate = _dec(entry.team_billing_hourly_rate_snapshot)
     material_billing_multiplier = _dec(entry.material_billing_multiplier)
     billable_materials = materials * material_billing_multiplier
-    calculated_billable = _dec(entry.duration_hours) * billing_rate + billable_materials
+    calculated_billable = _dec(entry.duration_hours) * billing_rate + billable_materials + services
     billable = calculated_billable if entry.billable_amount_override is None else _dec(entry.billable_amount_override)
     return {
         "labor_amount": labor,
@@ -554,6 +563,7 @@ def _entry_amounts(entry: WorkDiaryEntry) -> dict[str, Decimal]:
         "allowance_amount": allowances,
         "material_amount": materials,
         "billable_material_amount": billable_materials,
+        "billable_service_amount": services,
         "stock_material_amount": stock_materials,
         "linked_material_amount": linked_materials,
         "total_cost_amount": labor + allowances + materials,
@@ -658,6 +668,7 @@ def _serialize_entry(entry: WorkDiaryEntry) -> WorkDiaryEntryResponse:
         allowance_amount=_float(amounts["allowance_amount"]),
         material_amount=_float(amounts["material_amount"]),
         billable_material_amount=_float(amounts["billable_material_amount"]),
+        billable_service_amount=_float(amounts["billable_service_amount"]),
         stock_material_amount=_float(amounts["stock_material_amount"]),
         linked_material_amount=_float(amounts["linked_material_amount"]),
         total_cost_amount=_float(amounts["total_cost_amount"]),
@@ -795,7 +806,11 @@ async def create_entry(
         if data.team_hourly_rate_snapshot is not None
         else sum((_default_hourly_rate(worker) for worker in workers), Decimal("0"))
     )
-    team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
+    team_billing_hourly_rate = (
+        _dec(data.team_billing_hourly_rate_snapshot)
+        if data.team_billing_hourly_rate_snapshot is not None
+        else sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
+    )
     overtime_multiplier = (
         _dec(data.overtime_multiplier)
         if data.overtime_multiplier is not None
@@ -918,7 +933,15 @@ async def update_entry(
         team_hourly_rate = sum((_default_hourly_rate(worker) for worker in workers), Decimal("0"))
     else:
         team_hourly_rate = _dec(entry.team_hourly_rate_snapshot)
-    team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
+    if "team_billing_hourly_rate_snapshot" in dump:
+        if dump["team_billing_hourly_rate_snapshot"] is None:
+            team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
+        else:
+            team_billing_hourly_rate = _dec(dump["team_billing_hourly_rate_snapshot"])
+    elif workers_changed:
+        team_billing_hourly_rate = sum((_billing_hourly_rate(worker) for worker in workers), Decimal("0"))
+    else:
+        team_billing_hourly_rate = _dec(entry.team_billing_hourly_rate_snapshot)
     if "overtime_multiplier" in dump:
         if dump["overtime_multiplier"] is None:
             overtime_multiplier = await _default_overtime_multiplier(db)
@@ -1325,6 +1348,7 @@ async def get_summary(
         allowance_amount=sum(entry.allowance_amount for entry in entries),
         material_amount=sum(entry.material_amount for entry in entries),
         billable_material_amount=sum(entry.billable_material_amount for entry in entries),
+        billable_service_amount=sum(entry.billable_service_amount for entry in entries),
         stock_material_amount=sum(entry.stock_material_amount for entry in entries),
         linked_material_amount=sum(entry.linked_material_amount for entry in entries),
         total_cost_amount=sum(entry.total_cost_amount for entry in entries),

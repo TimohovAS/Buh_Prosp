@@ -127,6 +127,66 @@ async def test_work_diary_entry_supports_multiple_workers(db_session, make_proje
 
 
 @pytest.mark.asyncio
+async def test_work_diary_team_billing_rate_can_be_overridden_and_reset(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-billing-rate-admin")
+    worker_a = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("200"))
+    worker_b = Worker(name="Boris", regular_day_rate=Decimal("1200"), billing_hourly_rate=Decimal("300"))
+    db_session.add_all([worker_a, worker_b])
+    await db_session.flush()
+
+    created = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker_a.id],
+            description="Installation work",
+            duration_hours=4,
+            team_billing_hourly_rate_snapshot=350,
+        ),
+        db_session,
+        user,
+    )
+    assert created.team_billing_hourly_rate_snapshot == 350
+    assert created.billable_amount == 1400
+
+    updated = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(description="Updated work"),
+        db_session,
+        user,
+    )
+    assert updated.team_billing_hourly_rate_snapshot == 350
+
+    updated = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(worker_ids=[worker_a.id, worker_b.id], team_billing_hourly_rate_snapshot=400),
+        db_session,
+        user,
+    )
+    assert updated.team_billing_hourly_rate_snapshot == 400
+    assert updated.billable_amount == 1600
+
+    updated = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(team_billing_hourly_rate_snapshot=None),
+        db_session,
+        user,
+    )
+    assert updated.team_billing_hourly_rate_snapshot == 500
+    assert updated.billable_amount == 2000
+
+    updated = await update_entry(
+        created.id,
+        WorkDiaryEntryUpdate(worker_ids=[worker_a.id]),
+        db_session,
+        user,
+    )
+    assert updated.team_billing_hourly_rate_snapshot == 200
+    assert updated.billable_amount == 800
+
+
+@pytest.mark.asyncio
 async def test_work_diary_worker_filter_and_summary_use_all_assigned_workers(db_session, make_project):
     project = await make_project(db_session)
     user = _make_user(db_session, "diary-filter-admin")
@@ -440,6 +500,104 @@ async def test_work_diary_expense_options_include_receipt_and_invoice_items(db_s
     assert invoice_items[0].unit is None
     assert invoice_items[0].source_item_type == "expense_item"
     assert invoice_items[0].source_item_id is not None
+
+
+@pytest.mark.asyncio
+async def test_work_diary_stock_material_total_uses_quantity_and_unit_price(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-stock-price-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"))
+    db_session.add(worker)
+    await db_session.flush()
+
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Installation",
+            duration_hours=2,
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description="Cable",
+                    source="stock",
+                    quantity=3,
+                    unit="m",
+                    unit_price_snapshot=125.25,
+                    amount=999,
+                ),
+                WorkDiaryMaterialCreate(description="Old stock item", source="stock", amount=40),
+            ],
+        ),
+        db_session,
+        user,
+    )
+    assert [material.amount for material in entry.materials] == [375.75, 40]
+    assert entry.materials[0].unit_price_snapshot == 125.25
+
+    updated = await update_entry(
+        entry.id,
+        WorkDiaryEntryUpdate(
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description="Cable",
+                    source="stock",
+                    quantity=2,
+                    unit="m",
+                    unit_price_snapshot=75.5,
+                    amount=999,
+                ),
+                WorkDiaryMaterialCreate(description="Old stock item", source="stock", amount=40),
+            ]
+        ),
+        db_session,
+        user,
+    )
+    assert [material.amount for material in updated.materials] == [151, 40]
+
+
+@pytest.mark.asyncio
+async def test_work_diary_service_is_billable_without_becoming_material_cost(db_session, make_project):
+    project = await make_project(db_session)
+    user = _make_user(db_session, "diary-service-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("300"))
+    db_session.add(worker)
+    await db_session.flush()
+
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 10),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Installation",
+            duration_hours=2,
+            materials=[
+                WorkDiaryMaterialCreate(description="Cable", source="stock", quantity=1, unit="m", amount=50),
+                WorkDiaryMaterialCreate(
+                    description="Troškovi izlaska",
+                    source="service",
+                    quantity=2,
+                    unit="usl",
+                    unit_price_snapshot=1200,
+                    amount=999,
+                ),
+            ],
+        ),
+        db_session,
+        user,
+    )
+
+    assert [line.amount for line in entry.materials] == [50, 2400]
+    assert entry.material_amount == 50
+    assert entry.billable_material_amount == 60
+    assert entry.billable_service_amount == 2400
+    assert entry.total_cost_amount == 250
+    assert entry.calculated_billable_amount == entry.billable_amount == 3060
+
+    summary = await get_summary(project.id, None, None, None, db_session, user)
+    assert summary.material_amount == 50
+    assert summary.billable_service_amount == 2400
+    assert summary.billable_amount == 3060
 
 
 @pytest.mark.asyncio
@@ -1079,6 +1237,45 @@ async def test_work_diary_proposal_export_allows_missing_customer_and_enterprise
     assert workbook.active["A8"].value in (None, "")
 
 
+@pytest.mark.asyncio
+async def test_work_diary_proposal_export_lists_service_without_material_markup(db_session, make_project):
+    project = await make_project(db_session, code="PR-2026-0044", name="Service project")
+    user = _make_user(db_session, "diary-service-export-admin")
+    worker = Worker(name="Ana", regular_day_rate=Decimal("800"), billing_hourly_rate=Decimal("300"))
+    db_session.add(worker)
+    await db_session.flush()
+    entry = await create_entry(
+        WorkDiaryEntryCreate(
+            date=date(2026, 7, 25),
+            project_id=project.id,
+            worker_ids=[worker.id],
+            description="Inspection",
+            duration_hours=1,
+            materials=[
+                WorkDiaryMaterialCreate(
+                    description="Troškovi izlaska",
+                    source="service",
+                    quantity=2,
+                    unit="usl",
+                    unit_price_snapshot=1200,
+                )
+            ],
+        ),
+        db_session,
+        user,
+    )
+
+    response = await export_proposal_xlsx(WorkDiaryProposalExportRequest(entry_ids=[entry.id]), db_session, user)
+    content = b"".join([chunk async for chunk in response.body_iterator])
+    rows = list(load_workbook(BytesIO(content), data_only=False).active.iter_rows(values_only=True))
+    service_row = next(row for row in rows if str(row[2]).startswith("Usluga: Troškovi izlaska"))
+
+    assert service_row[4] == 2
+    assert service_row[5] == 1200
+    assert service_row[6] == 2400
+    assert not any(row[2] == "Korekcija dogovorene cene" for row in rows)
+
+
 def test_work_diary_payload_contract():
     fields = WorkDiaryEntryCreate.model_fields
 
@@ -1088,7 +1285,7 @@ def test_work_diary_payload_contract():
     assert "person_hours" not in fields
     assert "hours" not in fields
     assert "team_hourly_rate_snapshot" in fields
-    assert "team_billing_hourly_rate_snapshot" not in fields
+    assert "team_billing_hourly_rate_snapshot" in fields
     assert "billable_amount_override" in fields
     assert "calculated_billable_amount" not in fields
     assert "hourly_rate_snapshot" not in fields
@@ -1122,3 +1319,10 @@ def test_work_diary_material_validation():
 
     stock = WorkDiaryMaterialCreate(description="Kabl", source="stock", expense_id=5)
     assert stock.expense_id is None
+
+    with pytest.raises(ValidationError):
+        WorkDiaryMaterialCreate(description="Troškovi izlaska", source="service", quantity=1)
+    service = WorkDiaryMaterialCreate(
+        description="Troškovi izlaska", source="service", quantity=1, unit="usl", unit_price_snapshot=500
+    )
+    assert service.expense_id is None

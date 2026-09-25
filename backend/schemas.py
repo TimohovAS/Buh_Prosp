@@ -240,14 +240,14 @@ class WorkDiaryProjectMetaResponse(WorkDiaryProjectMetaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-WORK_DIARY_MATERIAL_UNITS = ("kom", "m", "m2", "m3", "kg", "t", "l", "pak", "h")
+WORK_DIARY_MATERIAL_UNITS = ("kom", "m", "m2", "m3", "kg", "t", "l", "pak", "h", "usl")
 
 
 class WorkDiaryMaterialBase(BaseModel):
     description: str
     quantity: Optional[float] = Field(default=None, gt=0)
     unit: Optional[str] = None
-    source: Literal["stock", "expense"] = "stock"
+    source: Literal["stock", "expense", "service"] = "stock"
     expense_id: Optional[int] = None
     source_item_type: Optional[Literal["expense_item", "receipt_item"]] = None
     source_item_id: Optional[int] = None
@@ -287,10 +287,12 @@ class WorkDiaryMaterialBase(BaseModel):
             raise ValueError("source_item_type and source_item_id must be provided together")
         if self.source_item_type is not None and self.source != "expense":
             raise ValueError("A source item can only be linked to an expense material")
-        if self.source == "stock":
+        if self.source in ("stock", "service"):
             self.expense_id = None
             self.source_item_type = None
             self.source_item_id = None
+        if self.source == "service" and (self.quantity is None or self.unit_price_snapshot is None):
+            raise ValueError("A service requires quantity and unit price")
         return self
 
 
@@ -323,6 +325,7 @@ class WorkDiaryEntryBase(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    team_billing_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
     # None => коэффициент из настроек предприятия
     material_billing_multiplier: Optional[float] = Field(default=None, gt=0)
     billable_amount_override: Optional[float] = Field(default=None, ge=0)
@@ -356,6 +359,7 @@ class WorkDiaryEntryBase(BaseModel):
         for key in (
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "team_billing_hourly_rate_snapshot",
             "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
@@ -383,6 +387,7 @@ class WorkDiaryEntryUpdate(BaseModel):
     end_time: Optional[str] = None
     duration_hours: Optional[float] = Field(default=None, gt=0)
     team_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
+    team_billing_hourly_rate_snapshot: Optional[float] = Field(default=None, ge=0)
     material_billing_multiplier: Optional[float] = Field(default=None, gt=0)
     billable_amount_override: Optional[float] = Field(default=None, ge=0)
     overtime_multiplier: Optional[float] = Field(default=None, ge=1)
@@ -417,6 +422,7 @@ class WorkDiaryEntryUpdate(BaseModel):
             "project_id",
             "duration_hours",
             "team_hourly_rate_snapshot",
+            "team_billing_hourly_rate_snapshot",
             "material_billing_multiplier",
             "billable_amount_override",
             "overtime_multiplier",
@@ -462,6 +468,7 @@ class WorkDiaryEntryResponse(BaseModel):
     allowance_amount: float
     material_amount: float
     billable_material_amount: float
+    billable_service_amount: float
     stock_material_amount: float
     linked_material_amount: float
     total_cost_amount: float
@@ -496,6 +503,7 @@ class WorkDiarySummaryResponse(BaseModel):
     allowance_amount: float
     material_amount: float
     billable_material_amount: float
+    billable_service_amount: float
     stock_material_amount: float
     linked_material_amount: float
     total_cost_amount: float
