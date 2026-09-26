@@ -22,13 +22,18 @@ target_metadata = Base.metadata
 
 
 def _sync_database_url(database_url: str) -> str:
-    """Return a sync SQLAlchemy URL for Alembic migrations."""
+    """Return a sync SQLAlchemy URL for Alembic migrations.
+
+    str(URL) hides the password behind "***", so render it explicitly. SQLAlchemy
+    2.1 also percent-encodes the database path ("C:/db" -> "C%3A/db"); make_url
+    decodes it back, but a config option needs its "%" escaped (see below).
+    """
     url = make_url(database_url)
     if url.drivername == "sqlite+aiosqlite":
-        return str(url.set(drivername="sqlite"))
-    if url.drivername == "postgresql+asyncpg":
-        return str(url.set(drivername="postgresql"))
-    return str(url)
+        url = url.set(drivername="sqlite")
+    elif url.drivername == "postgresql+asyncpg":
+        url = url.set(drivername="postgresql")
+    return url.render_as_string(hide_password=False)
 
 
 def _database_url() -> str:
@@ -36,7 +41,9 @@ def _database_url() -> str:
     return _sync_database_url(x_args.get("database_url") or get_settings().database_url)
 
 
-config.set_main_option("sqlalchemy.url", _database_url())
+# Config options go through ConfigParser interpolation, where "%" starts a
+# substitution: an encoded path or password must keep it as "%%".
+config.set_main_option("sqlalchemy.url", _database_url().replace("%", "%%"))
 
 
 def _is_sqlite_context(context_or_connection) -> bool:
