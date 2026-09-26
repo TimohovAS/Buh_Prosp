@@ -2,6 +2,8 @@
 
 ## Версия 3.0
 
+В «Настройки → О программе» показаны версии frontend/backend, Python, базы данных и миграции. Номер релиза (`3.0`) меняется вручную; коммиты frontend и backend определяются автоматически из Git, а время сборки frontend фиксируется при `npm run build`.
+
 - **Income:** `issued_date` (alias колонки `date`), `status` (issued|partial|paid|cancelled), `project_id`, `income_type` (advance|intermediate|final|other). Старые записи: status='paid' если paid_date есть, иначе 'issued'.
 - **Expenses:** `paid_date`, `status` (planned|paid|reversed), `is_tax_related`, `source` (manual|planned|obligation|bank_import|efaktura_import|cash_transfer), `reversed_expense_id`, `reversal_of_id` — сторно вместо удаления.
 - **Projects:** статусы (lead|active|completed|archived), связь с доходами, расходами, договорами.
@@ -549,6 +551,9 @@ python -m alembic upgrade head
 ## 27. Установка и запуск
 
 **Backend:**
+
+Рекомендуется Python 3.14.x (локально проверено на 3.14.7).
+
 ```bash
 python -m venv venv
 venv\Scripts\activate

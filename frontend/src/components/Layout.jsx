@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { api, PENDING_LINKS_UPDATE_EVENT } from '../api'
 import { tr } from '../i18n'
 import { useEnterpriseBrand } from '../hooks/useEnterpriseBrand'
+import { version as frontendVersion } from '../../package.json'
 import {
   LayoutDashboard,
   LineChart,
@@ -132,7 +133,10 @@ export default function Layout({ lang, toggleLang, children }) {
             </div>
             <div className="sidebar-brand-copy">
               <strong style={{ fontSize: '1.25rem' }}>
-                ProspEl <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>v2</span>
+                ProspEl{' '}
+                <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+                  v{frontendVersion.replace(/\.0$/, '')}
+                </span>
               </strong>
               {enterpriseName ? <div className="sidebar-brand-subtitle">{enterpriseName}</div> : null}
             </div>
@@ -309,7 +313,10 @@ export default function Layout({ lang, toggleLang, children }) {
           </button>
           <div className="mobile-topbar-copy">
             <strong>
-              ProspEl <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>v3</span>
+              ProspEl{' '}
+              <span style={{ fontSize: '0.72rem', opacity: 0.72 }}>
+                v{frontendVersion.replace(/\.0$/, '')}
+              </span>
             </strong>
             {enterpriseName ? <span>{enterpriseName}</span> : null}
           </div>

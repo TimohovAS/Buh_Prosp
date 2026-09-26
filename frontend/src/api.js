@@ -223,6 +223,9 @@ const dashboardApi = () => request('/dashboard')
 dashboardApi.pendingLinks = () => request('/dashboard/pending-links')
 
 export const api = {
+  system: {
+    version: () => request('/system/version'),
+  },
   auth: {
     login: (username, password) => {
       const params = new URLSearchParams()

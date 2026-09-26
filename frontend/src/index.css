@@ -697,6 +697,13 @@ textarea {
   min-width: 0;
 }
 
+.settings-info-revision {
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .settings-field-label {
   color: var(--color-text-muted);
   font-size: 0.82rem;

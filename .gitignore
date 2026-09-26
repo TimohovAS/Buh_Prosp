@@ -1,5 +1,6 @@
 # Python
 venv/
+venv-python-3.13.2-backup/
 __pycache__/
 *.py[cod]
 *.pyo

@@ -7,6 +7,7 @@ import Modal from '../components/Modal'
 import ProjectSelect from '../components/ProjectSelect'
 import { DEFAULT_MATERIAL_BILLING_MULTIPLIER } from '../components/work-diaries/workDiaryUtils'
 import { broadcastEnterpriseBrand } from '../hooks/useEnterpriseBrand'
+import { version as frontendVersion } from '../../package.json'
 import {
   DEFAULT_EFAKTURA_API_BASE_URL,
   DEFAULT_EFAKTURA_INCOMING_DOCUMENT_PATH,
@@ -29,6 +30,7 @@ const LANGS = [
 
 const UI_DASH = '\u2014'
 const UI_CLOSE = '\u00D7'
+const frontendBuildInfo = import.meta.env.VITE_BUILD_INFO || {}
 const MAX_EMBLEM_FILE_SIZE = 256 * 1024
 const DEFAULT_SERVICE_FORM = {
   backup_dir: '',
@@ -160,6 +162,9 @@ export default function Settings() {
   const [efakturaSaving, setEfakturaSaving] = useState(false)
   const [efakturaMessage, setEfakturaMessage] = useState('')
   const [activeSection, setActiveSection] = useState('enterprise')
+  const [systemVersion, setSystemVersion] = useState(null)
+  const [versionLoading, setVersionLoading] = useState(false)
+  const [versionError, setVersionError] = useState(false)
   const [backupView, setBackupView] = useState('settings')
 
   const loadUsers = () => {
@@ -252,6 +257,28 @@ export default function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, isActivePage])
 
+  useEffect(() => {
+    if (!isActivePage || activeSection !== 'about') return undefined
+    let cancelled = false
+    setVersionLoading(true)
+    setVersionError(false)
+    setSystemVersion(null)
+    api.system
+      .version()
+      .then((response) => {
+        if (!cancelled) setSystemVersion(response)
+      })
+      .catch(() => {
+        if (!cancelled) setVersionError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setVersionLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeSection, isActivePage])
+
   const formatBytes = (value) => {
     const size = Number(value) || 0
     if (size < 1024) return `${size} B`
@@ -265,6 +292,9 @@ export default function Settings() {
     const date = new Date(value)
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
   }
+
+  const formatBuild = (build) =>
+    build?.commit ? `${build.commit}${build.dirty ? ` (${tr('aboutModified')})` : ''}` : null
 
   const backupTypeLabel = (kind) => {
     if (kind === 'auto') return tr('serviceBackupsTypeAuto')
@@ -679,6 +709,11 @@ export default function Settings() {
           },
         ]
       : []),
+    {
+      key: 'about',
+      title: tr('aboutProgram'),
+      summary: tr('aboutProgramSummary'),
+    },
   ]
 
   return (
@@ -1501,6 +1536,50 @@ export default function Settings() {
                 )}
               </SettingsSection>
             )}
+            <SettingsSection
+              title={tr('aboutProgram')}
+              summary={tr('aboutProgramSummary')}
+              open={activeSection === 'about'}
+              onToggle={() => setActiveSection('about')}
+            >
+              {versionError ? <p className="settings-section-note">{tr('aboutVersionLoadError')}</p> : null}
+              <div className="settings-info-grid">
+                {[
+                  [tr('aboutFrontend'), frontendVersion, formatBuild(frontendBuildInfo)],
+                  [tr('aboutBackend'), systemVersion?.backend, formatBuild(systemVersion?.backend_build)],
+                  [
+                    tr(frontendBuildInfo.command === 'build' ? 'aboutBuildTime' : 'aboutStartTime'),
+                    formatDateTime(frontendBuildInfo.generatedAt),
+                  ],
+                  [tr('aboutPython'), systemVersion?.python],
+                  [
+                    tr('aboutDatabase'),
+                    systemVersion?.database?.engine
+                      ? [systemVersion.database.engine, systemVersion.database.version]
+                          .filter(Boolean)
+                          .join(' ')
+                      : null,
+                  ],
+                  [tr('aboutSchema'), systemVersion?.database?.revision],
+                  [
+                    tr('aboutEnvironment'),
+                    systemVersion?.environment && tr(`aboutEnv_${systemVersion.environment}`),
+                  ],
+                ].map(([label, value, build]) => (
+                  <div className="settings-info-item" key={label}>
+                    <div className="settings-field-label">{label}</div>
+                    <div className="settings-field-value">
+                      {value || (versionLoading ? tr('loading') : UI_DASH)}
+                    </div>
+                    {build !== undefined ? (
+                      <div className="settings-info-revision">
+                        {tr('aboutCommit')}: {build || (versionLoading ? tr('loading') : UI_DASH)}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </SettingsSection>
           </div>
         </div>
       </div>

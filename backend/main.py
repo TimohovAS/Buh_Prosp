@@ -2,15 +2,21 @@
 
 import asyncio
 import logging
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from contextlib import suppress
-from fastapi import FastAPI, Request
+from pathlib import Path
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import get_settings
+from backend.auth import get_current_user_required, get_password_hash
 from backend.backup_service import backup_scheduler_loop
+from backend.config import get_settings
+from backend.database import get_db
 from backend.models import User
-from backend.auth import get_password_hash
 from backend.routers.auth_router import router as auth_router
 from backend.routers.income_router import router as income_router
 from backend.routers.clients_router import router as clients_router
@@ -38,6 +44,31 @@ from backend.routers.work_diaries_router import router as work_diaries_router
 
 settings = get_settings()
 logger = logging.getLogger("prospel")
+
+
+def _git_output(*args: str) -> str | None:
+    repo_root = Path(__file__).resolve().parent.parent
+    try:
+        result = subprocess.run(
+            ["git", "-c", f"safe.directory={repo_root.as_posix()}", *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip()
+
+
+def _backend_build_info() -> dict[str, str | bool | None]:
+    commit = _git_output("rev-parse", "--short=12", "HEAD")
+    dirty = bool(_git_output("status", "--porcelain", "--untracked-files=no")) if commit else False
+    return {"commit": commit, "dirty": dirty}
+
+
+BACKEND_BUILD_INFO = _backend_build_info()
 
 
 async def _bootstrap_installation() -> None:
@@ -150,3 +181,29 @@ def root():
 def prospel_check():
     """Проверка: если видите это — backend ProspEl работает."""
     return {"app": settings.app_name, "status": "ok", "version": settings.app_version, "env": settings.app_env}
+
+
+@app.get("/api/system/version")
+async def system_version(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user_required),
+):
+    database_engine = db.get_bind().dialect.name
+    database_version = None
+    if database_engine == "sqlite":
+        database_version = await db.scalar(text("SELECT sqlite_version()"))
+    elif database_engine == "postgresql":
+        database_version = await db.scalar(text("SELECT current_setting('server_version')"))
+
+    revisions = (await db.execute(text("SELECT version_num FROM alembic_version"))).scalars().all()
+    return {
+        "backend": settings.app_version,
+        "backend_build": BACKEND_BUILD_INFO,
+        "python": sys.version.split()[0],
+        "environment": settings.app_env,
+        "database": {
+            "engine": database_engine,
+            "version": database_version,
+            "revision": ", ".join(revisions) or None,
+        },
+    }
