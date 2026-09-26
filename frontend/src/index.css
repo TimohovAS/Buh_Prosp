@@ -8069,6 +8069,10 @@ tr:hover td {
   color: var(--color-danger);
 }
 
+.efaktura-result-metric.is-warning > strong {
+  color: var(--color-warning);
+}
+
 .efaktura-result-issues {
   margin: 0.9rem 1.25rem 1rem;
   padding: 0.75rem 0.9rem;

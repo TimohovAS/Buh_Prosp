@@ -53,7 +53,10 @@ function getSortValue(item, column) {
 function ResultSummary({ result, onDismiss }) {
   if (!result) return null
 
-  const issueCount = Number(result.error_count || 0) + Number(result.download_error_count || 0)
+  const issueCount =
+    Number(result.error_count || 0) +
+    Number(result.download_error_count || 0) +
+    Number(result.warning_count || 0)
   const metrics = [
     {
       key: 'created',
@@ -69,6 +72,22 @@ function ResultSummary({ result, onDismiss }) {
     },
     { key: 'skipped', label: tr('efakturaSkipped'), value: result.skipped_count || 0, tone: 'muted' },
     { key: 'errors', label: tr('efakturaErrors'), value: result.error_count || 0, tone: 'danger' },
+    'cancelled_count' in result
+      ? {
+          key: 'cancelled',
+          label: tr('efakturaCancelledCount'),
+          value: result.cancelled_count || 0,
+          tone: 'warning',
+        }
+      : null,
+    'warning_count' in result
+      ? {
+          key: 'warnings',
+          label: tr('efakturaWarningsCount'),
+          value: result.warning_count || 0,
+          tone: 'warning',
+        }
+      : null,
     'fetched_count' in result
       ? {
           key: 'fetched',
@@ -129,6 +148,33 @@ function ResultSummary({ result, onDismiss }) {
           </div>
         ))}
       </div>
+
+      {(result.cancelled || []).length > 0 ? (
+        <div className="efaktura-result-issues is-warning">
+          <strong>{tr('efakturaCancelledTitle')}</strong>
+          <ul>
+            {result.cancelled.slice(0, 10).map((item, index) => (
+              <li key={`${item.invoice_number || 'cancelled'}-${index}`}>
+                {item.invoice_number || tr('efakturaDocument')}: {item.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {(result.warnings || []).length > 0 ? (
+        <div className="efaktura-result-issues is-warning">
+          <strong>{tr('efakturaWarningsTitle')}</strong>
+          <ul>
+            {result.warnings.slice(0, 10).map((item, index) => (
+              <li key={`${item.invoice_number || item.file_name || 'warning'}-${index}`}>
+                {item.invoice_number || item.file_name || tr('efakturaDocument')}:{' '}
+                {item.reason || tr('efakturaUnknownError')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {(result.errors || []).length > 0 ? (
         <div className="efaktura-result-issues is-danger">

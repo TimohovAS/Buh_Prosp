@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
-from urllib.parse import quote, urljoin
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from sqlalchemy import or_, select
@@ -183,12 +183,95 @@ async def get_income_by_invoice_identity(db: AsyncSession, invoice_number: str, 
             )
         )
     )
+    matching_ids = []
     for income_id, existing_number, existing_year, issued_date in result.fetchall():
         year_val = int(existing_year) if existing_year is not None else (issued_date.year if issued_date else None)
         existing_year_key, existing_key = invoice_identity(existing_number, year_val)
         if existing_year_key == target_year and existing_key == target_key:
-            return await db.get(Income, income_id)
-    return None
+            matching_ids.append(income_id)
+    return await db.get(Income, matching_ids[0]) if len(matching_ids) == 1 else None
+
+
+async def link_existing_outgoing_income(
+    db: AsyncSession,
+    *,
+    parsed: dict[str, Any],
+    external_id: str | None,
+    file_name: str,
+) -> tuple[EfakturaImportRecord | None, str]:
+    """Link a pre-existing income only after verifying the invoice's immutable details."""
+    invoice_year = parsed["issued_date"].year
+    invoice_number = to_number_year_format(parsed["invoice_number"], invoice_year)
+    income = await get_income_by_invoice_identity(db, invoice_number, invoice_year)
+    if income is None:
+        return None, "No unique income matches the eFaktura invoice number and year"
+    if income.issued_date != parsed["issued_date"]:
+        return None, f"Income #{income.id} has a different issue date"
+    if to_decimal(income.amount_rsd) != to_decimal(parsed["amount_rsd"]):
+        return None, f"Income #{income.id} has a different amount"
+    if (income.currency or "RSD").upper() != (parsed.get("currency") or "RSD").upper():
+        return None, f"Income #{income.id} has a different currency"
+
+    client = await db.get(Client, income.client_id)
+    client_pib = normalize_pib(client.pib) if client else None
+    invoice_pib = normalize_pib(parsed.get("customer_pib"))
+    client_name = normalize_name(client.name) if client else None
+    invoice_name = normalize_name(parsed.get("customer_name"))
+    if client_pib and invoice_pib:
+        if client_pib != invoice_pib:
+            return None, f"Income #{income.id} has a different customer PIB"
+    elif not client_name or not invoice_name or client_name != invoice_name:
+        return None, f"Income #{income.id} has no matching customer identity"
+
+    if not external_id:
+        return None, "eFaktura did not provide an external document ID"
+    external_id = str(external_id)
+    linked_records = (
+        await db.scalars(
+            select(EfakturaImportRecord).where(
+                EfakturaImportRecord.direction == "outgoing",
+                EfakturaImportRecord.imported_as == "income",
+                or_(
+                    EfakturaImportRecord.external_id == external_id,
+                    EfakturaImportRecord.imported_record_id == income.id,
+                ),
+            )
+        )
+    ).all()
+    for record in linked_records:
+        if record.imported_record_id != income.id:
+            return None, f"eFaktura document ID is already linked to income #{record.imported_record_id}"
+        if record.external_id and record.external_id != external_id:
+            return None, f"Income #{income.id} is linked to another eFaktura document"
+    if linked_records:
+        record = linked_records[0]
+        record.external_id = external_id
+        await db.flush()
+        return record, f"Linked eFaktura document to existing income #{income.id}"
+
+    document_key = build_document_key(parsed, "outgoing")
+    existing_record = await get_import_record_by_key(db, document_key)
+    if existing_record:
+        if existing_record.imported_as != "income" or existing_record.imported_record_id != income.id:
+            return None, "eFaktura document key is linked to another record"
+        if existing_record.external_id and existing_record.external_id != external_id:
+            return None, f"Income #{income.id} is linked to another eFaktura document"
+        existing_record.external_id = external_id
+        await db.flush()
+        return existing_record, f"Linked eFaktura document to existing income #{income.id}"
+
+    record = await register_import_record(
+        db,
+        document_key=document_key,
+        external_id=external_id,
+        direction="outgoing",
+        parsed=parsed,
+        imported_as="income",
+        imported_record_id=income.id,
+        source="api",
+        file_name=file_name,
+    )
+    return record, f"Linked eFaktura document to existing income #{income.id}"
 
 
 def _document_status_text(value: Any) -> str:
@@ -213,40 +296,6 @@ def _document_status_text(value: Any) -> str:
 def is_efaktura_cancelled_status(value: Any) -> bool:
     text = _document_status_text(value).casefold()
     return bool(text) and any(marker in text for marker in EFAKTURA_CANCELLED_STATUS_MARKERS)
-
-
-async def handle_cancelled_outgoing_invoice(
-    db: AsyncSession,
-    *,
-    invoice_number: str,
-    invoice_year: int,
-    status_text: str,
-) -> dict[str, Any]:
-    income = await get_income_by_invoice_identity(db, invoice_number, invoice_year)
-    if income is None:
-        return {"reason": f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'})"}
-    if income.status == "cancelled":
-        return {"reason": f"Outgoing eFaktura is already cancelled ({status_text or 'unknown status'})"}
-    if to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL) > ZERO_DECIMAL or income.status == "paid":
-        return {
-            "reason": (
-                f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'}), "
-                f"but income #{income.id} has payments and was not changed"
-            )
-        }
-
-    cancel_income(income)
-    income.bank_reference = None
-    income.note = "\n".join(
-        part
-        for part in [
-            income.note,
-            f"eFaktura API status: {status_text or 'cancelled/storned'}; income cancelled during sync.",
-        ]
-        if part
-    )
-    await db.flush()
-    return {"reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled"}
 
 
 async def handle_cancelled_outgoing_import_record(
@@ -275,12 +324,14 @@ async def handle_cancelled_outgoing_import_record(
             "external_id": str(external_id),
             "invoice_number": record.invoice_number,
             "reason": f"Outgoing eFaktura import record has no linked income ({status_text or 'unknown status'})",
+            "outcome": "warning",
         }
     if income.status == "cancelled":
         return {
             "external_id": str(external_id),
             "invoice_number": income.invoice_number,
             "reason": f"Outgoing eFaktura is already cancelled ({status_text or 'unknown status'})",
+            "outcome": "already_cancelled",
         }
     if to_decimal(getattr(income, "paid_amount", None) or ZERO_DECIMAL) > ZERO_DECIMAL or income.status == "paid":
         return {
@@ -290,6 +341,7 @@ async def handle_cancelled_outgoing_import_record(
                 f"Outgoing eFaktura is cancelled/storned in API ({status_text or 'unknown status'}), "
                 f"but income #{income.id} has payments and was not changed"
             ),
+            "outcome": "warning",
         }
 
     cancel_income(income)
@@ -302,6 +354,7 @@ async def handle_cancelled_outgoing_import_record(
         "external_id": str(external_id),
         "invoice_number": income.invoice_number,
         "reason": f"Outgoing eFaktura is cancelled/storned in API; income #{income.id} cancelled",
+        "outcome": "cancelled",
     }
 
 
@@ -480,6 +533,8 @@ async def import_efaktura_documents(
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    cancelled: list[dict[str, Any]] = []
     created_income_count = 0
     created_expense_count = 0
     download_errors: list[dict[str, Any]] = []
@@ -538,19 +593,24 @@ async def import_efaktura_documents(
         if source == "api" and direction == "outgoing" and is_efaktura_cancelled_status(source_status):
             try:
                 async with db.begin_nested():
-                    cancel_result = await handle_cancelled_outgoing_invoice(
-                        db,
-                        invoice_number=normalized_invoice_number,
-                        invoice_year=invoice_year,
-                        status_text=source_status_text,
+                    record, reason = await link_existing_outgoing_income(
+                        db, parsed=parsed, external_id=external_id, file_name=file_name
                     )
-                skipped.append(
-                    {
-                        "file_name": file_name,
-                        "invoice_number": normalized_invoice_number,
-                        "reason": cancel_result["reason"],
-                    }
-                )
+                    cancel_result = (
+                        await handle_cancelled_outgoing_import_record(
+                            db, external_id=str(external_id), status_text=source_status_text
+                        )
+                        if record else None
+                    )
+                item = {"file_name": file_name, "invoice_number": normalized_invoice_number}
+                if cancel_result is None:
+                    warnings.append({**item, "reason": f"Cancelled eFaktura was not linked: {reason}"})
+                elif cancel_result["outcome"] == "cancelled":
+                    cancelled.append({**item, "reason": cancel_result["reason"]})
+                elif cancel_result["outcome"] == "warning":
+                    warnings.append({**item, "reason": cancel_result["reason"]})
+                else:
+                    skipped.append({**item, "reason": cancel_result["reason"]})
             except Exception as exc:
                 errors.append(
                     {
@@ -572,6 +632,33 @@ async def import_efaktura_documents(
 
         existing_record = await get_import_record_by_key(db, document_key)
         if existing_record:
+            if source == "api" and direction == "outgoing":
+                if existing_record.external_id and existing_record.external_id != str(external_id):
+                    warnings.append(
+                        {
+                            "file_name": file_name,
+                            "invoice_number": normalized_invoice_number,
+                            "reason": "Existing eFaktura import is linked to a different document ID",
+                        }
+                    )
+                    continue
+                if not existing_record.external_id:
+                    try:
+                        async with db.begin_nested():
+                            linked_record, reason = await link_existing_outgoing_income(
+                                db, parsed=parsed, external_id=external_id, file_name=file_name
+                            )
+                    except Exception as exc:
+                        linked_record, reason = None, str(exc)
+                    if linked_record is None:
+                        warnings.append(
+                            {
+                                "file_name": file_name,
+                                "invoice_number": normalized_invoice_number,
+                                "reason": f"Existing eFaktura import was not linked: {reason}",
+                            }
+                        )
+                        continue
             skipped.append(
                 {
                     "file_name": file_name,
@@ -660,11 +747,27 @@ async def import_efaktura_documents(
                     continue
 
                 if await has_invoice_duplicate(db, normalized_invoice_number, invoice_year):
+                    if source == "api":
+                        record, reason = await link_existing_outgoing_income(
+                            db, parsed=parsed, external_id=external_id, file_name=file_name
+                        )
+                        if record is None:
+                            warnings.append(
+                                {
+                                    "file_name": file_name,
+                                    "invoice_number": normalized_invoice_number,
+                                    "reason": f"Existing income was not linked to eFaktura: {reason}",
+                                }
+                            )
+                            continue
+                        skip_reason = reason
+                    else:
+                        skip_reason = "Invoice already exists in income"
                     skipped.append(
                         {
                             "file_name": file_name,
                             "invoice_number": normalized_invoice_number,
-                            "reason": "Invoice already exists in income",
+                            "reason": skip_reason,
                         }
                     )
                     continue
@@ -769,11 +872,15 @@ async def import_efaktura_documents(
         "created_expense_count": created_expense_count,
         "skipped_count": len(skipped),
         "error_count": len(errors),
+        "warning_count": len(warnings),
+        "cancelled_count": len(cancelled),
         "pdf_download_count": len(pdf_downloads),
         "download_error_count": len(download_errors),
         "created": created,
         "skipped": skipped,
         "errors": errors,
+        "warnings": warnings,
+        "cancelled": cancelled,
         "download_errors": download_errors,
         "pdf_downloads": pdf_downloads,
     }
@@ -790,6 +897,13 @@ def _format_url(base_url: str | None, template: str | None, **values: Any) -> st
     if not base:
         return None
     return urljoin(base.rstrip("/") + "/", formatted.lstrip("/"))
+
+
+def _url_with_status(url: str, status: str) -> str:
+    parts = urlsplit(url)
+    query = [(key, value) for key, value in parse_qsl(parts.query) if key.lower() != "status"]
+    query.append(("status", status))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def _format_sync_boundary(value: date, *, end_of_day: bool) -> str:
@@ -1043,6 +1157,8 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
 
     documents: list[dict[str, Any]] = []
     outgoing_status_by_id: dict[str, Any] = {}
+    status_check_failures: list[str] = []
+    fetch_warnings: list[dict[str, Any]] = []
 
     async def fetch_outgoing_current_statuses(document_refs: list[dict[str, Any]]) -> dict[str, Any]:
         statuses: dict[str, Any] = {}
@@ -1066,13 +1182,15 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 )
                 details_payload = json.loads(raw_details.decode("utf-8"))
             except Exception:
+                status_check_failures.append(f"details #{external_id}")
                 continue
             for details_ref in _extract_document_refs(details_payload):
                 statuses[details_ref["external_id"]] = details_ref.get("source_status")
         return statuses
 
     async def fetch_outgoing_status_changes() -> None:
-        for day_offset in range((date_to - date_from).days + 1):
+        # The status-change endpoint accepts past dates only; status-filtered IDs cover today.
+        for day_offset in range((date_to - date_from).days):
             day = date_from + timedelta(days=day_offset)
             changes_url = _format_url(
                 base_url,
@@ -1091,9 +1209,44 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 )
                 changes_payload = json.loads(raw_changes.decode("utf-8"))
             except Exception:
+                status_check_failures.append(day.isoformat())
                 continue
             for change_ref in _extract_status_change_refs(changes_payload):
-                outgoing_status_by_id[change_ref["external_id"]] = change_ref.get("source_status")
+                external_id = change_ref["external_id"]
+                new_status = change_ref.get("source_status")
+                if is_efaktura_cancelled_status(new_status) or not is_efaktura_cancelled_status(
+                    outgoing_status_by_id.get(external_id)
+                ):
+                    outgoing_status_by_id[external_id] = new_status
+
+    async def fetch_cancelled_outgoing_ids() -> None:
+        list_url = _format_url(
+            base_url,
+            outgoing_list_path,
+            from_=date_from_value,
+            to=date_to_value,
+            **{"from": date_from_value},
+        )
+        if not list_url:
+            return
+        for status in ("Storno", "Cancelled"):
+            try:
+                raw_ids, _ = await asyncio.to_thread(
+                    _http_request,
+                    _url_with_status(list_url, status),
+                    method="POST",
+                    header_name=header_name,
+                    header_value=header_value,
+                )
+                ids_payload = json.loads(raw_ids.decode("utf-8"))
+            except Exception as exc:
+                fetch_warnings.append({"reason": f"Could not list {status} eFaktura documents: {exc}"})
+                continue
+            for document_ref in _extract_document_refs(ids_payload):
+                external_id = document_ref["external_id"]
+                source_status = document_ref.get("source_status")
+                if source_status in (None, "") or is_efaktura_cancelled_status(source_status):
+                    outgoing_status_by_id[external_id] = source_status or status
 
     async def fetch_direction(direction: str, list_path: str, document_path: str, pdf_path: str | None) -> None:
         list_url = _format_url(
@@ -1105,13 +1258,34 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         )
         if not list_url:
             return
-        raw_ids, _ = await asyncio.to_thread(
-            _http_request,
-            list_url,
-            method="POST",
-            header_name=header_name,
-            header_value=header_value,
-        )
+        try:
+            raw_ids, _ = await asyncio.to_thread(
+                _http_request,
+                list_url,
+                method="POST",
+                header_name=header_name,
+                header_value=header_value,
+            )
+        except Exception as exc:
+            if direction != "outgoing":
+                fetch_warnings.append({"reason": f"Could not list {direction} eFaktura documents: {exc}"})
+                return
+            try:
+                raw_ids, _ = await asyncio.to_thread(
+                    _http_request,
+                    _url_with_status(list_url, "Sent"),
+                    method="POST",
+                    header_name=header_name,
+                    header_value=header_value,
+                )
+            except Exception as fallback_exc:
+                fetch_warnings.append(
+                    {"reason": f"Could not list outgoing eFaktura documents: {exc}; Sent fallback: {fallback_exc}"}
+                )
+                return
+            fetch_warnings.append(
+                {"reason": "Outgoing eFaktura list required a status filter; only Sent documents were fetched"}
+            )
         try:
             ids_payload = json.loads(raw_ids.decode("utf-8"))
         except Exception:
@@ -1121,14 +1295,16 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
         if direction == "outgoing":
             current_status_by_id = await fetch_outgoing_current_statuses(document_refs)
             for current_external_id, current_status in current_status_by_id.items():
-                if current_status not in (None, ""):
+                if current_status not in (None, "") and not is_efaktura_cancelled_status(
+                    outgoing_status_by_id.get(current_external_id)
+                ):
                     outgoing_status_by_id[current_external_id] = current_status
         for document_ref in document_refs:
             external_id = document_ref["external_id"]
             source_status = document_ref.get("source_status")
             if direction == "outgoing":
                 source_status = (
-                    current_status_by_id.get(external_id) or outgoing_status_by_id.get(external_id) or source_status
+                    outgoing_status_by_id.get(external_id) or current_status_by_id.get(external_id) or source_status
                 )
                 if is_efaktura_cancelled_status(source_status):
                     continue
@@ -1140,13 +1316,19 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
             )
             if not xml_url:
                 continue
-            raw_xml, content_type = await asyncio.to_thread(
-                _http_request,
-                xml_url,
-                method="GET",
-                header_name=header_name,
-                header_value=header_value,
-            )
+            try:
+                raw_xml, content_type = await asyncio.to_thread(
+                    _http_request,
+                    xml_url,
+                    method="GET",
+                    header_name=header_name,
+                    header_value=header_value,
+                )
+            except Exception as exc:
+                fetch_warnings.append(
+                    {"file_name": f"{direction}-{external_id}.xml", "reason": f"Could not fetch eFaktura XML: {exc}"}
+                )
+                continue
             pdf_content = None
             download_errors = []
             if bool(getattr(enterprise, "efaktura_save_pdf", False)) and pdf_path:
@@ -1194,34 +1376,89 @@ async def sync_efaktura_documents(db: AsyncSession, *, user_id: int) -> dict[str
                 }
             )
 
-    async def apply_cancelled_outgoing_status_changes() -> list[dict[str, Any]]:
-        applied: list[dict[str, Any]] = []
+    async def apply_cancelled_outgoing_status_changes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        cancelled: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
         for external_id, source_status in outgoing_status_by_id.items():
             if not is_efaktura_cancelled_status(source_status):
                 continue
             status_text = _document_status_text(source_status)
-            async with db.begin_nested():
-                result_item = await handle_cancelled_outgoing_import_record(
-                    db,
-                    external_id=external_id,
-                    status_text=status_text,
+            try:
+                async with db.begin_nested():
+                    result_item = await handle_cancelled_outgoing_import_record(
+                        db, external_id=external_id, status_text=status_text
+                    )
+                    if result_item is None:
+                        xml_url = _format_url(
+                            base_url, outgoing_document_path, id=external_id, external_id=external_id
+                        )
+                        if not xml_url:
+                            raise ValueError("Outgoing XML endpoint is not configured")
+                        raw_xml, content_type = await asyncio.to_thread(
+                            _http_request,
+                            xml_url,
+                            method="GET",
+                            header_name=header_name,
+                            header_value=header_value,
+                        )
+                        parsed = parse_efaktura_invoice(
+                            _extract_xml_bytes(raw_xml, content_type), f"outgoing-{external_id}.xml"
+                        )
+                        record, reason = await link_existing_outgoing_income(
+                            db,
+                            parsed=parsed,
+                            external_id=external_id,
+                            file_name=f"outgoing-{external_id}.xml",
+                        )
+                        if record is None:
+                            warnings.append(
+                                {
+                                    "invoice_number": parsed["invoice_number"],
+                                    "file_name": f"outgoing-{external_id}.xml",
+                                    "reason": f"Cancelled eFaktura was not linked: {reason}",
+                                }
+                            )
+                            continue
+                        result_item = await handle_cancelled_outgoing_import_record(
+                            db, external_id=external_id, status_text=status_text
+                        )
+                    if result_item and result_item["outcome"] == "cancelled":
+                        cancelled.append(result_item)
+                    elif result_item and result_item["outcome"] == "warning":
+                        warnings.append(result_item)
+            except Exception as exc:
+                warnings.append(
+                    {
+                        "file_name": f"outgoing-{external_id}.xml",
+                        "reason": f"Cancelled eFaktura #{external_id} could not be matched: {exc}",
+                    }
                 )
-            if result_item:
-                applied.append(result_item)
-        if applied:
+        if cancelled or warnings:
             await db.commit()
-        return applied
+        return cancelled, warnings
 
     if enterprise.efaktura_sync_incoming:
         await fetch_direction("incoming", incoming_list_path, incoming_document_path, incoming_pdf_path)
     if enterprise.efaktura_sync_outgoing:
         await fetch_outgoing_status_changes()
+        await fetch_cancelled_outgoing_ids()
         await fetch_direction("outgoing", outgoing_list_path, outgoing_document_path, outgoing_pdf_path)
 
     result = await import_efaktura_documents(db, user_id=user_id, documents=documents, source="api")
-    status_change_results = await apply_cancelled_outgoing_status_changes()
-    if status_change_results:
-        result["skipped"].extend(status_change_results)
-        result["skipped_count"] = len(result["skipped"])
+    cancelled, warnings = await apply_cancelled_outgoing_status_changes()
+    result["cancelled"].extend(cancelled)
+    result["cancelled_count"] = len(result["cancelled"])
+    result["warnings"].extend(warnings)
+    result["warnings"].extend(fetch_warnings)
+    if status_check_failures:
+        result["warnings"].append(
+            {
+                "reason": (
+                    f"Could not check eFaktura status for {len(status_check_failures)} date(s)/document(s): "
+                    + ", ".join(status_check_failures[:5])
+                )
+            }
+        )
+    result["warning_count"] = len(result["warnings"])
     result["fetched_count"] = len(documents)
     return result

@@ -1402,11 +1402,15 @@ class EfakturaImportResult(BaseModel):
     created_expense_count: int = 0
     skipped_count: int = 0
     error_count: int = 0
+    warning_count: int = 0
+    cancelled_count: int = 0
     pdf_download_count: int = 0
     download_error_count: int = 0
     created: list[EfakturaImportSummary] = Field(default_factory=list)
     skipped: list[EfakturaImportSummary] = Field(default_factory=list)
     errors: list[EfakturaImportSummary] = Field(default_factory=list)
+    warnings: list[EfakturaImportSummary] = Field(default_factory=list)
+    cancelled: list[EfakturaImportSummary] = Field(default_factory=list)
     download_errors: list[EfakturaImportSummary] = Field(default_factory=list)
     pdf_downloads: list[EfakturaPdfDownload] = Field(default_factory=list)
 
